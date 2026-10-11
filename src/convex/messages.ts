@@ -23,8 +23,12 @@ type Message = Doc<"messages">;
 async function requireActor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
   const userId = await getAuthUserId(ctx);
   const user = userId === null ? null : await ctx.db.get(userId);
-  if (!user) {
-    throw new ConvexError("Debes iniciar sesión para usar la mensajería.");
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión con una cuenta registrada para usar la mensajería.",
+    );
   }
   return user;
 }

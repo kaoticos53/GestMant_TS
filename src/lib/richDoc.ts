@@ -818,6 +818,24 @@ export function richDocToHtml(
   return richDocBlocks(value).map(blockToHtml).join("");
 }
 
+function safeSrc(src: string | undefined): string {
+  if (!src) return "";
+  const trimmed = src.trim();
+  if (/^(?:https?:|\/|data:image\/(?:png|jpeg|webp|gif|avif);base64,)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return "";
+}
+
+function safeHref(href: string | undefined): string | undefined {
+  if (!href) return undefined;
+  const trimmed = href.trim();
+  if (/^(?:https?:|mailto:|tel:|\/|#)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return undefined;
+}
+
 function blockToHtml(block: RichBlock): string {
   switch (block.type) {
     case "paragraph":
@@ -830,10 +848,13 @@ function blockToHtml(block: RichBlock): string {
         .join("")}</${block.ordered ? "ol" : "ul"}>`;
     case "quote":
       return `<blockquote>${block.blocks.map(blockToHtml).join("")}</blockquote>`;
-    case "image":
-      return `<img src="${escapeHtml(block.src)}"${
+    case "image": {
+      const src = safeSrc(block.src);
+      if (!src) return "";
+      return `<img src="${escapeHtml(src)}"${
         block.alt ? ` alt="${escapeHtml(block.alt)}"` : ""
       }${block.title ? ` title="${escapeHtml(block.title)}"` : ""}>`;
+    }
     case "divider":
       return "<hr>";
   }
@@ -858,8 +879,9 @@ function runToHtml(run: RichInline): string {
     (inner, mark) => `<${MARK_TAGS[mark]}>${inner}</${MARK_TAGS[mark]}>`,
     text,
   );
-  return run.href !== undefined
-    ? `<a href="${escapeHtml(run.href)}">${wrapped}</a>`
+  const href = safeHref(run.href);
+  return href !== undefined
+    ? `<a href="${escapeHtml(href)}" rel="noopener noreferrer">${wrapped}</a>`
     : wrapped;
 }
 

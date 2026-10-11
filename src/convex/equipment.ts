@@ -10,6 +10,14 @@ async function requireUser(ctx: QueryCtx) {
   if (userId === null) {
     throw new ConvexError("Debes iniciar sesión para gestionar los equipos.");
   }
+  const user = await ctx.db.get(userId);
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+    );
+  }
   return userId;
 }
 

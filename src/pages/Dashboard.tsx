@@ -691,6 +691,21 @@ export default function Dashboard() {
     setTab("incidents");
   };
 
+  /**
+   * Lo que hace la campana al elegir un aviso: si el aviso apunta a una ficha
+   * (`incidentId`), abrirla —es lo que pide «verla»—; si no, a la cola de
+   * incidencias, que es donde vive lo que cuentan los avisos del taller.
+   */
+  const openNotification = (notification: {
+    incidentId?: Id<"incidents"> | null;
+  }) => {
+    if (notification.incidentId) {
+      openIncident(notification.incidentId);
+    } else {
+      goToTab("incidents");
+    }
+  };
+
   /** Abre el catálogo, opcionalmente mostrando solo lo que está bajo mínimo. */
   const openInventory = (lowStockOnly: boolean) => {
     setInventoryLowStockOnly(lowStockOnly);
@@ -931,7 +946,7 @@ export default function Dashboard() {
             </span>
           </span>
           <div className="flex items-center gap-1.5">
-            <NotificationBell onOpen={() => goToTab("incidents")} />
+            <NotificationBell onOpen={openNotification} />
             <MessagesCenter canSend={can("sendMessages")} />
           </div>
         </div>
@@ -1062,7 +1077,7 @@ export default function Dashboard() {
             {/* Lo que vivía en el menú: avisos, mensajes y el rol en uso. */}
             <div className="flex shrink-0 items-center gap-2">
               {roleBadge}
-              <NotificationBell onOpen={() => goToTab("incidents")} />
+              <NotificationBell onOpen={openNotification} />
               <MessagesCenter canSend={can("sendMessages")} />
             </div>
           </div>
@@ -1081,7 +1096,7 @@ export default function Dashboard() {
               </span>
             </a>
             <div className="flex shrink-0 items-center gap-2">
-              <NotificationBell onOpen={() => goToTab("incidents")} />
+              <NotificationBell onOpen={openNotification} />
               <MessagesCenter canSend={can("sendMessages")} />
               <span className="hidden sm:block">{roleBadge}</span>
               <button

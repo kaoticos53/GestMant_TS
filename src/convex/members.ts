@@ -25,6 +25,14 @@ async function requireUser(ctx: QueryCtx) {
   if (userId === null) {
     throw new ConvexError("Debes iniciar sesión para gestionar usuarios.");
   }
+  const user = await ctx.db.get(userId);
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión con una cuenta registrada para realizar esta acción.",
+    );
+  }
   return userId;
 }
 
@@ -64,20 +72,39 @@ const profileArgs = {
 };
 
 /**
- * Asigna el rol la primera vez que entra un usuario: el administrador si su
- * correo coincide con el de la cuenta admin de la página de acceso; el resto,
+ * Asigna el rol la primera vez que entra un usuario: el administrador si es el
+ * primer usuario o coincide con el correo admin; si es invitado, rol guest; el resto,
  * técnicos (un administrador puede promoverlos después).
  */
 export const ensureRole = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) {
+      throw new ConvexError("Debes iniciar sesión.");
+    }
     const user = await ctx.db.get(userId);
     if (!user) throw new ConvexError("Usuario no encontrado.");
+    if (user.active === false) {
+      throw new ConvexError("Esta cuenta ha sido dada de baja o no está activa.");
+    }
 
     if (user.role) return user.role;
 
+    if (user.isAnonymous === true) {
+      await ctx.db.patch(userId, { role: ROLES.GUEST });
+      return ROLES.GUEST;
+    }
+
+    const initialAdmin = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
+    const existingAdmin = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("role"), ROLES.ADMIN))
+      .first();
+
     const role =
+      (initialAdmin && user.email?.trim().toLowerCase() === initialAdmin) ||
+      !existingAdmin ||
       user.email?.trim().toLowerCase() === ADMIN_EMAIL
         ? ROLES.ADMIN
         : DEFAULT_ROLE;

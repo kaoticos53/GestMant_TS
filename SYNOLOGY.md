@@ -4,6 +4,11 @@ Cómo dejar el taller corriendo dentro de un NAS Synology, con Container Manager
 sin depender de nada que no sea de casa: la app, la base de datos y los archivos
 viven en el NAS.
 
+> Si tu servidor no es un Synology sino una **VM Debian en Proxmox**, el montaje
+> es el mismo (mismos contenedores, mismo volumen, mismo `npm run nas`) y está
+> contado en **[PROXMOX.md](./PROXMOX.md)**: cambia lo de delante — una **VM**
+> con Docker y **Caddy** en lugar del proxy inverso de DSM —.
+
 Son **tres contenedores** que se quedan y **uno que pasa**: el que sube el
 esquema y las funciones al backend. El backend es un Convex autoalojado —el mismo
 que usa el entorno local del repositorio (`docker/convex/`)—, así que aquí no hay

@@ -37,6 +37,52 @@ npm run nas -- --host IP-del-NAS \
 Termina con la URL de la app en la última línea, igual que el arranque local. Con
 `npm run nas -- --help` salen todas las opciones.
 
+Y si lo tuyo es un **servidor Proxmox** — una **VM Debian** en casa o en el
+taller, con Docker y **Caddy** poniendo el HTTPS donde en el Synology lo pone DSM
+—, esa guía está en **[PROXMOX.md](./PROXMOX.md)**. El montaje de contenedores
+es el mismo (usa el mismo compose y el mismo script `npm run nas`), así que los
+cambios son solo delante: crear la VM, instalar Docker y Caddy, y escribir el
+Caddyfile en lugar de las reglas del proxy inverso de DSM.
+
+### Instalar desde el repositorio de GitHub
+
+En las dos plataformas se parte igual: clonar el proyecto desde GitHub y
+seguir la guía de la plataforma elegida.
+
+**NAS Synology** — clona en el ordenador (no hace falta git en el propio NAS;
+quien lleva el código al NAS es el comando) y lanza:
+
+```bash
+git clone https://github.com/tu-usuario/pulso-taller.git
+cd pulso-taller
+npm run nas -- --host IP-del-NAS \
+  --app-url https://taller.tudominio.com --api-url https://api.tudominio.com
+```
+
+Lo que hace falta en el ordenador es Node y npm (los pasos 1 a 5 los ejecuta
+el comando por SSH); el NAS solo necesita Docker (Container Manager) y que se
+pueda entrar por SSH.
+
+**Proxmox** — dentro de la VM Debian también vale clonar directamente, sin
+copiar nada desde otro ordenador:
+
+```bash
+apt install -y git
+git clone https://github.com/tu-usuario/pulso-taller.git /srv/pulso-taller
+```
+
+Y a partir de ahí, los pasos 2 a 6 de **[PROXMOX.md](./PROXMOX.md)** (Docker,
+Caddy, `.env`, compose) se ejecutan todos en el propio servidor. Esta vía sí
+dispensa Node en tu ordenador: la app se compila dentro del servidor y las
+funciones las sube el contenedor `funciones`.
+
+**Actualizar a una versión nueva** es lo mismo con `git pull`: en el NAS,
+repite `npm run nas` (o `docker compose up -d --build` desde el NAS si el
+código se actualizó allí con un `git pull` en su carpeta); en Proxmox,
+`git pull` en la carpeta del servidor y `docker compose up -d --build`. Los
+datos nunca se tocan: viven en el volumen `pulso-taller_datos`, que ninguna de
+las dos rutas borra ni reemplaza.
+
 Si lo que quieres es una demo lista para enseñar, `npm run local -- --fresh`
 rehace la base de datos desde cero y carga los datos de ejemplo (se pierde lo
 que hubiera en este entorno). Y si el entorno se ha quedado a medias —clave de

@@ -15,14 +15,11 @@ import {
 import { Label } from "@/components/ui/label";
 
 import { useAuth } from "@/hooks/use-auth";
-import { ADMIN_EMAIL, ADMIN_PASSWORD } from "@/lib/roles";
 import logo from "@/assets/logo.svg";
 import {
   ArrowRight,
-  KeyRound,
   Loader2,
   Mail,
-  ShieldCheck,
   UserX,
 } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
@@ -102,30 +99,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         raw.includes("InvalidSecret") || raw.includes("Invalid credentials");
       const accountExists = raw.includes("already") || raw.includes("exists");
 
-      // Si la cuenta de administrador todavía no existe, se da de alta en el
-      // primer intento: las credenciales documentadas deben funcionar siempre.
-      const isAdminAccount =
-        email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      if (passwordFlow === "signIn" && isAdminAccount && accountMissing) {
-        try {
-          await submit("signUp");
-          navigate(redirect);
-          return;
-        } catch (createError) {
-          console.error("Admin account creation error:", createError);
-          const createRaw =
-            createError instanceof Error ? createError.message : "";
-          setError(
-            createRaw.includes("already") || createRaw.includes("exists")
-              ? "El correo o la contraseña no son correctos."
-              : `No se ha podido crear la cuenta de administrador${
-                  createRaw ? `: ${createRaw}` : "."
-                }`,
-          );
-          setIsLoading(false);
-          return;
-        }
-      }
 
       if (passwordFlow === "signUp") {
         setError(
@@ -201,13 +174,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  const useAdminCredentials = () => {
-    setMethod("password");
-    setPasswordFlow("signIn");
-    setEmail(ADMIN_EMAIL);
-    setPassword(ADMIN_PASSWORD);
-    setError(null);
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -477,37 +443,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 Entrar como invitado
               </Button>
 
-              <div className="rounded-lg border border-signal/30 bg-signal/5 p-3 text-left">
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-signal">
-                  <ShieldCheck className="size-3.5" />
-                  Cuenta de administrador
-                </p>
-                <dl className="mt-2 grid gap-1 text-xs">
-                  <div className="flex items-center justify-between gap-2">
-                    <dt className="text-muted-foreground">Usuario</dt>
-                    <dd className="font-mono font-medium">{ADMIN_EMAIL}</dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <dt className="text-muted-foreground">Contraseña</dt>
-                    <dd className="font-mono font-medium">{ADMIN_PASSWORD}</dd>
-                  </div>
-                </dl>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2.5 w-full gap-1.5"
-                  onClick={useAdminCredentials}
-                  disabled={isLoading}
-                >
-                  <KeyRound className="size-3.5" />
-                  Usar credenciales
-                </Button>
-                <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-                  Si es la primera vez, pulsa directamente «Entrar»: la cuenta
-                  se crea en el primer intento.
-                </p>
-              </div>
+
             </div>
 
             <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">

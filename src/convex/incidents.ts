@@ -191,8 +191,12 @@ async function auditAlertRecipientIds(
 async function requireActor(ctx: QueryCtx | MutationCtx): Promise<Actor> {
   const userId = await getAuthUserId(ctx);
   const user = userId === null ? null : await ctx.db.get(userId);
-  if (!user) {
-    throw new ConvexError("Debes iniciar sesión para gestionar incidencias.");
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+    );
   }
   return user;
 }
@@ -262,12 +266,34 @@ export const report = mutation({
       throw new ConvexError("La fecha de notificación no puede ser futura.");
     }
 
-    // Referencia autoincremental INC-0001, sin duplicar si hay borrados
-    const existing = await ctx.db.query("incidents").collect();
-    const taken = new Set(existing.map((item) => item.reference));
-    let sequence = existing.length + 1;
-    while (taken.has(`INC-${String(sequence).padStart(4, "0")}`)) sequence += 1;
-    const reference = `INC-${String(sequence).padStart(4, "0")}`;
+    // Referencia autoincremental INC-0001 eficiente (sin cargar toda la tabla en memoria)
+    const latest = await ctx.db
+      .query("incidents")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(100);
+
+    // Protección anti-inundación básica
+    const recentFromReporter = latest.find(
+      (item) =>
+        item.reporterName.toLowerCase() === reporterName.toLowerCase() &&
+        item.createdAt > Date.now() - 30_000,
+    );
+    if (recentFromReporter) {
+      throw new ConvexError(
+        "Ya has notificado una incidencia recientemente. Por favor, espera 30 segundos antes de enviar otra.",
+      );
+    }
+
+    let maxSeq = 0;
+    for (const item of latest) {
+      const match = item.reference?.match(/^INC-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxSeq) maxSeq = num;
+      }
+    }
+    const reference = `INC-${String(maxSeq + 1).padStart(4, "0")}`;
 
     const now = Date.now();
     const incidentId = await ctx.db.insert("incidents", {

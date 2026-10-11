@@ -1,4 +1,12 @@
+.env
 .env.local
+.env.*
+!.env.example
+docker/synology/.env
+*.pem
+*.key
+certs/
+
 node_modules
 dist
 src/convex/_generated

@@ -232,6 +232,25 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     configurePermissions: false,
     viewAudit: false,
   },
+  guest: {
+    viewIncidents: false,
+    manageIncidents: false,
+    viewRequests: false,
+    createRequests: false,
+    lookupCatalog: false,
+    decideRequests: false,
+    viewInventory: false,
+    manageInventory: false,
+    viewEquipment: false,
+    manageEquipment: false,
+    lookupEquipment: false,
+    viewManuals: false,
+    manageManuals: false,
+    sendMessages: false,
+    manageUsers: false,
+    configurePermissions: false,
+    viewAudit: false,
+  },
 };
 
 /* La mezcla de lo guardado sobre los defaults vive en el backend

@@ -24,7 +24,12 @@ const MAX_LABEL = 60;
 
 /** Claves que nacen en el código: no se crean ni se borran. */
 export function isSystemKey(key: string): key is Role {
-  return key === ROLES.ADMIN || key === ROLES.MANAGER || key === ROLES.TECHNICIAN;
+  return (
+    key === ROLES.ADMIN ||
+    key === ROLES.MANAGER ||
+    key === ROLES.TECHNICIAN ||
+    key === ROLES.GUEST
+  );
 }
 
 /**
@@ -167,6 +172,9 @@ export async function hasCapability(
   user: Doc<"users">,
   capability: Capability,
 ): Promise<boolean> {
+  if (user.active === false || user.isAnonymous === true) {
+    return false;
+  }
   return await roleCan(ctx, user.role ?? DEFAULT_ROLE, capability);
 }
 
@@ -189,8 +197,12 @@ export async function hasAnyCapability(
 async function requireActor(ctx: Ctx): Promise<Doc<"users">> {
   const userId = await getAuthUserId(ctx);
   const user = userId === null ? null : await ctx.db.get(userId);
-  if (!user) {
-    throw new ConvexError("Debes iniciar sesión para ver los permisos.");
+  if (!user || user.active === false) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión para ver los permisos.",
+    );
   }
   return user;
 }

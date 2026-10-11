@@ -7,6 +7,7 @@ export const ROLES = {
   ADMIN: "admin",
   MANAGER: "manager",
   TECHNICIAN: "technician",
+  GUEST: "guest",
 } as const;
 
 /** Clave del rol de un usuario: una clave del sistema (`ROLES`) o una
@@ -774,9 +775,6 @@ const schema = defineSchema(
       updatedAt: v.number(),
       updatedBy: v.optional(v.string()),
     }).index("by_key", ["key"]),
-  },
-  {
-    schemaValidation: false,
   },
 );
 

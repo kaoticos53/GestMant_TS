@@ -16,6 +16,14 @@ async function requireUser(ctx: QueryCtx) {
       "Debes iniciar sesión para gestionar las peticiones.",
     );
   }
+  const user = await ctx.db.get(userId);
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+    );
+  }
   return userId;
 }
 

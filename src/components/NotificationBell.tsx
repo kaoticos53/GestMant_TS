@@ -1,30 +1,96 @@
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+/** Una fila tal y como la da la consulta del backend (y como la reciben las
+ * props de prueba, que las sustituyen con la misma forma). */
+export type NotificationRow = {
+  _id: Id<"notifications">;
+  text: string;
+  read: boolean;
+  incidentId?: Id<"incidents">;
+  createdAt: number;
+};
+
 /**
- * Avisos in-app del taller. Al abrir un aviso se marca como leído y se salta
- * al módulo de incidencias (si se pasa `onOpen`).
+ * Avisos in-app del taller. Al abrir un aviso se marca como leído y se salta a
+ * lo que el aviso apunta: si lleva `incidentId`, a la ficha de esa incidencia;
+ * si no, lo que diga `onOpen` (la cola de incidencias, por defecto).
+ *
+ * Los avisos y su lectura llegan del backend con los hooks de Convex; las props
+ * `notifications`, `markRead` y `markAllRead` los sustituyen cuando las pasan
+ * (las pruebas), y quien no las pasa usa el backend, como siempre.
  */
 export function NotificationBell({
   onOpen,
   className,
+  notifications: notificationsProp,
+  markRead: markReadProp,
+  markAllRead: markAllReadProp,
 }: {
-  /** Se invoca al elegir un aviso (para navegar a la cola de incidencias). */
-  onOpen?: () => void;
+  /**
+   * Se invoca al elegir un aviso. Recibe el aviso elegido —los que llevan
+   * `incidentId` llevan a su ficha—; el que no lleva, al que abriría `onOpen`.
+   */
+  onOpen?: (notification: { incidentId?: Id<"incidents"> | null }) => void;
   className?: string;
+  notifications?: NotificationRow[];
+  markRead?: (args: { id: Id<"notifications"> }) => Promise<void>;
+  markAllRead?: () => Promise<void>;
 }) {
-  const notifications = useQuery(api.notifications.list);
-  const markRead = useMutation(api.notifications.markRead);
-  const markAllRead = useMutation(api.notifications.markAllRead);
+  const notificationsDelBackend = useQuery(api.notifications.list);
+  const notifications = (notificationsProp ?? notificationsDelBackend) as
+    | NotificationRow[]
+    | undefined;
+  const markReadBackend = useMutation(api.notifications.markRead);
+  const markRead = markReadProp ?? markReadBackend;
+  const markAllReadBackend = useMutation(api.notifications.markAllRead);
+  const markAllRead = markAllReadProp ?? markAllReadBackend;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  /** Coordenadas del desplegable, medidas desde la ventana. */
+  const [position, setPosition] = useState({ top: 0, right: 0, width: 0 });
 
-  // Cierre al pulsar fuera (suscripción al documento: setState en callback)
+  /**
+   * Mide el botón y deja el desplegable pegado a él pero **en la ventana**: el
+   * panel va en `fixed`, así que nada de lo que le rodea (un panel lateral de
+   * 208 px que recorta con `overflow-hidden`, una cabecera con scroll) puede
+   * cortarlo. El ancho pedido es 320 px, pero se encoge si la ventana tampoco
+   * da para él; y se recalcula al abrir, al mover la ventana o al hacer scroll,
+   * porque el botón vive en cabeceras pegajosas que se desplazan con la página.
+   */
+  const measure = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPosition({
+      top: rect.bottom + 8,
+      right: Math.max(8, window.innerWidth - rect.right),
+      width: Math.max(240, Math.min(320, window.innerWidth - 16)),
+    });
+  };
+
   useEffect(() => {
+    if (!open) return;
+    measure();
+    // Recalcular en resize y scroll: el botón puede moverse sin que React
+    // renderice (sticky, panel que se redimensiona, etc.).
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open]);
+
+  // Cierre al pulsar fuera, teclado y al perder el foco (suscripción al
+  // documento: setState en callback).
+  useEffect(() => {
+    if (!open) return;
     const handlePointerDown = (event: MouseEvent) => {
       if (
         containerRef.current &&
@@ -33,9 +99,16 @@ export function NotificationBell({
         setOpen(false);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const items = notifications ?? [];
   const unread = items.filter((item) => !item.read).length;
@@ -43,6 +116,7 @@ export function NotificationBell({
   const handleItem = async (item: {
     _id: Parameters<typeof markRead>[0]["id"];
     read: boolean;
+    incidentId?: Id<"incidents"> | null;
   }) => {
     if (!item.read) {
       try {
@@ -52,18 +126,24 @@ export function NotificationBell({
       }
     }
     setOpen(false);
-    onOpen?.();
+    // El aviso manda: si apunta a una ficha, es ahí a donde se va. Si no, al
+    // sitio que diga quien monta la campana (en el taller, la cola).
+    onOpen?.({ incidentId: item.incidentId ?? null });
   };
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
+        onPointerDown={() => {
+          // Antes de abrir se mide: sin esto, la primera vez abre en (0,0) y
+          // se pega la esquina; con esto, abre ya en su sitio.
+          if (!open) measure();
+        }}
         aria-label={
-          unread > 0
-            ? `Notificaciones: ${unread} sin leer`
-            : "Notificaciones"
+          unread > 0 ? `Notificaciones: ${unread} sin leer` : "Notificaciones"
         }
         className="relative flex size-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors hover:text-foreground"
       >
@@ -76,7 +156,18 @@ export function NotificationBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
+        <div
+          role="dialog"
+          aria-label="Notificaciones"
+          style={{
+            position: "fixed",
+            top: position.top,
+            right: position.right,
+            width: position.width,
+            maxHeight: Math.min(384, window.innerHeight - position.top - 16),
+          }}
+          className="z-50 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 pt-2 shadow-lg"
+        >
           <div className="flex items-center justify-between px-2.5 py-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Notificaciones

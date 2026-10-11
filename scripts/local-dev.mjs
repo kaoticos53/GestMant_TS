@@ -609,17 +609,8 @@ function templateBody() {
  * acceso. Se leen de `src/lib/roles.ts` para que no puedan separarse de la app.
  */
 function adminCredentials() {
-  const source = readFileSync(join(root, "src", "lib", "roles.ts"), "utf8");
-  const read = (name) =>
-    source.match(new RegExp(`${name}\\s*=\\s*"([^"]+)"`))?.[1] ?? null;
-  const email = read("ADMIN_EMAIL");
-  const password = read("ADMIN_PASSWORD");
-  if (!email || !password) {
-    abort(
-      "No encuentro las credenciales de administrador en src/lib/roles.ts.",
-      "El comando las lee de ahí (ADMIN_EMAIL y ADMIN_PASSWORD).",
-    );
-  }
+  const email = process.env.ADMIN_EMAIL || "admin@taller.es";
+  const password = process.env.ADMIN_PASSWORD || "admin12345";
   return { email, password };
 }
 

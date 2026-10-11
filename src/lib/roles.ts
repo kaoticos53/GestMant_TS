@@ -2,10 +2,10 @@
  * Claves de rol que nacen en el código (el resto son personalizadas y viven
  * en la tabla `roles` con su propia etiqueta y permisos).
  */
-export type SystemRole = "admin" | "manager" | "technician";
+export type SystemRole = "admin" | "manager" | "technician" | "guest";
 
-/** Las tres claves del sistema, en el orden en que se muestran. */
-export const SYSTEM_ROLES: SystemRole[] = ["admin", "manager", "technician"];
+/** Las claves del sistema, en el orden en que se muestran. */
+export const SYSTEM_ROLES: SystemRole[] = ["admin", "manager", "technician", "guest"];
 
 /**
  * Roles que coordinan el taller: los que deciden sobre el día a día de todos.
@@ -22,12 +22,12 @@ export type Role = SystemRole;
 /** Cualquier clave de rol: del sistema o creada por el administrador. */
 export type RoleKey = string;
 
-/** Credenciales del administrador que se muestran en la página de acceso. */
+/** Correo inicial de administrador (si se define en inicialización). */
 export const ADMIN_EMAIL = "admin@taller.es";
-export const ADMIN_PASSWORD = "admin12345";
 
 /** Rol que recibe quien se registra sin ser el administrador. */
 export const DEFAULT_ROLE: SystemRole = "technician";
+export const GUEST_ROLE: SystemRole = "guest";
 
 export const ROLE_META: Record<
   SystemRole,
@@ -52,6 +52,11 @@ export const ROLE_META: Record<
     description: "Crea peticiones de repuestos y consulta su estado",
     badgeClassName: "border-border bg-muted text-muted-foreground",
   },
+  guest: {
+    label: "Invitado",
+    description: "Sesión anónima de consulta sin permisos de gestión ni taller",
+    badgeClassName: "border-border bg-muted/60 text-muted-foreground",
+  },
 };
 
 /** Estilo de la píldora para un rol personalizado. */
@@ -62,7 +67,7 @@ export const CUSTOM_BADGE_CLASS =
 export function isSystemRole(
   key: string | null | undefined,
 ): key is SystemRole {
-  return key === "admin" || key === "manager" || key === "technician";
+  return key === "admin" || key === "manager" || key === "technician" || key === "guest";
 }
 
 /** Puede gestionar usuarios y roles. */
