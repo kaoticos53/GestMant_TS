@@ -363,6 +363,135 @@ describe("limpieza de los archivos que ya no cita nadie", () => {
   });
 });
 
+/** El taller de las pruebas, tal y como lo devuelve `setup`. */
+type Taller = Awaited<ReturnType<typeof setup>>;
+
+describe("los archivos que la limpieza no puede leer", () => {
+  /**
+   * Una foto que una nota cita y que el almacén ya no tiene: se borró a mano —o se
+   * la llevó otra pasada— y la nota sigue enseñando su hueco. Es el archivo que la
+   * limpieza se encuentra y no puede leer.
+   */
+  async function citedAndGone(
+    taller: Taller,
+    /** La incidencia donde citarla; sin ella, se notifica una nueva. */
+    incidentId?: Id<"incidents">,
+  ): Promise<Id<"incidents">> {
+    const { t, coordinator } = taller;
+    const storageId = await file(t);
+    const url = await urlOf(t, storageId);
+    const incident =
+      incidentId ??
+      (await reportedIncident(t, "<p>La cámara se apaga sola en directo.</p>"))
+        ._id;
+    await coordinator.mutation(api.incidents.addNote, {
+      incidentId: incident,
+      note: `<p>Comprobado en plató.</p><img src="${url}">`,
+    });
+    // El archivo se va del almacén; la nota se queda citándolo.
+    await t.run((ctx) => ctx.storage.delete(storageId));
+    return incident;
+  }
+
+  /**
+   * Los avisos que ha dejado la limpieza. La campana trae también los del taller
+   * —una incidencia nueva avisa—, así que se mira solo lo que es de aquí.
+   */
+  async function cleanupNotices(t: Test) {
+    const rows = await t.run((ctx) => ctx.db.query("notifications").collect());
+    return rows.filter((row) => row.text.includes("La limpieza del almacén"));
+  }
+
+  test("una imagen citada que ya no está se señala, y no se retira nada", async () => {
+    const taller = await setup();
+    const { t, coordinator } = taller;
+    await citedAndGone(taller);
+
+    // No hay nada que retirar: del archivo no queda nada en el almacén.
+    expect(await sweepEverything(t)).toBe(0);
+
+    const runs = await coordinator.query(api.cleanupLog.lastRuns, {});
+    const orphans = runs.find((run) => run.pass === "orphanFiles");
+    expect(orphans?.ranAt).not.toBeNull();
+    expect(orphans?.files).toBe(0);
+    expect(orphans?.unreadable).toBe(1);
+    // Las otras pasadas no tienen nada que contar: esto es del almacén.
+    expect(
+      runs
+        .filter((run) => run.pass !== "orphanFiles")
+        .every((run) => run.unreadable === 0),
+    ).toBe(true);
+  });
+
+  test("lo que no se puede leer no se mezcla con lo que se retira", async () => {
+    const taller = await setup();
+    const { t, coordinator } = taller;
+    // Una foto que nadie cita —esa sí se retira— y una citada que ya no está.
+    const orphan = await file(t);
+    await citedAndGone(taller);
+
+    expect(await sweepEverything(t)).toBe(1);
+
+    // Lo retirado va a la papelera; de lo que no se puede leer no hay nada que
+    // guardar allí.
+    const trashed = await t.run((ctx) => ctx.db.query("trashFiles").collect());
+    expect(trashed).toHaveLength(1);
+    expect(trashed[0]?.storageId).toBe(orphan);
+
+    const run = (await coordinator.query(api.cleanupLog.lastRuns, {})).find(
+      (item) => item.pass === "orphanFiles",
+    );
+    expect(run?.files).toBe(1);
+    expect(run?.unreadable).toBe(1);
+  });
+
+  test("el aviso va a quien coordina, y solo cuando la cuenta cambia", async () => {
+    const taller = await setup();
+    const { t, coordinator, coordinatorId } = taller;
+    const incident = await citedAndGone(taller);
+
+    // La pasada no se lleva nada —el archivo ya no está—, pero lo dice.
+    expect(await sweepEverything(t)).toBe(0);
+    const first = await cleanupNotices(t);
+    expect(first).toHaveLength(1);
+    expect(first[0]?.userId).toBe(coordinatorId);
+    expect(first[0]?.text).toContain("1 archivo que el almacén no puede leer");
+    expect(first[0]?.text).toContain("no se decide nada");
+    // El aviso es del almacén: no cuelga de ninguna incidencia.
+    expect(first[0]?.incidentId).toBeUndefined();
+
+    // La noche siguiente la cuenta es la misma: ya se dijo, y no se repite.
+    expect(await sweepEverything(t)).toBe(0);
+    expect(await cleanupNotices(t)).toHaveLength(1);
+
+    // Si aparece otro, vuelve a avisar —y dice de dónde viene—.
+    await citedAndGone(taller, incident);
+    expect(await sweepEverything(t)).toBe(0);
+    const after = await cleanupNotices(t);
+    expect(after).toHaveLength(2);
+    expect(after[1]?.text).toContain("2 archivos que el almacén no puede leer");
+    expect(after[1]?.text).toContain("Antes eran 1.");
+
+    // Y la constancia lo apunta igual, que es donde se mira después.
+    const run = (await coordinator.query(api.cleanupLog.lastRuns, {})).find(
+      (item) => item.pass === "orphanFiles",
+    );
+    expect(run?.unreadable).toBe(2);
+  });
+
+  test("la limpieza a mano lo cuenta y no manda aviso: quien pulsa lo ve", async () => {
+    const taller = await setup();
+    const { t, coordinator } = taller;
+    await citedAndGone(taller);
+
+    const result = await coordinator.action(api.storageCleanup.runNow, {});
+    expect(result.orphanFiles.files).toBe(0);
+    expect(result.orphanFiles.unreadable).toBe(1);
+    // La campana es de la madrugada: aquí el aviso es el de la pantalla.
+    expect(await cleanupNotices(t)).toHaveLength(0);
+  });
+});
+
 describe("la constancia de las pasadas", () => {
   test("cada pasada apunta cuándo fue y qué se llevó", async () => {
     const { t, coordinator } = await setup();

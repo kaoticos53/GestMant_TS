@@ -2,6 +2,7 @@
 import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { toast } from "sonner";
 
 import {
   Dialog,
@@ -209,6 +210,7 @@ async function mountSheet() {
 }
 
 beforeEach(() => {
+  toast.dismiss();
   installMissingDomApis();
   // React pide que se le diga que está en un entorno de pruebas.
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -216,6 +218,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  toast.dismiss();
   await act(async () => {
     for (const root of roots) root.unmount();
   });

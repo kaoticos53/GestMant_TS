@@ -26,6 +26,7 @@ import { RichText } from "@/components/RichText";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAnchoredPanel } from "@/hooks/use-anchored-panel";
 import { useAuth } from "@/hooks/use-auth";
 import {
   chatPanelReducer,
@@ -84,10 +85,21 @@ export function MessagesCenter({
 
   // Una sola máquina de estados para la lista, el chat y el alta de mensaje:
   // al cerrar el chat la lista vuelve a estar a la vista.
-  const [panel, dispatch] = useReducer(chatPanelReducer<Id<"users">>, null, () =>
-    initialChatPanel<Id<"users">>(),
+  const [panel, dispatch] = useReducer(
+    chatPanelReducer<Id<"users">>,
+    null,
+    () => initialChatPanel<Id<"users">>(),
   );
   const containerRef = useRef<HTMLDivElement>(null);
+  // La lista se ancla a la ventana, no a su contenedor: el icono vive en
+  // cabeceras pegajosas y junto al panel lateral del menú, que recorta con
+  // `overflow-hidden`, así que un desplegable `absolute` se vería cortado. El
+  // anclaje es el mismo que el de la campana de avisos.
+  const {
+    style: listStyle,
+    measure,
+    triggerRef: buttonRef,
+  } = useAnchoredPanel(panel.listOpen);
 
   const meId = user?._id;
   const items = useMemo(() => messages ?? [], [messages]);
@@ -102,7 +114,9 @@ export function MessagesCenter({
     const map = new Map<string, ThreadSummary>();
     for (const message of items) {
       const isMine = message.senderId === meId;
-      const otherId = (isMine ? message.recipientId : message.senderId) as string;
+      const otherId = (
+        isMine ? message.recipientId : message.senderId
+      ) as string;
       const existing = map.get(otherId);
       if (existing) {
         if (!isMine && !message.read) existing.unread += 1;
@@ -145,12 +159,16 @@ export function MessagesCenter({
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => dispatch({ type: "toggle-list" })}
+        onPointerDown={() => {
+          // Antes de abrir se mide: sin esto, la primera vez abre en la esquina
+          // y se coloca en su sitio en el render siguiente.
+          if (!panel.listOpen) measure();
+        }}
         aria-label={
-          unreadTotal > 0
-            ? `Mensajes: ${unreadTotal} sin leer`
-            : "Mensajes"
+          unreadTotal > 0 ? `Mensajes: ${unreadTotal} sin leer` : "Mensajes"
         }
         className="relative flex size-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors hover:text-foreground"
       >
@@ -163,8 +181,13 @@ export function MessagesCenter({
       </button>
 
       {panel.listOpen && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-xl border border-border/70 bg-popover shadow-lg">
-          <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
+        <div
+          role="dialog"
+          aria-label="Mensajes"
+          style={listStyle}
+          className="z-50 flex flex-col overflow-hidden rounded-xl border border-border/70 bg-popover shadow-lg"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-3 py-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Mensajes
             </p>
@@ -181,7 +204,7 @@ export function MessagesCenter({
           </div>
 
           {threads.length === 0 ? (
-            <div className="px-4 py-6 text-center">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 text-center">
               <p className="text-sm text-muted-foreground">
                 No hay conversaciones todavía.
               </p>
@@ -199,7 +222,7 @@ export function MessagesCenter({
               )}
             </div>
           ) : (
-            <ul className="max-h-96 divide-y divide-border/60 overflow-y-auto">
+            <ul className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
               {threads.map((thread) => (
                 <li key={thread.userId}>
                   <button
@@ -388,7 +411,8 @@ function ChatSheet({
                     />
                   </div>
                   <span className="mt-1 px-1 text-[10px] text-muted-foreground">
-                    {message.senderName} · {formatRelativeTime(message.createdAt)}
+                    {message.senderName} ·{" "}
+                    {formatRelativeTime(message.createdAt)}
                   </span>
                 </div>
               );
@@ -420,8 +444,8 @@ function ChatSheet({
           </form>
         ) : (
           <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">
-            Tu rol no tiene permiso para enviar mensajes: aquí solo puedes
-            leer la conversación.
+            Tu rol no tiene permiso para enviar mensajes: aquí solo puedes leer
+            la conversación.
           </p>
         )}
       </SheetContent>
@@ -544,7 +568,11 @@ function NewMessageDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" className="gap-2" disabled={busy || !canSubmit}>
+            <Button
+              type="submit"
+              className="gap-2"
+              disabled={busy || !canSubmit}
+            >
               {busy ? "Enviando..." : "Enviar"}
             </Button>
           </DialogFooter>

@@ -590,7 +590,12 @@ export const approve = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status !== "pending") {
+    // Pendiente o con el material ya recibido: lo comprado entra en el almacén
+    // y se aprueba desde ahí, que es cuando hay existencias que apartar.
+    if (
+      request.status !== "pending" &&
+      request.status !== "materialReceived"
+    ) {
       throw new ConvexError(
         `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
       );

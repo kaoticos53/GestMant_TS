@@ -39,6 +39,11 @@ export const REQUEST_STATUSES = {
   RETURNED: "returned",
   CANCELLED: "cancelled",
   PENDING_SUPPLIER_QUOTE: "pendingSupplierQuote",
+  // Material recibido: lo que faltaba se pidió al proveedor y ya ha entrado en
+  // el almacén, así que la petición puede resolverse con lo que hay (mira
+  // `purchasing`). Es el único estado que no decide el responsable: lo pone la
+  // recepción de la orden de compra.
+  MATERIAL_RECEIVED: "materialReceived",
 } as const;
 
 /** Estados del ciclo de vida de una incidencia (cada paso deja un registro). */
@@ -90,6 +95,7 @@ export const requestStatusValidator = v.union(
   v.literal(REQUEST_STATUSES.RETURNED),
   v.literal(REQUEST_STATUSES.CANCELLED),
   v.literal(REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE),
+  v.literal(REQUEST_STATUSES.MATERIAL_RECEIVED),
 );
 export type RequestStatus = Infer<typeof requestStatusValidator>;
 
@@ -134,6 +140,100 @@ export type RequestDecision = Infer<typeof requestDecisionValidator>;
  * estandarizado. Se usa en validaciones de mutación y en reportes, pero no es
  * obligatorio en el esquema: la columna se puede poblar con texto libre mientras
  * la aplicación estandariza sus motivos internos. */
+// --- Compras: lo que el almacén no puede cubrir y hay que pedir fuera ---
+
+/**
+ * Ciclo de vida de una petición de compra: una línea de una petición de
+ * repuesto que no había en el almacén (o era nueva), apartada por el responsable
+ * de repuestos para comprarla. Mientras está `pending` espera agrupada por
+ * proveedor; cuando el proveedor la recibe no se toca hasta que llega el
+ * material.
+ *
+ *   pending    sin tratar: todavía no está en ninguna orden de compra
+ *   ordered    dentro de una orden, a la espera del proveedor
+ *   received   el material ha entrado en el almacén
+ *   cancelled  retirada por el responsable (ya no se compra)
+ */
+export const PURCHASE_REQUEST_STATUSES = {
+  PENDING: "pending",
+  ORDERED: "ordered",
+  RECEIVED: "received",
+  CANCELLED: "cancelled",
+} as const;
+
+export const purchaseRequestStatusValidator = v.union(
+  v.literal(PURCHASE_REQUEST_STATUSES.PENDING),
+  v.literal(PURCHASE_REQUEST_STATUSES.ORDERED),
+  v.literal(PURCHASE_REQUEST_STATUSES.RECEIVED),
+  v.literal(PURCHASE_REQUEST_STATUSES.CANCELLED),
+);
+export type PurchaseRequestStatus = Infer<
+  typeof purchaseRequestStatusValidator
+>;
+
+/**
+ * Estados de una orden de compra, que es lo que se manda al proveedor. La orden
+ * se cierra sola con las recepciones: nunca se marca «completada» a mano.
+ *
+ *   pending    enviada al proveedor, sin ninguna entrada todavía
+ *   partial    ha llegado parte del material
+ *   completed  ha llegado todo
+ *   cancelled  anulada: sus peticiones de compra vuelven a la cola
+ */
+export const PURCHASE_ORDER_STATUSES = {
+  PENDING: "pending",
+  PARTIAL: "partial",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+} as const;
+
+export const purchaseOrderStatusValidator = v.union(
+  v.literal(PURCHASE_ORDER_STATUSES.PENDING),
+  v.literal(PURCHASE_ORDER_STATUSES.PARTIAL),
+  v.literal(PURCHASE_ORDER_STATUSES.COMPLETED),
+  v.literal(PURCHASE_ORDER_STATUSES.CANCELLED),
+);
+export type PurchaseOrderStatus = Infer<typeof purchaseOrderStatusValidator>;
+
+/**
+ * Una línea de una orden de compra. Lleva copiado lo que hacía falta saber
+ * aunque el catálogo cambie después (el código, el nombre y la unidad) y, con
+ * la petición de compra, **la petición de repuesto que la originó** —su número y
+ * su fecha de solicitud—, que es lo que lleva el documento que se manda al
+ * proveedor y lo que permite volver de una orden a la petición de la que salió.
+ */
+export const purchaseOrderLineValidator = v.object({
+  purchaseRequestId: v.id("purchaseRequests"),
+  requestId: v.id("partRequests"),
+  requestReference: v.string(), // "PET-0007"
+  requestDate: v.number(), // fecha de solicitud de esa petición
+  sparePartId: v.id("spareParts"),
+  code: v.string(),
+  name: v.string(),
+  unit: v.string(),
+  quantity: v.number(),
+  receivedQuantity: v.number(), // cuánto ha entrado ya de esta línea
+  note: v.optional(v.string()), // nota del responsable sobre este artículo
+});
+export type PurchaseOrderLine = Infer<typeof purchaseOrderLineValidator>;
+
+/** El albarán de entrega que acompaña a una recepción: sin él no hay entrada. */
+export const deliveryNoteValidator = v.object({
+  storageId: v.id("_storage"),
+  name: v.string(),
+  kind: v.union(v.literal("image"), v.literal("document")),
+});
+export type DeliveryNote = Infer<typeof deliveryNoteValidator>;
+
+/** Lo que ha entrado de un repuesto en una recepción. */
+export const receptionLineValidator = v.object({
+  sparePartId: v.id("spareParts"),
+  code: v.string(),
+  name: v.string(),
+  quantity: v.number(),
+});
+export type ReceptionLine = Infer<typeof receptionLineValidator>;
+
 export const DECISION_REASON_VALUES = [
   REJECTION_REASONS.OUT_OF_SCOPE,
   REJECTION_REASONS.NO_BUDGET,
@@ -543,6 +643,94 @@ const schema = defineSchema(
       at: v.number(),
     }).index("by_request", ["requestId"]),
 
+    // Peticiones de compra: una línea de una petición de repuesto que no había
+    // en el almacén y hay que pedir fuera. Las aparta el responsable de
+    // repuestos, una a una, y esperan agrupadas por proveedor hasta que entran
+    // en una orden. Guardan el número y la fecha de la petición que las originó
+    // para poder volver a ella sin cruzar dos tablas.
+    purchaseRequests: defineTable({
+      reference: v.string(), // "PC-0001"
+      requestId: v.id("partRequests"), // la petición de repuesto que la origina
+      requestReference: v.string(), // "PET-0007", copiado
+      requestDate: v.number(), // fecha de solicitud de esa petición
+      requesterName: v.string(), // quién pidió el repuesto (copiado)
+      sparePartId: v.id("spareParts"),
+      code: v.string(),
+      name: v.string(),
+      unit: v.string(),
+      quantity: v.number(), // lo que hay que comprar
+      supplier: v.string(), // por proveedor se agrupan las que están sin tratar
+      status: purchaseRequestStatusValidator,
+      // Motivo por el que se compra, tal y como lo ve el responsable: no había
+      // stock, el repuesto es nuevo (no estaba en el catálogo), etc.
+      reason: v.union(
+        v.literal("noStock"),
+        v.literal("newPart"),
+        v.literal("other"),
+      ),
+      notes: v.optional(v.string()),
+      orderId: v.optional(v.id("purchaseOrders")),
+      requestedAt: v.number(), // cuándo la apartó el responsable
+      requestedBy: v.string(),
+      orderedAt: v.optional(v.number()),
+      receivedAt: v.optional(v.number()),
+      cancelledAt: v.optional(v.number()),
+      cancelNote: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_status", ["status"])
+      .index("by_request", ["requestId"])
+      .index("by_order", ["orderId"])
+      .index("by_supplier", ["supplier"])
+      .index("by_createdAt", ["createdAt"]),
+
+    // Órdenes de compra: lo que el responsable manda de una vez a un proveedor
+    // con las peticiones de compra que esperaban por él. Lleva su número y su
+    // fecha (la de la orden) y, en cada línea, la petición de repuesto de la que
+    // sale; el estado lo cierran las recepciones, no una decisión a mano.
+    purchaseOrders: defineTable({
+      reference: v.string(), // "OC-0001"
+      supplier: v.string(),
+      status: purchaseOrderStatusValidator,
+      orderedAt: v.number(), // la fecha de la orden
+      orderedBy: v.string(),
+      // Las peticiones de repuesto que han generado esta orden, con su número y
+      // su fecha de solicitud: es lo que se lee en la cabecera del documento.
+      requestRefs: v.array(
+        v.object({
+          reference: v.string(),
+          requestedAt: v.number(),
+        }),
+      ),
+      lines: v.array(purchaseOrderLineValidator),
+      notes: v.optional(v.string()),
+      completedAt: v.optional(v.number()),
+      cancelledAt: v.optional(v.number()),
+      cancelNote: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_status", ["status"])
+      .index("by_supplier", ["supplier"])
+      .index("by_orderedAt", ["orderedAt"]),
+
+    // Recepciones: cada entrada de material de un proveedor, con el albarán de
+    // entrega adjunto (obligatorio) y lo que ha entrado. Una orden puede tener
+    // varias —el proveedor manda lo que tiene— y de aquí salen el movimiento de
+    // almacén, el estado de la orden y el «material recibido» de las peticiones.
+    receptions: defineTable({
+      orderId: v.id("purchaseOrders"),
+      orderReference: v.string(), // "OC-0001", copiado
+      supplier: v.string(),
+      lines: v.array(receptionLineValidator),
+      deliveryNote: deliveryNoteValidator, // el albarán: sin él no hay recepción
+      note: v.optional(v.string()),
+      receivedBy: v.string(),
+      receivedAt: v.number(),
+    })
+      .index("by_order", ["orderId"])
+      .index("by_receivedAt", ["receivedAt"]),
+
     // Roles del taller: los del sistema nacen en el código (su etiqueta y sus
     // permisos por defecto) y el administrador crea los personalizados. La
     // fila guarda además los permisos que el administrador haya configurado.
@@ -639,6 +827,11 @@ const schema = defineSchema(
       // Vales sin archivo que se retiraron con ellos: no son archivos, pero se
       // van en la misma pasada.
       tickets: v.optional(v.number()),
+      // Archivos que la pasada no pudo leer: los que están en el almacén sin
+      // dirección con la que abrirlos y los que algo cita y ya no están. No se
+      // retiran —de un archivo que no se lee no se puede decidir nada—, así que
+      // se cuentan aparte de los retirados para que la pantalla pueda señalarlos.
+      unreadable: v.optional(v.number()),
       // Quién la lanzó: la limpieza automática o el nombre de quien pulsó.
       runBy: v.string(),
     }).index("by_pass", ["pass"]),

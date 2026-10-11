@@ -33,6 +33,7 @@ import { monthsAgo } from "@/lib/browse";
 import {
   CLEANUP_PASS_META,
   cleanupCount,
+  cleanupUnreadableLabel,
   cleanupTicketsLabel,
 } from "@/lib/cleanupLog";
 import { roleBadgeClassName } from "@/lib/roles";
@@ -663,7 +664,10 @@ function UnusedUploadsCard() {
 
   const images = pending?.images ?? [];
   const tickets = pending?.tickets ?? 0;
-  const total = images.length + tickets;
+  // Vales cuyo archivo el almacén ya no puede leer: se van en la misma pasada,
+  // pero no son imágenes ni dejan nada en la papelera.
+  const unreadable = pending?.unreadable ?? 0;
+  const total = images.length + tickets + unreadable;
   // Lo pendiente, en una línea: cuántas fotos, cuánto ocupan, y lo que se va con
   // ellas (los vales sin archivo no son imágenes, pero se van en la misma pasada).
   const summary = [
@@ -673,6 +677,7 @@ function UnusedUploadsCard() {
     tickets > 0
       ? `${tickets} ${tickets === 1 ? "vale" : "vales"} sin archivo`
       : null,
+    unreadable > 0 ? cleanupUnreadableLabel(unreadable) : null,
     pending?.partial ? "la limpieza va por tandas" : null,
   ]
     .filter((part): part is string => part !== null)
@@ -687,12 +692,22 @@ function UnusedUploadsCard() {
         result.images > 0 ? cleanupCount("reportUploads", result.images) : null,
         result.tickets > 0 ? cleanupTicketsLabel(result.tickets) : null,
       ].filter((part): part is string => part !== null);
-      toast.success(
-        parts.length === 0
-          ? "No había nada que purgar"
-          : `A la papelera: ${parts.join(" y ")}${
+      // Y lo que no se puede leer no deja nada: se dice aparte para no contarlo
+      // entre lo que se guarda.
+      const messages = [
+        parts.length > 0
+          ? `A la papelera: ${parts.join(" y ")}${
               result.bytes > 0 ? ` (${formatFileSize(result.bytes)})` : ""
-            }`,
+            }`
+          : null,
+        result.unreadable > 0
+          ? `${cleanupUnreadableLabel(result.unreadable)}, que no dejan nada`
+          : null,
+      ].filter((part): part is string => part !== null);
+      toast.success(
+        messages.length === 0
+          ? "No había nada que purgar"
+          : messages.join(" · "),
       );
       setConfirming(false);
     } catch (error) {
@@ -739,6 +754,17 @@ function UnusedUploadsCard() {
           <p className="mt-4 text-xs leading-5 text-muted-foreground">
             {summary}
           </p>
+
+          {unreadable > 0 && (
+            // Lo que no se puede leer no tiene miniatura que enseñar —por eso no
+            // está en la lista de abajo—, así que se explica: es un vale que
+            // sigue ahí y un archivo que ya no.
+            <p className="mt-2 rounded-lg border border-dashed border-border/70 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {`${cleanupUnreadableLabel(
+                unreadable,
+              )}: el vale sigue aquí, pero el archivo ya no está en el almacén. La pasada se lleva el vale —ya no sirve para nada— y lo cuenta aparte, sin hacerlo pasar por una imagen.`}
+            </p>
+          )}
 
           {images.length > 0 && (
             // Las imágenes de la tanda, como grupo: si lo que falla es la
@@ -806,6 +832,11 @@ function UnusedUploadsCard() {
                 } (${formatFileSize(pending?.totalBytes ?? 0)})`}
                 {tickets > 0
                   ? ` y ${tickets} ${tickets === 1 ? "vale" : "vales"} sin archivo`
+                  : ""}
+                {unreadable > 0
+                  ? `, y ${cleanupUnreadableLabel(
+                      unreadable,
+                    )}, que se irán sin dejar nada en la papelera`
                   : ""}
                 {`. No están en ninguna incidencia, así que no se pierde nada del expediente: se quedan ${retentionDays} días en la papelera, por si hay que volver a por ellas.`}
               </DialogDescription>
@@ -999,11 +1030,25 @@ function StorageCleanupCard() {
               result.trash.files,
             )})`
           : null;
+      // Lo que no se puede leer se dice aparte: lo de los archivos sin citar se
+      // queda donde estaba —de lo que no se lee no se decide nada— y el vale del
+      // formulario se va sin dejar nada en la papelera.
+      const unreadable = [
+        result.reportUploads.unreadable > 0
+          ? `${cleanupUnreadableLabel(
+              result.reportUploads.unreadable,
+            )}, sin nada que guardar`
+          : null,
+        result.orphanFiles.unreadable > 0
+          ? `${cleanupUnreadableLabel(result.orphanFiles.unreadable)}, sin retirar`
+          : null,
+      ].filter((part): part is string => part !== null);
       // Solo se cuenta lo que salió: una pasada que no se llevó nada no se
       // nombra, para que el aviso diga lo que pasó y no lo que pudo pasar.
       const parts = [
         removed.length > 0 ? `${removed.join(" y ")} a la papelera` : null,
         freed,
+        ...unreadable,
       ].filter((part): part is string => part !== null);
 
       toast.success(
@@ -1068,6 +1113,15 @@ function StorageCleanupCard() {
                   ? "no retiró nada"
                   : `${cleanupCount(run.pass, run.files)} · ${formatFileSize(run.bytes)}`,
               run.tickets > 0 ? cleanupTicketsLabel(run.tickets) : null,
+              // Lo que no se pudo leer, aparte de lo retirado: no es lo mismo que
+              // no haberlo visto.
+              run.unreadable > 0
+                ? `${cleanupUnreadableLabel(run.unreadable)}${
+                    run.pass === "orphanFiles"
+                      ? ", sin retirar"
+                      : ", sin nada que guardar"
+                  }`
+                : null,
             ].filter((part): part is string => part !== null);
 
             return (

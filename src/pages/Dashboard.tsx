@@ -55,6 +55,7 @@ import {
   LogOut,
   Mail,
   PackageCheck,
+  ShoppingCart,
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
@@ -82,14 +83,17 @@ import { InventoryView } from "./dashboard/InventoryView";
 import { ManualsView } from "./dashboard/ManualsView";
 import { PermissionsView } from "./dashboard/PermissionsView";
 import { ProfileView } from "./dashboard/ProfileView";
+import { PurchasingView } from "./dashboard/PurchasingView";
 import { RequestsView, type RequestFilterId } from "./dashboard/RequestsView";
 import { UsersView } from "./dashboard/UsersView";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { WorkshopSettingsView } from "./dashboard/WorkshopSettingsView";
+import { FULL_VERSION, DETAILED_VERSION } from "@/version";
 
 type NavId =
   | "incidents"
   | "requests"
+  | "purchasing"
   | "inventory"
   | "equipment"
   | "manuals"
@@ -376,6 +380,18 @@ export default function Dashboard() {
   // El resumen semanal es de los mandos del taller: los mismos que coordinan
   // las incidencias o deciden las peticiones (igual que el archivo).
   const canConfigureReport = can("manageIncidents") || can("decideRequests");
+  // Compras: lo que el almacén no cubre. Se pregunta solo si se puede ver (el
+  // backend no contesta a quien no tiene la capacidad), y lo que llega son las
+  // tres listas del módulo: lo que espera por proveedor, las órdenes y las
+  // recepciones con su albarán.
+  const canSeePurchasing = can("viewPurchasing") || can("managePurchasing");
+  const purchasingArgs = canSeePurchasing ? {} : ("skip" as const);
+  const purchaseRequests = useQuery(
+    api.purchasing.listPurchaseRequests,
+    purchasingArgs,
+  );
+  const purchaseOrders = useQuery(api.purchasing.listOrders, purchasingArgs);
+  const receptions = useQuery(api.purchasing.listReceptions, purchasingArgs);
   const needsRole =
     user !== undefined && user !== null && user.role === undefined;
 
@@ -417,6 +433,13 @@ export default function Dashboard() {
             icon: ClipboardList,
             badge: 0,
           },
+        ] as NavItem[])
+      : []),
+    // Compras: el trabajo del responsable cuando el almacén no tiene lo que se
+    // pide. Va después de las peticiones porque es su continuación natural.
+    ...(canSeePurchasing
+      ? ([
+          { id: "purchasing", label: "Compras", icon: ShoppingCart, badge: 0 },
         ] as NavItem[])
       : []),
     ...(can("viewInventory")
@@ -591,6 +614,11 @@ export default function Dashboard() {
     incidents: activeIncidents.filter((item) => item.status === "reported")
       .length,
     requests: pendingRequests.length,
+    // La píldora de compras cuenta lo que espera a que alguien monte la orden,
+    // que es el trabajo pendiente del responsable.
+    purchasing: (purchaseRequests?.requests ?? []).filter(
+      (row) => row.status === "pending",
+    ).length,
     inventory: 0,
     equipment: allEquipment.length,
     manuals: allManuals.length,
@@ -1028,6 +1056,13 @@ export default function Dashboard() {
               Salir
             </Button>
           </div>
+
+          <div
+            className="mt-2 text-center text-[11px] text-muted-foreground/60 select-none"
+            title={DETAILED_VERSION}
+          >
+            {FULL_VERSION}
+          </div>
         </div>
       </aside>
 
@@ -1397,8 +1432,18 @@ export default function Dashboard() {
                 equipmentFilter={requestsEquipmentFilter}
                 onEquipmentFilterChange={setRequestsEquipmentFilter}
                 canManage={can("decideRequests")}
+                canPurchase={can("managePurchasing") && can("viewPurchasing")}
                 initialDetailId={initialRequestId}
                 initialFilter={requestsInitialFilter}
+              />
+            ) : activeTab === "purchasing" && canSeePurchasing ? (
+              <PurchasingView
+                purchaseRequests={purchaseRequests?.requests ?? []}
+                orders={purchaseOrders ?? []}
+                receptions={receptions ?? []}
+                partRequests={allRequests}
+                parts={allParts}
+                canManage={can("managePurchasing")}
               />
             ) : activeTab === "inventory" && can("viewInventory") ? (
               <InventoryView

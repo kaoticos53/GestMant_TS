@@ -3,7 +3,7 @@
 Cómo dejar el taller corriendo en un servidor propio con **Proxmox VE**, con la
 aplicación, la base de datos y los archivos viviendo dentro de casa o del taller
 (y sin depender de nada que no sea tuyo). Es el mismo montaje que el del NAS
-Synology —tres contenedores que se quedan, uno que pasa— pero sobre una **máquina
+Synology —cuatro contenedores que se quedan, uno que pasa— pero sobre una **máquina
 virtual Debian** dentro de Proxmox, con **Caddy** delante poniendo el HTTPS que en
 el Synology pone DSM.
 
@@ -33,7 +33,9 @@ En lo que sigue, «el servidor» es esa VM Debian (o el LXC ajustado).
 - **Proxmox VE 8** o más nuevo, con una **VM Debian 12 o 13** creada en él (paso
   1). En el LXC es la variante contada aparte.
 - **SSH hacia el servidor** desde el ordenador donde tienes el proyecto clonado,
-  igual que en la guía del NAS: casi todo se hace por ahí.
+  igual que en la guía del NAS: casi todo se hace por ahí. Si clonas el código en
+  el propio servidor (paso 3), el proyecto en el ordenador no hace falta ni para
+  eso.
 - **Un dominio** con dos subdominios (`taller.` y `api.`) apuntando a la
   dirección del servidor. Al final está la variante sin dominio, solo red local.
 - Un **puerto 80 y 443 libres** en el servidor: los pide Caddy para el
@@ -202,7 +204,35 @@ tar --exclude=node_modules --exclude=dist --exclude=.env.local -czf - . \
       'rm -rf /srv/pulso-taller/codigo && mkdir -p /srv/pulso-taller/codigo && tar xzf - -C /srv/pulso-taller/codigo'
 ```
 
-Y el compose y la plantilla del `.env`:
+### En vez de copiar: `git clone` en el propio servidor
+
+En la VM, `git` se instala en un segundo y así no hace falta tener el proyecto en
+el ordenador: el código llega directo al servidor.
+
+```bash
+apt install -y git
+git clone --depth 1 https://github.com/tu-usuario/pulso-taller.git /srv/pulso-taller/codigo
+```
+
+Se clona **en `codigo/`**, que es donde el `docker-compose.yml` lo espera (y
+`--depth 1` basta: hace falta el código, no el historial). El compose y la
+plantilla del `.env` ya vienen dentro del propio clon, así que no hay que
+mandarlos por separado:
+
+```bash
+cd /srv/pulso-taller
+cp codigo/docker/synology/docker-compose.yml .
+cp codigo/docker/synology/.env.example .
+```
+
+Y ese `.env.example` se convierte en `.env` como dice la nota de abajo.
+**Actualizar, entonces, es `git pull`**: `cd /srv/pulso-taller/codigo && git pull`
+y `docker compose up -d --build`. Ojo con mezclar las dos vías: `npm run nas`
+sustituye `codigo/` entero por el código del ordenador —el `.git` se va con él—,
+así que o clonas en el servidor y actualizas con `git pull`, o llevas el código
+desde el ordenador.
+
+De la otra forma —copiando—, el compose y la plantilla del `.env` van aparte:
 
 ```bash
 scp docker/synology/docker-compose.yml docker/synology/.env.example \
@@ -307,7 +337,12 @@ docker compose up -d --build
 
 El contenedor `funciones` sube el esquema y las funciones y **se para con
 `exited (0)`** —ha hecho su recado—. Su última línea, en `docker compose logs
-funciones`, es «listo: el esquema y las funciones están al día». Si sale con
+funciones`, es «listo: el esquema y las funciones están al día». A partir de ahí
+los cambios llegan solos: el contenedor `vigilante`, que sí se queda, mira
+`./codigo/src/convex` (lo que hay en el servidor) y vuelve a subir el esquema y
+las funciones **solo cuando cambian**, sin reiniciar ni reconstruir nada. Tampoco
+genera las claves de Convex Auth: espera a que las deje `funciones`. Se ve en
+`docker compose logs -f vigilante`. Si sale con
 error, lo dice con palabras; el apartado de **Problemas frecuentes** está al
 final, y es el mismo catálogo que el de la guía del NAS (los motivos son los
 mismos: la clave, las variables de auth o el WebSocket).
@@ -371,19 +406,30 @@ zip que se puede devolver a cualquier instalación —esta o la nube—.
 Recuerda que todo esto lo hace `npm run nas -- --host IP-del-servidor --user
 root` desde el ordenador (se puede repetir, y es idempotente). A mano:
 
+Si llevaste el código con `git clone` (paso 3), «llevar el código otra vez» es
+**`git pull` dentro del servidor** —`cd /srv/pulso-taller/codigo && git pull`—,
+sin tocar el ordenador; lo de después, igual.
+
 - **La app** (lo que se ve y sus textos): lleva el código otra vez (paso 3) y
   `docker compose up -d --build`. El sitio va dentro de la imagen, así que
   hasta que no se recompila no cambia; y la imagen se sustituye entera, sin
   restos de la versión anterior.
-- **Las funciones** (lo que hay en `src/convex/`): lleva el código y arranca
-  **solo** ese contenedor, que es el que las sube:
+- **Las funciones** (lo que hay en `src/convex/`): basta con dejar el código nuevo
+  en `codigo/`. El `vigilante` lo ve y vuelve a subir el esquema y las funciones
+  solo, **sin reiniciar ni reconstruir nada**:
 
   ```bash
   cd /srv/pulso-taller
-  docker compose up -d --build funciones
+  docker compose logs -f vigilante
   ```
 
-  Sube y se para, como en el primer arranque. Los datos no se tocan.
+  La primera subida, al arrancar el proyecto, sigue siendo la de `funciones`. El
+  vigilante mira la carpeta del servidor, así que cuando el código llega como
+  carpeta nueva `npm run nas` lo recrea para que su montaje sea el de ahora. Si el
+  vigilante estuviera parado —tres intentos fallidos lo dejan así, y dice por
+  qué—, se levanta con `docker compose up -d vigilante`, y para forzar una subida
+  suelta vale el contenedor de arranque: `docker compose up funciones`. Sube y se
+  para, como en el primer arranque. Los datos no se tocan.
 
 - **Los contenedores** (backend y panel): cuando quieras traer una versión
   nueva de las imágenes de Convex:
@@ -408,9 +454,10 @@ se tocan solas:
 - **Proxmox**: las actualizaciones del hipervisor van por su web (node -> shell
   → `apt update && apt full-upgrade` en el propio nodo), fuera del alcance de
   esta guía. Lo que sí conviene reflejar aquí: **un reinicio de la VM no toca
-  nada del taller** — Compose tiene `restart: unless-stopped` en los tres
-  contenedores que se quedan, y `restart: "no"` en `funciones` porque su
-  trabajo es subir y pararse—. Cuando la VM vuelva, el taller está corriendo
+  nada del taller** — Compose tiene `restart: unless-stopped` en los
+  contenedores que se quedan y `restart: on-failure:3` en `vigilante` —para no
+  estar reintentando en bucle si lo que falla es la configuración—, y `restart:
+"no"` en `funciones` porque su trabajo es subir y pararse—. Cuando la VM vuelva, el taller está corriendo
   solo.
 
 - **Caddy**: lo renueva la instalación del paquete. No hay nada que hacer.
@@ -490,6 +537,14 @@ Si el 80 está cerrado en el cortafuegos o el registro DNS de `api.` no apunta a
 la dirección pública de la VM, el certificado no se emite y `curl https://api./
 version` se queda en un error de TLS. En los registros lo dice:
 `journalctl -u caddy -f` mientras lo intenta de nuevo.
+
+**He cambiado una función y no se ha subido.**
+El que las sube solo es el `vigilante`: mira `docker compose logs vigilante`. Si
+dice que no ha podido subir el código en tres intentos, el motivo está en las
+líneas de arriba —casi siempre la clave de administrador o el backend—, y después
+de arreglarlo lo reintenta solo. Si el contenedor está parado, levántalo con
+`docker compose up -d vigilante`; para una subida puntual, `docker compose up
+funciones`.
 
 **El contenedor `funciones` sale con un aviso y se para.**
 Le falta la clave de administrador (la primera vez, antes del paso 5) o la que

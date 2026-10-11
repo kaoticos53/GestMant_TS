@@ -49,6 +49,7 @@ const VALUE_OPTIONS = {
 
 /** Las opciones que no llevan valor: están o no están. */
 const SWITCH_OPTIONS = {
+  "--check": "check",
   "--force-compose": "forceCompose",
   "--new-key": "newKey",
   "--no-build": "noBuild",
@@ -61,7 +62,8 @@ export function usage(name = "npm run nas --") {
   return [
     "Puesta en marcha del taller en un NAS Synology, de una sola vez.",
     "",
-    `  ${name} --host IP-del-NAS [opciones]`,
+    `${name} --host IP-del-NAS [opciones]`,
+    `  ${name} --check --host IP-del-NAS`,
     `  ${name} --host 192.168.1.20 --app-url https://taller.mi-taller.es \\`,
     "    --api-url https://api.mi-taller.es",
     "",
@@ -72,8 +74,14 @@ export function usage(name = "npm run nas --") {
     "las funciones las suba. Se puede lanzar tantas veces como haga falta: lo que",
     "ya está hecho no se rehace ni se pisa, y los datos no se tocan nunca.",
     "",
+    "Con --check no se cambia nada: mira cómo está el taller —los contenedores, el",
+    ".env y si el esquema está al día— y lo cuenta. Ni construye ni arranca ni",
+    "sube código: se puede lanzar en cualquier momento, también con gente dentro.",
+    "",
     "Opciones:",
     "",
+    "  --check                  solo mira cómo está el taller (contenedores, .env",
+    "                           y esquema). No cambia nada",
     "  --host IP-del-NAS        el NAS (también NAS_HOST)",
     "  --user admin             la cuenta con la que se entra (NAS_USER)",
     "  --port 22                el puerto de SSH (NAS_PORT)",
@@ -111,6 +119,7 @@ export function resolveConfig(argv = [], env = {}) {
     appUrl: "",
     apiUrl: "",
     instance: DEFAULT_INSTANCE,
+    check: false,
     forceCompose: false,
     newKey: false,
     build: true,
@@ -150,6 +159,18 @@ export function resolveConfig(argv = [], env = {}) {
 
   if (config.noBuild) config.build = false;
   delete config.noBuild;
+
+  // Mirar y cambiar son dos cosas distintas: con --check no hay nada que forzar
+  // ni clave que pedir, y prometerlo sería peor que no aceptarlo.
+  const noCheck = [
+    config.forceCompose ? "--force-compose" : null,
+    config.newKey ? "--new-key" : null,
+  ].filter(Boolean);
+  if (config.check && noCheck.length > 0) {
+    config.errors.push(
+      `--check no cambia nada, así que no se combina con ${noCheck.join(" ni ")}`,
+    );
+  }
 
   // El puerto tiene que ser un puerto, y la carpeta tiene que ser absoluta: las
   // dos cosas se comprueban aquí porque un dedazo se paga más tarde y peor.
@@ -477,6 +498,19 @@ else
   compose up -d || fail "los contenedores no han arrancado"
 fi
 
+# El vigilante mira «codigo/src/convex», montado desde el NAS. El codigo acaba de
+# llegar como carpeta nueva --se descomprime al lado y se sustituye entera, para
+# que un corte a mitad no deje el proyecto a medias--, y un montaje de Docker
+# apunta a la carpeta que existia cuando se creo el contenedor: sin recrearlo, se
+# quedaria mirando al codigo viejo y no volveria a subir nada. Se recrea para que
+# mire el nuevo; al arrancar no sube nada por su cuenta (apunta como esta el
+# codigo y espera al primer cambio: el primer envio es del contenedor de arriba).
+# En una instalacion anterior, sin ese servicio, no aparece y no se toca nada.
+if [ -n "$(compose ps -a -q vigilante 2>/dev/null || true)" ]; then
+  compose up -d --force-recreate vigilante ||
+    log "no he podido recrear el vigilante: mira «$COMPOSE_CMD up -d --force-recreate vigilante»"
+fi
+
 # El backend tiene que estar en pie antes de pedirle la clave. Se pregunta por lo
 # mismo que su healthcheck —su version— y se espera con paciencia, que un NAS
 # tambien arranca despacio.
@@ -573,23 +607,207 @@ printf 'PULSO_SETUP env=%s secreto=%s clave=%s compose=%s funciones=%s construid
 }
 
 /**
- * Lee el resumen que el guion del NAS deja como ultima linea
- * (`PULSO_SETUP env=si clave=pedida ...`). Devuelve `null` si no aparece: quien
- * llama lo trata como «el guion no ha terminado», que es lo que es.
+ * El guion que se ejecuta **dentro** del NAS para mirar como esta el taller, sin
+ * tocar nada: no escribe archivos, no construye ni arranca contenedores, no sube
+ * codigo y no pide claves. Solo lee —el `.env`, el proyecto de Compose y el
+ * estado de los contenedores— y deja lo que ha visto en una ultima linea
+ * (`PULSO_CHECK ...`) que lee el script del ordenador.
+ *
+ * Viaja como argumento de la conexion, no se sube a ningun sitio: la
+ * comprobacion no deja ni un archivo en el NAS. Por eso no depende de que la
+ * puesta en marcha haya pasado por ahi (sus guiones viven en `.setup/`).
+ *
+ * Del `.env` solo salen **nombres**: que claves faltan y si las direcciones son
+ * todavia las de la plantilla. Ningun valor viaja en el resumen —tampoco la
+ * clave de administrador—, asi que el panel puede ensenarlo sin cuidado.
+ *
+ * Lo unico que no se puede saber desde dentro es si el backend tiene el esquema
+ * de este ordenador: eso lo decide quien llama, comparando la fecha del ultimo
+ * envio (que va en el resumen) con la del codigo que tiene delante.
  */
-export function parseSetupResult(text) {
+export function checkScript({
+  root = DEFAULT_PROJECT_PATH,
+  healthUrl = BACKEND_HEALTH_URL,
+} = {}) {
+  return `#!/bin/sh
+# Como esta el taller, sin tocar nada. Lo lanza el comando del ordenador con
+# --check y no se queda en el NAS: viaja por la conexion, como argumento.
+#
+# Corre con sh, no con bash: en el NAS no hay bash de sobra. Y no usa sudo para
+# todo: le pregunta a Docker si le hace falta, igual que la puesta en marcha.
+
+set -u
+
+RAIZ=${shQuote(root)}
+SALUD=${shQuote(healthUrl)}
+ENV="$RAIZ/.env"
+COMPOSE="$RAIZ/docker-compose.yml"
+
+log() { printf 'nas: %s\\n' "$*"; }
+
+# Los datos del resumen, con su valor de partida: lo que no se pueda mirar queda
+# como desconocido en vez de inventado.
+raiz="no"
+docker_estado="no"
+salud="no"
+contenedores=""
+env_estado="no"
+faltan=""
+plantilla="no"
+api=""
+sitio=""
+funciones="desconocido"
+salida=""
+fin=""
+
+if [ ! -d "$RAIZ" ]; then
+  log "no existe la carpeta del proyecto: $RAIZ"
+  printf 'PULSO_CHECK raiz=no\\n'
+  exit 0
+fi
+raiz="si"
+log "carpeta del proyecto: $RAIZ"
+
+# --- Con quien se habla con Docker -------------------------------------------
+# La misma pregunta que hace la puesta en marcha, sin cambiar nada: en un
+# Synology hace falta root para hablar con Docker, aunque no siempre (si el
+# usuario esta en el grupo que toca, no).
+if docker info >/dev/null 2>&1; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+if $SUDO docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+  docker_estado="si"
+elif $SUDO docker-compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+  docker_estado="si"
+else
+  log "no encuentro docker compose: sin Container Manager no hay contenedores que mirar"
+fi
+
+if [ "$docker_estado" = "si" ]; then
+  # Los que se quedan, uno a uno y con -a: un contenedor parado sigue siendo
+  # parte de la respuesta (parado no es lo mismo que no estar). El del vigilante
+  # de las funciones va el ultimo: si la instalacion es de antes de que existiera,
+  # no aparece y no pasa nada (quien lo mira lo tiene en cuenta).
+  for servicio in app backend dashboard vigilante; do
+    id=$($SUDO $COMPOSE_CMD ps -a -q "$servicio" 2>/dev/null || true)
+    estado="falta"
+    if [ -n "$id" ]; then
+      estado=$($SUDO docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
+      [ "$estado" = "running" ] || estado="parado"
+    fi
+    if [ -z "$contenedores" ]; then
+      contenedores="$servicio:$estado"
+    else
+      contenedores="$contenedores,$servicio:$estado"
+    fi
+  done
+  log "contenedores: $contenedores"
+
+  # Y el que pasa: sube el esquema y las funciones, termina y se para. Su salida
+  # limpia es la senal de que el ultimo envio entro; su fecha, la de cuando.
+  id=$($SUDO $COMPOSE_CMD ps -a -q funciones 2>/dev/null || true)
+  if [ -z "$id" ]; then
+    funciones="falta"
+  else
+    estado=$($SUDO docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
+    case "$estado" in
+      running) funciones="en-marcha" ;;
+      exited) funciones="terminado" ;;
+      *) funciones="$estado" ;;
+    esac
+    salida=$($SUDO docker inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || printf '')
+    fin=$($SUDO docker inspect -f '{{.State.FinishedAt}}' "$id" 2>/dev/null || printf '')
+  fi
+  if [ -z "$salida" ]; then
+    log "funciones: $funciones"
+  else
+    log "funciones: $funciones (salida $salida)"
+  fi
+
+  # El backend se pregunta por su version, que es lo que publica su healthcheck.
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -o /dev/null "$SALUD" 2>/dev/null && salud="si"
+  else
+    wget -q -O /dev/null "$SALUD" 2>/dev/null && salud="si"
+  fi
+  log "el backend $([ "$salud" = "si" ] && printf 'responde' || printf 'no responde') en $SALUD"
+fi
+
+# --- El .env ------------------------------------------------------------------
+# Del .env solo se miran los nombres: que esten las claves que hacen falta y que
+# las direcciones no sean las de la plantilla. Ningun valor sale de aqui.
+if [ -f "$ENV" ]; then
+  env_estado="si"
+  valor_de() { sed -n "s/^$1=//p" "$ENV" 2>/dev/null | head -n 1 || true; }
+  for clave in INSTANCE_NAME INSTANCE_SECRET CONVEX_CLOUD_ORIGIN SITE_URL CONVEX_ADMIN_KEY; do
+    [ -n "$(valor_de "$clave")" ] && continue
+    if [ -z "$faltan" ]; then
+      faltan="$clave"
+    else
+      faltan="$faltan,$clave"
+    fi
+  done
+  api=$(valor_de CONVEX_CLOUD_ORIGIN)
+  sitio=$(valor_de SITE_URL)
+  if [ "$api" = "https://api.tudominio.com" ] || [ "$sitio" = "https://taller.tudominio.com" ]; then
+    plantilla="si"
+  fi
+  if [ -z "$faltan" ]; then
+    log "el .env esta completo"
+  else
+    log "al .env le falta: $faltan"
+  fi
+else
+  log "no hay .env en $ENV: el proyecto de Container Manager no puede arrancar"
+fi
+
+# El resumen va en una sola linea y sin huecos: lo lee el script del ordenador
+# palabra a palabra. Donde no hay nada se pone «ninguno», que no es lo mismo que
+# venir vacio.
+if [ -z "$faltan" ]; then
+  faltan="ninguno"
+fi
+printf 'PULSO_CHECK raiz=%s docker=%s salud=%s contenedores=%s env=%s faltan=%s plantilla=%s api=%s sitio=%s funciones=%s salida=%s fin=%s\\n' \\
+  "$raiz" "$docker_estado" "$salud" "$contenedores" "$env_estado" "$faltan" "$plantilla" \\
+  "$api" "$sitio" "$funciones" "$salida" "$fin"
+`;
+}
+
+/**
+ * Lee el resumen que un guion del NAS deja como ultima linea, con su marca
+ * delante (`PULSO_SETUP ...`, `PULSO_CHECK ...` o `PULSO_BACKUP ...` —el lector
+ * es el mismo para los tres—). Devuelve `null` si no
+ * aparece: quien llama lo trata como «el guion no ha terminado», que es lo que
+ * es. La seudo-terminal del SSH devuelve cada linea terminada en `\r`, asi que
+ * se quita antes de mirarla.
+ */
+export function parseSummary(text, marker) {
   const line = String(text ?? "")
     .split("\n")
     .map((one) => one.replace(/\r$/, ""))
     .reverse()
-    .find((one) => one.startsWith("PULSO_SETUP "));
+    .find((one) => one.startsWith(marker));
   if (!line) return null;
   const result = {};
-  for (const pair of line.slice("PULSO_SETUP ".length).trim().split(/\s+/)) {
+  for (const pair of line.slice(marker.length).trim().split(/\s+/)) {
     const at = pair.indexOf("=");
     if (at > 0) result[pair.slice(0, at)] = pair.slice(at + 1);
   }
   return result;
+}
+
+/** El resumen de la puesta en marcha (`PULSO_SETUP ...`). */
+export function parseSetupResult(text) {
+  return parseSummary(text, "PULSO_SETUP ");
+}
+
+/** El resumen de la comprobación (`PULSO_CHECK ...`). */
+export function parseCheckResult(text) {
+  return parseSummary(text, "PULSO_CHECK ");
 }
 
 /**
@@ -616,7 +834,13 @@ export function panelLines(
     `  API de Convex    ${apiUrl}`,
     `  Panel de Convex  http://${host}:6791  (solo desde la red local)`,
     `  Proyecto         ${user}@${host}:${root}`,
-    "  Contenedores     app · backend · dashboard en pie · funciones terminado (exited 0)",
+    // El vigilante solo se nombra cuando el compose es el del repositorio: es el
+    // que lo trae. Si se conservo el del NAS, este guion no sabe si esa
+    // instalacion lo tiene, y darlo por hecho seria mentir en el panel —el
+    // aviso de abajo lo dice sin afirmar nada—.
+    result.compose === "conservado"
+      ? "  Contenedores     app · backend · dashboard en pie · funciones terminado (exited 0)"
+      : "  Contenedores     app · backend · dashboard y el vigilante en pie · funciones terminado (exited 0)",
   ];
 
   if (result.env === "si") {
@@ -646,6 +870,12 @@ export function panelLines(
       ),
       color.dim(
         "                   (para pisarlo con el del repositorio: --force-compose)",
+      ),
+      color.dim(
+        "                   si el tuyo no trae el servicio «vigilante», los cambios en src/convex",
+      ),
+      color.dim(
+        "                   no se suben solos: mira «docker compose ps -a» y SYNOLOGY.md",
       ),
     );
   }
@@ -690,5 +920,303 @@ export function panelLines(
     );
   }
   lines.push("", `  Abre la app en ${color.bold(appUrl)}`);
+  return lines;
+}
+
+/* ------------------------------------------------------------------ */
+/* --check: cómo está el taller                                        */
+/* ------------------------------------------------------------------ */
+
+/** Lo que cuenta el resumen de cada servicio: `app:running,backend:parado`. */
+function serviceStates(contenedores = "") {
+  const states = new Map();
+  for (const piece of String(contenedores).split(",")) {
+    const at = piece.indexOf(":");
+    if (at > 0) states.set(piece.slice(0, at), piece.slice(at + 1));
+  }
+  return states;
+}
+
+/** «en pie», «parado», «no está»: el estado de un contenedor, en palabras. */
+function stateWords(state) {
+  if (state === "running") return "en pie";
+  if (state === "parado") return "parado";
+  if (state === undefined || state === "falta") return "no está";
+  return `en «${state}»`;
+}
+
+/**
+ * Los contenedores del taller. Los tres que se quedan tienen que estar en pie
+ * —la app, el backend y el panel de Convex— y el backend, además, tiene que
+ * contestar en su puerto: es el que sostiene todo lo demás. El cuarto, el de las
+ * funciones, es un recado que pasa y se va; de él se ocupa la comprobación del
+ * esquema.
+ */
+export function containerVerdict(result = {}) {
+  const base = { id: "containers", label: "Contenedores" };
+  if (result.raiz === "no") {
+    return {
+      ...base,
+      ok: false,
+      detail: "no hay ninguna instalación en esa carpeta",
+      fix: "para ponerla en marcha: npm run nas -- --host … --app-url … --api-url …",
+    };
+  }
+  if (result.docker !== "si") {
+    return {
+      ...base,
+      ok: false,
+      detail: "no encuentro docker compose en el NAS",
+      fix: "instala Container Manager desde el Centro de paquetes y vuelve a mirar",
+    };
+  }
+
+  const states = serviceStates(result.contenedores);
+  const names = ["app", "backend", "dashboard"];
+  const down = names.filter((name) => states.get(name) !== "running");
+  if (down.length > 0) {
+    return {
+      ...base,
+      ok: false,
+      detail: names
+        .map((name) => `${name} ${stateWords(states.get(name))}`)
+        .join(" · "),
+      fix: "levántalos con: npm run nas -- (o el botón de arrancar de Container Manager)",
+    };
+  }
+  if (result.salud !== "si") {
+    return {
+      ...base,
+      ok: false,
+      detail:
+        "app · backend · dashboard en pie, pero la API no responde en su puerto",
+      fix: "mira los registros del contenedor backend en el NAS: docker compose logs backend",
+    };
+  }
+
+  // El vigilante de las funciones: es el que vuelve a subir el código cuando
+  // cambia, así que si está, tiene que estar en pie. Si no aparece —una
+  // instalación de antes de que existiera, con su compose conservado— no se dice
+  // nada: no se puede echar en falta lo que nunca se pidió.
+  const vigilante = states.get("vigilante");
+  if (vigilante !== undefined && vigilante !== "running") {
+    return {
+      ...base,
+      ok: false,
+      detail: `app · backend · dashboard en pie, pero el vigilante de las funciones ${stateWords(
+        vigilante,
+      )}`,
+      fix: "levántalo en el NAS con «docker compose up -d vigilante», o vuelve a lanzar la puesta en marcha: npm run nas -- --host …",
+    };
+  }
+
+  return {
+    ...base,
+    ok: true,
+    detail:
+      vigilante === "running"
+        ? "app · backend · dashboard en pie · el vigilante de las funciones en marcha · la API responde en su puerto"
+        : "app · backend · dashboard en pie · la API responde en su puerto",
+  };
+}
+
+/**
+ * El `.env` del proyecto: que exista, que no le falte ninguna de las claves que
+ * hacen falta y que las direcciones no sean todavía las de la plantilla. Se dice
+ * **qué** falta y nunca cuánto vale: del `.env` solo salen nombres.
+ */
+export function envVerdict(result = {}) {
+  const base = { id: "env", label: ".env" };
+  if (result.raiz === "no") {
+    return {
+      ...base,
+      ok: false,
+      detail: "sin carpeta del proyecto no hay .env que mirar",
+    };
+  }
+  if (result.env !== "si") {
+    return {
+      ...base,
+      ok: false,
+      detail: "no hay .env en la carpeta del proyecto",
+      fix: "lo escribe la puesta en marcha: npm run nas -- --host … --app-url … --api-url …",
+    };
+  }
+
+  const missing = String(result.faltan ?? "")
+    .split(",")
+    .filter((name) => name !== "" && name !== "ninguno");
+  if (missing.length > 0) {
+    return {
+      ...base,
+      ok: false,
+      detail: `le falta${missing.length === 1 ? "" : "n"} ${missing.join(", ")}`,
+      fix: "rellena esas líneas en el .env del NAS y vuelve a lanzar la puesta en marcha",
+    };
+  }
+  if (result.plantilla === "si") {
+    return {
+      ...base,
+      ok: false,
+      detail:
+        "completo, pero con las direcciones de la plantilla (tudominio.com)",
+      fix: "escribe las del taller (CONVEX_CLOUD_ORIGIN y SITE_URL) y vuelve a lanzar la puesta en marcha",
+    };
+  }
+  return {
+    ...base,
+    ok: true,
+    detail:
+      "completo: instancia, secreto, direcciones y clave de administrador",
+  };
+}
+
+/**
+ * Si el backend tiene el esquema de este ordenador. Lo que se puede saber desde
+ * el NAS es cómo acabó el último envío —el contenedor de las funciones sube el
+ * esquema y se va— y cuándo terminó; con eso, y la fecha del código que hay aquí
+ * delante (`codeMtime`, la del archivo más reciente de `src/convex`), queda claro
+ * si falta volver a lanzar la puesta en marcha.
+ *
+ * La fecha del código sirve porque el código viaja al NAS con sus fechas: lo
+ * empaqueta `tar`.
+ */
+export function schemaVerdict(result = {}, { codeMtime = null } = {}) {
+  const base = { id: "schema", label: "Esquema" };
+  if (result.raiz === "no") {
+    return {
+      ...base,
+      ok: false,
+      detail: "no hay instalación de la que hablar",
+    };
+  }
+  if (result.docker !== "si") {
+    return {
+      ...base,
+      ok: false,
+      detail: "sin Container Manager no se sabe si el esquema llegó a subirse",
+    };
+  }
+
+  const funciones = result.funciones ?? "desconocido";
+  if (funciones === "en-marcha") {
+    return {
+      ...base,
+      ok: true,
+      detail:
+        "el contenedor de las funciones está subiendo el código ahora mismo",
+    };
+  }
+  if (funciones === "falta") {
+    return {
+      ...base,
+      ok: false,
+      detail:
+        "no hay contenedor de las funciones: el esquema no se ha subido nunca",
+      fix: "lanza la puesta en marcha: npm run nas -- --host …",
+    };
+  }
+  if (funciones !== "terminado") {
+    return {
+      ...base,
+      ok: false,
+      detail: `el contenedor de las funciones está «${funciones}»`,
+      fix: "míralo en el NAS con: docker compose logs funciones",
+    };
+  }
+
+  const salida = result.salida ?? "";
+  if (salida !== "" && salida !== "0") {
+    return {
+      ...base,
+      ok: false,
+      detail: `la última subida salió con error (salida ${salida})`,
+      fix: "los avisos están en los registros del contenedor funciones; la puesta en marcha lo reintenta",
+    };
+  }
+
+  const fin = Date.parse(result.fin ?? "");
+  if (!Number.isFinite(fin)) {
+    return {
+      ...base,
+      ok: false,
+      detail: "no se sabe cuándo terminó la última subida",
+    };
+  }
+  if (codeMtime !== null && Number.isFinite(codeMtime) && codeMtime > fin) {
+    return {
+      ...base,
+      ok: false,
+      detail: "hay cambios en src/convex posteriores a la última subida",
+      fix: "vuelve a lanzar la puesta en marcha: npm run nas -- --host …",
+    };
+  }
+  return {
+    ...base,
+    ok: true,
+    detail: "el último envío entró después del último cambio en src/convex",
+  };
+}
+
+/** Las tres cosas que mira `--check`: los contenedores, el `.env` y el esquema. */
+export function checkReport(result = {}, { codeMtime = null } = {}) {
+  return [
+    containerVerdict(result),
+    envVerdict(result),
+    schemaVerdict(result, { codeMtime }),
+  ];
+}
+
+/**
+ * El panel con el que termina `--check`: cada comprobación con su marca, lo que
+ * hay que hacer cuando algo no está bien y, al final, la dirección de la app —o
+ * lo que falta para tenerla—, que es lo que se busca al mirar cómo está el
+ * taller.
+ */
+export function checkPanelLines(
+  {
+    host,
+    user,
+    root = DEFAULT_PROJECT_PATH,
+    result = {},
+    codeMtime = null,
+    report = null,
+  },
+  color = NO_COLOR,
+) {
+  const findings = report ?? checkReport(result, { codeMtime });
+  const lines = [
+    "",
+    color.bold("Cómo está el taller"),
+    `  NAS              ${user}@${host}:${root}`,
+  ];
+  for (const finding of findings) {
+    const mark = finding.ok ? color.green("✓") : color.red("✗");
+    lines.push(`  ${finding.label.padEnd(17)}${mark} ${finding.detail}`);
+    if (!finding.ok && finding.fix) {
+      lines.push(`  ${" ".repeat(17)}${color.dim(finding.fix)}`);
+    }
+  }
+
+  const broken = findings.filter((finding) => !finding.ok);
+  lines.push(
+    "",
+    broken.length === 0
+      ? "  Todo en pie: el taller está en marcha y el esquema al día."
+      : `  ${broken.length} ${
+          broken.length === 1 ? "cosa que mirar" : "cosas que mirar"
+        }: los arreglos, arriba.`,
+    color.dim(
+      "  Del .env no se ha leído ningún valor: solo los nombres de lo que falta.",
+    ),
+    "",
+  );
+
+  const site = result.sitio ?? "";
+  lines.push(
+    site === ""
+      ? `  Escribe SITE_URL en el .env del NAS y lanza la puesta en marcha: npm run nas -- --host ${host}`
+      : `  Abre la app en ${color.bold(site)}`,
+  );
   return lines;
 }

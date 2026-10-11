@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useAnchoredPanel } from "@/hooks/use-anchored-panel";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
@@ -44,48 +45,21 @@ export function NotificationBell({
 }) {
   const notificationsDelBackend = useQuery(api.notifications.list);
   const notifications = (notificationsProp ?? notificationsDelBackend) as
-    | NotificationRow[]
-    | undefined;
+    NotificationRow[] | undefined;
   const markReadBackend = useMutation(api.notifications.markRead);
   const markRead = markReadProp ?? markReadBackend;
   const markAllReadBackend = useMutation(api.notifications.markAllRead);
   const markAllRead = markAllReadProp ?? markAllReadBackend;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  /** Coordenadas del desplegable, medidas desde la ventana. */
-  const [position, setPosition] = useState({ top: 0, right: 0, width: 0 });
-
-  /**
-   * Mide el botón y deja el desplegable pegado a él pero **en la ventana**: el
-   * panel va en `fixed`, así que nada de lo que le rodea (un panel lateral de
-   * 208 px que recorta con `overflow-hidden`, una cabecera con scroll) puede
-   * cortarlo. El ancho pedido es 320 px, pero se encoge si la ventana tampoco
-   * da para él; y se recalcula al abrir, al mover la ventana o al hacer scroll,
-   * porque el botón vive en cabeceras pegajosas que se desplazan con la página.
-   */
-  const measure = () => {
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setPosition({
-      top: rect.bottom + 8,
-      right: Math.max(8, window.innerWidth - rect.right),
-      width: Math.max(240, Math.min(320, window.innerWidth - 16)),
-    });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    measure();
-    // Recalcular en resize y scroll: el botón puede moverse sin que React
-    // renderice (sticky, panel que se redimensiona, etc.).
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-    };
-  }, [open]);
+  // El desplegable se ancla a la ventana (no a su contenedor), que es lo que
+  // impide que lo corte el panel lateral o la cabecera: el mismo anclaje que
+  // usa el icono de mensajes, en `@/hooks/use-anchored-panel`.
+  const {
+    style: panelStyle,
+    measure,
+    triggerRef: buttonRef,
+  } = useAnchoredPanel(open);
 
   // Cierre al pulsar fuera, teclado y al perder el foco (suscripción al
   // documento: setState en callback).
@@ -159,13 +133,7 @@ export function NotificationBell({
         <div
           role="dialog"
           aria-label="Notificaciones"
-          style={{
-            position: "fixed",
-            top: position.top,
-            right: position.right,
-            width: position.width,
-            maxHeight: Math.min(384, window.innerHeight - position.top - 16),
-          }}
+          style={panelStyle}
           className="z-50 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 pt-2 shadow-lg"
         >
           <div className="flex items-center justify-between px-2.5 py-1.5">

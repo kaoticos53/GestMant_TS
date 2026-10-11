@@ -9,23 +9,27 @@ viven en el NAS.
 > contado en **[PROXMOX.md](./PROXMOX.md)**: cambia lo de delante — una **VM**
 > con Docker y **Caddy** en lugar del proxy inverso de DSM —.
 
-Son **tres contenedores** que se quedan y **uno que pasa**: el que sube el
-esquema y las funciones al backend. El backend es un Convex autoalojado —el mismo
-que usa el entorno local del repositorio (`docker/convex/`)—, así que aquí no hay
-cuentas en la nube ni servicios de terceros:
+Son **cuatro contenedores** que se quedan y **uno que pasa**: el que sube el
+esquema y las funciones al backend al arrancar. El backend es un Convex
+autoalojado —el mismo que usa el entorno local del repositorio
+(`docker/convex/`)—, así que aquí no hay cuentas en la nube ni servicios de
+terceros:
 
-| Qué                        | Dónde                                              | Contenedor                            |
-| -------------------------- | -------------------------------------------------- | ------------------------------------- |
-| La aplicación              | `https://taller.tudominio.com`                     | `app` (nginx)                         |
-| La API de Convex           | `https://api.tudominio.com`                        | `backend` (puerto 3210)               |
-| Acciones HTTP (sesiones)   | `http://127.0.0.1:3211` — solo dentro del NAS      | `backend`                             |
-| Panel de administración    | `http://IP-del-NAS:6791` — solo desde la red local | `dashboard`                           |
-| El esquema y las funciones | dentro del backend, subidos desde el propio NAS    | `funciones` (arranca, sube y se para) |
-| Los datos                  | volumen Docker `pulso-taller_datos`                | `backend`                             |
+| Qué                          | Dónde                                              | Contenedor                            |
+| ---------------------------- | -------------------------------------------------- | ------------------------------------- |
+| La aplicación                | `https://taller.tudominio.com`                     | `app` (nginx)                         |
+| La API de Convex             | `https://api.tudominio.com`                        | `backend` (puerto 3210)               |
+| Acciones HTTP (sesiones)     | `http://127.0.0.1:3211` — solo dentro del NAS      | `backend`                             |
+| Panel de administración      | `http://IP-del-NAS:6791` — solo desde la red local | `dashboard`                           |
+| El esquema y las funciones   | dentro del backend, subidos desde el propio NAS    | `funciones` (arranca, sube y se para) |
+| Volver a subirlos al cambiar | mira `./codigo/src/convex` del NAS montado dentro  | `vigilante` (se queda)                |
+| Los datos                    | volumen Docker `pulso-taller_datos`                | `backend`                             |
 
 Y las funciones las sube el propio NAS, no tu ordenador: el contenedor `funciones`
-hace el despliegue cada vez que se arranca el proyecto, así que un cambio en
-`src/convex/` llega con solo llevar el código y arrancar otra vez.
+hace el despliegue al arrancar el proyecto, y el `vigilante` —que sí se queda—
+mira `src/convex/` y las vuelve a subir **solo cuando cambian**, así que un cambio
+en una función llega sin reiniciar ni reconstruir nada: lo único que hay que hacer
+es dejar el código nuevo en el NAS.
 
 **Por qué dos direcciones y no una.** Quien usa la app necesita llegar a la API
 (el navegador abre ahí la conexión en vivo con el backend), así que la API tiene
@@ -69,8 +73,9 @@ Entra por SSH, lleva el código (sin `node_modules/`, sin `dist/` y sin
 `.env.local`) y deja el NAS haciendo lo que queda: escribe el `docker-compose.yml`
 y el `.env` si no están, genera el `INSTANCE_SECRET` cuando falta, construye las
 imágenes, arranca los contenedores, le pide al backend la clave de administrador
-y espera a que el contenedor `funciones` suba el esquema y las funciones. Termina
-con un panel que dice cómo ha quedado todo, y la última línea es la URL de la app.
+y espera a que el contenedor `funciones` suba el esquema y las funciones —de ahí
+en adelante las mantiene al día el `vigilante`, solo—. Termina con un panel que
+dice cómo ha quedado todo, y la última línea es la URL de la app.
 
 Se puede lanzar tantas veces como haga falta, y ese es su punto: **nunca cambia
 nada que ya esté hecho**. El `docker-compose.yml` del NAS se conserva si tiene
@@ -79,6 +84,22 @@ solo se rellena donde esté vacío —el secreto de la instancia y la clave de
 administrador no se rotan nunca, porque rotarlos dejaría fuera a quien esté
 dentro— y los datos no se tocan jamás: viven en el volumen. Para actualizar la
 app después de un cambio, lo mismo: llevas el código y reconstruye.
+
+Y para saber cómo está el taller sin tocar nada, el mismo comando tiene un modo de
+solo comprobación:
+
+```bash
+npm run nas:check -- --host IP-del-NAS
+```
+
+Mira desde dentro del NAS los contenedores (los que se quedan, el `vigilante`
+entre ellos, y cómo acabó el último envío), si al `.env` le falta alguna clave y si el esquema está al día
+—comparando la fecha del código de este ordenador con la del último envío—, lo
+cuenta en un panel y **no escribe ni una línea**: se puede lanzar con el taller en
+marcha y con gente dentro. Del `.env` solo salen **nombres**, nunca valores, así
+que el panel se puede enseñar sin cuidado. Termina con la URL de la app y devuelve
+0 si todo está en pie y 1 si hay algo que mirar, de modo que también sirve desde un
+guion.
 
 Dos detalles que conviene saber antes:
 
@@ -199,10 +220,35 @@ En File Station, si prefieres el ratón: comprime el proyecto en un `.zip` —si
 `node_modules/`, sin `dist/` y **sin `.env.local`**, que lleva la clave de
 administrador— y descomprímelo dentro de `codigo/`.
 
-Si el proyecto está en un repositorio remoto, `git clone` en el NAS deja lo mismo
-y actualizar luego es `git pull`. Lo que no vale es copiar `node_modules/`: los
-binarios de tu ordenador —en Windows, sobre todo— no son los que necesita el NAS,
-y el `npm ci` de dentro de la imagen los trae buenos.
+Lo que no vale es copiar `node_modules/`: los binarios de tu ordenador —en
+Windows, sobre todo— no son los que necesita el NAS, y el `npm ci` de dentro de
+la imagen los trae buenos.
+
+### En vez de copiar: `git clone` en el propio NAS
+
+Si el proyecto está en un repositorio (GitHub, GitLab, un git propio), el NAS
+puede traérselo él solo: no hace falta tener el proyecto en el ordenador ni
+mandar nada por la conexión. Necesita `git` en el NAS; si no lo trae, se instala
+el paquete **Git Server** desde el Centro de paquetes.
+
+```bash
+ssh admin@IP-del-NAS
+cd /volume1/docker/pulso-taller
+git clone --depth 1 https://github.com/tu-usuario/pulso-taller.git codigo
+```
+
+La carpeta se llama **`codigo`** y se clona directamente ahí, que es donde el
+`docker-compose.yml` la espera; `--depth 1` basta porque lo que hace falta es el
+código, no el historial. Si el repositorio es privado, el NAS necesita
+credenciales para traerlo —un token de solo lectura—, que quedan guardadas en el
+NAS: si eso no te encaja, copia el código como arriba y déjalo ahí.
+
+**Actualizar, entonces, es `git pull`**: dentro del NAS,
+`cd /volume1/docker/pulso-taller/codigo && git pull`, y recompilar como en el
+apartado «Actualizar». Eso sí, no mezcles las dos vías: `npm run nas` sustituye
+`codigo/` entero por el código del ordenador —y el `.git` se va con él—, así que
+o clonas en el NAS y actualizas con `git pull`, o llevas el código desde el
+ordenador.
 
 ## Paso 4 — Crear el proyecto en Container Manager
 
@@ -212,9 +258,10 @@ elegir el `docker-compose.yml` que ya está en esa carpeta; al terminar, dale a
 **Start**.
 
 La primera vez, ese **Start** construye dentro del propio NAS las dos imágenes que
-salen del código —el sitio y el contenedor que sube las funciones—: instala las
-dependencias, compila el sitio (Node y npm van dentro de la imagen, así que no hay
-que instalarlos en el NAS) y reutiliza esa misma instalación para la segunda.
+salen del código —el sitio y la de las funciones, que comparten el contenedor de
+arranque y el `vigilante`—: instala las dependencias, compila el sitio (Node y npm
+van dentro de la imagen, así que no hay que instalarlos en el NAS) y reutiliza esa
+misma instalación para la segunda.
 Tarda unos minutos; se ve cómo va en **Project → el proyecto → Build Details**.
 
 Por SSH es lo mismo, y de paso compruebas que arranca bien:
@@ -234,9 +281,9 @@ que es de lo que va el paso 5.
 > `sudo docker-compose …` (con guion). Para saber cuál tienes:
 > `docker compose version`.
 
-Los tres que se quedan tienen que estar en `running` (el `backend`, además,
-`healthy`); el de las funciones aparece como `exited (0)`, que es como debe
-quedar. Si algo no arranca, el motivo está en sus registros:
+Los que se quedan tienen que estar en `running` (el `backend`, además, `healthy`, y
+el `vigilante` también, que es el que mantiene las funciones al día); el de las
+funciones aparece como `exited (0)`, que es como debe quedar. Si algo no arranca, el motivo está en sus registros:
 
 ```bash
 sudo docker compose logs -f backend
@@ -248,8 +295,9 @@ Details → Log**.
 ## Paso 5 — La clave del backend y el primer despliegue
 
 El backend arranca vacío: no tiene ni el esquema ni las funciones de la app. Eso
-lo sube el propio NAS, con el contenedor `funciones`, y lo vuelve a subir cada vez
-que se arranca el proyecto. Para poder hacerlo solo le falta una cosa que no puede
+lo sube el propio NAS, con el contenedor `funciones`, y desde ese momento lo
+mantiene al día el `vigilante`: en cuanto cambia una función, la vuelve a subir
+él solo. Para poder hacerlo solo le falta una cosa que no puede
 saber por su cuenta: la **clave de administrador**. Así que la primera vez son dos
 arranques; después, ninguno.
 
@@ -316,6 +364,25 @@ Lo que hace, en orden, y por qué:
   si el primer intento tropieza con un arranque recién hecho.
 
 Nada de esto toca los datos: se puede repetir tantas veces como haga falta.
+
+Los envíos siguientes no los hace ese contenedor, sino el `vigilante`, que es este
+mismo trabajo disparado por un cambio: mira `src/convex/` cada veinte segundos —lo
+que hay en el NAS, no lo que traía la imagen—, espera a que el árbol de archivos
+se quede quieto y entonces vuelve a subir. Sus archivos generados
+(`src/convex/_generated`) no cuentan como cambio, así que no se dispara a sí
+mismo. Se mira igual:
+
+```bash
+sudo docker compose logs -f vigilante
+```
+
+Cuando no hay nada que hacer lo dice: «sin cambios en /app/src/convex: el esquema
+y las funciones siguen al día».
+
+Dos cosas las hace a propósito distinto que el contenedor del arranque: **las
+claves de Convex Auth no las genera él** —espera a que las deje `funciones`, para
+no generar dos pares a la vez en el primer arranque—, y no sube nada al
+arrancar: apunta cómo está el código y espera al primer cambio.
 
 > `CONVEX_SITE_URL` no se toca: viene incorporada en el backend y sale del
 > `CONVEX_SITE_ORIGIN` del compose (el `127.0.0.1:3211` de dentro del NAS). Es la
@@ -391,6 +458,28 @@ sudo docker volume ls | grep pulso
 # pulso-taller_datos
 ```
 
+Las dos copias las hace de una vez, desde el ordenador, un comando que habla por
+SSH con el NAS igual que `npm run nas`:
+
+```bash
+npm run nas:backup -- --host IP-del-NAS
+```
+
+Es la que conviene lanzar antes de cada actualización. Hace el export lógico y
+la copia en frío del volumen —parando el backend un momento— y deja las dos en
+`/volume1/docker/respaldos`, conservando las últimas 7 de cada tipo: las más
+viejas se van borrando para que no se acumulen. No cambia datos, no toca el
+`.env` y no imprime ningún secreto; la última línea que escribe es dónde han
+quedado las copias. Se puede repetir cuando se quiera —cada copia lleva su fecha
+en el nombre, así que no se pisa ninguna— y las opciones salen con
+`npm run nas:backup -- --help` (`--respaldos`, `--keep`, `--path`). Como en
+`npm run nas`, el host se puede dejar fijado en `NAS_HOST` —y la carpeta de las
+copias y cuántas se conservan en `NAS_RESPALDOS` y `NAS_KEEP`— para no repetirlos
+en cada orden.
+
+Debajo están las dos piezas por separado, para hacerlas a mano o para saber qué
+hace el comando por dentro.
+
 **Copia lógica** (la que se recomienda: se puede volver a cargar en cualquier
 instalación, también en la nube). Se hace desde el ordenador, con la dirección
 pública de la API y la clave de administrador del `.env` del NAS:
@@ -426,26 +515,83 @@ sudo docker compose start backend
 ## Actualizar
 
 Recuerda que todo esto lo hace solo `npm run nas -- --host IP-del-NAS` desde el
-ordenador: lleva el código y reconstruye. A mano, es lo que sigue.
+ordenador: lleva el código y reconstruye.
+
+### Actualizar versión de la app
+
+El camino recomendado, de un tirón:
+
+1. **Copia previa.** Antes de tocar nada, con el comando del apartado «Los datos
+   y las copias de seguridad»:
+
+   ```bash
+   npm run nas:backup -- --host IP-del-NAS
+   ```
+
+   La actualización no borra nada —los datos viven en el volumen—, pero una
+   versión nueva trae código y esquema nuevos, y con la copia delante cualquier
+   sorpresa se deshace volviéndola a cargar.
+
+2. **`npm run nas`.** Desde el ordenador, con el código ya actualizado (las
+   direcciones no hacen falta: después de la primera vez manda el `.env` del
+   NAS, y el comando no lo pisa):
+
+   ```bash
+   npm run nas -- --host IP-del-NAS
+   ```
+
+   Lleva el código, recompila las imágenes y espera a que el contenedor
+   `funciones` suba el esquema y las funciones. Se puede repetir sin miedo: si
+   algo se corta a mitad, volver a lanzarlo sigue donde se quedó. Si el código
+   llegó al NAS con `git clone`, antes toca `git pull` allí (abajo).
+
+3. **Comprobación después.** Primero sin tocar nada, con el modo de solo
+   comprobación —los contenedores, el `.env` y si el esquema quedó al día—, que
+   devuelve 0 si todo está en pie:
+
+   ```bash
+   npm run nas:check -- --host IP-del-NAS
+   ```
+
+   Y después con el navegador: abrir `https://taller.tudominio.com` y entrar con
+   una cuenta del taller. Si carga el panel con sus incidencias y sus repuestos,
+   la versión está puesta.
+
+### A mano, pieza a pieza
+
+Si llevaste el código con `git clone` (paso 3), «volver a llevar el código» es
+**`git pull` dentro del NAS** —`cd /volume1/docker/pulso-taller/codigo && git
+pull`—, sin tocar el ordenador. Lo de después (recompilar) es exactamente igual.
 
 - **La app** (lo que se ve y sus textos): vuelve a llevar el código al NAS
   (paso 3) y recompila el proyecto —**Container Manager → Project → Build**, o
   `sudo docker compose up -d --build`—. El sitio va dentro de la imagen, así que
   hasta que no se recompila no cambia; y como la imagen se sustituye entera, no
   quedan restos de la versión anterior mezclados con la nueva.
-- **Las funciones** (lo que hay en `src/convex/`): vuelve a llevar el código al
-  NAS (paso 3) y arranca **solo** ese contenedor, que es el que las sube. Hay que
-  recompilar su imagen —el código va dentro—, y no hace falta tocar la app: el
-  sitio no cambia por tocar una función.
+- **Las funciones** (lo que hay en `src/convex/`): basta con dejar el código nuevo
+  en el NAS. El `vigilante` ve que `./codigo/src/convex` ha cambiado y vuelve a
+  subir el esquema y las funciones solo, **sin reiniciar ni reconstruir nada** —y
+  sin tocar la app: el sitio no cambia por tocar una función—:
 
   ```bash
   cd /volume1/docker/pulso-taller
-  sudo docker compose up -d --build funciones
+  sudo docker compose logs -f vigilante
   ```
 
-  Sube y se para, como en el primer arranque. Los datos no se tocan. Desde
-  Container Manager, **Project → Build** reconstruye las dos imágenes y luego basta
-  con arrancar el proyecto: más lento, pero igual de correcto.
+  La primera subida, al arrancar el proyecto, sigue siendo la del contenedor
+  `funciones`. El vigilante mira la carpeta del NAS, así que cuando `npm run nas`
+  cambia el código —que llega como carpeta nueva, no como archivos editados—, el
+  comando **recrea el vigilante** para que su montaje sea el de ahora; sin eso
+  seguiría mirando la carpeta vieja. Si el vigilante estuviera parado —tres
+  intentos fallidos lo dejan así, y dice por qué—, se levanta con
+  `sudo docker compose up -d vigilante`, y para forzar una subida suelta vale el
+  contenedor de arranque:
+
+  ```bash
+  sudo docker compose up funciones
+  ```
+
+  Sube y se para, como en el primer arranque. Los datos no se tocan.
 
 - **Los contenedores** (backend y panel): cuando quieras traer una versión nueva
   de las imágenes,
@@ -475,8 +621,9 @@ certificado. Son tres cambios:
    `"127.0.0.1:3210:3210"` por `"3210:3210"` (los comentarios del archivo lo
    señalan), y permite 8080 y 3210 desde la red local en el cortafuegos de DSM.
 
-El contenedor `funciones` sube a esa misma dirección (`CONVEX_CLOUD_ORIGIN`), así
-que la IP del NAS tiene que valer también desde dentro; con la IP fija que pide el
+Los contenedores que suben las funciones (`funciones` y `vigilante`) lo hacen a
+esa misma dirección (`CONVEX_CLOUD_ORIGIN`), así que la IP del NAS tiene que valer
+también desde dentro; con la IP fija que pide el
 apartado anterior, así es. Y sin dominio no hay `SITE_URL` pública que apuntar: se
 pone `http://IP-del-NAS:8080`, que es donde entra quien usa la app.
 
@@ -517,6 +664,23 @@ esas palabras en `sudo docker compose logs funciones`. Al copiarla, cuidado con 
 pico `|` que lleva en medio: en un `bash` va entre comillas, o la shell se queda
 con lo de después. Puesta la clave, `sudo docker compose up -d funciones` y ya no
 sale más.
+
+**He cambiado una función y no se ha subido.**
+El que las sube solo es el `vigilante`: mira `sudo docker compose logs vigilante`.
+Si dice que no ha podido subir el código en tres intentos, el motivo está en las
+líneas de arriba —casi siempre la clave de administrador o el backend—, y después
+de arreglarlo lo reintenta solo. Y si dice que el deployment sigue sin claves de
+Convex Auth, arranca antes el contenedor de las funciones (`sudo docker compose up
+funciones`): las claves son suyas, no del vigilante. Si el contenedor está parado (los tres intentos
+fallidos lo dejan así, en vez de estar reintentando en bucle sin decir nada),
+levántalo:
+
+```bash
+sudo docker compose up -d vigilante
+```
+
+Y para una subida puntual, la hace el contenedor de arranque:
+`sudo docker compose up funciones`.
 
 **Entro y me devuelve a `/auth` en bucle.**
 Faltan variables del deployment, o el esquema y las funciones no llegaron a
@@ -561,9 +725,10 @@ docker build -f docker/synology/Dockerfile \
 docker save pulso-taller-app:local | ssh admin@IP-del-NAS 'docker load'
 ```
 
-El contenedor de las funciones también se construye en el NAS, pero pide mucho
-menos —no compila el sitio—; si aun así hiciera falta, se construye igual desde el
-ordenador y se quita su bloque `build:`:
+La imagen de las funciones —la que usan el contenedor de arranque y el
+`vigilante`— también se construye en el NAS, pero pide mucho menos —no compila el
+sitio—; si aun así hiciera falta, se construye igual desde el ordenador y se quita
+su bloque `build:`:
 
 ```bash
 docker build -f docker/synology/Dockerfile --target funciones \
@@ -590,8 +755,9 @@ sudo docker compose exec backend ./generate_admin_key.sh | tail -1
 ```
 
 Al cambiarla hay que actualizarla también en el `.env` (`CONVEX_ADMIN_KEY`), que es
-la que usa el contenedor `funciones` para desplegar. Si lo que se ha perdido es el
-secreto, no hay vuelta atrás: sin él no se firman claves de administrador nuevas.
+la que usan el contenedor `funciones` y el `vigilante` para desplegar. Si lo que
+se ha perdido es el secreto, no hay vuelta atrás: sin él no se firman claves de
+administrador nuevas.
 
 **El panel de Convex no abre desde mi ordenador.**
 Se sirve solo en la red local (`http://IP-del-NAS:6791`) y, además, el navegador

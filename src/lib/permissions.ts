@@ -11,6 +11,8 @@ export type Capability =
   | "createRequests"
   | "lookupCatalog"
   | "decideRequests"
+  | "viewPurchasing"
+  | "managePurchasing"
   | "viewInventory"
   | "manageInventory"
   | "viewEquipment"
@@ -84,6 +86,20 @@ export const CAPABILITIES: CapabilityMeta[] = [
     group: "Peticiones",
     label: "Aprobar, rechazar y entregar",
     description: "Decidir las peticiones y marcarlas como entregadas.",
+  },
+  {
+    id: "viewPurchasing",
+    group: "Compras",
+    label: "Ver las compras",
+    description:
+      "Muestra el módulo de compras: las peticiones de compra sin tratar, las órdenes y sus recepciones.",
+  },
+  {
+    id: "managePurchasing",
+    group: "Compras",
+    label: "Comprar y recepcionar",
+    description:
+      "Generar peticiones de compra, montar las órdenes por proveedor, anotar cada artículo y recepcionar el material con su albarán.",
   },
   {
     id: "viewInventory",
@@ -180,6 +196,8 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     createRequests: true,
     lookupCatalog: true,
     decideRequests: true,
+    viewPurchasing: true,
+    managePurchasing: true,
     viewInventory: true,
     manageInventory: true,
     viewEquipment: true,
@@ -199,6 +217,8 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     createRequests: true,
     lookupCatalog: true,
     decideRequests: true,
+    viewPurchasing: true,
+    managePurchasing: true,
     viewInventory: true,
     manageInventory: true,
     viewEquipment: true,
@@ -218,6 +238,8 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     createRequests: true,
     lookupCatalog: true,
     decideRequests: false,
+    viewPurchasing: false,
+    managePurchasing: false,
     viewInventory: false,
     manageInventory: false,
     viewEquipment: false,
@@ -239,6 +261,8 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     createRequests: false,
     lookupCatalog: false,
     decideRequests: false,
+    viewPurchasing: false,
+    managePurchasing: false,
     viewInventory: false,
     manageInventory: false,
     viewEquipment: false,

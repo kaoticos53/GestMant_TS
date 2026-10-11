@@ -18,7 +18,10 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
     () => null,
     (err: unknown) => err,
   );
-  expect(error, `Se esperaba un error que contuviera: ${fragment}`).not.toBeNull();
+  expect(
+    error,
+    `Se esperaba un error que contuviera: ${fragment}`,
+  ).not.toBeNull();
   const message =
     error instanceof ConvexError ? String(error.data) : String(error);
   expect(message).toContain(fragment);
@@ -79,7 +82,10 @@ async function upload(t: Test, bytes: Uint8Array, type?: string) {
 }
 
 /** ¿Sigue el archivo en el almacén? */
-async function stillStored(t: Test, storageId: Id<"_storage">): Promise<boolean> {
+async function stillStored(
+  t: Test,
+  storageId: Id<"_storage">,
+): Promise<boolean> {
   return (await t.run((ctx) => ctx.storage.getUrl(storageId))) !== null;
 }
 
@@ -157,11 +163,17 @@ describe("subida de imágenes del formulario público", () => {
     const t = harness();
     const tk = await ticket(t);
     const first = await store(t, PNG_HEAD);
-    await t.action(api.reportUploads.attachImage, { ticket: tk, storageId: first });
+    await t.action(api.reportUploads.attachImage, {
+      ticket: tk,
+      storageId: first,
+    });
 
     const second = await store(t, photo(9));
     await expectConvexError(
-      t.action(api.reportUploads.attachImage, { ticket: tk, storageId: second }),
+      t.action(api.reportUploads.attachImage, {
+        ticket: tk,
+        storageId: second,
+      }),
       "ya tenía su imagen",
     );
     expect(await stillStored(t, second)).toBe(false);
@@ -348,6 +360,15 @@ describe("imágenes del formulario sin usar (panel del taller)", () => {
     return storageId;
   }
 
+  /**
+   * Un vale con su archivo, borrado a mano después: el vale sigue ahí y el
+   * almacén ya no puede leer lo que citaba.
+   */
+  async function unreadable(t: Test, marker: number): Promise<void> {
+    const storageId = await abandoned(t, marker, YESTERDAY);
+    await t.run((ctx) => ctx.storage.delete(storageId));
+  }
+
   /** Un vale que nadie acreditó: sin archivo, pero también se va. */
   async function emptyTicket(t: Test, ageMs: number): Promise<void> {
     await t.run((ctx) =>
@@ -412,6 +433,53 @@ describe("imágenes del formulario sin usar (panel del taller)", () => {
     expect(panel.images).toHaveLength(0);
     expect(panel.tickets).toBe(0);
     expect(panel.totalBytes).toBe(0);
+  });
+
+  test("un vale cuyo archivo ya no se puede leer no es una imagen más", async () => {
+    const { t, manager } = await harnessWithManager();
+    await unreadable(t, 8);
+    const live = await abandoned(t, 9, YESTERDAY);
+
+    const panel = await manager.query(api.reportUploads.unusedImages, {});
+    // El que no se puede leer no está entre las imágenes: no hay miniatura que
+    // enseñar, y una imagen de 0 KB no cuenta lo que pasó.
+    expect(panel.images).toHaveLength(1);
+    expect(panel.unreadable).toBe(1);
+    expect(panel.tickets).toBe(0);
+    const liveFile = await t.run((ctx) => ctx.db.system.get("_storage", live));
+    expect(panel.totalBytes).toBe(liveFile?.size);
+
+    // La purga se lo lleva, pero sin dejar una imagen fantasma en la papelera.
+    const result = await manager.mutation(api.reportUploads.purgeUnused, {});
+    expect(result).toMatchObject({ removed: 2, images: 1, unreadable: 1 });
+    const trashed = await t.run((ctx) => ctx.db.query("trashFiles").collect());
+    expect(trashed).toHaveLength(1);
+    expect(trashed[0]?.storageId).toBe(live);
+
+    // Y la constancia lo cuenta aparte de lo retirado.
+    const run = (await manager.query(api.cleanupLog.lastRuns, {})).find(
+      (item) => item.pass === "reportUploads",
+    );
+    expect(run?.files).toBe(1);
+    expect(run?.unreadable).toBe(1);
+    expect(run?.runBy).toBe("Iván Torres");
+  });
+
+  test("la pasada de la madrugada lo cuenta igual, sin tocar la papelera", async () => {
+    const { t } = await harnessWithManager();
+    await unreadable(t, 5);
+
+    // El vale se va —ya no sirve para nada—, pero no hay archivo que guardar.
+    expect(await t.mutation(internal.reportUploads.sweepUnused, {})).toBe(1);
+    expect(
+      await t.run((ctx) => ctx.db.query("trashFiles").collect()),
+    ).toHaveLength(0);
+    const [run] = await t.run((ctx) =>
+      ctx.db.query("storageCleanupRuns").collect(),
+    );
+    expect(run?.files).toBe(0);
+    expect(run?.bytes).toBe(0);
+    expect(run?.unreadable).toBe(1);
   });
 
   test("el panel y su purga son de quien gobierna el taller", async () => {
@@ -529,6 +597,20 @@ describe("el aviso de lo que la limpieza se va a llevar del formulario", () => {
     }
     // Y quien no gobierna el taller no se entera: esto no es un permiso.
     expect(await notificationsOf(t, techId)).toHaveLength(0);
+  });
+
+  test("lo que no se puede leer se avisa, y no pasa por una imagen de 0 KB", async () => {
+    const { t, coordinatorId } = await harnessWithRoles();
+    const storageId = await abandoned(t, 8);
+    await t.run((ctx) => ctx.storage.delete(storageId));
+
+    expect(await t.mutation(internal.reportUploads.warnUnused, {})).toBe(2);
+    const [aviso] = await notificationsOf(t, coordinatorId);
+    expect(aviso?.text).toContain("1 archivo que el almacén no puede leer");
+    expect(aviso?.text).toContain("no queda nada en la papelera");
+    // Ni una imagen de 0 KB, ni un plazo para algo que no se guarda.
+    expect(aviso?.text).not.toContain("0 KB");
+    expect(aviso?.text).not.toContain("por si hay que recuperarlo");
   });
 
   test("no avisa de lo que está en una incidencia ni de lo que se acaba de subir", async () => {

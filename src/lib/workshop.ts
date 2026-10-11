@@ -24,7 +24,8 @@ export type RequestStatus =
   | "onHold"
   | "returned"
   | "cancelled"
-  | "pendingSupplierQuote";
+  | "pendingSupplierQuote"
+  | "materialReceived";
 
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 
@@ -118,6 +119,13 @@ export const STATUS_META: Record<
     description: "En espera de respuesta del proveedor",
     badgeClassName: "border-sky-600/25 bg-sky-600/10 text-sky-700",
     dotClassName: "bg-sky-500",
+  },
+  materialReceived: {
+    label: "Material recibido",
+    description:
+      "Lo que faltaba se compró y ya ha entrado en el almacén: se puede resolver",
+    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    dotClassName: "bg-emerald-600",
   },
 };
 

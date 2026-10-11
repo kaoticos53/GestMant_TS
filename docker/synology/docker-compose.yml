@@ -1,12 +1,14 @@
 # Pulso Taller en un NAS Synology (Container Manager).
 #
-# Tres contenedores se quedan y uno pasa:
+# Cuatro contenedores se quedan y uno pasa:
 #
 #   app        la aplicación: se construye aquí dentro desde el código de
 #              `./codigo` (mismo Dockerfile) y nginx sirve el resultado
 #   backend    la API de Convex, la base de datos y el almacén de archivos
 #   dashboard  el panel de administración de Convex (para el taller, no para quien usa la app)
-#   funciones  sube el esquema y las funciones al backend al arrancar y se va
+#   vigilante  mira `src/convex` y vuelve a subir las funciones cuando cambian,
+#              así que un cambio llega sin reiniciar ni reconstruir el proyecto
+#   funciones  sube el esquema y las funciones al arrancar y se va
 #              (no queda corriendo; mira su comentario más abajo)
 #
 # Antes de arrancar hay que rellenar `.env`, en esta misma carpeta:
@@ -45,9 +47,9 @@ services:
     # repositorio. Compilar aquí tiene una ventaja callada: la imagen sale para la
     # arquitectura del NAS, sea la que sea.
     #
-    # El mismo Dockerfile construye también la imagen del servicio `funciones`:
-    # las dos comparten la fase en la que se instalan las dependencias, así que
-    # `npm ci` se paga una vez y no dos.
+    # El mismo Dockerfile construye también las imágenes de `funciones` y del
+    # `vigilante`: las tres comparten la fase en la que se instalan las
+    # dependencias, así que `npm ci` se paga una vez y no tres.
     #
     # `./codigo` es relativo a **esta** carpeta, la del proyecto en el NAS: este
     # archivo se copia allí junto al `.env` y el proyecto se deja al lado, en
@@ -148,6 +150,9 @@ services:
     # `restart` es a propósito: si falla, se debe poder arreglar y volver a
     # levantarlo a mano (`sudo docker compose up funciones`) en lugar de que el
     # NAS lo reintente en bucle sin decir nada.
+    #
+    # El que se queda vigilando es `vigilante`, aquí debajo: los dos salen de la
+    # misma imagen y se reparten el trabajo —este el primer envío, ese los demás—.
     build:
       context: ./codigo
       dockerfile: docker/synology/Dockerfile
@@ -178,6 +183,60 @@ services:
       # Y en el backend, para no intentarlo antes de que esté escuchando. El NAS
       # arranca los dos al encender: primero el backend, luego este, que sube y
       # se va.
+      backend:
+        condition: service_healthy
+
+  vigilante:
+    # El que se queda: mira `src/convex` y, cuando cambia algo, vuelve a subir el
+    # esquema y las funciones. Es lo que hace que un cambio llegue **sin
+    # reiniciar ni reconstruir el proyecto**: ni Container Manager ni el botón de
+    # arrancar, nada. Lo que mira es el código que hay en el NAS —`./codigo/src/convex`,
+    # montado dentro del contenedor—, así que da igual cómo haya llegado el
+    # cambio: `npm run nas` desde el ordenador, un `git pull` en el NAS o un
+    # archivo tocado por SSH.
+    #
+    # Es la misma imagen que `funciones` —salen de la misma fase del Dockerfile—
+    # con otra orden: en lugar de subir una vez y marcharse, vigila. Están los dos
+    # a propósito: `funciones` se encarga del primer envío al arrancar y este de
+    # los siguientes, así que nunca coinciden subiendo a la vez. Y por eso mismo
+    # este **no sube nada al arrancar**: lo que hace es apuntar cómo está el
+    # código y esperar a que cambie.
+    #
+    # `on-failure:3` es a propósito: si el problema es de configuración —falta la
+    # clave de administrador, el deployment no contesta—, lo cuenta y se para
+    # pasados unos intentos, en vez de quedarse reintentando en bucle sin decir
+    # por qué. Lo que falla de verdad, se arregla en los registros.
+    build:
+      context: ./codigo
+      dockerfile: docker/synology/Dockerfile
+      target: funciones
+    image: pulso-taller-funciones:local
+    # La orden que trae la imagen es la del arranque; el vigilante es el otro
+    # guion de dentro de la misma imagen.
+    command: ["/usr/local/bin/vigila-funciones"]
+    restart: "on-failure:3"
+    volumes:
+      # El código de las funciones, tal cual está en el NAS. Va montado y no
+      # metido en la imagen: dentro de la imagen está la versión de cuando se
+      # construyó, y lo que hay que vigilar es lo que hay ahora mismo.
+      #
+      # Se monta en escritura porque el CLI de Convex deja ahí sus archivos
+      # generados (`src/convex/_generated`), igual que en el entorno local. Esos
+      # archivos no cuentan para la huella que decide si algo ha cambiado: si
+      # contaran, cada subida dispararía la siguiente.
+      - ./codigo/src/convex:/app/src/convex
+    environment:
+      # Las mismas que `funciones`, y por lo mismo: a dónde sube, con qué clave y
+      # qué variables lleva el deployment. Mira allí el detalle de cada una.
+      CONVEX_SELF_HOSTED_URL: ${CONVEX_CLOUD_ORIGIN:?falta CONVEX_CLOUD_ORIGIN en el .env}
+      CONVEX_SELF_HOSTED_ADMIN_KEY: ${CONVEX_ADMIN_KEY:-}
+      SITE_URL: ${SITE_URL:?falta SITE_URL en el .env}
+      VLY_CONVEX_AUTH_ISSUER: ${VLY_CONVEX_AUTH_ISSUER:-https://freebuff.com}
+      VLY_INTEGRATION_KEY: ${VLY_INTEGRATION_KEY:-}
+      VLY_INTEGRATION_BASE_URL: ${VLY_INTEGRATION_BASE_URL:-}
+    depends_on:
+      # Como los otros: nada hasta que el backend esté escuchando. Se queda
+      # levantado, así que este `depends_on` solo decide el orden del arranque.
       backend:
         condition: service_healthy
 

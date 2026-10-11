@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
+import { FULL_VERSION, DETAILED_VERSION } from "@/version";
 
 const reveal = {
   initial: { opacity: 0, y: 18 },
@@ -646,8 +647,8 @@ export default function Landing() {
               </p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Versión 1 · Gestión de repuestos y peticiones · © 2026 Pulso Taller
+          <p className="text-xs text-muted-foreground" title={DETAILED_VERSION}>
+            {FULL_VERSION} · Gestión de repuestos y peticiones · © 2026 Pulso Taller
           </p>
         </div>
       </footer>

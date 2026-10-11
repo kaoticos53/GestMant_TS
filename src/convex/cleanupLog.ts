@@ -24,11 +24,30 @@ export interface CleanupResult {
   files: number;
   bytes: number;
   tickets?: number;
+  /**
+   * Archivos que la pasada no pudo leer: se quedan donde están y se señalan. Los
+   * retira la noche siguiente a la primera que sí los lea —o los deja para
+   * siempre, si no hay forma—; hasta entonces, esta es la cuenta que lo dice.
+   */
+  unreadable?: number;
 }
 
 /** El nombre que firma una limpieza lanzada a mano. */
 export function cleanupActor(user: { name?: string; email?: string }): string {
   return user.name?.trim() || user.email?.trim() || "Coordinación del taller";
+}
+
+/**
+ * La última pasada de una clave, tal y como quedó apuntada: la lee quien tiene que
+ * comparar lo de ahora con lo de la vez anterior —el aviso de los archivos que no
+ * se pueden leer— y la propia constancia, que actualiza la fila en vez de
+ * apuntarla dos veces.
+ */
+export async function lastRun(ctx: MutationCtx, pass: CleanupPass) {
+  return await ctx.db
+    .query("storageCleanupRuns")
+    .withIndex("by_pass", (q) => q.eq("pass", pass))
+    .unique();
 }
 
 /** Deja constancia de una pasada: cuándo fue, qué retiró y quién la lanzó. */
@@ -38,10 +57,7 @@ export async function recordCleanupRun(
   result: CleanupResult,
   runBy: string,
 ): Promise<void> {
-  const row = await ctx.db
-    .query("storageCleanupRuns")
-    .withIndex("by_pass", (q) => q.eq("pass", pass))
-    .unique();
+  const row = await lastRun(ctx, pass);
 
   const fields = {
     pass,
@@ -50,6 +66,9 @@ export async function recordCleanupRun(
     bytes: result.bytes,
     runBy,
     ...(result.tickets !== undefined ? { tickets: result.tickets } : {}),
+    ...(result.unreadable !== undefined
+      ? { unreadable: result.unreadable }
+      : {}),
   };
   if (row) await ctx.db.patch(row._id, fields);
   else await ctx.db.insert("storageCleanupRuns", fields);
@@ -115,6 +134,7 @@ export const lastRuns = query({
         files: row?.files ?? 0,
         bytes: row?.bytes ?? 0,
         tickets: row?.tickets ?? 0,
+        unreadable: row?.unreadable ?? 0,
         runBy: row?.runBy ?? null,
         automatic: row?.runBy === AUTO_CLEANUP_BY,
       };

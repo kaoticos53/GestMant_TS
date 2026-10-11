@@ -86,8 +86,7 @@ type Rejection =
  * sitio. Quien lanza el aviso que ve el usuario es la acción, después.
  */
 type ClaimResult =
-  | { ok: true; url: string | null }
-  | { ok: false; reason: Rejection };
+  { ok: true; url: string | null } | { ok: false; reason: Rejection };
 
 /** El aviso que ve quien sube el archivo, por cada motivo de rechazo. */
 const REJECTION_MESSAGES: Record<Rejection, string> = {
@@ -479,6 +478,12 @@ async function pendingUnusedRows(
  * arrepentirse. Por eso hay que decirle quién la lanza, que es lo que firma su
  * fila de la papelera.
  *
+ * De los vales con archivo, hay uno que no es como los demás: el que apunta a un
+ * archivo que el almacén ya no puede leer —se borró a mano mientras el vale
+ * seguía ahí—. Ese no se retira a la papelera, porque no hay nada que guardar ni
+ * tamaño que contar: se va el vale y se cuenta aparte (`unreadable`), que es la
+ * diferencia entre una imagen y un vale cuyo archivo ya no existe.
+ *
  * Y cuando la lanza una persona —y no la limpieza de la madrugada— deja además su
  * constancia en `reportUploadPurges`: quién, cuándo y qué se llevó, una entrada
  * por archivo con su vale, que es lo que permite leer una purga a mano meses
@@ -492,6 +497,7 @@ export async function sweepUnusedRows(
   removed: number;
   images: number;
   tickets: number;
+  unreadable: number;
   bytes: number;
 }> {
   const { pending } = await pendingUnusedRows(ctx);
@@ -499,6 +505,7 @@ export async function sweepUnusedRows(
   let removed = 0;
   let images = 0;
   let tickets = 0;
+  let unreadable = 0;
   let bytes = 0;
   // Lo que se lleva, con su vale: es lo que firma la constancia de una purga a
   // mano. Los vales sin archivo van aparte porque no eran imágenes.
@@ -506,20 +513,28 @@ export async function sweepUnusedRows(
   const goneTickets: string[] = [];
   for (const { row, file } of pending) {
     if (row.storageId) {
-      const size = file?.size ?? 0;
-      bytes += size;
-      await moveToTrash(ctx, {
-        storageId: row.storageId,
-        size,
-        ...(file?.contentType !== undefined
-          ? { contentType: file.contentType }
-          : {}),
-        pass: "reportUploads",
-        runBy,
-        ticket: row.ticket,
-      });
-      images += 1;
-      gone.push({ ticket: row.ticket, size });
+      if (file === null) {
+        // El vale apunta a un archivo que el almacén ya no puede leer: no hay
+        // imagen que retirar, ni tamaño que contar, ni nada que guardar en la
+        // papelera. Se va el vale y se señala, en vez de dejar una imagen de 0
+        // KB en la papelera que nadie va a poder abrir.
+        unreadable += 1;
+      } else {
+        const size = file.size;
+        bytes += size;
+        await moveToTrash(ctx, {
+          storageId: row.storageId,
+          size,
+          ...(file.contentType !== undefined
+            ? { contentType: file.contentType }
+            : {}),
+          pass: "reportUploads",
+          runBy,
+          ticket: row.ticket,
+        });
+        images += 1;
+        gone.push({ ticket: row.ticket, size });
+      }
     } else {
       tickets += 1;
       goneTickets.push(row.ticket);
@@ -541,7 +556,7 @@ export async function sweepUnusedRows(
       bytes,
     });
   }
-  return { removed, images, tickets, bytes };
+  return { removed, images, tickets, unreadable, bytes };
 }
 
 /**
@@ -556,7 +571,12 @@ export const sweepUnused = internalMutation({
     await recordCleanupRun(
       ctx,
       "reportUploads",
-      { files: result.images, bytes: result.bytes, tickets: result.tickets },
+      {
+        files: result.images,
+        bytes: result.bytes,
+        tickets: result.tickets,
+        unreadable: result.unreadable,
+      },
       AUTO_CLEANUP_BY,
     );
     return result.removed;
@@ -581,11 +601,18 @@ export const warnUnused = internalMutation({
   args: {},
   handler: async (ctx) => {
     const { pending, partial } = await pendingUnusedRows(ctx);
-    const images = pending.filter((item) => item.row.storageId !== undefined);
+    const withFile = pending.filter((item) => item.row.storageId !== undefined);
+    // De los que tienen archivo, los que el almacén todavía puede leer: los que
+    // no, se cuentan aparte —no son una imagen de 0 KB—.
+    const readable = withFile.filter((item) => item.file !== null);
     const text = uploadSweepAlert({
-      images: images.length,
-      tickets: pending.length - images.length,
-      bytes: images.reduce((total, item) => total + (item.file?.size ?? 0), 0),
+      images: readable.length,
+      tickets: pending.length - withFile.length,
+      unreadable: withFile.length - readable.length,
+      bytes: readable.reduce(
+        (total, item) => total + (item.file?.size ?? 0),
+        0,
+      ),
       partial,
       // El plazo de la papelera lo ajusta el taller: el aviso dice el vigente, no
       // el de partida, para no prometer un margen que no es el que hay.
@@ -612,7 +639,9 @@ type UnusedUploadImage = {
  * imágenes que ya cumplieron su ventana y que ninguna incidencia cita. Es la
  * misma cuenta que hace la pasada —la misma regla, leída antes de borrar—, para
  * que se pueda mirar y adelantar desde Ajustes del taller: quien gobierna el
- * taller ve qué hay ahí antes de que se lo lleve la noche.
+ * taller ve qué hay ahí antes de que se lo lleve la noche. Los vales cuyo archivo
+ * el almacén ya no puede leer no están entre las imágenes —no hay miniatura que
+ * enseñar—: van en su propia cuenta (`unreadable`), como en la pasada.
  *
  * Se mira solo lo que la próxima pasada tiene delante (las más antiguas hasta
  * el tope de una tanda): lo que enseña es lo que se va a barrer, no una promesa
@@ -629,16 +658,23 @@ export const unusedImages = query({
 
     const images: UnusedUploadImage[] = [];
     let tickets = 0;
+    let unreadable = 0;
     for (const { row, file } of pending) {
       if (row.storageId === undefined) {
         // Un vale sin archivo: se va con las imágenes, pero no es una imagen.
         tickets += 1;
         continue;
       }
+      if (file === null) {
+        // Su archivo ya no se puede leer: tampoco es una imagen, y una miniatura
+        // rota no dice lo mismo que contarlo. Se dice aparte, como la pasada.
+        unreadable += 1;
+        continue;
+      }
       images.push({
         id: row._id,
         url: await ctx.storage.getUrl(row.storageId),
-        size: file?.size ?? 0,
+        size: file.size,
         uploadedAt: row.createdAt,
       });
     }
@@ -646,6 +682,7 @@ export const unusedImages = query({
     return {
       images,
       tickets,
+      unreadable,
       totalBytes: images.reduce((total, image) => total + image.size, 0),
       retentionMs: UNUSED_RETENTION_MS,
       partial,
@@ -657,8 +694,9 @@ export const unusedImages = query({
  * La purga a mano del panel de Ajustes del taller: barre ahora lo mismo que
  * barrería la pasada de esta noche, ni más ni menos. Lo que retira queda en la
  * papelera, igual que si lo hubiera retirado la madrugada. Devuelve cuántas
- * imágenes se han retirado, cuánto ocupaban y cuántos vales sin archivo se han
- * ido con ellas, que es lo que cuenta el aviso que ve quien purga.
+ * imágenes se han retirado, cuánto ocupaban, cuántos vales sin archivo se han ido
+ * con ellas y cuántos vales había cuyo archivo ya no se puede leer, que es lo que
+ * cuenta el aviso que ve quien purga.
  */
 export const purgeUnused = mutation({
   args: {},
@@ -675,7 +713,12 @@ export const purgeUnused = mutation({
     await recordCleanupRun(
       ctx,
       "reportUploads",
-      { files: result.images, bytes: result.bytes, tickets: result.tickets },
+      {
+        files: result.images,
+        bytes: result.bytes,
+        tickets: result.tickets,
+        unreadable: result.unreadable,
+      },
       by,
     );
     return result;

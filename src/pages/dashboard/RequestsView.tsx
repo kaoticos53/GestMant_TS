@@ -61,7 +61,7 @@ import {
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
   ArrowRight,
@@ -80,6 +80,7 @@ import {
   Plus,
   RotateCcw,
   SearchX,
+  ShoppingCart,
   Upload,
   User,
   Wrench,
@@ -114,11 +115,13 @@ const STATUS_RANK: Record<RequestStatusId, number> = {
   pending: 0,
   onHold: 1,
   pendingSupplierQuote: 2,
-  approved: 3,
-  issued: 4,
-  returned: 5,
-  rejected: 6,
-  cancelled: 7,
+  // El material comprado ya ha entrado: es lo primero que hay que resolver.
+  materialReceived: 3,
+  approved: 4,
+  issued: 5,
+  returned: 6,
+  rejected: 7,
+  cancelled: 8,
 };
 
 const PRIORITY_RANK: Record<RequestDoc["priority"], number> = {
@@ -144,6 +147,7 @@ const FILTERS: { id: RequestFilterId; label: string }[] = [
   { id: "rejected", label: "Rechazadas" },
   { id: "cancelled", label: "Canceladas" },
   { id: "pendingSupplierQuote", label: "Presupuesto pendiente" },
+  { id: "materialReceived", label: "Material recibido" },
 ];
 
 /** Orden de trabajo: lo que está pendiente y lo urgente primero. */
@@ -191,6 +195,7 @@ function countByStatus(
     rejected: 0,
     cancelled: 0,
     pendingSupplierQuote: 0,
+    materialReceived: 0,
   };
   for (const request of requests) {
     // Future-proof: ignore statuses that do not match the current UI filter map.
@@ -280,6 +285,7 @@ export function RequestsView({
   equipmentFilter = "all",
   onEquipmentFilterChange = () => {},
   canManage = false,
+  canPurchase = false,
   initialDetailId = null,
   initialFilter = "all",
 }: {
@@ -291,6 +297,8 @@ export function RequestsView({
   onEquipmentFilterChange?: (value: string) => void;
   /** Solo responsable de repuestos/admin deciden peticiones (fail-closed). */
   canManage?: boolean;
+  /** Puede generar peticiones de compra cuando el almacén no cubre la petición. */
+  canPurchase?: boolean;
   /** Petición abierta al montar (la elige la búsqueda global). */
   initialDetailId?: Id<"partRequests"> | null;
   /** Estado con el que se abre la cola (lo eligen las tarjetas del resumen). */
@@ -641,6 +649,7 @@ export function RequestsView({
           request={decision.request}
           mode={decision.mode}
           parts={parts}
+          canPurchase={canPurchase}
           onClose={() => setDecision(null)}
         />
       )}
@@ -1024,14 +1033,17 @@ function DecisionDialog({
   request,
   mode,
   parts,
+  canPurchase,
   onClose,
 }: {
   request: RequestDoc;
   mode: DecisionMode;
   parts: PartDoc[];
+  canPurchase: boolean;
   onClose: () => void;
 }) {
   const approve = useMutation(api.partRequests.approve);
+  const requestPurchase = useMutation(api.purchasing.requestPurchase);
   const reject = useMutation(api.partRequests.reject);
   const markIssued = useMutation(api.partRequests.markIssued);
   const onHold = useMutation(api.partRequests.onHold);
@@ -1051,6 +1063,43 @@ function DecisionDialog({
   const isApprove = mode === "approve";
   const missingReference = isApprove && request.lines.length === 0;
   const blocked = isApprove && (missingReference || shortages.length > 0);
+  // De lo que falta, qué ya está en la cola de compras: así no se compra dos
+  // veces lo mismo y se ve que la petición va por buen camino. Solo se pregunta
+  // si se puede mirar (el backend no contesta a quien no tiene la capacidad).
+  const comprasQuery = useQuery(
+    api.purchasing.byRequest,
+    canPurchase ? { requestId: request._id } : ("skip" as const),
+  );
+  const compras = comprasQuery?.requests ?? [];
+  const compradas = compras.filter(
+    (row) => row.status !== "cancelled" && row.receivedAt === undefined,
+  ).length;
+
+  const handlePurchase = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { references, repeated } = await requestPurchase({
+        requestId: request._id,
+      });
+      toast.success(
+        references.length === 1
+          ? `${references[0]} apartada para comprar`
+          : `${references.length} peticiones de compra apartadas`,
+        {
+          description:
+            repeated > 0
+              ? `${repeated} línea${repeated === 1 ? "" : "s"} ya estaba${repeated === 1 ? "" : "n"} en la cola de compras.`
+              : "Están sin tratar, en el módulo de compras.",
+        },
+      );
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -1128,11 +1177,27 @@ function DecisionDialog({
               })}
             </ul>
             {shortages.length > 0 && (
-              <p className="mt-3 flex items-start gap-2 rounded-md bg-destructive/10 px-2.5 py-2 text-xs leading-5 text-destructive">
-                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                Stock insuficiente en {shortages.length} líneas. Rechaza la
-                petición o repón el catálogo antes de aprobar.
-              </p>
+              <div className="mt-3 grid gap-2 rounded-md bg-destructive/10 px-2.5 py-2 text-xs leading-5 text-destructive">
+                <p className="flex items-start gap-2">
+                  <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                  {compradas > 0
+                    ? `Stock insuficiente en ${shortages.length} líneas, pero ${compradas === 1 ? "ya hay una petición de compra viva" : `ya hay ${compradas} peticiones de compra vivas`} para ellas: entra en el almacén cuando llegue el material.`
+                    : `Stock insuficiente en ${shortages.length} líneas. Rechaza la petición o repón el catálogo antes de aprobar.`}
+                </p>
+                {canPurchase && compradas < shortages.length && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-fit gap-2"
+                    disabled={busy}
+                    onClick={() => void handlePurchase()}
+                  >
+                    <ShoppingCart className="size-4" />
+                    Comprar lo que falta
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         ) : (

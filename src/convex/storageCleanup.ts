@@ -1,5 +1,9 @@
 import { v } from "convex/values";
-import { AUTO_CLEANUP_BY } from "../lib/cleanupLog";
+import {
+  AUTO_CLEANUP_BY,
+  fileReading,
+  unreadableFilesAlert,
+} from "../lib/cleanupLog";
 import { internal } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
 import {
@@ -8,8 +12,9 @@ import {
   internalQuery,
   type MutationCtx,
 } from "./_generated/server";
-import { cleanupActor, recordCleanupRun } from "./cleanupLog";
-import { requireCoordinator } from "./permissions";
+import { cleanupActor, lastRun, recordCleanupRun } from "./cleanupLog";
+import { notifyUsers } from "./notify";
+import { coordinatorIds, requireCoordinator } from "./permissions";
 import { sweepUnusedRows } from "./reportUploads";
 import schema from "./schema";
 import { moveToTrash, purgeExpiredRows } from "./trash";
@@ -32,6 +37,14 @@ import { moveToTrash, purgeExpiredRows } from "./trash";
  *
  * La regla vale igual para una foto que para el archivo de un documento: si
  * nadie lo menciona, no es de nadie.
+ *
+ * Y hay archivos que no se pueden leer. El almacén puede tener en su lista un
+ * archivo al que no da dirección con la que abrirlo, y una ficha puede seguir
+ * citando una dirección que ya no lleva a ninguna parte. De esos no se decide
+ * nada —tampoco que no los cite nadie—, así que no se retiran: se cuentan aparte
+ * y se señalan (la constancia de la pasada, que es lo que enseña Ajustes del
+ * taller, y un aviso a quien coordina cuando la cuenta cambia). Retirar un
+ * archivo que no se ha podido leer es la forma de borrar algo en uso.
  *
  * Se mira a lo bruto a propósito. Las imágenes de una nota no llevan una fila que
  * las apunte —en el texto va su dirección—, así que la única pregunta que se
@@ -114,15 +127,62 @@ async function storedText(ctx: MutationCtx): Promise<string[]> {
  * el id dentro, pero no se da por hecho: se comprueba también la dirección tal
  * cual, que es lo que de verdad está escrito en una nota o en una versión
  * antigua de una nota.
+ *
+ * La dirección la lee quien barre —una vez por archivo—, porque es también lo
+ * que decide si el archivo se puede leer: aquí entra ya leída, y por eso no hay
+ * nada que resolver. Se llama solo con la dirección delante: un archivo sin ella
+ * no se comprueba, porque de un archivo que no se lee no se decide nada.
  */
-async function isCited(
-  ctx: MutationCtx,
+function isCitedIn(
   storageId: Id<"_storage">,
+  address: string,
   texts: string[],
-): Promise<boolean> {
+): boolean {
   if (texts.some((text) => text.includes(storageId))) return true;
-  const url = await ctx.storage.getUrl(storageId);
-  return url !== null && texts.some((text) => text.includes(url));
+  return texts.some((text) => text.includes(address));
+}
+
+/** El tramo de la dirección del almacén con el que se identifica un archivo. */
+const STORAGE_ADDRESS_RE = /\/api\/storage\/([A-Za-z0-9_-]+)/;
+
+/** El trozo de dirección que apunta al almacén: lo que se busca dentro de un texto. */
+const STORAGE_PATH = "/api/storage/";
+
+/** Una dirección escrita en algún sitio de lo que se guarda. */
+const ADDRESS_IN_TEXT_RE = /https?:\/\/[^\s"'<>()\\]+/g;
+
+/**
+ * El sello con el que el almacén identifica un archivo dentro de su dirección. Se
+ * compara el sello —y no la dirección entera— porque una dirección puede llevar
+ * añadidos suyos sin dejar de ser la del mismo archivo.
+ */
+function addressToken(address: string | null): string | null {
+  if (!address) return null;
+  return STORAGE_ADDRESS_RE.exec(address)?.[1] ?? null;
+}
+
+/**
+ * Las direcciones del almacén escritas en lo que se guarda —una nota, una versión
+ * antigua de una nota, la descripción de una incidencia, el documento de un
+ * expediente, el texto de un mensaje— que el almacén ya no puede servir: archivos
+ * que algo cita y que no se pueden leer.
+ *
+ * Se cuentan una sola vez: la misma foto citada en tres sitios sigue siendo un
+ * archivo. Y se comparan por su sello contra las que el almacén sí sirve, que es
+ * la única lista de la que fiarse: lo que el almacén no da es un archivo perdido,
+ * no una dirección de otro sitio que se parezca.
+ */
+function citedButUnreadable(texts: string[], served: Set<string>): number {
+  const missing = new Set<string>();
+  for (const text of texts) {
+    // Lo que no lleva una dirección del almacén no puede ser un archivo suyo.
+    if (!text.includes(STORAGE_PATH)) continue;
+    for (const match of text.matchAll(ADDRESS_IN_TEXT_RE)) {
+      const token = addressToken(match[0]);
+      if (token !== null && !served.has(token)) missing.add(token);
+    }
+  }
+  return missing.size;
 }
 
 /**
@@ -139,9 +199,34 @@ async function sweepOrphanRows(
   ctx: MutationCtx,
   cutoff: number,
   runBy: string,
-): Promise<{ files: number; bytes: number }> {
+): Promise<{ files: number; bytes: number; unreadable: number }> {
   const texts = await storedText(ctx);
   const files = await ctx.db.system.query("_storage").collect();
+
+  // Lo que el almacén puede leer de verdad: la dirección de cada archivo y el
+  // sello con el que la identifica. Un archivo del que no sale dirección no se
+  // puede leer, y de lo que no se lee no se decide nada.
+  const addresses = new Map<Id<"_storage">, string | null>();
+  const served = new Set<string>();
+  let unreadable = 0;
+  for (const file of files) {
+    const address = await ctx.storage.getUrl(file._id);
+    addresses.set(file._id, address);
+    if (address === null) {
+      unreadable += 1;
+      continue;
+    }
+    const token = addressToken(address);
+    if (token !== null) served.add(token);
+  }
+  // Y las direcciones que algo cita y el almacén ya no sirve: archivos que se han
+  // perdido y que una ficha sigue enseñando. Aquí no hay nada que retirar —del
+  // archivo no queda nada en el almacén—, pero tampoco se pueden callar.
+  //
+  // Una dirección se reconoce por su forma —la misma que lee el resto de la
+  // aplicación para volver de una dirección a su vale (`reportUploads`)—, así que
+  // no hace falta que el almacén tenga algún archivo para empezar a buscarlas.
+  unreadable += citedButUnreadable(texts, served);
 
   let removed = 0;
   let bytes = 0;
@@ -150,7 +235,11 @@ async function sweepOrphanRows(
     // Lo que acaba de subirse todavía puede acabar en una nota: se deja para
     // otra noche.
     if (file._creationTime > cutoff) continue;
-    if (await isCited(ctx, file._id, texts)) continue;
+    const address = addresses.get(file._id) ?? null;
+    const cited = address !== null && isCitedIn(file._id, address, texts);
+    // Solo se retira lo que se lee y no lo menciona nadie: lo citado se queda, y
+    // lo que no se puede leer no se toca —ya está contado arriba—.
+    if (fileReading({ address, cited }) !== "orphan") continue;
     await moveToTrash(ctx, {
       storageId: file._id,
       size: file.size,
@@ -163,7 +252,7 @@ async function sweepOrphanRows(
     removed += 1;
     bytes += file.size;
   }
-  return { files: removed, bytes };
+  return { files: removed, bytes, unreadable };
 }
 
 /**
@@ -175,8 +264,21 @@ export const sweepOrphanFiles = internalMutation({
   args: { before: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const cutoff = args.before ?? Date.now() - ORPHAN_FILE_RETENTION_MS;
+    // Lo que dijo la pasada anterior: el aviso de lo que no se puede leer solo
+    // vuelve a salir cuando la cuenta cambia.
+    const previous = await lastRun(ctx, "orphanFiles");
     const result = await sweepOrphanRows(ctx, cutoff, AUTO_CLEANUP_BY);
     await recordCleanupRun(ctx, "orphanFiles", result, AUTO_CLEANUP_BY);
+    // Lo que no se puede leer no se retira, así que quien coordina tiene que
+    // enterarse de otra forma: es el único de los tres sitios donde el aviso
+    // existe —la constancia y la pantalla son los otros dos—.
+    const alert = unreadableFilesAlert({
+      unreadable: result.unreadable,
+      before: previous?.unreadable ?? 0,
+    });
+    if (alert !== null) {
+      await notifyUsers(ctx, await coordinatorIds(ctx), alert);
+    }
     return result.files;
   },
 });
@@ -184,8 +286,13 @@ export const sweepOrphanFiles = internalMutation({
 /** Lo que retiró cada pasada de la limpieza a mano, tal y como lo cuenta el
  * aviso que ve quien la lanza. */
 export interface ManualCleanupSummary {
-  reportUploads: { files: number; bytes: number; tickets: number };
-  orphanFiles: { files: number; bytes: number };
+  reportUploads: {
+    files: number;
+    bytes: number;
+    tickets: number;
+    unreadable: number;
+  };
+  orphanFiles: { files: number; bytes: number; unreadable: number };
   trash: { files: number; bytes: number };
 }
 
@@ -219,14 +326,21 @@ export const runReportUploadsPass = internalMutation({
   handler: async (
     ctx,
     args,
-  ): Promise<{ files: number; bytes: number; tickets: number }> => {
+  ): Promise<{
+    files: number;
+    bytes: number;
+    tickets: number;
+    unreadable: number;
+  }> => {
     // Las imágenes son las que cuentan como archivos; los vales sin archivo se
-    // van con ellas.
+    // van con ellas, y los vales cuyo archivo ya no se puede leer se cuentan
+    // aparte en vez de pasar por imágenes de 0 KB.
     const uploads = await sweepUnusedRows(ctx, args.runBy);
     const reportUploads = {
       files: uploads.images,
       bytes: uploads.bytes,
       tickets: uploads.tickets,
+      unreadable: uploads.unreadable,
     };
     await recordCleanupRun(ctx, "reportUploads", reportUploads, args.runBy);
     return reportUploads;
@@ -240,7 +354,10 @@ export const runReportUploadsPass = internalMutation({
  */
 export const runOrphanFilesPass = internalMutation({
   args: { runBy: v.string() },
-  handler: async (ctx, args): Promise<{ files: number; bytes: number }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ files: number; bytes: number; unreadable: number }> => {
     const orphanFiles = await sweepOrphanRows(
       ctx,
       Date.now() - ORPHAN_FILE_RETENTION_MS,

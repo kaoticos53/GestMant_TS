@@ -36,6 +36,20 @@ matices, son el mismo producto llamando a lo mismo de dos maneras.
 | **ficha del proveedor** | La página del proveedor donde se compra ese repuesto (la dirección). | URL de la ficha, enlace del fabricante, ficha proveedor |
 | **compatible** | Un repuesto es compatible **con equipos**: los que puede reponer. | compatible con modelos |
 
+## Las compras
+
+| Término                 | Qué nombra                                                                                                                                                                          | No usar                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **petición de compra**   | La línea que el responsable aparta de una petición de repuesto porque el almacén no la cubre (no hay stock, o el repuesto es nuevo). Se numera **PC-0001** y espera agrupada por proveedor. | solicitud de compra, pedido (para la línea)                 |
+| **orden de compra**      | Lo que se manda de una vez a un proveedor: se numera **OC-0001**, lleva su fecha y dentro van las peticiones de compra de ese proveedor. La monta a mano el responsable.            | pedido de compra (para la orden), OC (a secas en la pantalla) |
+| **artículo**             | Cada línea de una orden: el repuesto, lo que se pide, lo que ha llegado y su nota. Es lo que dice de qué petición de repuesto sale.                                                | línea (fuera de la ficha), ítem                              |
+| **recepción**            | La entrada de material de un proveedor: se hace sobre una orden, lleva el albarán adjunto y deja el movimiento de recepción.                                                        | entrada (a secas para el documento), albarán (como nombre del hecho) |
+| **albarán**              | El papel del proveedor que acompaña al material. Sin él no se recepciona: es lo que respalda la entrada. Se escribe así, con tilde.                                                  | albarán de entrega (como etiqueta del botón), nota de entrega |
+| **proveedor**            | Quien vende el repuesto. Es la clave con la que se agrupa lo que está sin tratar y el destinatario de cada orden.                                                                   | suministrador, distribuidor (como término de la app)        |
+| **Sin proveedor**        | El grupo de lo que se compra y no tiene proveedor en el catálogo. Se escribe así, con mayúscula inicial: es una etiqueta.                                                           | Proveedor pendiente, sin asignar                            |
+| **Sin tratar**           | Lo que está apartado para comprar y todavía no ha entrado en ninguna orden. Es el estado de la cola de compras.                                                                     | pendiente (para la cola de compras), por procesar            |
+| **material recibido**    | El estado de una petición cuando ya ha llegado todo lo que se compró para ella: se puede aprobar y entregar.                                                                        | material en almacén, recibido (a secas)                     |
+
 ## El trabajo del día a día
 
 | Término                      | Qué nombra                                                                                                                                     | No usar                                                                   |

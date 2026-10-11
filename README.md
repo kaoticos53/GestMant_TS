@@ -37,6 +37,25 @@ npm run nas -- --host IP-del-NAS \
 Termina con la URL de la app en la última línea, igual que el arranque local. Con
 `npm run nas -- --help` salen todas las opciones.
 
+Y para saber cómo está el taller sin cambiar nada —los contenedores, el `.env` y
+si el esquema está al día—, el mismo comando tiene un modo de solo comprobación,
+que además devuelve 0 si todo está en pie y 1 si hay algo que mirar:
+
+```bash
+npm run nas:check -- --host IP-del-NAS
+```
+
+Y antes de cada actualización, la **copia previa** —el export lógico y la copia
+en frío del volumen, las dos en el NAS, conservando las últimas 7 de cada tipo y
+borrando las más viejas— se lanza también desde el ordenador:
+
+```bash
+npm run nas:backup -- --host IP-del-NAS
+```
+
+No cambia datos, no toca el `.env` y no imprime ningún secreto; termina diciendo
+dónde han quedado las copias.
+
 Y si lo tuyo es un **servidor Proxmox** — una **VM Debian** en casa o en el
 taller, con Docker y **Caddy** poniendo el HTTPS donde en el Synology lo pone DSM
 —, esa guía está en **[PROXMOX.md](./PROXMOX.md)**. El montaje de contenedores
@@ -68,20 +87,30 @@ copiar nada desde otro ordenador:
 
 ```bash
 apt install -y git
-git clone https://github.com/tu-usuario/pulso-taller.git /srv/pulso-taller
+git clone https://github.com/tu-usuario/pulso-taller.git /srv/pulso-taller/codigo
+cd /srv/pulso-taller
+cp codigo/docker/synology/docker-compose.yml .
+cp codigo/docker/synology/.env.example .
 ```
 
-Y a partir de ahí, los pasos 2 a 6 de **[PROXMOX.md](./PROXMOX.md)** (Docker,
-Caddy, `.env`, compose) se ejecutan todos en el propio servidor. Esta vía sí
-dispensa Node en tu ordenador: la app se compila dentro del servidor y las
-funciones las sube el contenedor `funciones`.
+El código va en **`codigo/`**, que es donde el `docker-compose.yml` lo busca
+(`context: ./codigo`). Y a partir de ahí, los pasos 2 a 6 de
+**[PROXMOX.md](./PROXMOX.md)** (Docker, Caddy, `.env`, compose) se ejecutan todos
+en el propio servidor. Esta vía sí dispensa Node en tu ordenador: la app se
+compila dentro del servidor y las funciones las sube él solo —el contenedor
+`funciones` al arrancar y el `vigilante` cuando cambian, sin reiniciar nada—.
+
+El paso 3 de las dos guías cuenta la otra vía —clonar **dentro** del NAS o del
+servidor—: allí, actualizar es `git pull` y recompilar.
 
 **Actualizar a una versión nueva** es lo mismo con `git pull`: en el NAS,
 repite `npm run nas` (o `docker compose up -d --build` desde el NAS si el
 código se actualizó allí con un `git pull` en su carpeta); en Proxmox,
 `git pull` en la carpeta del servidor y `docker compose up -d --build`. Los
 datos nunca se tocan: viven en el volumen `pulso-taller_datos`, que ninguna de
-las dos rutas borra ni reemplaza.
+las dos rutas borra ni reemplaza. Y si lo que ha cambiado son **solo las
+funciones**, ni eso hace falta: el contenedor `vigilante` —que se queda mirando
+`src/convex`— las vuelve a subir solo, sin reiniciar ni reconstruir nada.
 
 Si lo que quieres es una demo lista para enseñar, `npm run local -- --fresh`
 rehace la base de datos desde cero y carga los datos de ejemplo (se pierde lo

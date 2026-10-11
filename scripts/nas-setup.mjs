@@ -5,6 +5,10 @@
 //     --app-url https://taller.tudominio.com \
 //     --api-url https://api.tudominio.com
 //
+// Y, para saber cómo está el taller sin cambiar nada:
+//
+//   npm run nas:check            (o: npm run nas -- --check --host IP-del-NAS)
+//
 // Se lanza **desde el ordenador** (con el proyecto clonado) y habla con el NAS por
 // SSH, que es la única forma de hacer el paso 3 —llevar el código— sin copiar
 // carpetas a mano. A partir de ahí, todo pasa dentro del NAS: el guion que se
@@ -30,12 +34,16 @@
 // dónde entrar.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  checkPanelLines,
+  checkReport,
+  checkScript,
   panelLines,
+  parseCheckResult,
   parseSetupResult,
   resolveConfig,
   setupScript,
@@ -165,26 +173,48 @@ function uploadText(path, text) {
  */
 const runVisible = (args) => stream("ssh", args);
 
-/* ------------------------------------------------------------------ */
-/* Paso a paso                                                        */
-/* ------------------------------------------------------------------ */
+/**
+ * La fecha del archivo más reciente dentro de una carpeta, en milisegundos;
+ * `null` si ahí no hay nada que mirar. El código viaja al NAS con sus fechas —lo
+ * empaqueta `tar`—, así que esta fecha es la del código que tiene el NAS: con la
+ * de `src/convex` y la del último envío se sabe si al esquema le falta un viaje.
+ */
+function newestMtime(directory) {
+  let newest = null;
+  let entries;
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    let stamp = null;
+    if (entry.isDirectory()) {
+      stamp = newestMtime(path);
+    } else {
+      try {
+        stamp = statSync(path).mtimeMs;
+      } catch {
+        stamp = null;
+      }
+    }
+    if (stamp !== null && (newest === null || stamp > newest)) newest = stamp;
+  }
+  return newest;
+}
 
-console.log(
-  `\n${c.bold("Pulso Taller en el NAS")} ${c.dim(`· ${destinoLargo}`)}`,
-);
-console.log(
-  c.dim(
-    "Los pasos 1 a 5 de SYNOLOGY.md, de una vez. Se puede repetir sin miedo: nada de esto toca los datos.",
-  ),
-);
-
-step("Comprobar que se llega al NAS");
-{
-  // Delante de una terminal se deja preguntar la contraseña: en un Synology hay
-  // quien entra con clave y quien entra con contraseña, y no se obliga a nadie a
-  // montar claves para poner el taller en pie. En una ejecución desatendida —sin
-  // terminal— se pide `BatchMode`, que es lo que convierte una clave que falta en
-  // un fallo inmediato en vez de en una pregunta esperando para siempre.
+/**
+ * ¿Se llega al NAS por SSH? Es lo primero de las dos formas de llamar —la
+ * puesta en marcha y la comprobación—, y lo único que no se puede intentar sin
+ * conseguirlo. Delante de una terminal se deja preguntar la contraseña: en un
+ * Synology hay quien entra con clave y quien entra con contraseña, y no se obliga
+ * a nadie a montar claves para poner el taller en pie. En una ejecución
+ * desatendida —sin terminal— se pide `BatchMode`, que es lo que convierte una
+ * clave que falta en un fallo inmediato en vez de en una pregunta esperando para
+ * siempre.
+ */
+function ensureReachable() {
   const preflight = [...sshArgs(), "echo hola"];
   if (!process.stdin.isTTY) preflight.unshift("-o", "BatchMode=yes");
   const ping = capture("ssh", preflight);
@@ -208,6 +238,81 @@ step("Comprobar que se llega al NAS");
   }
   ok(`entra ${destino}`);
 }
+
+/* ------------------------------------------------------------------ */
+/* --check: mirar cómo está el taller, sin tocar nada                  */
+/* ------------------------------------------------------------------ */
+
+if (config.check) {
+  console.log(
+    `\n${c.bold("Pulso Taller · cómo está el NAS")} ${c.dim(`· ${destinoLargo}`)}`,
+  );
+  console.log(
+    c.dim(
+      "Solo mira: los contenedores, el .env y si el esquema está al día. No construye, no arranca y no sube nada.",
+    ),
+  );
+
+  step("Comprobar que se llega al NAS");
+  ensureReachable();
+
+  step("Mirar el taller desde dentro del NAS");
+  // El guion viaja como argumento de la conexión, no se sube a ningún sitio: la
+  // comprobación no deja ni un archivo en el NAS. Hereda la terminal para que el
+  // `sudo` de dentro pueda preguntar la contraseña si Docker la pide.
+  const result = await stream(
+    "ssh",
+    [
+      ...sshArgs(ttyArgs),
+      `sh -c ${shQuote(checkScript({ root: config.root }))}`,
+    ],
+    { capture: true },
+  );
+  const summary = parseCheckResult(result.stdout);
+  if (result.status !== 0 || !summary) {
+    abort(
+      "no he podido mirar cómo está el taller",
+      [
+        "Arriba está el motivo, tal como lo ha contado el NAS.",
+        "Comprueba el host y la carpeta (--host, --path) y vuelve a intentarlo: la comprobación no toca nada, así que repetirla es gratis.",
+      ].join("\n"),
+    );
+  }
+
+  // La fecha del código de este ordenador: con ella y la del último envío se sabe
+  // si al esquema le falta un viaje.
+  const codeMtime = newestMtime(join(root, "src", "convex"));
+  const report = checkReport(summary, { codeMtime });
+  for (const line of checkPanelLines({
+    host: config.host,
+    user: config.user,
+    root: config.root,
+    result: summary,
+    codeMtime,
+    report,
+  })) {
+    console.log(line);
+  }
+  // El código de salida es el de la comprobación: 0 si todo está en pie y 1 si hay
+  // algo que mirar, para que sirva también desde un guion.
+  process.exit(report.every((finding) => finding.ok) ? 0 : 1);
+}
+
+/* ------------------------------------------------------------------ */
+/* Paso a paso                                                        */
+/* ------------------------------------------------------------------ */
+
+console.log(
+  `\n${c.bold("Pulso Taller en el NAS")} ${c.dim(`· ${destinoLargo}`)}`,
+);
+console.log(
+  c.dim(
+    "Los pasos 1 a 5 de SYNOLOGY.md, de una vez. Se puede repetir sin miedo: nada de esto toca los datos.",
+  ),
+);
+
+step("Comprobar que se llega al NAS");
+ensureReachable();
 
 step("Paso 1 — la carpeta del proyecto en el NAS");
 {

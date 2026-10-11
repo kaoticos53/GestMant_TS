@@ -3,8 +3,8 @@
 # levantar el proyecto y no hay que copiar nada a mano—.
 #
 #   target app        → la aplicación (nginx con el sitio compilado)
-#   target funciones  → el contenedor que sube el esquema y las funciones al
-#                       backend al arrancar
+#   target funciones  → los que suben el esquema y las funciones: el del
+#                       arranque y el vigilante, que comparten imagen
 #
 # Las dos comparten la fase `base` (dependencias instaladas y código copiado), así
 # que el `npm ci` —lo que más tarda— se paga una vez y lo aprovechan las dos.
@@ -61,14 +61,28 @@ RUN npm run build
 
 # --- 3. Subir las funciones --------------------------------------------------
 
-# El contenedor que deja el backend con el esquema y las funciones de la app:
-# arranca, lo sube y se va. Lleva Node y las dependencias porque el despliegue lo
-# hace el propio CLI de Convex, y el guion que lo ordena va explicado línea a
-# línea en `docker/synology/funciones.sh`.
+# La imagen que habla con el deployment desde dentro: arranca, deja el backend
+# con el esquema y las funciones y se va. Lleva Node y las dependencias porque el
+# despliegue lo hace el propio CLI de Convex.
+#
+# De aquí salen **los dos** servicios que suben funciones, porque los dos
+# necesitan lo mismo (Node, el CLI y el código):
+#
+#   `funciones`   el del arranque: sube una vez y se va (este es su `CMD`)
+#   `vigilante`   el que se queda: vuelve a subir cuando `src/convex` cambia, y
+#                 el compose le cambia la orden por `vigila-funciones`
+#
+# Lo que comparten —esperar al backend, dejar puestas las variables del
+# deployment, generar las claves de Convex Auth si faltan y subir con
+# reintentos— vive en `funciones-lib.sh`, que leen los dos. Los pasos del
+# arranque y los de la vigilancia están contados, uno a uno, en `funciones.sh` y
+# en `vigila-funciones.sh`.
 FROM base AS funciones
 
 COPY docker/synology/funciones.sh /usr/local/bin/funciones
-RUN chmod +x /usr/local/bin/funciones
+COPY docker/synology/vigila-funciones.sh /usr/local/bin/vigila-funciones
+COPY docker/synology/funciones-lib.sh /usr/local/bin/funciones-lib.sh
+RUN chmod +x /usr/local/bin/funciones /usr/local/bin/vigila-funciones
 
 CMD ["/usr/local/bin/funciones"]
 
