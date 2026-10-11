@@ -1,0 +1,2543 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { DocumentLink } from "@/components/DocumentLink";
+import { ListArea } from "@/components/ListArea";
+import { TablePagination } from "@/components/TablePagination";
+import { RichText } from "@/components/RichText";
+import { RichTextEditor } from "@/components/RichTextEditor";
+import { api } from "@/convex/_generated/api";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { groupByDate, matchesQuery, sortByDate } from "@/lib/browse";
+import { downloadText } from "@/lib/export";
+import {
+  noteRemovedToast,
+  noteRestoreUndoneToast,
+  noteRestoredToast,
+  noteVersionRestoredToast,
+} from "@/lib/noteToasts";
+import { downloadPdf, loadPdfImage } from "@/lib/pdfBrowser";
+import {
+  REPORT_MIME,
+  incidentReport,
+  incidentReportFilename,
+  incidentReportPackageFilename,
+  incidentReportPdfFilename,
+} from "@/lib/report";
+import { reportPackage } from "@/lib/reportPackage";
+import {
+  downloadReportPackage,
+  loadReportPhoto,
+} from "@/lib/reportPackageBrowser";
+import { reportToPdf } from "@/lib/reportPdf";
+import {
+  richDocIsEmpty,
+  richDocToPlainText,
+  richDocToStore,
+} from "@/lib/richDoc";
+import {
+  FILE_ACCEPT,
+  MAX_FILE_SIZE_LABEL,
+  compressForUpload,
+  exceedsFileLimit,
+  uploadToStorage,
+} from "@/lib/upload";
+import { cn } from "@/lib/utils";
+import { describeBlockCounts } from "@/lib/richDocDiff";
+import { describeDiff } from "@/lib/textDiff";
+import {
+  INCIDENT_FILTERS,
+  INCIDENT_STATUS_META,
+  PRIORITY_META,
+  documentTrailLabel,
+  equipmentLabel,
+  formatClockTime,
+  formatDateTime,
+  getErrorMessage,
+  isNoteWithinEditWindow,
+  liveNotes,
+  noteEditDeadline,
+  noteRestoration,
+  noteRestoreUndoIndex,
+  noteVersionChanges,
+  retiredNotes,
+  type IncidentStatus,
+  type Priority,
+} from "@/lib/workshop";
+import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
+import { useTablePagination } from "@/hooks/use-table-pagination";
+import { useMutation, useQuery } from "convex/react";
+import {
+  Archive,
+  Check,
+  ChevronDown,
+  FileDown,
+  FileText,
+  History,
+  MapPin,
+  Paperclip,
+  Pen,
+  Pencil,
+  Plus,
+  PackagePlus,
+  SearchX,
+  Siren,
+  Trash2,
+  Undo2,
+  Upload,
+  UserPlus,
+  Wrench,
+  X,
+} from "lucide-react";
+import { useRef, useState } from "react";
+import { Link } from "react-router";
+import { toast } from "sonner";
+import { IncidentReportsDialog } from "./IncidentReportsDialog";
+import {
+  QueueToolbar,
+  type QueueSortId,
+  type QueueSortOption,
+} from "./QueueToolbar";
+
+/**
+ * La incidencia tal y como la sirve la cola: sus documentos llegan con el
+ * enlace del archivo ya resuelto, para poder abrirlo desde la ficha. Los
+ * documentos sin archivo (los viajan solo con su nombre) quedan con `url`
+ * ausente o nula, y la ficha los marca como tales.
+ */
+type IncidentDoc = Omit<Doc<"incidents">, "documents"> & {
+  documents?: (NonNullable<Doc<"incidents">["documents"]>[number] & {
+    url?: string | null;
+  })[];
+};
+type EquipmentDoc = Doc<"equipment">;
+
+/** Orden de la cola: primero lo que está esperando acción. */
+const STATUS_RANK: Record<IncidentStatus, number> = {
+  reported: 0,
+  assigned: 1,
+  workshop: 2,
+  unresolved: 3,
+  resolved: 4,
+};
+
+/** Órdenes disponibles cuando el histórico es largo. */
+const SORT_OPTIONS: QueueSortOption[] = [
+  { id: "recent", label: "Fecha: más recientes primero" },
+  { id: "oldest", label: "Fecha: más antiguas primero" },
+  { id: "queue", label: "Orden de trabajo: pendientes primero" },
+];
+
+/** Todo lo que identifica una incidencia para el buscador. */
+function searchableFields(incident: IncidentDoc): (string | undefined)[] {
+  return [
+    incident.reference,
+    incident.equipmentKind,
+    incident.model,
+    incident.serialNumber,
+    // La descripción es un documento del editor: se busca por su texto.
+    richDocToPlainText(incident.description),
+    incident.location,
+    incident.reporterName,
+    incident.reporterRole,
+    incident.assigneeName,
+    incident.workshopAssigneeName,
+    ...(incident.documents?.map((d) => d.name) ?? []),
+    // Una nota retirada no está en el cuaderno: buscarla no la saca de ahí.
+    // Y se busca por lo que dice la nota, no por sus bloques de formato.
+    ...liveNotes(incident.lifecycleNotes).map((n) =>
+      richDocToPlainText(n.note),
+    ),
+  ];
+}
+
+export function IncidentsView({
+  incidents = [],
+  equipment = [],
+  requests = [],
+  currentUserId,
+  currentUserName = "Técnico",
+  canAssign = false,
+  initialDetailId = null,
+}: {
+  incidents?: IncidentDoc[];
+  equipment?: EquipmentDoc[];
+  requests?: Doc<"partRequests">[];
+  /** Identidad actual (para autoasignación y permisos de atención). */
+  currentUserId?: Id<"users"> | null;
+  currentUserName?: string;
+  /** Coordinador (responsable/admin): asigna a otros técnicos. */
+  canAssign?: boolean;
+  /** Incidencia abierta al montar (la elige el aviso del panel). */
+  initialDetailId?: Id<"incidents"> | null;
+}) {
+  const [filter, setFilter] = useState<IncidentStatus | "all">("all");
+  const [detailId, setDetailId] = useState<Id<"incidents"> | null>(
+    initialDetailId ?? null,
+  );
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<QueueSortId>("recent");
+  const [compact, setCompact] = useState(false);
+  // Lote de informes del periodo: se pide al backend solo al abrir el diálogo.
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const archiveIncident = useMutation(api.incidents.archive);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  const handleArchive = async (incident: IncidentDoc) => {
+    setArchivingId(incident._id);
+    try {
+      await archiveIncident({ incidentId: incident._id });
+      toast.success(
+        `${incident.reference} al archivo · puedes recuperarla desde Archivo`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setArchivingId(null);
+    }
+  };
+
+  const inQueueOrder = (items: IncidentDoc[]) =>
+    [...items].sort(
+      (a, b) =>
+        STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
+        b.reportedAt - a.reportedAt,
+    );
+
+  const matched = incidents.filter((incident) =>
+    matchesQuery(searchableFields(incident), search),
+  );
+  const filtered =
+    filter === "all"
+      ? matched
+      : matched.filter((item) => item.status === filter);
+  const counts: Record<IncidentStatus | "all", number> = {
+    all: matched.length,
+    reported: matched.filter((item) => item.status === "reported").length,
+    assigned: matched.filter((item) => item.status === "assigned").length,
+    workshop: matched.filter((item) => item.status === "workshop").length,
+    resolved: matched.filter((item) => item.status === "resolved").length,
+    unresolved: matched.filter((item) => item.status === "unresolved").length,
+  };
+
+  const byDate = sort !== "queue";
+  const ordered = byDate
+    ? sortByDate(filtered, (incident) => incident.reportedAt, sort)
+    : inQueueOrder(filtered);
+  // La misma medida que en las tablas: cuántas fichas caben en el alto del área
+  // —contadas por el navegador— y la cola partida en páginas con esas fichas. La
+  // vista compacta encoge cada ficha, así que vuelve a medir a propósito.
+  const { areaRef, rowsFit } = useRowsThatFit({
+    shape: "cards",
+    remeasureKey: compact,
+  });
+  const paging = useTablePagination({
+    total: ordered.length,
+    rowsFit,
+    // Cambiar lo que se mira devuelve a la primera página: lo que se busca no
+    // está en la cuarta página de otra lista.
+    resetKey: `${search}|${sort}|${filter}`,
+  });
+  const visible = ordered.slice(paging.from - 1, paging.to);
+  const sections = byDate
+    ? groupByDate(visible, (incident) => incident.reportedAt)
+    : [{ key: "queue", label: "", items: visible }];
+
+  const detail = detailId
+    ? (incidents.find((item) => item._id === detailId) ?? null)
+    : null;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex flex-wrap rounded-lg border border-border/70 bg-card p-1 shadow-sm">
+          {INCIDENT_FILTERS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setFilter(option.id)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                filter === option.id
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {option.label}
+              <span className="ml-1.5 text-xs tabular-nums opacity-70">
+                {counts[option.id]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Entregar el trabajo de un mes: un archivo con todos los partes. */}
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={() => setReportsOpen(true)}
+            title="Descarga en un solo archivo el informe de las incidencias de un periodo"
+          >
+            <FileDown className="size-4" />
+            Informes del periodo
+          </Button>
+          <Button asChild variant="outline" className="gap-2">
+            <Link to="/reportar" target="_blank">
+              <Siren className="size-4" />
+              Notificar incidencia
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {reportsOpen && (
+        <IncidentReportsDialog
+          open={reportsOpen}
+          onOpenChange={setReportsOpen}
+          equipment={equipment}
+          canReadTrails={canAssign}
+          currentUserName={currentUserName}
+        />
+      )}
+
+      <QueueToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Buscar por referencia, equipo, nº de serie, descripción, técnico…"
+        sort={sort}
+        onSortChange={setSort}
+        sortOptions={SORT_OPTIONS}
+        compact={compact}
+        onCompactChange={setCompact}
+        noun="incidencias"
+      />
+
+      {filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center shadow-sm">
+          <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-signal/10 text-signal">
+            {search !== "" ? (
+              <SearchX className="size-5" />
+            ) : (
+              <Siren className="size-5" />
+            )}
+          </span>
+          <p className="mt-4 text-base font-semibold tracking-tight">
+            {search !== ""
+              ? `Ninguna incidencia coincide con «${search}»`
+              : filter === "all"
+                ? "No hay incidencias notificadas"
+                : `No hay incidencias «${INCIDENT_STATUS_META[filter as IncidentStatus].label}»`}
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+            {search !== ""
+              ? "Prueba con otra referencia, otro equipo o el nombre del técnico, o limpia la búsqueda."
+              : "Cualquier persona del taller puede notificar una incidencia desde el formulario público; aparecerá aquí para asignarla."}
+          </p>
+          {search !== "" ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5 gap-2"
+              onClick={() => setSearch("")}
+            >
+              <X className="size-4" />
+              Limpiar la búsqueda
+            </Button>
+          ) : (
+            <Button asChild variant="outline" className="mt-5 gap-2">
+              <Link to="/reportar" target="_blank">
+                <Siren className="size-4" />
+                Abrir formulario
+              </Link>
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {/* El alto de las fichas queda acotado a la pantalla, así que se
+              recorren con la barra del propio listado y el rótulo del día se
+              queda pegado arriba. El pie con la paginación va fuera: sigue a la
+              vista sin tener que bajar hasta el final. */}
+          <ListArea
+            ref={areaRef}
+            resetKey={`${search}|${sort}|${filter}|${paging.page}`}
+          >
+            <div className="flex flex-col gap-5">
+              {sections.map((section) => (
+                <section key={section.key} className="flex flex-col gap-3">
+                  {section.label !== "" && (
+                    <h2
+                      data-row-header
+                      className="flex items-center justify-between gap-2 rounded-md bg-background/85 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm lg:sticky lg:top-0 lg:z-10"
+                    >
+                      {section.label}
+                      <span className="tabular-nums opacity-70">
+                        {section.items.length}
+                      </span>
+                    </h2>
+                  )}
+                  <div className={compact ? "grid gap-2" : "grid gap-4"}>
+                    {section.items.map((incident) => {
+                      const status = INCIDENT_STATUS_META[incident.status];
+                      const isClosed =
+                        incident.status === "resolved" ||
+                        incident.status === "unresolved";
+                      return (
+                        <div key={incident._id} data-row className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setDetailId(incident._id)}
+                            className={cn(
+                              "w-full rounded-xl border border-border/70 bg-card text-left shadow-sm transition-colors hover:border-signal/40",
+                              compact ? "p-3" : "p-4",
+                              canAssign && isClosed && "pb-12",
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-xs font-semibold text-muted-foreground">
+                                  {incident.reference}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={status.badgeClassName}
+                                >
+                                  {status.label}
+                                </Badge>
+                                {incident.location && (
+                                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                    <MapPin className="size-3" />
+                                    {incident.location}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateTime(incident.reportedAt)}
+                              </span>
+                            </div>
+                            <p
+                              className={cn(
+                                "truncate text-sm font-semibold tracking-tight",
+                                compact ? "mt-1" : "mt-2",
+                              )}
+                            >
+                              {incident.equipmentKind} · {incident.model}
+                              {incident.serialNumber && (
+                                <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                                  {incident.serialNumber}
+                                </span>
+                              )}
+                            </p>
+                            <RichText
+                              value={incident.description}
+                              className={cn(
+                                "mt-1 text-sm leading-6 text-muted-foreground",
+                                compact ? "line-clamp-1" : "line-clamp-2",
+                              )}
+                            />
+                            <div
+                              className={cn(
+                                "flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground",
+                                compact ? "mt-1.5" : "mt-2.5",
+                              )}
+                            >
+                              <span>Por {incident.reporterName}</span>
+                              {incident.reporterRole && (
+                                <span>· {incident.reporterRole}</span>
+                              )}
+                              {incident.assigneeName && (
+                                <span className="font-medium text-foreground">
+                                  · Técnico: {incident.assigneeName}
+                                </span>
+                              )}
+                              {incident.workshopAssigneeName && (
+                                <span className="font-medium text-amber-700">
+                                  · Taller: {incident.workshopAssigneeName}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+
+                          {canAssign && isClosed && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              title={`Mandar ${incident.reference} al archivo`}
+                              aria-label={`Archivar ${incident.reference}`}
+                              disabled={archivingId === incident._id}
+                              onClick={() => void handleArchive(incident)}
+                              className="absolute bottom-3 right-3 z-10 gap-1.5 bg-card"
+                            >
+                              <Archive className="size-3.5" />
+                              Archivar
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </ListArea>
+
+          <TablePagination
+            paging={paging}
+            singular="incidencia"
+            plural="incidencias"
+            className="rounded-xl border border-border/70 bg-card shadow-sm"
+          />
+        </div>
+      )}
+
+      {detail && (
+        <IncidentDetailSheet
+          key={detail._id}
+          incident={detail}
+          equipment={equipment}
+          requests={requests}
+          currentUserId={currentUserId ?? null}
+          currentUserName={currentUserName}
+          canAssign={canAssign}
+          onClose={() => setDetailId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Historial de correcciones de una nota: qué decía antes de cada cambio y
+ * cuándo se cambió, de la corrección más reciente hacia atrás. Una nota
+ * corregida no esconde su texto anterior: queda en el expediente para poder
+ * reconstruirla. Sin correcciones no enseña nada, ni el desplegable.
+ *
+ * Cada versión se enseña comparada con el texto que la sustituyó —la versión
+ * siguiente, o la nota tal y como está ahora—, con lo que se añadió resaltado y
+ * lo que se quitó tachado, para ver de un vistazo qué cambió en esa corrección.
+ *
+ * Desde aquí se puede devolver la nota a una de esas versiones. Restaurar es
+ * una corrección al revés: la pide el mismo autor y dentro del mismo plazo que
+ * cualquier otra, y la constancia —quién la hizo, cuándo y a qué versión se
+ * volvió— la guarda el propio cuaderno.
+ */
+function NoteHistory({
+  entry,
+  onRestore,
+  restoringVersion,
+  canRestore = false,
+}: {
+  entry: {
+    note: string;
+    versions?: { note: string; at: number }[];
+    restoredAt?: number;
+    restoredBy?: string;
+    restoredVersion?: number;
+  };
+  /** Devuelve la nota a esa versión del historial (por su posición). */
+  onRestore?: (versionIndex: number) => void;
+  /** Posición de la versión que se está restaurando ahora mismo, si hay alguna. */
+  restoringVersion?: number | null;
+  /** Solo su autor dentro del plazo puede restaurar: el backend lo comprueba igual. */
+  canRestore?: boolean;
+}) {
+  const changes = noteVersionChanges(entry);
+  const restoration = noteRestoration(entry);
+  if (changes.length === 0) return null;
+  return (
+    <Collapsible className="mt-2">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <History className="size-3.5" />
+          Historial de cambios ({changes.length})
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+          Comparado con lo que la sustituyó: en verde lo que se añadió, tachado
+          lo que se quitó.
+        </p>
+        {restoration && (
+          <p className="mt-1 rounded-md bg-muted/50 px-2 py-1 text-[11px] leading-5 text-muted-foreground">
+            {`Restaurada por ${restoration.by} el ${formatDateTime(restoration.at)}`}
+            {restoration.from !== null
+              ? `: la nota volvió a la versión que se sustituyó el ${formatDateTime(
+                  restoration.from,
+                )}.`
+              : "."}
+          </p>
+        )}
+        <ul className="mt-2 space-y-2 border-l border-border/70 pl-3">
+          {changes.map((change, index) => {
+            // Un párrafo o una lista que apareció o se fue entero se dice aquí:
+            // el recuento de palabras no lo distingue de una frase retocada.
+            const blocks = describeBlockCounts(change);
+            return (
+              <li key={`${change.at}-${index}`} className="text-xs">
+                <p className="whitespace-pre-wrap leading-5 text-muted-foreground">
+                  {change.parts.map((part, position) => {
+                    const key = `${change.at}-${position}`;
+                    if (part.kind === "added") {
+                      return (
+                        <ins
+                          key={key}
+                          className="rounded bg-emerald-600/15 px-0.5 text-emerald-700 no-underline"
+                        >
+                          {part.text}
+                        </ins>
+                      );
+                    }
+                    if (part.kind === "removed") {
+                      return (
+                        <del
+                          key={key}
+                          className="rounded bg-destructive/10 px-0.5 text-destructive line-through"
+                        >
+                          {part.text}
+                        </del>
+                      );
+                    }
+                    return <span key={key}>{part.text}</span>;
+                  })}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Sustituida el {formatDateTime(change.at)} ·{" "}
+                  {describeDiff({
+                    added: change.added,
+                    removed: change.removed,
+                  })}
+                  {blocks !== null ? ` · ${blocks}` : ""}
+                  {restoration !== null && change.index === restoration.version
+                    ? " · versión restaurada"
+                    : ""}
+                </p>
+                {canRestore && onRestore && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 h-7 gap-1.5 px-2"
+                    disabled={restoringVersion === change.index}
+                    onClick={() => onRestore(change.index)}
+                  >
+                    <Undo2 className="size-3.5" />
+                    {restoringVersion === change.index
+                      ? "Restaurando…"
+                      : "Volver a esta versión"}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function IncidentDetailSheet({
+  incident,
+  equipment,
+  requests,
+  currentUserId,
+  currentUserName,
+  canAssign,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  equipment: EquipmentDoc[];
+  requests: Doc<"partRequests">[];
+  currentUserId: Id<"users"> | null;
+  currentUserName: string;
+  canAssign: boolean;
+  onClose: () => void;
+}) {
+  const selfAssign = useMutation(api.incidents.selfAssign);
+  const archiveIncident = useMutation(api.incidents.archive);
+  const attachDocument = useMutation(api.incidents.attachDocument);
+  const updateDocument = useMutation(api.incidents.updateDocument);
+  const removeDocument = useMutation(api.incidents.removeDocument);
+  const generateUploadUrl = useMutation(api.incidents.generateUploadUrl);
+  const addNote = useMutation(api.incidents.addNote);
+  const updateNote = useMutation(api.incidents.updateNote);
+  const removeNote = useMutation(api.incidents.removeNote);
+  const restoreNote = useMutation(api.incidents.restoreNote);
+  const restoreNoteVersion = useMutation(api.incidents.restoreNoteVersion);
+  // El rastro de auditoría se pide solo a quien puede gestionar el expediente:
+  // al resto el backend se lo negaría, así que ni se consulta.
+  const trail = useQuery(
+    api.incidents.documentTrail,
+    canAssign ? { incidentId: incident._id } : "skip",
+  );
+  const [assignTarget, setAssignTarget] = useState<
+    "assign" | "workshop" | null
+  >(null);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [documentsOpen, setDocumentsOpen] = useState(false);
+  // Documento del expediente que se está corrigiendo (null = se adjunta uno
+  // nuevo) y documento que se está a punto de quitar.
+  const [editingDocumentId, setEditingDocumentId] =
+    useState<Id<"incidentDocuments"> | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] =
+    useState<Id<"incidentDocuments"> | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [documentName, setDocumentName] = useState("");
+  const [documentNote, setDocumentNote] = useState("");
+  // Archivo elegido para el documento: al adjuntar es el que se sube al
+  // servidor y al corregir es el que reemplaza al que tuviera, que se borra.
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const documentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [note, setNote] = useState("");
+  // Nota que se está corrigiendo (null = se está escribiendo una nueva) y nota
+  // que se está a punto de borrar.
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // El mismo guardado sirve para adjuntar y para corregir.
+  const [savingDoc, setSavingDoc] = useState(false);
+  // El PDF se compone al vuelo (mide el texto e incrusta las imágenes): mientras
+  // se prepara, el botón lo dice.
+  const [preparingPdf, setPreparingPdf] = useState(false);
+  // El paquete trae las fotos de una en una: el botón avisa mientras se bajan.
+  const [preparingPackage, setPreparingPackage] = useState(false);
+  const [removingDoc, setRemovingDoc] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [removingNote, setRemovingNote] = useState(false);
+  const [restoringNoteId, setRestoringNoteId] = useState<string | null>(null);
+  // Versión del historial que se está restaurando ahora mismo (su posición en
+  // el historial, que es como se identifica cada entrada).
+  const [restoringVersionAt, setRestoringVersionAt] = useState<number | null>(
+    null,
+  );
+
+  const status = INCIDENT_STATUS_META[incident.status];
+  const linkedEquipment = incident.equipmentId
+    ? (equipment.find((item) => item._id === incident.equipmentId) ?? null)
+    : null;
+  const linkedRequest = requests.find(
+    (request) => request.incidentId === incident._id,
+  );
+  const isAssignee =
+    currentUserId !== null &&
+    (incident.assigneeId === currentUserId ||
+      incident.workshopAssigneeId === currentUserId);
+  const canWork = canAssign || isAssignee;
+  // El rastro llega con la consulta: mientras está en camino (solo se pide a
+  // quien coordina) no se exporta un informe al que le falte la auditoría.
+  const trailPending = canAssign && trail === undefined;
+  // Una nota retirada sale del cuaderno pero se puede devolver: la ve quien
+  // puede recuperarla —quien la escribió o quien coordina la incidencia—, que
+  // es el mismo permiso que pide el backend.
+  const restorableNotes = retiredNotes(incident.lifecycleNotes).filter(
+    (entry) =>
+      canAssign || (currentUserId !== null && entry.authorId === currentUserId),
+  );
+
+  /**
+   * El parte completo de la incidencia para entregarlo fuera de la aplicación:
+   * los datos, el cuaderno, los documentos y, cuando quien lo exporta puede leer
+   * el expediente, el rastro de auditoría de documentos. Se compone una sola vez
+   * y de aquí salen las dos descargas —Markdown y PDF—, que así no pueden contar
+   * cosas distintas.
+   */
+  const reportContent = () =>
+    incidentReport({
+      incident,
+      equipmentName: linkedEquipment
+        ? equipmentLabel(linkedEquipment)
+        : undefined,
+      trail: trail ?? undefined,
+      exportedBy: currentUserName,
+    });
+
+  const handleDownloadReport = () => {
+    try {
+      downloadText(
+        incidentReportFilename(incident.reference),
+        reportContent(),
+        REPORT_MIME,
+      );
+      toast.success(`Parte de ${incident.reference} descargado`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
+  };
+
+  /**
+   * El parte entregable: el Markdown con sus fotos dentro, en un ZIP. Es la
+   * descarga que no depende del servidor —ni de tener sesión— una vez hecha:
+   * quien lo recibe descomprime y ve el parte con sus fotos.
+   */
+  const handleDownloadReportPackage = async () => {
+    setPreparingPackage(true);
+    try {
+      const pack = await reportPackage({
+        markdown: reportContent(),
+        markdownName: incidentReportFilename(incident.reference),
+        loadPhoto: loadReportPhoto,
+      });
+      downloadReportPackage(
+        incidentReportPackageFilename(incident.reference),
+        pack.bytes,
+      );
+      const fotos =
+        pack.photos.length === 0
+          ? "sin fotos"
+          : pack.photos.length === 1
+            ? "con 1 foto"
+            : `con ${pack.photos.length} fotos`;
+      if (pack.missing.length === 0) {
+        toast.success(`Paquete de ${incident.reference} descargado ${fotos}`);
+      } else {
+        // La foto que falta se dice, no se calla: el paquete se entrega igual.
+        toast.warning(
+          `Paquete de ${incident.reference} descargado ${fotos} · faltó ${pack.missing.join(", ")}`,
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setPreparingPackage(false);
+    }
+  };
+
+  /**
+   * El mismo parte, en PDF. Se compone aquí mismo, en el navegador, y las
+   * imágenes que el informe cita se traen de donde estén para incrustarlas: por
+   * eso el botón avisa mientras se prepara.
+   */
+  const handleDownloadReportPdf = async () => {
+    setPreparingPdf(true);
+    try {
+      const bytes = await reportToPdf(reportContent(), {
+        footer: `Parte de ${incident.reference} · Pulso Taller`,
+        loadImage: loadPdfImage,
+      });
+      downloadPdf(incidentReportPdfFilename(incident.reference), bytes);
+      toast.success(`Parte de ${incident.reference} en PDF descargado`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setPreparingPdf(false);
+    }
+  };
+
+  const handleSelfAssign = async () => {
+    setBusy(true);
+    try {
+      await selfAssign({ incidentId: incident._id });
+      toast.success(`${incident.reference} autoasignada`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleArchive = async () => {
+    setBusy(true);
+    try {
+      await archiveIncident({ incidentId: incident._id });
+      toast.success(`${incident.reference} enviada al archivo`);
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deletingDocument = incident.documents?.find(
+    (doc) => doc._id === deletingDocumentId,
+  );
+  // El documento que se está corrigiendo, con su archivo actual: el diálogo
+  // necesita saber si hay algo que reemplazar y a qué enlace apunta hoy.
+  const editingDocument = incident.documents?.find(
+    (doc) => doc._id === editingDocumentId,
+  );
+
+  const handleNewDocument = () => {
+    setEditingDocumentId(null);
+    // Al adjuntar no se corrige nada: el archivo es obligatorio y no hay uno
+    // anterior que sustituir.
+    setDocumentName("");
+    setDocumentNote("");
+    setDocumentFile(null);
+    setDocumentsOpen(true);
+  };
+
+  const handleEditDocument = (
+    documentId: Id<"incidentDocuments">,
+    name: string,
+    note?: string,
+  ) => {
+    setEditingDocumentId(documentId);
+    setDocumentName(name);
+    setDocumentNote(note ?? "");
+    setDocumentFile(null);
+    setDocumentsOpen(true);
+  };
+
+  const handleCloseDocument = () => {
+    setDocumentsOpen(false);
+    setDocumentName("");
+    setDocumentNote("");
+    setDocumentFile(null);
+    setEditingDocumentId(null);
+  };
+
+  /**
+   * El archivo elegido es el que se sube al guardar. Su nombre propone el
+   * nombre visible del documento, que se puede corregir antes de adjuntarlo.
+   * Si es una foto, se recomprime antes de seguir: una foto de móvil se queda
+   * en unos cientos de kB y no llega a rozar el tope.
+   */
+  const handleDocumentFileChosen = async (chosen: FileList | null) => {
+    const picked = chosen?.[0];
+    if (!picked) return;
+    const file = await compressForUpload(picked);
+    if (exceedsFileLimit(file)) {
+      toast.error(`${picked.name}: supera los ${MAX_FILE_SIZE_LABEL}`);
+      return;
+    }
+    setDocumentFile(file);
+    setDocumentName((current) => (current.trim() ? current : file.name));
+  };
+
+  const handleSaveDocument = async () => {
+    // El nombre puede venir del archivo: si se eligió uno, no hace falta
+    // escribirlo a mano.
+    const name = documentName.trim() || documentFile?.name.trim() || "";
+    if (!name) return;
+    setSavingDoc(true);
+    try {
+      // Primero el archivo y luego la ficha: si la subida falla, el expediente
+      // no se queda con un documento apuntando a un archivo que no existe —ni
+      // se borra el que ya tenía—.
+      const storageId = documentFile
+        ? await uploadToStorage(await generateUploadUrl(), documentFile)
+        : undefined;
+      if (editingDocumentId) {
+        await updateDocument({
+          incidentId: incident._id,
+          documentId: editingDocumentId,
+          name,
+          note: richDocToStore(documentNote),
+          ...(storageId ? { storageId } : {}),
+        });
+        toast.success(
+          storageId
+            ? "Documento actualizado con su archivo nuevo"
+            : "Documento actualizado",
+        );
+      } else {
+        await attachDocument({
+          incidentId: incident._id,
+          name,
+          ...(storageId ? { storageId } : {}),
+          note: richDocToStore(documentNote),
+        });
+        toast.success(
+          storageId ? "Documento adjunto con su archivo" : "Documento adjunto",
+        );
+      }
+      handleCloseDocument();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const handleRemoveDocument = async () => {
+    if (!deletingDocumentId) return;
+    setRemovingDoc(true);
+    try {
+      await removeDocument({
+        incidentId: incident._id,
+        documentId: deletingDocumentId,
+      });
+      toast.success("Documento quitado del expediente");
+      setDeletingDocumentId(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRemovingDoc(false);
+    }
+  };
+
+  const handleCloseNote = () => {
+    setNotesOpen(false);
+    setNote("");
+    setEditingNoteId(null);
+  };
+
+  const handleNewNote = () => {
+    setEditingNoteId(null);
+    setNote("");
+    setNotesOpen(true);
+  };
+
+  const handleEditNote = (noteId: string, text: string) => {
+    setEditingNoteId(noteId);
+    setNote(text);
+    setNotesOpen(true);
+  };
+
+  const handleSaveNote = async () => {
+    // El editor deja un párrafo suelto al final: se limpia al guardar, y si al
+    // final no queda nada escrito, no hay nada que guardar.
+    const noteText = richDocToStore(note);
+    if (!noteText) return;
+    setSavingNote(true);
+    try {
+      if (editingNoteId) {
+        await updateNote({
+          incidentId: incident._id,
+          noteId: editingNoteId,
+          note: noteText,
+        });
+        toast.success("Nota corregida");
+      } else {
+        await addNote({ incidentId: incident._id, note: noteText });
+        toast.success("Nota añadida");
+      }
+      handleCloseNote();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  /** Devuelve al cuaderno una nota retirada: deshace el borrado o la rescata. */
+  const handleRestoreNote = async (noteId: string) => {
+    setRestoringNoteId(noteId);
+    try {
+      await restoreNote({ incidentId: incident._id, noteId });
+      noteRestoredToast();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRestoringNoteId(null);
+    }
+  };
+
+  /**
+   * Devuelve la nota a una versión anterior de su historial. El backend exige
+   * lo mismo que para corregirla —su autor y dentro del plazo—, porque es una
+   * corrección: el texto que había antes queda archivado igual.
+   *
+   * El aviso deja deshacerlo. Deshacer es volver a la posición donde la
+   * restauración archivó el texto que se acaba de quitar (`noteRestoreUndoIndex`),
+   * y ese aviso ya no ofrece deshacer: encadenar vueltas dejaría el cuaderno sin
+   * saber dónde está.
+   */
+  const handleRestoreVersion = async (
+    noteId: string,
+    versionIndex: number,
+    mode: "restore" | "undo" = "restore",
+  ) => {
+    // Se mira antes de restaurar: la posición que guardará el texto que se
+    // quita solo se conoce con el historial que hay ahora.
+    const entry = liveNotes(incident.lifecycleNotes).find(
+      (item) => item.id === noteId,
+    );
+    const undoIndex = entry ? noteRestoreUndoIndex(entry, versionIndex) : null;
+    setRestoringVersionAt(versionIndex);
+    try {
+      await restoreNoteVersion({
+        incidentId: incident._id,
+        noteId,
+        versionIndex,
+      });
+      if (mode === "undo") {
+        noteRestoreUndoneToast();
+      } else {
+        // La posición de deshacer se mira antes de restaurar: la guarda el
+        // propio aviso. Sin ella (la nota ya decía eso) no hay nada que
+        // deshacer.
+        noteVersionRestoredToast(
+          undoIndex === null
+            ? {}
+            : {
+                onUndo: () =>
+                  void handleRestoreVersion(noteId, undoIndex, "undo"),
+              },
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRestoringVersionAt(null);
+    }
+  };
+
+  const handleRemoveNote = async () => {
+    if (!deletingNoteId) return;
+    // La nota se retira, no se borra: se guarda su identificador para poder
+    // deshacer desde el propio aviso.
+    const noteId = deletingNoteId;
+    setRemovingNote(true);
+    try {
+      await removeNote({ incidentId: incident._id, noteId });
+      setDeletingNoteId(null);
+      noteRemovedToast({ onUndo: () => void handleRestoreNote(noteId) });
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRemovingNote(false);
+    }
+  };
+
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-muted-foreground">
+              {incident.reference}
+            </span>
+            <Badge variant="outline" className={status.badgeClassName}>
+              {status.label}
+            </Badge>
+            {incident.maintenanceId && (
+              <Badge
+                variant="outline"
+                className="border-emerald-600/25 bg-emerald-600/10 text-emerald-700"
+              >
+                Ficha creada
+              </Badge>
+            )}
+          </div>
+          <SheetTitle className="text-xl tracking-tight">
+            {incident.equipmentKind} · {incident.model}
+          </SheetTitle>
+          <SheetDescription>
+            {status.description} · notificada{" "}
+            {formatDateTime(incident.reportedAt)}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="grid gap-4 px-4 pb-4 sm:px-6">
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Datos de la notificación
+            </p>
+            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  Notificada por
+                </dt>
+                <dd>{incident.reporterName}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Puesto</dt>
+                <dd>{incident.reporterRole ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Ubicación</dt>
+                <dd>{incident.location ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  Fecha de notificación
+                </dt>
+                <dd>{formatDateTime(incident.reportedAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Nº de serie</dt>
+                <dd className="font-mono">{incident.serialNumber ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">
+                  Equipo en inventario
+                </dt>
+                <dd>
+                  {linkedEquipment
+                    ? equipmentLabel(linkedEquipment)
+                    : "Sin vincular"}
+                </dd>
+              </div>
+            </dl>
+            <RichText
+              value={incident.description}
+              className="mt-3 rounded-lg border border-border/70 bg-background/60 p-3 text-sm leading-6"
+            />
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Asignación
+            </p>
+            <div className="mt-2 grid gap-2 text-sm">
+              <p>
+                <span className="text-muted-foreground">Técnico: </span>
+                {incident.assigneeName ?? "Sin asignar"}
+              </p>
+              {(incident.status === "workshop" ||
+                incident.workshopAssigneeName) && (
+                <p>
+                  <span className="text-muted-foreground">
+                    Entrada a taller:{" "}
+                  </span>
+                  {incident.workshopAssigneeName ?? "—"}
+                </p>
+              )}
+              {incident.closedAt && (
+                <p>
+                  <span className="text-muted-foreground">Cerrada: </span>
+                  {formatDateTime(incident.closedAt)}
+                </p>
+              )}
+              {incident.notes && (
+                <RichText
+                  value={incident.notes}
+                  className="rounded-lg border border-border/70 bg-background/60 p-3 text-sm leading-6"
+                />
+              )}
+              {linkedRequest && (
+                <p className="font-mono text-xs text-muted-foreground">
+                  Petición {linkedRequest.reference} ·{" "}
+                  {PRIORITY_META[linkedRequest.priority].label}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Historial de estados
+            </p>
+            <ol className="mt-3 space-y-3">
+              {incident.history.map((entry, index) => {
+                const meta = INCIDENT_STATUS_META[entry.status];
+                return (
+                  <li
+                    key={`${entry.status}-${entry.at}-${index}`}
+                    className="flex gap-3"
+                  >
+                    <span className="mt-1 size-2 shrink-0 rounded-full bg-signal" />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className={meta.badgeClassName}
+                        >
+                          {meta.label}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(entry.at)}
+                        </span>
+                        {entry.by && (
+                          <span className="text-xs text-muted-foreground">
+                            · {entry.by}
+                          </span>
+                        )}
+                      </div>
+                      {entry.note && (
+                        <RichText
+                          value={entry.note}
+                          className="mt-0.5 text-muted-foreground"
+                        />
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          {(canAssign || (incident.documents?.length ?? 0) > 0) && (
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Documentos adjuntos
+                </p>
+                {canAssign && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleNewDocument}
+                  >
+                    <Plus className="size-3.5" />
+                    Adjuntar
+                  </Button>
+                )}
+              </div>
+              <ul className="mt-3 space-y-2">
+                {(incident.documents?.length ?? 0) === 0 && (
+                  <li className="text-sm text-muted-foreground">
+                    Todavía no hay documentos adjuntos.
+                  </li>
+                )}
+                {incident.documents?.map((doc) => (
+                  <li
+                    key={doc._id}
+                    className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/60 p-3 text-sm"
+                  >
+                    <FileText className="mt-0.5 shrink-0 size-4 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">{doc.name}</p>
+                      {/* El enlace del documento con su aviso puesto: si el
+                          archivo ya no está, o si la dirección pública de la API
+                          no es la que alcanza el navegador, lo dice aquí en vez
+                          de ofrecer un enlace que no lleva a ninguna parte. */}
+                      <DocumentLink
+                        url={doc.url}
+                        name={doc.name}
+                        icon={<FileDown className="size-3.5" />}
+                        className="mt-0.5"
+                      />
+                      {doc.note && (
+                        <RichText
+                          value={doc.note}
+                          className="mt-0.5 text-xs leading-5 text-muted-foreground"
+                        />
+                      )}
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {doc.author && <>{doc.author} · </>}
+                        Añadido {formatDateTime(doc.createdAt)}
+                      </p>
+                      {/* Corregir —nombre, nota o archivo— o retirar del
+                          expediente: los dos cambios quedan firmados en el
+                          rastro de abajo. */}
+                      {canAssign && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 px-2"
+                            onClick={() =>
+                              handleEditDocument(doc._id, doc.name, doc.note)
+                            }
+                          >
+                            <Pencil className="size-3.5" />
+                            Corregir
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 px-2 text-destructive hover:text-destructive"
+                            onClick={() => setDeletingDocumentId(doc._id)}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Quitar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Auditoría del expediente: quién movió cada documento y cuándo.
+                  Un adjunto retirado ya no está arriba, pero aquí se ve. */}
+              {canAssign && (
+                <Collapsible className="mt-3 border-t border-border/70 pt-3">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ChevronDown className="size-3.5" />
+                      Rastro de cambios
+                      {trail && ` (${trail.length})`}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ol className="mt-2 space-y-2">
+                      {trail && trail.length === 0 && (
+                        <li className="text-xs text-muted-foreground">
+                          Sin cambios: ningún documento se ha movido en este
+                          expediente.
+                        </li>
+                      )}
+                      {trail?.map((entry) => (
+                        <li
+                          key={entry._id}
+                          className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
+                        >
+                          <p className="text-foreground">
+                            {documentTrailLabel(entry)}
+                          </p>
+                          <p className="mt-0.5 text-muted-foreground">
+                            {entry.by} · {formatDateTime(entry.at)}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+          )}
+
+          {/* Las notas son el cuaderno de quien repara: las escribe también el
+              técnico asignado, no solo el coordinador (los adjuntos no). */}
+          {(canWork || liveNotes(incident.lifecycleNotes).length > 0) && (
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Notas a lo largo del ciclo de vida
+                </p>
+                {canWork && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleNewNote}
+                  >
+                    <Pen className="size-3.5" />
+                    Nueva nota
+                  </Button>
+                )}
+              </div>
+              <ul className="mt-3 space-y-3">
+                {liveNotes(incident.lifecycleNotes).length === 0 && (
+                  <li className="text-sm text-muted-foreground">
+                    Todavía no hay notas en el ciclo de vida.
+                  </li>
+                )}
+                {liveNotes(incident.lifecycleNotes).map((entry, index) => {
+                  // La firma y el plazo, no el rol ni la asignación, deciden
+                  // quién puede tocar la nota. El backend lo comprueba igual.
+                  const noteId = entry.id;
+                  const writtenAt = entry.createdAt ?? entry.at;
+                  const canEdit =
+                    currentUserId !== null &&
+                    entry.authorId === currentUserId &&
+                    isNoteWithinEditWindow(writtenAt);
+                  const restoration = noteRestoration(entry);
+                  return (
+                    <li
+                      key={noteId ?? `${entry.author}-${entry.at}-${index}`}
+                      className="flex gap-2 rounded-lg border border-border/60 bg-background/60 p-3 text-sm"
+                    >
+                      <Pen className="mt-0.5 shrink-0 size-4 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <RichText
+                          value={entry.note}
+                          className="text-foreground"
+                        />
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {entry.author} · {formatDateTime(entry.at)}
+                          {entry.editedAt
+                            ? restoration && restoration.at === entry.editedAt
+                              ? ` · restaurada por ${restoration.by} el ${formatDateTime(
+                                  restoration.at,
+                                )}`
+                              : ` · corregida ${formatDateTime(entry.editedAt)}`
+                            : ""}
+                        </p>
+                        {canEdit && noteId && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2"
+                              onClick={() => handleEditNote(noteId, entry.note)}
+                            >
+                              <Pencil className="size-3.5" />
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2 text-destructive hover:text-destructive"
+                              onClick={() => setDeletingNoteId(noteId)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              Borrar
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Se puede corregir hasta las{" "}
+                              {formatClockTime(noteEditDeadline(writtenAt))}
+                            </span>
+                          </div>
+                        )}
+                        {/* Lo que la nota decía antes de cada corrección, y
+                            desde donde se vuelve a una de esas versiones. */}
+                        <NoteHistory
+                          entry={entry}
+                          canRestore={canEdit}
+                          restoringVersion={restoringVersionAt}
+                          onRestore={
+                            noteId
+                              ? (versionIndex) =>
+                                  void handleRestoreVersion(
+                                    noteId,
+                                    versionIndex,
+                                  )
+                              : undefined
+                          }
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* Retirar una nota no la borra: esperan aquí, tal y como
+                  estaban, a que alguien las devuelva al cuaderno. */}
+              {restorableNotes.length > 0 && (
+                <Collapsible className="mt-3 border-t border-border/60 pt-3">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <ChevronDown className="size-3.5" />
+                      Notas retiradas ({restorableNotes.length})
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      Una nota retirada no se pierde: vuelve al cuaderno tal y
+                      como estaba, en su sitio y con su firma, cuando se
+                      recupera.
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {restorableNotes.map((entry, index) => {
+                        const noteId = entry.id;
+                        return (
+                          <li
+                            key={
+                              noteId ??
+                              `retirada-${entry.author}-${entry.at}-${index}`
+                            }
+                            className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-3 text-sm"
+                          >
+                            <RichText
+                              value={entry.note}
+                              className="text-muted-foreground"
+                            />
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {entry.author} · {formatDateTime(entry.at)}
+                              {entry.deletedAt !== undefined
+                                ? ` · retirada por ${entry.deletedBy ?? "—"} el ${formatDateTime(entry.deletedAt)}`
+                                : ""}
+                            </p>
+                            {/* Retirada, pero con su historial intacto. */}
+                            <NoteHistory entry={entry} />
+                            {noteId && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 h-7 gap-1.5 px-2"
+                                disabled={restoringNoteId === noteId}
+                                onClick={() => void handleRestoreNote(noteId)}
+                              >
+                                <Undo2 className="size-3.5" />
+                                Recuperar
+                              </Button>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={trailPending || preparingPdf}
+              title={
+                trailPending
+                  ? "Cargando el rastro de auditoría…"
+                  : `Descarga el parte de ${incident.reference} en Markdown, para leerlo o editarlo`
+              }
+              onClick={handleDownloadReport}
+            >
+              <FileDown className="size-4" />
+              Descargar Markdown
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={trailPending || preparingPdf || preparingPackage}
+              title={
+                trailPending
+                  ? "Cargando el rastro de auditoría…"
+                  : `Descarga el parte de ${incident.reference} en PDF, listo para entregar`
+              }
+              onClick={() => void handleDownloadReportPdf()}
+            >
+              <FileDown className="size-4" />
+              {preparingPdf ? "Preparando PDF…" : "Descargar PDF"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={trailPending || preparingPdf || preparingPackage}
+              title={
+                trailPending
+                  ? "Cargando el rastro de auditoría…"
+                  : `Descarga el parte de ${incident.reference} con sus fotos dentro, en un ZIP que se abre sin conexión`
+              }
+              onClick={() => void handleDownloadReportPackage()}
+            >
+              <FileDown className="size-4" />
+              {preparingPackage ? "Preparando paquete…" : "Descargar ZIP"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cerrar
+            </Button>
+
+            {incident.status === "reported" && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={handleSelfAssign}
+                  disabled={busy || !currentUserId}
+                >
+                  <UserPlus className="size-4" />
+                  Autoasignarme
+                </Button>
+                {canAssign && (
+                  <Button
+                    type="button"
+                    className="gap-2"
+                    onClick={() => setAssignTarget("assign")}
+                  >
+                    <UserPlus className="size-4" />
+                    Asignar a un técnico
+                  </Button>
+                )}
+              </>
+            )}
+
+            {incident.status === "assigned" && canWork && (
+              <>
+                {canAssign && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setAssignTarget("assign")}
+                  >
+                    <UserPlus className="size-4" />
+                    Reasignar
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setVerifyOpen(true)}
+                >
+                  <Check className="size-4" />
+                  Verificar incidencia
+                </Button>
+              </>
+            )}
+
+            {(incident.status === "resolved" ||
+              incident.status === "unresolved") &&
+              canAssign && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={busy}
+                  onClick={() => void handleArchive()}
+                >
+                  <Archive className="size-4" />
+                  Archivar
+                </Button>
+              )}
+
+            {incident.status === "workshop" && canWork && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setRequestOpen(true)}
+                >
+                  <PackagePlus className="size-4" />
+                  Petición de repuestos
+                </Button>
+                {canAssign && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setAssignTarget("workshop")}
+                  >
+                    <UserPlus className="size-4" />
+                    Asignar orden
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setCloseOpen(true)}
+                >
+                  <Wrench className="size-4" />
+                  Finalizar trabajo
+                </Button>
+              </>
+            )}
+          </div>
+          {!canWork && incident.status !== "reported" && (
+            <p className="mt-2 text-right text-xs text-muted-foreground">
+              Solo el técnico asignado o el coordinador pueden actuar sobre esta
+              incidencia.
+            </p>
+          )}
+        </div>
+
+        {assignTarget && (
+          <AssignDialog
+            incident={incident}
+            mode={assignTarget}
+            onClose={() => setAssignTarget(null)}
+          />
+        )}
+        {verifyOpen && (
+          <VerifyDialog
+            incident={incident}
+            equipment={equipment}
+            onClose={() => setVerifyOpen(false)}
+          />
+        )}
+        {closeOpen && (
+          <CloseDialog
+            incident={incident}
+            equipment={equipment}
+            onClose={() => setCloseOpen(false)}
+          />
+        )}
+        {requestOpen && (
+          <IncidentRequestDialog
+            incident={incident}
+            currentUserName={currentUserName}
+            onClose={() => setRequestOpen(false)}
+          />
+        )}
+
+        {documentsOpen && (
+          <Dialog open onOpenChange={(open) => !open && handleCloseDocument()}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingDocumentId
+                    ? "Corregir documento"
+                    : "Adjuntar documento"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingDocumentId
+                    ? `Cambias el nombre, la nota o el archivo de un documento de ${incident.reference}. Si reemplazas el archivo, el anterior se borra; el rastro de cambios guarda quién lo corrigió y cuándo.`
+                    : `Elige el archivo y adjúntalo a ${incident.reference}: se sube al servidor y queda enlazado al expediente, con la nota que escribas.`}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="doc-name">Nombre del documento</Label>
+                  <Input
+                    id="doc-name"
+                    value={documentName}
+                    onChange={(event) => setDocumentName(event.target.value)}
+                    placeholder="p. ej. Reporte técnico.pdf"
+                    disabled={savingDoc}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="doc-file">
+                    {editingDocument?.storageId
+                      ? "Reemplazar el archivo"
+                      : "Archivo"}
+                  </Label>
+                  {/* El archivo que ya tiene el documento se enseña antes de
+                      elegir otro: reemplazarlo es una decisión, no un añadido.
+                      Y con el mismo enlace avisado que en la ficha: si su
+                      dirección no lleva a ninguna parte, se dice aquí. */}
+                  {editingDocument?.storageId && !documentFile && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm">
+                      <FileText className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        Archivo actual
+                      </span>
+                      <DocumentLink
+                        url={editingDocument.url}
+                        name={editingDocument.name}
+                        className="shrink-0"
+                      />
+                    </div>
+                  )}
+                  <input
+                    ref={documentFileInputRef}
+                    id="doc-file"
+                    type="file"
+                    accept={FILE_ACCEPT}
+                    className="hidden"
+                    onChange={(event) => {
+                      void handleDocumentFileChosen(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                  {documentFile ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm">
+                      <Paperclip className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {documentFile.name}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {Math.max(1, Math.round(documentFile.size / 1024))} KB
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label="Descartar el archivo elegido"
+                        disabled={savingDoc}
+                        onClick={() => setDocumentFile(null)}
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="justify-start gap-2"
+                      disabled={savingDoc}
+                      onClick={() => documentFileInputRef.current?.click()}
+                    >
+                      <Upload className="size-4" />
+                      {editingDocument?.storageId
+                        ? "Elegir el archivo nuevo"
+                        : "Elegir archivo"}
+                    </Button>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {editingDocument?.storageId
+                      ? `Imágenes, PDF o documentos de oficina, máximo ${MAX_FILE_SIZE_LABEL}. Al guardar, el archivo anterior se borra del servidor y el cambio queda firmado en el rastro.`
+                      : `Imágenes, PDF o documentos de oficina. Máximo ${MAX_FILE_SIZE_LABEL} por archivo; el archivo se sube y queda guardado con el expediente.`}
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="doc-note">Nota</Label>
+                  <RichTextEditor
+                    id="doc-note"
+                    value={documentNote}
+                    onChange={setDocumentNote}
+                    placeholder="p. ej. Foto del daño antes de la reparación"
+                    disabled={savingDoc}
+                  />
+                </div>
+              </div>
+
+              {(documentName.trim() || documentFile) && (
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCloseDocument}
+                    disabled={savingDoc}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveDocument}
+                    disabled={
+                      savingDoc || (!documentName.trim() && !documentFile)
+                    }
+                  >
+                    {savingDoc
+                      ? documentFile
+                        ? "Subiendo..."
+                        : "Guardando..."
+                      : editingDocumentId
+                        ? "Guardar cambios"
+                        : "Adjuntar"}
+                  </Button>
+                </DialogFooter>
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {deletingDocument && (
+          <AlertDialog
+            open
+            onOpenChange={(open) => {
+              if (!open && !removingDoc) setDeletingDocumentId(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  ¿Quitar «{deletingDocument.name}» del expediente?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Dejará de estar en la ficha de {incident.reference}. El rastro
+                  de cambios conserva quién lo quitó, cuándo y con qué nombre
+                  estaba.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={removingDoc}>
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  disabled={removingDoc}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleRemoveDocument();
+                  }}
+                >
+                  {removingDoc ? "Quitando..." : "Quitar documento"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+
+        {notesOpen && (
+          <Dialog open onOpenChange={(open) => !open && handleCloseNote()}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingNoteId ? "Corregir nota" : "Añadir nota"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingNoteId
+                    ? `Corriges una nota de ${incident.reference}. La fecha del hilo y el lugar que ocupa en el cuaderno no cambian.`
+                    : `Añade una nota a ${incident.reference}. Queda registrada con tu nombre y la fecha actual.`}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="note-input">Nota</Label>
+                  <RichTextEditor
+                    id="note-input"
+                    value={note}
+                    onChange={setNote}
+                    placeholder="p. ej. Diagnóstico en curso, se comprueba el cable..."
+                    disabled={savingNote}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseNote}
+                  disabled={savingNote}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveNote}
+                  disabled={savingNote || richDocIsEmpty(note)}
+                >
+                  {savingNote
+                    ? "Guardando..."
+                    : editingNoteId
+                      ? "Guardar cambios"
+                      : "Añadir nota"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {deletingNoteId && (
+          <AlertDialog
+            open
+            onOpenChange={(open) => {
+              if (!open && !removingNote) setDeletingNoteId(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Retirar la nota?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Sale del cuaderno de {incident.reference}, pero no se pierde:
+                  podrás recuperarla desde la propia ficha si te has equivocado.
+                  El resto de notas y el historial de estados no cambian.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={removingNote}>
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  disabled={removingNote}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void handleRemoveNote();
+                  }}
+                >
+                  {removingNote ? "Retirando..." : "Retirar nota"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function AssignDialog({
+  incident,
+  mode,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  mode: "assign" | "workshop";
+  onClose: () => void;
+}) {
+  const assignable = useQuery(api.members.listAssignable);
+  const assign = useMutation(api.incidents.assign);
+  const assignWorkshop = useMutation(api.incidents.assignWorkshop);
+  const [targetId, setTargetId] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    if (!targetId) {
+      setError("Elige el técnico que se va a encargar.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const args = {
+        incidentId: incident._id,
+        assigneeId: targetId as Id<"users">,
+      };
+      if (mode === "assign") await assign(args);
+      else await assignWorkshop(args);
+      toast.success(
+        mode === "assign"
+          ? `${incident.reference} asignada`
+          : `Orden de ${incident.reference} asignada`,
+      );
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "assign"
+              ? "Asignar incidencia"
+              : "Asignar entrada a taller"}
+          </DialogTitle>
+          <DialogDescription>
+            {incident.reference} · {incident.equipmentKind} {incident.model}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2">
+          <Label htmlFor="assign-technician">Técnico</Label>
+          <Select value={targetId} onValueChange={setTargetId}>
+            <SelectTrigger id="assign-technician" disabled={busy}>
+              <SelectValue placeholder="Elige un técnico" />
+            </SelectTrigger>
+            <SelectContent>
+              {(assignable ?? []).map((user) => (
+                <SelectItem key={user._id} value={user._id}>
+                  {user.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={busy}>
+            {busy ? "Asignando..." : "Asignar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VerifyDialog({
+  incident,
+  equipment,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  equipment: EquipmentDoc[];
+  onClose: () => void;
+}) {
+  const verify = useMutation(api.incidents.verify);
+  const [outcome, setOutcome] = useState<"onsite" | "workshop" | "unresolved">(
+    "onsite",
+  );
+  const [equipmentId, setEquipmentId] = useState<string>(
+    incident.equipmentId ?? "",
+  );
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await verify({
+        incidentId: incident._id,
+        outcome,
+        equipmentId: equipmentId ? (equipmentId as Id<"equipment">) : undefined,
+        notes: richDocToStore(notes),
+      });
+      toast.success(
+        outcome === "workshop"
+          ? `${incident.reference} derivada a taller`
+          : outcome === "onsite"
+            ? `${incident.reference} resuelta in situ`
+            : `${incident.reference} cerrada sin resolución`,
+      );
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Verificar {incident.reference}</DialogTitle>
+          <DialogDescription>
+            Registra el resultado de la verificación. Cada opción deja un nuevo
+            estado en la ficha.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="verify-outcome">Resultado</Label>
+            <Select
+              value={outcome}
+              onValueChange={(value) =>
+                setOutcome(value as "onsite" | "workshop" | "unresolved")
+              }
+            >
+              <SelectTrigger id="verify-outcome" disabled={busy}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="onsite">
+                  Resuelta in situ (se cierra)
+                </SelectItem>
+                <SelectItem value="workshop">
+                  Requiere desplazar el equipo al taller
+                </SelectItem>
+                <SelectItem value="unresolved">
+                  Se cierra sin resolución
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="verify-equipment">Equipo del inventario</Label>
+            <Select
+              value={equipmentId || "none"}
+              onValueChange={(value) =>
+                setEquipmentId(value === "none" ? "" : value)
+              }
+            >
+              <SelectTrigger id="verify-equipment" disabled={busy}>
+                <SelectValue placeholder="Vincular con un equipo del inventario" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin vincular</SelectItem>
+                {equipment.map((item) => (
+                  <SelectItem key={item._id} value={item._id}>
+                    {equipmentLabel(item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Si hay equipo relacionado, al cerrar se creará la ficha en su
+              historial.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="verify-notes">Notas del técnico</Label>
+            <RichTextEditor
+              id="verify-notes"
+              value={notes}
+              onChange={setNotes}
+              placeholder="Diagnóstico, repuestos sustituidos, qué se ha probado..."
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={busy}>
+            {busy ? "Guardando..." : "Registrar resultado"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CloseDialog({
+  incident,
+  equipment,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  equipment: EquipmentDoc[];
+  onClose: () => void;
+}) {
+  const close = useMutation(api.incidents.close);
+  const [outcome, setOutcome] = useState<"resolved" | "unresolved">("resolved");
+  const [equipmentId, setEquipmentId] = useState<string>(
+    incident.equipmentId ?? "",
+  );
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await close({
+        incidentId: incident._id,
+        outcome,
+        equipmentId: equipmentId ? (equipmentId as Id<"equipment">) : undefined,
+        notes: richDocToStore(notes),
+      });
+      toast.success(
+        outcome === "resolved"
+          ? `${incident.reference} resuelta`
+          : `${incident.reference} cerrada sin resolución`,
+      );
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Finalizar {incident.reference}</DialogTitle>
+          <DialogDescription>
+            Cierra la entrada de taller. Con tus datos se creará la ficha de
+            historial del equipo relacionado.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="close-outcome">Resultado del trabajo</Label>
+            <Select
+              value={outcome}
+              onValueChange={(value) =>
+                setOutcome(value as "resolved" | "unresolved")
+              }
+            >
+              <SelectTrigger id="close-outcome" disabled={busy}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="resolved">Resuelta</SelectItem>
+                <SelectItem value="unresolved">Sin resolución</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="close-equipment">Equipo del inventario</Label>
+            <Select
+              value={equipmentId || "none"}
+              onValueChange={(value) =>
+                setEquipmentId(value === "none" ? "" : value)
+              }
+            >
+              <SelectTrigger id="close-equipment" disabled={busy}>
+                <SelectValue placeholder="Vincular con un equipo del inventario" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin vincular</SelectItem>
+                {equipment.map((item) => (
+                  <SelectItem key={item._id} value={item._id}>
+                    {equipmentLabel(item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="close-notes">Datos aportados por el técnico</Label>
+            <RichTextEditor
+              id="close-notes"
+              value={notes}
+              onChange={setNotes}
+              placeholder="Qué se ha hecho, causas, recomendaciones..."
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={busy}>
+            {busy ? "Cerrando..." : "Finalizar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * La entrada a taller puede generar una petición de repuestos para ese
+ * equipo: la gestiona el encargado de repuestos como cualquier otra.
+ */
+function IncidentRequestDialog({
+  incident,
+  currentUserName,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  currentUserName: string;
+  onClose: () => void;
+}) {
+  const createRequest = useMutation(api.partRequests.create);
+  const [priority, setPriority] = useState<Priority>("normal");
+  const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    const requested = richDocToStore(description);
+    if (!requested) {
+      setError("Describe qué material hace falta.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const equipmentText =
+        `${incident.equipmentKind} ${incident.model}`.trim();
+      const reference = await createRequest({
+        requesterName: currentUserName,
+        equipment: equipmentText,
+        equipmentId: incident.equipmentId,
+        priority,
+        description: requested,
+        notes: notes.trim() || undefined,
+        incidentId: incident._id,
+      });
+      toast.success(`${reference} creada para ${incident.reference}`);
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PackagePlus className="size-4" />
+            Petición de repuestos
+          </DialogTitle>
+          <DialogDescription>
+            {incident.reference} · el encargado de repuestos la gestionará en la
+            cola de peticiones.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="req-priority">Prioridad</Label>
+            <Select
+              value={priority}
+              onValueChange={(value) => setPriority(value as Priority)}
+            >
+              <SelectTrigger id="req-priority" disabled={busy}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(PRIORITY_META) as Priority[]).map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {PRIORITY_META[option].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="req-description">¿Qué material hace falta? *</Label>
+            <RichTextEditor
+              id="req-description"
+              value={description}
+              onChange={setDescription}
+              placeholder="Repuestos, cantidades, plazos... el responsable asociará los del catálogo."
+              disabled={busy}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="req-notes">Notas</Label>
+            <Input
+              id="req-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="p. ej. urgente: el plató 2 está parado"
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={busy}>
+            {busy ? "Creando..." : "Crear petición"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

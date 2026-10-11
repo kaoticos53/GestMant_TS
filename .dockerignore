@@ -1,0 +1,28 @@
+# Qué NO entra en la imagen.
+#
+# El contexto de construcción viaja entero al demonio de Docker, así que cuanto
+# menos pese menos tarda y menos cosas de nadie acaban dentro: aquí se aparta lo
+# que la propia imagen genera, lo que es de cada máquina y lo que solo estorba
+# para compilar.
+
+# Las dependencias y el sitio construido los hace la fase 1 dentro de la imagen.
+# Si se colaran, el `npm ci` de dentro trabajaría sobre lo del ordenador (que en
+# Windows trae binarios que no valen para el NAS).
+node_modules
+dist
+
+# Ajustes de cada máquina, y algún secreto de verdad: el `.env.local` lleva la
+# clave de administrador del backend. La dirección de la API no se pierde por
+# esto —entra como argumento de construcción (`VITE_CONVEX_URL`)—, así que fuera
+# todos.
+.env
+.env.*
+
+# Historia del repositorio y herramientas de fuera del proyecto.
+.git
+.gitignore
+.github
+.vscode
+.idea
+coverage
+*.log

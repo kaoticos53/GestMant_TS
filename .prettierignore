@@ -1,0 +1,10 @@
+# Ignore artifacts:
+build
+coverage
+
+
+bun.lock
+
+# Lanzadores de arranque: prettier no trae analizador para shell ni batch.
+start.cmd
+start.sh
