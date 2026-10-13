@@ -5,15 +5,15 @@
  */
 
 export const APP_VERSION = "1.0.0";
-export const BUILD_NUMBER = 10;
-export const BUILD_TIME = "2026-10-13T13:46:23.452Z";
-export const GIT_COMMIT = "43d244a";
+export const BUILD_NUMBER = 12;
+export const BUILD_TIME = "2026-10-13T13:53:02.123Z";
+export const GIT_COMMIT = "586ac0f";
 
 /** Versión resumida para UI (ej: "v1.0.0 (b1)") */
-export const FULL_VERSION = "v1.0.0 (b10)";
+export const FULL_VERSION = "v1.0.0 (b12)";
 
 /** Versión detallada con commit para diagnóstico o depuración (ej: "v1.0.0 (b1 · 440f2a6)") */
-export const DETAILED_VERSION = "v1.0.0 (b10 · 43d244a)";
+export const DETAILED_VERSION = "v1.0.0 (b12 · 586ac0f)";
 
 export interface VersionInfo {
   version: string;

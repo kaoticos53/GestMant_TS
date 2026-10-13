@@ -458,21 +458,6 @@ export default function Dashboard() {
     api.purchasing.listPurchaseRequests,
     purchasingArgs,
   );
-  const purchaseOrders = useQuery(api.purchasing.listOrders, purchasingArgs);
-  const receptions = useQuery(api.purchasing.listReceptions, purchasingArgs);
-  // La papelera de incidencias: lo retirado esperando su plazo. Se pide solo a
-  // quien puede deshacer (el backend no contesta a nadie más); de aquí salen la
-  // lista que enseña el módulo Archivo y el plazo que tiene ajustado el taller.
-  const incidentTrash = useQuery(
-    api.incidents.trash,
-    can("manageIncidents") ? {} : ("skip" as const),
-  );
-  // La de peticiones, con la misma forma y la misma pantalla: lo retirado de
-  // cada tipo se deshace desde el módulo Archivo, con el plazo de la papelera.
-  const requestTrash = useQuery(
-    api.partRequests.trash,
-    can("decideRequests") ? {} : ("skip" as const),
-  );
   const needsRole =
     user !== undefined && user !== null && user.role === undefined;
 
@@ -1603,8 +1588,6 @@ export default function Dashboard() {
                 ) : activeTab === "purchasing" && canSeePurchasing ? (
                   <PurchasingView
                     purchaseRequests={purchaseRequests?.requests ?? []}
-                    orders={purchaseOrders ?? []}
-                    receptions={receptions ?? []}
                     partRequests={allRequests}
                     parts={allParts}
                     canManage={can("managePurchasing")}
@@ -1654,11 +1637,6 @@ export default function Dashboard() {
                     activeRequests={activeRequests}
                     canArchiveIncidents={can("manageIncidents")}
                     canArchiveRequests={can("decideRequests")}
-                    trashedIncidents={incidentTrash?.items ?? []}
-                    trashedRequests={requestTrash?.items ?? []}
-                    trashRetentionDays={
-                      incidentTrash?.retentionDays ?? requestTrash?.retentionDays
-                    }
                     onOpenSettings={
                       can("manageIncidents") || can("decideRequests")
                         ? () => goToTab("settings")

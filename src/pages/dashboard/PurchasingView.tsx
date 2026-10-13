@@ -44,7 +44,7 @@ import {
   type PurchaseRequestDoc,
 } from "@/lib/purchasing";
 import { formatDate, formatDateTime, getErrorMessage } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Check,
   ClipboardList,
@@ -73,8 +73,8 @@ const SECTIONS: { id: Section; label: string; icon: typeof Truck }[] = [
 
 interface PurchasingViewProps {
   purchaseRequests: PurchaseRequestDoc[];
-  orders: PurchaseOrderDoc[];
-  receptions: ReceptionDoc[];
+  orders?: PurchaseOrderDoc[];
+  receptions?: ReceptionDoc[];
   partRequests: PartRequestDoc[];
   parts: PartDoc[];
   canManage: boolean;
@@ -87,12 +87,24 @@ interface PurchasingViewProps {
  */
 export function PurchasingView({
   purchaseRequests,
-  orders,
-  receptions,
+  orders: ordersProp,
+  receptions: receptionsProp,
   partRequests,
   parts,
   canManage,
 }: PurchasingViewProps) {
+  const queryOrders = useQuery(
+    api.purchasing.listOrders,
+    ordersProp !== undefined ? "skip" : {},
+  );
+  const queryReceptions = useQuery(
+    api.purchasing.listReceptions,
+    receptionsProp !== undefined ? "skip" : {},
+  );
+
+  const orders = ordersProp ?? queryOrders ?? [];
+  const receptions = receptionsProp ?? queryReceptions ?? [];
+
   const [section, setSection] = useState<Section>("pending");
 
   const sinTratar = purchaseRequests.filter((row) => row.status === "pending");

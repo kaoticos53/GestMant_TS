@@ -90,10 +90,34 @@ export const ORPHAN_FILE_RETENTION_MS = 24 * H;
  */
 const SWEEP_LIMIT = 100;
 
+/**
+ * Tablas del sistema o de configuración plana que no almacenan referencias a archivos.
+ * Omitirlas ahorra lecturas de base de datos y memoria en cada pasada.
+ */
+const NON_STORAGE_TABLES = new Set<string>([
+  "authSessions",
+  "authAccounts",
+  "authRefreshTokens",
+  "authVerificationCodes",
+  "authRateLimits",
+  "authVerifiers",
+  "storageSettings",
+  "alertSettings",
+  "auditAlertSettings",
+  "reportSettings",
+  "archiveSettings",
+  "appSettings",
+  "storageCleanupRuns",
+  "reportUploadPurges",
+]);
+
 /** Todas las cadenas que hay dentro de un documento (listas y objetos incluidos). */
 function collectStrings(value: unknown, out: string[]): void {
   if (typeof value === "string") {
-    out.push(value);
+    // Solo retenemos cadenas que puedan contener una referencia a storage (URL o ID)
+    if (value.includes(STORAGE_PATH) || value.length >= 16) {
+      out.push(value);
+    }
     return;
   }
   if (Array.isArray(value)) {
@@ -106,14 +130,13 @@ function collectStrings(value: unknown, out: string[]): void {
 }
 
 /**
- * Lo que guarda la base, en texto plano: cada tabla del esquema y, dentro de
- * cada documento, todas sus cadenas. Se lee todo —también las tablas de la
- * autenticación— porque cualquier campo puede citar un archivo, y una tabla que
- * se dejara fuera sería un archivo en uso borrado por error.
+ * Lo que guarda la base, en texto plano: cada tabla del esquema que puede citar
+ * un archivo y, dentro de cada documento, sus cadenas relevantes.
  */
 async function storedText(ctx: MutationCtx): Promise<string[]> {
   const texts: string[] = [];
   for (const name of Object.keys(schema.tables)) {
+    if (NON_STORAGE_TABLES.has(name)) continue;
     const documents = await ctx.db.query(name as TableNames).collect();
     for (const document of documents) collectStrings(document, texts);
   }

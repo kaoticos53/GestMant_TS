@@ -51,7 +51,7 @@ import {
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   Archive,
   ArchiveRestore,
@@ -305,9 +305,9 @@ export function ArchiveView({
   activeRequests = [],
   canArchiveIncidents = false,
   canArchiveRequests = false,
-  trashedIncidents = [],
-  trashedRequests = [],
-  trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS,
+  trashedIncidents: trashedIncidentsProp,
+  trashedRequests: trashedRequestsProp,
+  trashRetentionDays: trashRetentionDaysProp,
   onOpenSettings,
 }: {
   /** Incidencias ya archivadas. */
@@ -329,6 +329,29 @@ export function ArchiveView({
   /** Abre «Ajustes del taller», donde se configura el archivado automático. */
   onOpenSettings?: () => void;
 }) {
+  const queryIncidentTrash = useQuery(
+    api.incidents.trash,
+    canArchiveIncidents && trashedIncidentsProp === undefined
+      ? {}
+      : ("skip" as const),
+  );
+  const queryRequestTrash = useQuery(
+    api.partRequests.trash,
+    canArchiveRequests && trashedRequestsProp === undefined
+      ? {}
+      : ("skip" as const),
+  );
+
+  const trashedIncidents =
+    trashedIncidentsProp ?? queryIncidentTrash?.items ?? [];
+  const trashedRequests =
+    trashedRequestsProp ?? queryRequestTrash?.items ?? [];
+  const trashRetentionDays =
+    trashRetentionDaysProp ??
+    queryIncidentTrash?.retentionDays ??
+    queryRequestTrash?.retentionDays ??
+    DEFAULT_TRASH_RETENTION_DAYS;
+
   const unarchiveIncident = useMutation(api.incidents.unarchive);
   const unarchiveRequest = useMutation(api.partRequests.unarchive);
   const archiveIncidents = useMutation(api.incidents.archiveClosedBefore);
