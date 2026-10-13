@@ -218,8 +218,10 @@ describe("richDocToHtml — el HTML que come el editor", () => {
     const doc = richDocToStore(
       '<p>Con <strong>negrita</strong>, <u>subrayado</u> y <a href="https://ok/x">enlace</a>.</p><ol><li>uno</li></ol><hr>',
     );
+    // Los enlaces salen con `rel` para que abrir uno no le dé la pestaña al
+    // destino.
     expect(richDocToHtml(doc)).toBe(
-      '<p>Con <strong>negrita</strong>, <u>subrayado</u> y <a href="https://ok/x">enlace</a>.</p><ol><li><p>uno</p></li></ol><hr>',
+      '<p>Con <strong>negrita</strong>, <u>subrayado</u> y <a href="https://ok/x" rel="noopener noreferrer">enlace</a>.</p><ol><li><p>uno</p></li></ol><hr>',
     );
   });
 

@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { QueryCtx, mutation, query } from "./_generated/server";
-import { hasCapability } from "./permissions";
+import { hasCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 
 /** El historial requiere sesión iniciada (lo pueden consultar los técnicos). */
@@ -32,7 +32,10 @@ async function requireManager(ctx: QueryCtx) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireUser(ctx);
+    // Invitado o cuenta de baja: vacío en vez de error. El panel pide esta lista
+    // al montar y, además, el historial no es del invitado: no debe ver el del
+    // taller. Las escrituras siguen exigiendo una cuenta (`requireManager`).
+    if ((await memberOrNull(ctx)) === null) return [];
     const records = await ctx.db.query("maintenanceRecords").collect();
     return records.sort((a, b) => b.performedAt - a.performedAt);
   },

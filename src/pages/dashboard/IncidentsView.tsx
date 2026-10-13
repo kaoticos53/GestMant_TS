@@ -46,8 +46,9 @@ import { RichText } from "@/components/RichText";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import { groupByDate, matchesQuery, sortByDate } from "@/lib/browse";
+import { groupByDate, sortByDate } from "@/lib/browse";
 import { downloadText } from "@/lib/export";
+import { reporterNoticeText } from "@/lib/incidentMail";
 import {
   noteRemovedToast,
   noteRestoreUndoneToast,
@@ -94,6 +95,7 @@ import {
   getErrorMessage,
   isNoteWithinEditWindow,
   liveNotes,
+  matchesIncidentQuery,
   noteEditDeadline,
   noteRestoration,
   noteRestoreUndoIndex,
@@ -242,8 +244,14 @@ export function IncidentsView({
         b.reportedAt - a.reportedAt,
     );
 
+  // El buscador de la cola también entiende la referencia escrita sin los
+  // ceros de delante («inc-4»), que es como se teclea de verdad.
   const matched = incidents.filter((incident) =>
-    matchesQuery(searchableFields(incident), search),
+    matchesIncidentQuery(
+      searchableFields(incident),
+      incident.reference,
+      search,
+    ),
   );
   const filtered =
     filter === "all"
@@ -698,6 +706,7 @@ function IncidentDetailSheet({
 }) {
   const selfAssign = useMutation(api.incidents.selfAssign);
   const archiveIncident = useMutation(api.incidents.archive);
+  const withdrawIncident = useMutation(api.incidents.withdraw);
   const attachDocument = useMutation(api.incidents.attachDocument);
   const updateDocument = useMutation(api.incidents.updateDocument);
   const removeDocument = useMutation(api.incidents.removeDocument);
@@ -716,9 +725,16 @@ function IncidentDetailSheet({
   const [assignTarget, setAssignTarget] = useState<
     "assign" | "workshop" | null
   >(null);
+  // Retirada a la papelera: el aviso que lo confirma —y el motivo, si lo hay—
+  // viven aquí, porque se retira desde la ficha y no desde un módulo aparte.
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
+  // Corrección de los datos del equipo: quien notificó los escribió de memoria,
+  // y quien tiene la máquina delante es quien los puede poner bien.
+  const [equipmentOpen, setEquipmentOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   // Documento del expediente que se está corrigiendo (null = se adjunta uno
   // nuevo) y documento que se está a punto de quitar.
@@ -890,6 +906,27 @@ function IncidentDetailSheet({
       toast.error(getErrorMessage(error));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    setBusy(true);
+    try {
+      const reason = withdrawReason.trim();
+      await withdrawIncident({
+        incidentId: incident._id,
+        ...(reason ? { reason } : {}),
+      });
+      toast.success(
+        `${incident.reference} retirada: queda en la papelera por si hay que volver a por ella`,
+      );
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+      setWithdrawOpen(false);
+      setWithdrawReason("");
     }
   };
 
@@ -1141,7 +1178,9 @@ function IncidentDetailSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-muted-foreground">
+            {/* La referencia es lo que se le da a quien notificó la avería: se
+                queda a la vista y se puede seleccionar de un clic para pasarla. */}
+            <span className="select-all font-mono text-sm font-semibold text-muted-foreground">
               {incident.reference}
             </span>
             <Badge variant="outline" className={status.badgeClassName}>
@@ -1167,9 +1206,23 @@ function IncidentDetailSheet({
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Datos de la notificación
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Datos de la notificación
+              </p>
+              {canWork && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 px-2 text-xs"
+                  onClick={() => setEquipmentOpen(true)}
+                >
+                  <Pencil className="size-3.5" />
+                  Corregir datos del equipo
+                </Button>
+              )}
+            </div>
             <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">
@@ -1192,8 +1245,21 @@ function IncidentDetailSheet({
                 <dd>{formatDateTime(incident.reportedAt)}</dd>
               </div>
               <div>
+                <dt className="text-xs text-muted-foreground">Modelo</dt>
+                <dd>{incident.model ?? "—"}</dd>
+              </div>
+              <div>
                 <dt className="text-xs text-muted-foreground">Nº de serie</dt>
                 <dd className="font-mono">{incident.serialNumber ?? "—"}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-muted-foreground">
+                  Aviso a quien notificó
+                </dt>
+                {/* Quien avisó no tiene cuenta: este es el único sitio donde el
+                    taller ve si su correo salió, o por qué no, sin abrir la
+                    base de datos ni quedarse con la duda. */}
+                <dd>{reporterNoticeText(incident)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">
@@ -1712,6 +1778,23 @@ function IncidentDetailSheet({
                 </Button>
               )}
 
+            {/* Retirar: para el aviso equivocado o el duplicado. No borra —eso
+                sería irreversible—, deja la incidencia en la papelera unos
+                días, con el mismo plazo que lo retirado del almacén. */}
+            {canAssign && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 text-destructive hover:text-destructive"
+                disabled={busy}
+                onClick={() => setWithdrawOpen(true)}
+                title="Se guarda unos días en la papelera antes de borrarse de verdad"
+              >
+                <Trash2 className="size-4" />
+                Retirar
+              </Button>
+            )}
+
             {incident.status === "workshop" && canWork && (
               <>
                 <Button
@@ -1779,6 +1862,12 @@ function IncidentDetailSheet({
             incident={incident}
             currentUserName={currentUserName}
             onClose={() => setRequestOpen(false)}
+          />
+        )}
+        {equipmentOpen && (
+          <CorrectEquipmentDialog
+            incident={incident}
+            onClose={() => setEquipmentOpen(false)}
           />
         )}
 
@@ -2053,6 +2142,64 @@ function IncidentDetailSheet({
             </AlertDialogContent>
           </AlertDialog>
         )}
+
+        {/* La confirmación de la retirada: es lo que evita que un aviso bueno se
+            vaya por pulsar donde no era, y lo que apunta por qué se retira. */}
+        <AlertDialog
+          open={withdrawOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setWithdrawOpen(false);
+              setWithdrawReason("");
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                ¿Retirar {incident.reference}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Sale de la cola y su referencia deja de seguir el caso: es para
+                el aviso equivocado o el duplicado de otra. No se borra ahora:
+                queda en la papelera —en el módulo Archivo— el plazo que tenga
+                ajustado el taller, y desde ahí se recupera tal y como está,
+                con su expediente y sus notas.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="grid gap-2">
+              <Label htmlFor="incidencia-retirar-motivo">
+                Por qué se retira (opcional)
+              </Label>
+              <Input
+                id="incidencia-retirar-motivo"
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value)}
+                placeholder="Duplicada, aviso equivocado…"
+                maxLength={160}
+                disabled={busy}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se apunta en la papelera, para saber de un vistazo por qué está
+                ahí.
+              </p>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleWithdraw();
+                }}
+              >
+                <Trash2 className="size-4" />
+                {busy ? "Retirando..." : "Retirar a la papelera"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   );
@@ -2284,6 +2431,136 @@ function VerifyDialog({
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={busy}>
             {busy ? "Guardando..." : "Registrar resultado"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Corregir el modelo y el nº de serie del equipo de una incidencia. Quien
+ * notificó no lo tenía delante y los escribió de memoria —a veces mal y a veces
+ * en blanco—, y quien acaba abriendo la máquina es quien lo ve de verdad: son
+ * los dos datos que la identifican en el historial de mantenimiento.
+ *
+ * Vale en cualquier estado: el dato es del equipo, no de un paso del flujo. El
+ * cambio queda en el historial de la incidencia diciendo qué se cambió, así que
+ * lo que llegó con la notificación no se pierde: sigue en esa traza.
+ */
+function CorrectEquipmentDialog({
+  incident,
+  onClose,
+}: {
+  incident: IncidentDoc;
+  onClose: () => void;
+}) {
+  const updateEquipment = useMutation(api.incidents.updateEquipment);
+  const [model, setModel] = useState(incident.model ?? "");
+  const [serialNumber, setSerialNumber] = useState(incident.serialNumber ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sin cambios no hay nada que guardar: el backend lo rechazaría igual, pero es
+  // mejor no dejar pulsar que explicar después por qué no se puede. Y el modelo
+  // no puede quedarse en blanco: es lo que identifica la máquina.
+  const modelEmpty = model.trim() === "";
+  const unchanged =
+    model.trim() === (incident.model ?? "") &&
+    serialNumber.trim() === (incident.serialNumber ?? "");
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await updateEquipment({
+        incidentId: incident._id,
+        model: model.trim(),
+        serialNumber: serialNumber.trim(),
+      });
+      toast.success(`Datos del equipo de ${incident.reference} corregidos`);
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Datos del equipo de {incident.reference}</DialogTitle>
+          <DialogDescription>
+            Escribe el modelo y el nº de serie tal y como figuran en la máquina.
+            Si el dato que llegó con la notificación era erróneo se corrige aquí
+            —también se puede vaciar—, y el cambio queda en el historial de la
+            incidencia.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="equipment-model">Modelo</Label>
+            <Input
+              id="equipment-model"
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+              placeholder="p. ej. HDC-3500"
+              disabled={busy}
+            />
+            {/* Lo que llegó con la notificación se enseña al lado del campo: la
+                corrección se hace sabiendo de dónde sale el dato. */}
+            <p
+              className={cn(
+                "text-xs text-muted-foreground",
+                modelEmpty && "text-destructive",
+              )}
+            >
+              {modelEmpty
+                ? "El modelo identifica la máquina: no puede quedarse en blanco."
+                : incident.model
+                  ? `Lo notificado: ${incident.model}`
+                  : "Lo notificado: sin modelo."}
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="equipment-serial">Nº de serie</Label>
+            <Input
+              id="equipment-serial"
+              value={serialNumber}
+              onChange={(event) => setSerialNumber(event.target.value)}
+              placeholder="p. ej. HDC3500-2505-0147"
+              className="font-mono"
+              disabled={busy}
+            />
+            <p className="text-xs text-muted-foreground">
+              {incident.serialNumber
+                ? `Lo notificado: ${incident.serialNumber}`
+                : "Lo notificado: sin nº de serie."}
+            </p>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={busy || unchanged || modelEmpty}
+          >
+            {busy ? "Guardando..." : "Guardar"}
           </Button>
         </DialogFooter>
       </DialogContent>

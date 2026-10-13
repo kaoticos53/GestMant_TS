@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
+import { looksLikeEmail } from "@/lib/incidentMail";
 import { richDocToPlainText, richDocToStore } from "@/lib/richDoc";
 import { MAX_FILE_SIZE_LABEL, MAX_REPORT_IMAGES } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
@@ -38,6 +39,7 @@ export default function ReportIncident() {
   const report = useMutation(api.incidents.report);
 
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
   const [location, setLocation] = useState("");
   const [equipmentKind, setEquipmentKind] = useState("");
@@ -66,6 +68,14 @@ export default function ReportIncident() {
       setError("Indica el modelo del equipo.");
       return;
     }
+    // El correo es opcional, pero si se escribe tiene que servir para
+    // responderle: más vale decirlo aquí, cuando se puede corregir, que
+    // descubrirlo cuando el aviso ya no llega a nadie.
+    const reporterEmail = email.trim().toLowerCase();
+    if (reporterEmail && !looksLikeEmail(reporterEmail)) {
+      setError("Ese correo no parece una dirección válida. Revísalo o déjalo en blanco.");
+      return;
+    }
     // El texto que se lee, no las marcas del documento: con formato, un
     // párrafo vacío contaría como escrito.
     if (richDocToPlainText(description).trim().length < 10) {
@@ -81,6 +91,7 @@ export default function ReportIncident() {
     try {
       const created = await report({
         reporterName: name.trim(),
+        reporterEmail: reporterEmail || undefined,
         reporterRole: role.trim() || undefined,
         location: location.trim() || undefined,
         equipmentKind: equipmentKind.trim(),
@@ -102,6 +113,7 @@ export default function ReportIncident() {
   const reset = () => {
     setReference(null);
     setName("");
+    setEmail("");
     setRole("");
     setLocation("");
     setEquipmentKind("");
@@ -150,16 +162,35 @@ export default function ReportIncident() {
                 ha recibido tu aviso y se pondrá manos a la obra.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <Button variant="outline" onClick={reset}>
-                Reportar otra incidencia
-              </Button>
-              <Button asChild className="gap-2">
-                <Link to="/">
-                  Volver al inicio
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
+            <CardContent className="flex flex-col gap-4">
+              {/* La referencia es lo único que hace falta para seguir el caso:
+                  se enseña para copiarla, no escondida en un rincón. */}
+              <div className="rounded-lg border border-border/70 bg-muted/50 p-3 text-center">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Tu referencia
+                </p>
+                <p className="mt-1 select-all font-mono text-lg font-semibold tracking-tight">
+                  {reference}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Guárdala: con ella se sigue el caso. Entrando como invitado
+                  puedes ver en qué punto va, sin cuenta del taller.
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <Button asChild className="gap-2">
+                  <Link to="/dashboard">
+                    Seguir esta incidencia
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+                <Button variant="outline" onClick={reset}>
+                  Reportar otra incidencia
+                </Button>
+                <Button variant="ghost" asChild>
+                  <Link to="/">Volver al inicio</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -194,6 +225,21 @@ export default function ReportIncident() {
                       disabled={busy}
                       required
                     />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="inc-email">Correo electrónico</Label>
+                    <Input
+                      id="inc-email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="p. ej. sandra.ruiz@taller.es"
+                      autoComplete="email"
+                      disabled={busy}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Si lo dejas, te avisamos cuando el caso cambie de estado.
+                    </p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="inc-role">Puesto</Label>
@@ -303,7 +349,8 @@ export default function ReportIncident() {
                 </Button>
                 <p className="text-center text-xs text-muted-foreground">
                   Recibirás el número de referencia para dar seguimiento al
-                  caso.
+                  caso. Con tu correo, además, te avisamos de cada cambio de
+                  estado.
                 </p>
               </form>
             </CardContent>

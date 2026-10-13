@@ -1,7 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { QueryCtx, mutation, query } from "./_generated/server";
-import { hasAnyCapability, hasCapability } from "./permissions";
+import {
+  hasAnyCapability,
+  hasCapability,
+  memberOrNull,
+} from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 
 /** El inventario de equipos requiere sesión iniciada. */
@@ -45,8 +49,10 @@ async function requireManager(ctx: QueryCtx) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
-    const me = await ctx.db.get(userId);
+    // Invitado o cuenta de baja: vacío en vez de error. El panel pide esta lista
+    // al montar y sus consumidores degradan a «sin opciones»; las escrituras
+    // siguen exigiendo una cuenta con `requireManager`.
+    const me = await memberOrNull(ctx);
     if (
       !me ||
       !(await hasAnyCapability(ctx, me, [

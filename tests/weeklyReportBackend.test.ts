@@ -275,12 +275,11 @@ describe("weeklyReport.settings — ajustes del resumen", () => {
     });
 
     const options = await manager.query(api.weeklyReport.roleOptions, {});
-    expect(options.map((option) => option.key)).toEqual([
-      "admin",
-      "manager",
-      "technician",
-      key,
-    ]);
+    const keys = options.map((option) => option.key);
+    expect(keys).toEqual(["admin", "manager", "technician", key]);
+    // «Invitado» no está: es la sesión anónima de consulta, no un rol al que
+    // apuntar el resumen —ni uno que se le dé a una persona—.
+    expect(keys).not.toContain("guest");
   });
 });
 
@@ -317,6 +316,29 @@ describe("weeklyReport.preview — el correo que saldría", () => {
     const preview = await manager.query(api.weeklyReport.preview, {});
     expect(preview.marginDays).toBe(30);
     expect(preview.counts.withoutTrace).toBe(0);
+  });
+
+  test("lo retirado a la papelera no entra en el resumen", async () => {
+    const { t, manager } = await setup();
+    // Un aviso duplicado se retiró: su rastro es de la papelera, no del resumen
+    // de la semana. Ni cuenta como trabajo tocado ni sale con su referencia.
+    const incident = await t.run((ctx) =>
+      ctx.db
+        .query("incidents")
+        .withIndex("by_reference", (q) => q.eq("reference", "INC-0002"))
+        .unique(),
+    );
+    await t.run((ctx) =>
+      ctx.db.patch(incident!._id, {
+        deletedAt: Date.now(),
+        deletedBy: "Elena Vidal",
+        purgeAt: Date.now() + 7 * DAY,
+      }),
+    );
+
+    const preview = await manager.query(api.weeklyReport.preview, {});
+    expect(preview.counts.touched).toBe(0);
+    expect(preview.text).not.toContain("INC-0002");
   });
 
   test("quien no coordina no puede ver la vista previa", async () => {
@@ -401,10 +423,14 @@ describe("weeklyReport.sendNow — enviar el resumen a mano", () => {
       weekday: 1,
       roleKeys: ["technician"],
     });
-    // Todos de baja: ningún rol de la lista tiene a nadie a quien escribir.
+    // Todos de baja menos quien manda (una cuenta de baja tampoco puede enviar
+    // el resumen): ningún rol de la lista tiene ya a nadie a quien escribir.
     await t.run(async (ctx) => {
       const users = await ctx.db.query("users").collect();
-      for (const user of users) await ctx.db.patch(user._id, { active: false });
+      for (const user of users) {
+        if (user.email === "coord@taller.es") continue;
+        await ctx.db.patch(user._id, { active: false });
+      }
     });
 
     const result = await manager.action(api.weeklyReport.sendNow, {});

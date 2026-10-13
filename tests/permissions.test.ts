@@ -114,6 +114,10 @@ describe("permissions.myPermissions / list — quién ve qué", () => {
       "manager",
       "technician",
     ]);
+    // «Invitado» no sale: esta lista es la que usa el alta de usuarios para
+    // elegir rol, y una sesión anónima no se le da a nadie —es el propio
+    // visitante sin cuenta—. Solo consulta una incidencia por su referencia.
+    expect(roles.map((item) => item.key)).not.toContain("guest");
     const adminRole = roles.find((item) => item.key === "admin");
     const managerRole = roles.find((item) => item.key === "manager");
     const technicianRole = roles.find((item) => item.key === "technician");
@@ -330,7 +334,12 @@ describe("capacidades aplicadas en los módulos", () => {
       reportedAt: Date.now() - 60 * 60 * 1000,
     };
     await t.mutation(api.incidents.report, report);
-    await t.mutation(api.incidents.report, report);
+    // Otra persona: el formulario público corta a quien repite en 30 segundos,
+    // y aquí lo que se prueba es el permiso, no el freno anti-ráfaga.
+    await t.mutation(api.incidents.report, {
+      ...report,
+      reporterName: "Marta Ruiz",
+    });
     const [first, second] = await t.run((ctx) =>
       ctx.db.query("incidents").collect(),
     );

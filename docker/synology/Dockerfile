@@ -76,7 +76,8 @@ RUN npm run build
 # deployment, generar las claves de Convex Auth si faltan y subir con
 # reintentos— vive en `funciones-lib.sh`, que leen los dos. Los pasos del
 # arranque y los de la vigilancia están contados, uno a uno, en `funciones.sh` y
-# en `vigila-funciones.sh`.
+# en `vigila-funciones.sh`. El arranque, además, deja hecha la **cuenta de
+# administrador** de una instalación nueva (y no carga ningún dato de ejemplo).
 FROM base AS funciones
 
 COPY docker/synology/funciones.sh /usr/local/bin/funciones

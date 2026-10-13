@@ -45,6 +45,9 @@ export async function archiveClosedIncidentsBefore(
   let archived = 0;
   for (const incident of items) {
     if (incident.archivedAt !== undefined) continue;
+    // Lo retirado no se archiva: está en la papelera esperando a volver o a
+    // borrarse, y devolverlo al archivo lo sacaría de la pantalla que lo guarda.
+    if (incident.deletedAt !== undefined) continue;
     if (!isClosedIncident(incident.status)) continue;
     const closedAt = incident.closedAt ?? incident.updatedAt;
     if (closedAt >= args.before) continue;
@@ -75,6 +78,9 @@ export async function archiveDecidedRequestsBefore(
   let archived = 0;
   for (const request of requests) {
     if (request.archivedAt !== undefined) continue;
+    // Lo retirado no se archiva: está en la papelera esperando a volver o a
+    // borrarse, y devolverlo al archivo lo sacaría de la pantalla que lo guarda.
+    if (request.deletedAt !== undefined) continue;
     // Lo que sigue en movimiento no se archiva, tampoco por la noche: una
     // petición pendiente o en espera no está terminada. Es la misma regla que
     // la del archivado a mano de una petición (`partRequests.archive`), para

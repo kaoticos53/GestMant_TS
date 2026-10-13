@@ -1,15 +1,24 @@
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
 import {
+  Archive,
   ArrowRight,
+  BellRing,
+  BookOpen,
   Boxes,
   Check,
   ClipboardList,
+  FileClock,
   ListChecks,
-  PackageCheck,
+  Mail,
+  Search,
   ShieldCheck,
+  ShoppingCart,
   Siren,
+  Sparkles,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
@@ -28,46 +37,103 @@ const features: {
   description: string;
 }[] = [
   {
+    icon: Siren,
+    title: "Incidencias de principio a fin",
+    description:
+      "Cualquiera notifica una avería desde el formulario público; el coordinador la asigna y el técnico la trabaja hasta cerrarla con su parte.",
+  },
+  {
+    icon: FileClock,
+    title: "Cuaderno y expediente",
+    description:
+      "Notas con formato e imágenes en el hilo de cada incidencia, y los documentos del expediente con su rastro de cambios.",
+  },
+  {
     icon: ClipboardList,
+    title: "Mantenimiento del equipo",
+    description:
+      "El historial de cada equipo del inventario —averías y revisiones preventivas— con el aviso de la que toca por calendario.",
+  },
+  {
+    icon: BookOpen,
+    title: "Manuales del taller",
+    description:
+      "Del fabricante o notas del taller, buscables por tipo, marca, modelo y equipo, con descarga y la versión anterior a mano.",
+  },
+  {
+    icon: ListChecks,
     title: "Cola de peticiones",
     description:
       "Cada petición entra con prioridad, quién la pide, el equipo afectado y sus líneas. Nada se pierde en el correo del turno.",
   },
   {
     icon: Check,
-    title: "Aprobación con un clic",
+    title: "Aprobación con stock real",
     description:
-      "Al aprobar, el material se descuenta del catálogo. El stock que ves en pantalla es el stock real del almacén AV.",
+      "Aprobar descuenta el material del catálogo, así que el stock de la pantalla es el del almacén; rechazar deja el motivo firmado.",
   },
   {
-    icon: ListChecks,
-    title: "Estados claros",
+    icon: ShoppingCart,
+    title: "Compras y recepción",
     description:
-      "Pendiente, aprobada, rechazada o entregada: el técnico siempre sabe en qué punto está su petición.",
+      "Lo que el almacén no cubre se aparta por proveedor, se arma la orden de compra y la recepción del albarán deja el material recibido.",
   },
   {
     icon: Boxes,
-    title: "Catálogo con mínimos",
+    title: "Catálogo e inventario",
     description:
-      "Código, ubicación, proveedor, precio y stock mínimo, con aviso al bajar del umbral y compatibilidad por equipo.",
+      "Repuestos con código, ubicación, proveedor y stock mínimo; equipos con su ficha, su nº de serie y la compatibilidad entre ambos.",
   },
   {
-    icon: ShieldCheck,
-    title: "Decisiones firmadas",
+    icon: Archive,
+    title: "Archivado y auditoría",
     description:
-      "Quién aprobó o rechazó, cuándo y con qué motivo quedan registrados dentro de la propia petición.",
-  },
-  {
-    icon: PackageCheck,
-    title: "Entrega trazada",
-    description:
-      "Marcas el material como entregado y cierras el ciclo: el técnico sabe que ya puede recogerlo.",
+      "Lo terminado se archiva solo cada noche —nunca se borra—, y el expediente guarda quién movió cada documento.",
   },
 ];
 
-const steps = [
+/** Lo que redondea el producto, en una línea por cosa: lo que no cabe en la
+ * rejilla de funciones, pero cambia el día a día. */
+const extras: { icon: LucideIcon; label: string }[] = [
   {
-    title: "El técnico solicita",
+    icon: BellRing,
+    label: "Avisos de stock bajo y de trabajo sin constancia",
+  },
+  { icon: Mail, label: "Resumen semanal del taller por correo" },
+  { icon: Users, label: "Roles y permisos, persona a persona" },
+  { icon: ShieldCheck, label: "El expediente deja su rastro de cambios" },
+  { icon: Search, label: "Búsqueda única desde la barra de arriba" },
+  { icon: Sparkles, label: "Datos de ejemplo o taller vacío, a tu elección" },
+];
+
+/** El recorrido de una incidencia, de la avería al parte. */
+const incidentSteps = [
+  {
+    title: "Se notifica",
+    description:
+      "Cualquiera abre el formulario público y cuenta la avería; queda como incidencia con su referencia.",
+  },
+  {
+    title: "Se asigna y diagnostica",
+    description:
+      "El coordinador la asigna —o el técnico se autoasigna— y el cuaderno recoge notas, fotos y documentos.",
+  },
+  {
+    title: "Entra a taller",
+    description:
+      "Se vincula al equipo del inventario y se piden los repuestos que falten para repararla.",
+  },
+  {
+    title: "Se cierra con su parte",
+    description:
+      "Resuelta o sin resolución: la intervención queda en el historial del equipo y el parte, listo para entregar.",
+  },
+];
+
+/** El recorrido de una petición de repuestos, de la solicitud a la entrega. */
+const requestSteps = [
+  {
+    title: "El técnico pide",
     description:
       "Elige repuestos y cantidades, indica el equipo afectado y la prioridad.",
   },
@@ -79,19 +145,20 @@ const steps = [
   {
     title: "Aprueba o rechaza",
     description:
-      "Aprobar descuenta stock del catálogo; rechazar deja el motivo registrado.",
+      "Aprobar descuenta stock del catálogo; si falta, se aparta para comprar. Rechazar deja el motivo.",
   },
   {
-    title: "Se entrega y queda registrado",
-    description: "Marcas la entrega y la petición pasa al archivo del taller.",
+    title: "Se entrega y se archiva",
+    description:
+      "El material queda en manos del técnico y lo terminado pasa al archivo del taller.",
   },
 ];
 
 const heroChecks = [
-  "Cola de pendientes al abrir",
-  "Stock descontado al aprobar",
-  "Avisos de stock bajo",
-  "Historial de decisiones",
+  "Incidencias de principio a fin",
+  "Peticiones con el stock descontado",
+  "Mantenimiento y manuales por equipo",
+  "Muestra de ejemplo o taller vacío",
 ];
 
 function SectionHeading({
@@ -116,7 +183,54 @@ function SectionHeading({
   );
 }
 
+/** Un recorrido del taller, paso a paso: el mismo armazón para la incidencia y
+ * para la petición, que es lo que hace que las dos se lean igual. */
+function FlowTrack({
+  eyebrow,
+  title,
+  subtitle,
+  steps,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  steps: { title: string; description: string }[];
+}) {
+  return (
+    <div>
+      <SectionHeading eyebrow={eyebrow} title={title} subtitle={subtitle} />
+      <ol className="mt-8 grid gap-4 md:grid-cols-4">
+        {steps.map((step, index) => (
+          <motion.li
+            key={step.title}
+            {...reveal}
+            transition={{
+              duration: 0.45,
+              ease: "easeOut",
+              delay: index * 0.07,
+            }}
+            className="relative rounded-xl border border-border/70 bg-card p-5 shadow-sm"
+          >
+            <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {index + 1}
+            </span>
+            <h3 className="mt-4 text-sm font-semibold tracking-tight">
+              {step.title}
+            </h3>
+            <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
+              {step.description}
+            </p>
+          </motion.li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export default function Landing() {
+  const { isLoading, isAuthenticated } = useAuth();
+  const signedIn = isAuthenticated && !isLoading;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* ---------------------------------------------------------------- */}
@@ -163,15 +277,26 @@ export default function Landing() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/auth">Acceder</Link>
-            </Button>
-            <Button asChild size="sm" className="gap-1.5">
-              <Link to="/auth">
-                Entrar al taller
-                <ArrowRight className="size-3.5" />
-              </Link>
-            </Button>
+            {signedIn ? (
+              <Button asChild size="sm" className="gap-1.5">
+                <Link to="/dashboard">
+                  Ir al panel
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/auth">Acceder</Link>
+                </Button>
+                <Button asChild size="sm" className="gap-1.5">
+                  <Link to="/auth">
+                    Entrar al taller
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -196,27 +321,26 @@ export default function Landing() {
             transition={{ duration: 0.5, ease: "easeOut" }}
           >
             <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-              {" "}
               <span className="size-1.5 rounded-full bg-signal" />
-              Equipo audiovisual · Cadena de televisión · Versión1
+              Taller audiovisual · Cadena de televisión
             </span>
 
             <h1 className="mt-6 text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-[3.4rem]">
-              Las peticiones de repuestos,{" "}
+              El taller audiovisual,{" "}
               <span className="text-signal">bajo control</span>.
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-              Pulso Taller reúne lo que hoy vive en correos y hojas de cálculo:
-              las peticiones de los técnicos de plató, realización y audio, el
-              stock real del almacén AV y cada decisión del responsable, en una
-              sola pantalla.
+              Pulso Taller reúne lo que hoy vive en correos, hojas de cálculo y
+              cuadernos de papel: las incidencias y su reparación, las peticiones
+              de repuestos, el stock del almacén y el mantenimiento de cada
+              equipo, en una sola pantalla.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild size="lg" className="gap-2">
-                <Link to="/auth">
-                  Acceder al taller
+                <Link to={signedIn ? "/dashboard" : "/auth"}>
+                  {signedIn ? "Ir al panel" : "Acceder al taller"}
                   <ArrowRight className="size-4" />
                 </Link>
               </Button>
@@ -370,8 +494,8 @@ export default function Landing() {
           <motion.div {...reveal}>
             <SectionHeading
               eyebrow="Funciones"
-              title="Todo lo esencial para gestionar repuestos"
-              subtitle="La versión 1 se centra en una sola cosa: que las peticiones de repuestos se resuelvan rápido y con un stock fiable detrás."
+              title="Todo el taller, no solo el almacén"
+              subtitle="Desde la avería que alguien notifica hasta el repuesto que se entrega: incidencias, peticiones, compras, manuales y mantenimiento, cada uno con su registro."
             />
           </motion.div>
 
@@ -399,6 +523,19 @@ export default function Landing() {
               </motion.div>
             ))}
           </div>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {extras.map((extra) => (
+              <motion.div
+                key={extra.label}
+                {...reveal}
+                className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card px-3 py-2.5 text-sm text-muted-foreground"
+              >
+                <extra.icon className="size-4 shrink-0 text-signal" />
+                {extra.label}
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -406,39 +543,20 @@ export default function Landing() {
       {/* Cómo funciona                                                    */}
       {/* ---------------------------------------------------------------- */}
       <section id="flujo" className="scroll-mt-20 py-20">
-        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-          <motion.div {...reveal}>
-            <SectionHeading
-              eyebrow="Cómo funciona"
-              title="De la petición a la entrega, en cuatro pasos"
-              subtitle="Un flujo corto y trazable, pensado para que el responsable de repuestos decida en segundos y el técnico sepa siempre dónde está su material."
-            />
-          </motion.div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-14 px-4 sm:px-6">
+          <FlowTrack
+            eyebrow="Cómo funciona"
+            title="Una incidencia, de la avería al parte"
+            subtitle="Quien sufre la avería la notifica, el taller la trabaja y cada paso deja su registro en el cuaderno y en el historial del equipo."
+            steps={incidentSteps}
+          />
 
-          <ol className="mt-10 grid gap-4 md:grid-cols-4">
-            {steps.map((step, index) => (
-              <motion.li
-                key={step.title}
-                {...reveal}
-                transition={{
-                  duration: 0.45,
-                  ease: "easeOut",
-                  delay: index * 0.07,
-                }}
-                className="relative rounded-xl border border-border/70 bg-card p-5 shadow-sm"
-              >
-                <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                  {index + 1}
-                </span>
-                <h3 className="mt-4 text-sm font-semibold tracking-tight">
-                  {step.title}
-                </h3>
-                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-                  {step.description}
-                </p>
-              </motion.li>
-            ))}
-          </ol>
+          <FlowTrack
+            eyebrow="Y una petición"
+            title="Del almacén al técnico, sin perderse"
+            subtitle="Un flujo corto y trazable, pensado para que el responsable decida en segundos y el técnico sepa siempre dónde está su material."
+            steps={requestSteps}
+          />
 
           <motion.div
             {...reveal}
@@ -474,15 +592,16 @@ export default function Landing() {
             <SectionHeading
               eyebrow="Tu primera pantalla"
               title="El puesto de trabajo del responsable de repuestos"
-              subtitle="Al entrar no hay dashboards decorativos: hay una cola de decisiones."
+              subtitle="Al entrar no hay gráficos decorativos: hay un resumen del taller y una cola de decisiones."
             />
             <ul className="mt-6 space-y-3 text-sm leading-6 text-muted-foreground">
               {[
-                "Las peticiones pendientes primero, con prioridad, solicitante y equipo afectado.",
+                "El resumen al abrir: peticiones pendientes, repuestos con stock bajo y material entregado.",
+                "Las peticiones en cola con su prioridad, su solicitante y el equipo afectado.",
                 "Stock disponible junto a cada línea, para aprobar sin sorpresas.",
+                "La incidencia que avanza sin dejar constancia, señalada en el panel.",
                 "Un botón para aprobar —descontando stock— y otro para rechazar con motivo.",
-                "Aviso inmediato de los repuestos que han bajado del mínimo.",
-                "Historial de aprobaciones, rechazos y entregas con fecha y autor.",
+                "Historial de decisiones y entregas con fecha y autor.",
               ].map((item) => (
                 <li key={item} className="flex gap-2.5">
                   <span className="mt-1 flex size-4 shrink-0 items-center justify-center rounded-full bg-signal/10">
@@ -493,8 +612,8 @@ export default function Landing() {
               ))}
             </ul>
             <Button asChild size="lg" className="mt-8 gap-2">
-              <Link to="/auth">
-                Acceder al taller
+              <Link to={signedIn ? "/dashboard" : "/auth"}>
+                {signedIn ? "Ir al panel" : "Acceder al taller"}
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -601,16 +720,18 @@ export default function Landing() {
           className="relative mx-auto max-w-3xl px-4 text-center sm:px-6"
         >
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Empieza por lo esencial: repuestos y peticiones.
+            Tu taller, con tus datos desde el primer día.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-            Entra con tu correo y carga un set de datos de ejemplo para recorrer
-            el flujo completo en dos minutos: pedir, aprobar, entregar.
+            Un taller nuevo arranca con la base vacía y da de alta lo suyo, o
+            carga los datos de ejemplo para recorrer el flujo completo en dos
+            minutos: notificar, reparar, pedir, aprobar y entregar. Los datos de
+            ejemplo se pueden vaciar cuando ya no hagan falta.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="gap-2">
-              <Link to="/auth">
-                Acceder al taller
+              <Link to={signedIn ? "/dashboard" : "/auth"}>
+                {signedIn ? "Ir al panel" : "Acceder al taller"}
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
@@ -648,7 +769,7 @@ export default function Landing() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground" title={DETAILED_VERSION}>
-            {FULL_VERSION} · Gestión de repuestos y peticiones · © 2026 Pulso Taller
+            {FULL_VERSION} · Gestión del taller audiovisual · © 2026 Pulso Taller
           </p>
         </div>
       </footer>

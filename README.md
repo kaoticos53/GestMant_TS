@@ -37,6 +37,12 @@ npm run nas -- --host IP-del-NAS \
 Termina con la URL de la app en la última línea, igual que el arranque local. Con
 `npm run nas -- --help` salen todas las opciones.
 
+El taller queda **listo de una sola pasada**: la base **vacía** —sin datos de
+ejemplo, que se dan de alta a mano— y la **cuenta de administrador ya creada**
+(`admin@taller.es` / `admin12345`, o las que dejes en `ADMIN_EMAIL` y
+`ADMIN_PASSWORD` dentro del `.env`). Con `PULSO_INSTALL=no` no se toca ninguna
+cuenta.
+
 Y para saber cómo está el taller sin cambiar nada —los contenedores, el `.env` y
 si el esquema está al día—, el mismo comando tiene un modo de solo comprobación,
 que además devuelve 0 si todo está en pie y 1 si hay algo que mirar:

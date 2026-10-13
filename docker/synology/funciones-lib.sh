@@ -17,6 +17,10 @@
 #
 # y quien lo lee pone antes `PREFIJO` (el nombre con el que firman sus avisos:
 # `funciones:` o `vigilante:`). Aquí no se imprime ningún secreto.
+#
+# Vive aquí también el paso que deja hecha la **cuenta de administrador** de una
+# instalación nueva, aunque solo lo use el arranque (`crear_cuenta_de_administrador`,
+# al final del archivo): el vigilante no crea cuentas, solo sube código.
 
 PREFIJO="${PREFIJO:-funciones}"
 log() { printf '%s: %s\n' "$PREFIJO" "$*"; }
@@ -185,4 +189,79 @@ subir() {
     log "el envío no ha entrado: se reintenta en ${PULSO_REINTENTO_SEGUNDOS:-10} s (intento ${intento_subida}/3)"
     sleep "${PULSO_REINTENTO_SEGUNDOS:-10}"
   done
+}
+
+# --- La cuenta de administrador de una instalación nueva ---------------------
+#
+# El taller que se despliega en producción arranca con la base **vacía**: la
+# muestra de ejemplo no se carga, porque sus datos los da de alta él a mano. Lo
+# que sí conviene dejar hecho es la cuenta de administrador —para no tener que
+# entrar a crearla y, sobre todo, para que el primero que se registre no acabe
+# siendo el administrador del taller por ser el primero—.
+#
+# Solo actúa con la base **sin ninguna cuenta**: en un taller que ya está en
+# marcha no se toca nada, así que el contenedor se puede volver a arrancar sin
+# miedo. Se apaga con `PULSO_INSTALL=no` en el `.env`, y las credenciales se
+# cambian con `ADMIN_EMAIL` y `ADMIN_PASSWORD` (por defecto, las de la guía).
+#
+# No se imprime ningún secreto: la contraseña viaja en la llamada y su resumen no
+# sale de aquí.
+
+NOMBRE_ADMIN="Administración del taller"
+
+# Cuántas cuentas tiene el taller. Consulta de solo lectura, y la respuesta es un
+# número. Devuelve distinto de cero si el deployment no contesta: quien llama lo
+# cuenta con su propio mensaje.
+cuentas_del_taller() {
+  respuesta=$(convex run --inline-query \
+    'const users = await ctx.db.query("users").collect(); return users.length;' \
+    2>/dev/null) || return 1
+  printf '%s' "$respuesta" | tr -cd '0-9'
+}
+
+crear_cuenta_de_administrador() {
+  if [ "${PULSO_INSTALL:-empty}" = "no" ]; then
+    log "instalación: no se crea ninguna cuenta (PULSO_INSTALL=no)"
+    return 0
+  fi
+
+  cuentas=$(cuentas_del_taller) ||
+    fail "no he podido mirar si el taller tiene cuentas: el deployment no contesta"
+  if [ "$cuentas" != "0" ]; then
+    log "el taller ya tiene cuentas ($cuentas): no se crea ninguna"
+    return 0
+  fi
+
+  admin_email="${ADMIN_EMAIL:-admin@taller.es}"
+  admin_clave="${ADMIN_PASSWORD:-admin12345}"
+  # Las credenciales viajan dentro de un JSON escrito a mano: con comillas o una
+  # barra invertida lo romperían, y es mejor decirlo que crear una cuenta a medias.
+  case "$admin_email$admin_clave" in
+    *'"'* | *\\*)
+      fail "ADMIN_EMAIL y ADMIN_PASSWORD no pueden llevar comillas ni barras invertidas"
+      ;;
+  esac
+  # La app exige al menos ocho caracteres al darse de alta; aquí se comprueba lo
+  # mismo antes de llamar, para no dejar una cuenta que no valga para entrar.
+  if [ "${#admin_clave}" -lt 8 ]; then
+    fail "ADMIN_PASSWORD tiene que llevar al menos 8 caracteres (los mismos que exige la app)"
+  fi
+
+  log "el taller está recién instalado: creando la cuenta de administrador ($admin_email)"
+  # El mismo camino que usa la app en el primer «Entrar» (el store de Convex Auth
+  # con el proveedor de contraseña). Es idempotente: si la cuenta ya existiera con
+  # la misma contraseña, no cambia nada.
+  peticion=$(printf '{"args":{"type":"createAccountFromCredentials","provider":"password","account":{"id":"%s","secret":"%s"},"profile":{"email":"%s","name":"%s","role":"admin","active":true},"shouldLinkViaEmail":false}}' \
+    "$admin_email" "$admin_clave" "$admin_email" "$NOMBRE_ADMIN")
+  # La salida del comando no se imprime nunca: trae el resumen de la contraseña.
+  if ! convex run auth:store "$peticion" >/dev/null 2>&1; then
+    fail "no se ha podido crear la cuenta de administrador ($admin_email): mira los registros de este contenedor con «docker compose logs funciones»"
+  fi
+
+  cuentas=$(cuentas_del_taller) ||
+    fail "no he podido comprobar que la cuenta de administrador haya quedado creada"
+  if [ "$cuentas" = "0" ]; then
+    fail "la cuenta de administrador no ha quedado registrada: mira los registros del contenedor «funciones»"
+  fi
+  log "cuenta de administrador lista: $admin_email (la base vacía, sin datos de ejemplo)"
 }

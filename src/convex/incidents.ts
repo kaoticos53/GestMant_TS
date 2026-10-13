@@ -1,17 +1,37 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { MutationCtx, QueryCtx, internalMutation, mutation, query } from "./_generated/server";
 import { archiveClosedIncidentsBefore } from "./archive";
 import { readAuditAlertRoles } from "./auditAlerts";
 import { notifyUsers } from "./notify";
-import { grantsForRole, hasAnyCapability, hasCapability } from "./permissions";
+import {
+  grantsForRole,
+  hasAnyCapability,
+  hasCapability,
+  memberOrNull,
+} from "./permissions";
 import { assertReportImages } from "./reportUploads";
+import { trashRetentionDays } from "./trash";
 import { documentMoveAlert, summarizeAudit } from "../lib/audit";
+import {
+  INCIDENT_WITHDRAWN_NOTICE,
+  isWithdrawnNotice,
+  looksLikeEmail,
+  mailableStatus,
+  normalizeReporterEmail,
+} from "../lib/incidentMail";
+import type { IncidentMailNotice } from "../lib/incidentMail";
 import type { Capability } from "../lib/permissions";
 import { DEFAULT_ROLE } from "../lib/roles";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
-import { NOTE_EDIT_WINDOW_MS, isNoteWithinEditWindow } from "../lib/workshop";
+import { trashPurgeAt } from "../lib/trash";
+import {
+  NOTE_EDIT_WINDOW_MS,
+  isNoteWithinEditWindow,
+  normalizeIncidentReference,
+} from "../lib/workshop";
 import {
   DOCUMENT_ACTIONS,
   INCIDENT_STATUSES,
@@ -134,6 +154,23 @@ async function requireNoteAuthor(
   );
 }
 
+/**
+ * Quién puede corregir los datos del equipo: el mismo que escribe en el
+ * cuaderno —quien coordina y quien tiene la incidencia entre manos—, que es
+ * quien puede llegar a saber el modelo y el número de serie de verdad.
+ */
+async function requireEquipmentEditor(
+  ctx: MutationCtx,
+  actor: Actor,
+  incident: Doc<"incidents">,
+): Promise<void> {
+  if (await hasCapability(ctx, actor, "manageIncidents")) return;
+  if (isAssignedTo(actor, incident)) return;
+  throw new ConvexError(
+    "Solo el técnico asignado o quien coordina la incidencia pueden corregir los datos del equipo.",
+  );
+}
+
 /** Usuarios activos cuyo rol tiene esa capacidad.
  * (Los permisos de cada rol se resuelven una sola vez por rol.) */
 async function idsWithCapability(
@@ -223,6 +260,37 @@ function historyEntry(
 }
 
 /**
+ * Programa el aviso por correo a quien notificó. Se programa en vez de esperar:
+ * el correo sale por la pasarela de la plataforma, y eso es cosa de una acción
+ * —una mutación no puede salir a la red—, así que la ficha cierra su cambio de
+ * estado sin quedarse mirando al cartero. No se programa nada si quien notificó
+ * no dejó correo, si lo que hay que contarle no se cuenta por correo o si ya se
+ * le contó lo mismo. La decisión fina vive en `convex/incidentMail`.
+ */
+async function scheduleReporterEmail(
+  ctx: MutationCtx,
+  incident: Doc<"incidents">,
+  notice: IncidentMailNotice,
+  /** La retirada: cuándo se está apuntando, que la ficha leída aún no lo sabe. */
+  withdrawnAt?: number,
+): Promise<void> {
+  if (!incident.reporterEmail) return;
+  if (isWithdrawnNotice(notice)) {
+    // Sin fecha de retirada no hay nada que contar; y si el último aviso salió
+    // después de retirarla, esta retirada ya se contó.
+    const at = withdrawnAt ?? incident.deletedAt;
+    if (at === undefined) return;
+    if (incident.emailedAt !== undefined && incident.emailedAt >= at) return;
+  } else {
+    if (mailableStatus(notice) === null) return;
+    if (incident.emailedStatus === notice) return;
+  }
+  await ctx.scheduler.runAfter(0, internal.incidentMail.notifyReporter, {
+    incidentId: incident._id,
+  });
+}
+
+/**
  * Reporta una incidencia. Es la única función pública del módulo: el
  * notificador no tiene por qué estar registrado en la aplicación.
  */
@@ -230,6 +298,9 @@ export const report = mutation({
   args: {
     reporterName: v.string(),
     reporterRole: v.optional(v.string()),
+    // Correo de quien notifica, si lo deja: solo sirve para avisarle cuando el
+    // caso cambie de estado (`convex/incidentMail`). Opcional a propósito.
+    reporterEmail: v.optional(v.string()),
     location: v.optional(v.string()),
     equipmentKind: v.string(),
     model: v.string(),
@@ -246,6 +317,18 @@ export const report = mutation({
     if (!equipmentKind) throw new ConvexError("Indica el tipo de equipo.");
     const model = args.model.trim();
     if (!model) throw new ConvexError("Indica el modelo del equipo.");
+    // El correo es opcional —avisar sin cuenta no debe exigir dejar datos de
+    // contacto—, pero si se escribe tiene que servir para responder. Una errata
+    // de dedo se avisa aquí, que es cuando todavía se puede corregir, y no
+    // cuando el correo se rebota semanas después sin que nadie lo vea.
+    const reporterEmail = args.reporterEmail?.trim()
+      ? normalizeReporterEmail(args.reporterEmail)
+      : undefined;
+    if (reporterEmail !== undefined && !looksLikeEmail(reporterEmail)) {
+      throw new ConvexError(
+        "Ese correo no parece una dirección válida. Revísalo o déjalo en blanco.",
+      );
+    }
     // La descripción viene como documento del editor (párrafos, listas,
     // imágenes) y así se guarda; el mínimo se cuenta sobre lo que dice, no
     // sobre su estructura (si no, un documento sin texto colaría).
@@ -285,20 +368,35 @@ export const report = mutation({
       );
     }
 
-    let maxSeq = 0;
-    for (const item of latest) {
-      const match = item.reference?.match(/^INC-(\d+)$/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxSeq) maxSeq = num;
-      }
-    }
-    const reference = `INC-${String(maxSeq + 1).padStart(4, "0")}`;
+    // La referencia es con lo que se sigue el caso —lo que se teclea para
+    // consultarlo—, así que no puede repetirse. Se parte de la más alta que hay
+    // (el índice va por referencia y, con el mismo ancho, eso es el número) y se
+    // avanza hasta la primera libre. Mirar solo las últimas 100 dejaría fuera la
+    // referencia más alta cuando el histórico trae fechas repartidas, y el aviso
+    // nuevo repetiría un número ya usado; con la referencia repetida, la consulta
+    // de quien la recibió ya no sabría a qué incidencia contesta.
+    const highest = await ctx.db
+      .query("incidents")
+      .withIndex("by_reference")
+      .order("desc")
+      .first();
+    let seq = Number(/^INC-(\d+)$/.exec(highest?.reference ?? "")?.[1] ?? 0);
+    let reference: string;
+    do {
+      seq += 1;
+      reference = `INC-${String(seq).padStart(4, "0")}`;
+    } while (
+      (await ctx.db
+        .query("incidents")
+        .withIndex("by_reference", (q) => q.eq("reference", reference))
+        .first()) !== null
+    );
 
     const now = Date.now();
     const incidentId = await ctx.db.insert("incidents", {
       reference,
       reporterName,
+      ...(reporterEmail ? { reporterEmail } : {}),
       ...(args.reporterRole?.trim()
         ? { reporterRole: args.reporterRole.trim() }
         : {}),
@@ -341,15 +439,21 @@ export const report = mutation({
 export const list = query({
   args: { includeArchived: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await requireActor(ctx);
+    // Invitado o cuenta de baja: vacío en vez de error (el panel pide esta lista
+    // al montar). El resto de acciones sigue exigiendo una cuenta (`requireActor`).
+    if ((await memberOrNull(ctx)) === null) return [];
     const items = await ctx.db
       .query("incidents")
       .withIndex("by_createdAt")
       .order("desc")
       .collect();
+    // Lo retirado no está en ninguna de las dos caras de la cola: ni en el día a
+    // día ni en el archivo. Vive en la papelera (`trash`), que es su propia
+    // pantalla: colarlo aquí lo devolvería a las listas de las que se retiró.
+    const live = items.filter((item) => item.deletedAt === undefined);
     const visible = args.includeArchived
-      ? items
-      : items.filter((item) => item.archivedAt === undefined);
+      ? live
+      : live.filter((item) => item.archivedAt === undefined);
     // Los documentos del expediente viajan con su enlace ya resuelto: la ficha
     // los abre tal cual, sin una consulta por documento. Es la misma forma que
     // devuelven los adjuntos de una petición.
@@ -366,6 +470,74 @@ export const list = query({
         ),
       })),
     );
+  },
+});
+
+/**
+ * Lo que se enseña de una incidencia a quien no es del taller: el recorte del
+ * seguimiento. Es una lista de campos explícita a propósito —y no «todo menos
+ * esto»—: una columna nueva del esquema no se cuela aquí sola, y las notas
+ * internas, el expediente y quién dio cada paso del historial se quedan dentro.
+ */
+function trackingOf(incident: Doc<"incidents">) {
+  return {
+    reference: incident.reference,
+    status: incident.status,
+    equipmentKind: incident.equipmentKind ?? null,
+    model: incident.model ?? null,
+    serialNumber: incident.serialNumber ?? null,
+    location: incident.location ?? null,
+    description: incident.description,
+    reportedAt: incident.reportedAt,
+    closedAt: incident.closedAt ?? null,
+    // Quién la lleva: el técnico y, si ha pasado por taller, su responsable.
+    assigneeName: incident.assigneeName ?? null,
+    workshopAssigneeName: incident.workshopAssigneeName ?? null,
+    // El historial, solo con el paso y su fecha: lo que cuenta cada paso y quién
+    // lo dio es el cuaderno del taller, no lo que se le enseña al notificador.
+    history: incident.history.map((entry) => ({
+      status: entry.status,
+      at: entry.at,
+    })),
+  };
+}
+
+/**
+ * Consultar una incidencia por su referencia («INC-0004»). Es el camino de quien
+ * la notificó y no es del taller: recibe esa referencia al avisar y con ella
+ * sigue el caso. La cola entera no la ve —`list` le devuelve vacío—; esto, en
+ * cambio, sí, y con lo justo.
+ *
+ * Pide sesión, y una de invitado vale: la referencia circula por un correo o por
+ * un papel, y esto no es una puerta abierta para quien ni siquiera ha entrado.
+ * Nunca devuelve la ficha entera: lo que sale de aquí es el recorte de
+ * `trackingOf`, sin notas internas, documentos ni adjuntos.
+ *
+ * `null` si no hay ninguna con esa referencia —el panel lo cuenta como «no
+ * encontramos ninguna»—, y también si lo escrito no lleva ningún número.
+ */
+export const byReference = query({
+  args: { reference: v.string() },
+  handler: async (ctx, args) => {
+    if ((await getAuthUserId(ctx)) === null) {
+      throw new ConvexError(
+        "Debes iniciar sesión para consultar una incidencia por su referencia.",
+      );
+    }
+    const reference = normalizeIncidentReference(args.reference);
+    if (reference === null) return null;
+    // `first` y no `unique`: una instalación con datos viejos puede tener la
+    // misma referencia repetida, y eso tiene que contestar (la más antigua) en
+    // vez de tumbar la consulta de quien la recibió.
+    const incident = await ctx.db
+      .query("incidents")
+      .withIndex("by_reference", (q) => q.eq("reference", reference))
+      .first();
+    // Una incidencia retirada no se sigue: se retiró porque es duplicada o
+    // equivocada, así que su referencia deja de contar el caso. Si se recupera
+    // desde la papelera, vuelve a contestar como si nunca hubiera pasado.
+    if (incident === null || incident.deletedAt !== undefined) return null;
+    return trackingOf(incident);
   },
 });
 
@@ -414,6 +586,7 @@ export const assign = mutation({
         ),
       ],
     });
+    await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.ASSIGNED);
     await notifyUsers(
       ctx,
       [assignee._id],
@@ -470,6 +643,7 @@ export const selfAssign = mutation({
         ),
       ],
     });
+    await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.ASSIGNED);
     await notifyUsers(
       ctx,
       await moderatorIds(ctx),
@@ -554,6 +728,7 @@ export const verify = mutation({
         incident._id,
         actor._id,
       );
+      await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.WORKSHOP);
       return;
     }
 
@@ -610,6 +785,7 @@ export const verify = mutation({
       incident._id,
       actor._id,
     );
+    await scheduleReporterEmail(ctx, incident, status);
   },
 });
 
@@ -753,6 +929,88 @@ export const close = mutation({
       incident._id,
       actor._id,
     );
+    await scheduleReporterEmail(ctx, incident, status);
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Datos del equipo: corregir lo que se notificó mal o a medias         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Corrige el modelo y el nº de serie del equipo de una incidencia. Quien la
+ * notifica no tiene el equipo delante y lo describe de memoria: a veces se
+ * equivoca y a veces deja el nº de serie en blanco. Quien sí lo tiene delante
+ * —el técnico que la lleva o quien coordina— es el único que puede ponerlos
+ * bien, y son justo los dos datos que identifican la máquina en la ficha de
+ * historial y con los que se compone su intervención.
+ *
+ * Vale para cualquier estado: el dato es del equipo, no de un paso del flujo, y
+ * corregirlo después de cerrar sigue valiendo para el historial de la máquina
+ * (que se compone con estos mismos campos). Deja su traza en la ficha, como los
+ * demás pasos, diciendo qué cambió.
+ *
+ * Un campo sin enviar se deja como está, y enviarlo en blanco es quitarlo —así
+ * se corrige el dato que era erróneo, y no por descuido al mandar solo uno de
+ * los dos—. El modelo, en cambio, no puede quedarse vacío: es lo que identifica
+ * la máquina en su historial, y el formulario de notificación tampoco lo admite
+ * en blanco.
+ */
+export const updateEquipment = mutation({
+  args: {
+    incidentId: v.id("incidents"),
+    model: v.optional(v.string()),
+    serialNumber: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    await requireEquipmentEditor(ctx, actor, incident);
+
+    const model =
+      args.model === undefined ? incident.model : args.model.trim() || undefined;
+    if (model === undefined) {
+      throw new ConvexError(
+        "Escribe el modelo del equipo: es lo que identifica la máquina en su historial.",
+      );
+    }
+    const serialNumber =
+      args.serialNumber === undefined
+        ? incident.serialNumber
+        : args.serialNumber.trim() || undefined;
+    if (model === incident.model && serialNumber === incident.serialNumber) {
+      throw new ConvexError(
+        "Esos son los datos que ya tiene la incidencia: cambia el modelo o el nº de serie.",
+      );
+    }
+
+    const now = Date.now();
+    const name = actorName(actor);
+    // El rastro dice qué cambió, no solo que cambió: es lo que permite leer la
+    // ficha de un vistazo y saber de dónde salió el dato que hay ahora.
+    const changes = [
+      ...(model !== incident.model ? [`modelo ${model}`] : []),
+      ...(serialNumber !== incident.serialNumber
+        ? [serialNumber ? `nº de serie ${serialNumber}` : "sin nº de serie"]
+        : []),
+    ];
+
+    await ctx.db.patch(args.incidentId, {
+      // Vaciar es una corrección, no un descuido: si el dato que había era
+      // erróneo, se quita (y `undefined` es como se quita un campo aquí).
+      model,
+      serialNumber,
+      updatedAt: now,
+      history: [
+        ...incident.history,
+        historyEntry(
+          incident.status,
+          now,
+          name,
+          `Datos del equipo corregidos · ${changes.join(" · ")}`,
+        ),
+      ],
+    });
   },
 });
 
@@ -851,6 +1109,257 @@ export const archiveClosedBefore = mutation({
       before: args.before,
       by: actorName(actor),
     });
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Papelera: retirar lo equivocado o duplicado, con plazo para volver   */
+/* ------------------------------------------------------------------ */
+
+/** Retirar una incidencia es tarea de coordinación, como archivarla. */
+async function requireWithdrawCapability(ctx: MutationCtx): Promise<Actor> {
+  const actor = await requireActor(ctx);
+  if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
+    throw new ConvexError(
+      isModerator(actor)
+        ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
+        : "Solo el coordinador puede retirar una incidencia. Pídeselo al responsable del taller.",
+    );
+  }
+  return actor;
+}
+
+/**
+ * Tope de una pasada de la papelera: no borra de golpe todo lo que haya
+ * caducado. Como las demás pasadas, si queda más, la siguiente sigue por donde
+ * esta lo dejó.
+ */
+const PURGE_LIMIT = 100;
+
+/**
+ * Borra de verdad una incidencia retirada: su expediente y los avisos que la
+ * señalaban. Es lo irreversible, así que solo lo llaman el borrado a mano y la
+ * pasada de la papelera, nunca la retirada.
+ *
+ * Dos cosas se quedan a propósito: el rastro de auditoría de los documentos
+ * (`incidentDocumentLog` no se borra nunca: es la única constancia de un adjunto
+ * retirado) y la ficha de historial del equipo, que es del equipo y no de la
+ * incidencia. Los archivos del expediente sí se van con ella: nadie los cita ya.
+ */
+async function purgeIncident(
+  ctx: MutationCtx,
+  incident: Doc<"incidents">,
+): Promise<void> {
+  const documents = await ctx.db
+    .query("incidentDocuments")
+    .withIndex("by_incident", (q) => q.eq("incidentId", incident._id))
+    .collect();
+  for (const document of documents) {
+    if (document.storageId) await ctx.storage.delete(document.storageId);
+    await ctx.db.delete(document._id);
+  }
+  // Los avisos que señalaban a esta incidencia se van con ella: sin la ficha,
+  // pulsarlos no llevaría a ninguna parte.
+  const notifications = await ctx.db.query("notifications").collect();
+  for (const notification of notifications) {
+    if (notification.incidentId === incident._id) {
+      await ctx.db.delete(notification._id);
+    }
+  }
+  await ctx.db.delete(incident._id);
+}
+
+/**
+ * Retira una incidencia: quien la notificó se equivocó o es el duplicado de
+ * otra. No se borra —eso sería irreversible— sino que sale de la cola y espera
+ * en la papelera con el mismo plazo que lo retirado del almacén, por si hay que
+ * volver a por ella (`lib/trash`).
+ *
+ * Vale para cualquier estado: lo que se retira es el caso entero, no un paso del
+ * flujo. Retirar dos veces la misma incidencia no es un error.
+ */
+export const withdraw = mutation({
+  args: { incidentId: v.id("incidents"), reason: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const actor = await requireWithdrawCapability(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    if (incident.deletedAt !== undefined) return;
+
+    const now = Date.now();
+    const name = actorName(actor);
+    const reason = args.reason?.trim();
+    await ctx.db.patch(args.incidentId, {
+      deletedAt: now,
+      deletedBy: name,
+      ...(reason ? { deletedReason: reason } : {}),
+      // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
+      // el plazo con el que entró, igual que en la papelera del almacén.
+      purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
+      updatedAt: now,
+      history: [
+        ...incident.history,
+        historyEntry(incident.status, now, name, "Retirada a la papelera"),
+      ],
+    });
+
+    // Y se le cuenta a quien notificó: su referencia deja de seguir el caso, y
+    // eso no puede descubrirlo mirando. Sale con la fecha de la retirada, que es
+    // lo que distingue este aviso del de un cambio de estado.
+    await scheduleReporterEmail(
+      ctx,
+      incident,
+      INCIDENT_WITHDRAWN_NOTICE,
+      now,
+    );
+  },
+});
+
+/**
+ * Recupera una incidencia de la papelera: vuelve a la cola —o al archivo, si de
+ * ahí salió— tal y como estaba, con su expediente y sus notas, y su referencia
+ * vuelve a seguir el caso.
+ */
+export const restore = mutation({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    const actor = await requireWithdrawCapability(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    if (incident.deletedAt === undefined) return;
+
+    const now = Date.now();
+    const name = actorName(actor);
+    await ctx.db.patch(args.incidentId, {
+      deletedAt: undefined,
+      deletedBy: undefined,
+      deletedReason: undefined,
+      purgeAt: undefined,
+      updatedAt: now,
+      history: [
+        ...incident.history,
+        historyEntry(incident.status, now, name, "Recuperada de la papelera"),
+      ],
+    });
+  },
+});
+
+/**
+ * Borra ya una incidencia retirada, sin esperar el plazo: lo que alguien retiró
+ * y ahora confirma que no quiere. Es la única forma de borrar de verdad, así que
+ * pide que la incidencia esté retirada: lo que no ha pasado por la papelera no
+ * se borra de un tirón.
+ */
+export const deleteNow = mutation({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    await requireWithdrawCapability(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    if (incident.deletedAt === undefined) {
+      throw new ConvexError(
+        "Retira la incidencia antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
+      );
+    }
+    await purgeIncident(ctx, incident);
+  },
+});
+
+/**
+ * La pasada de la papelera de incidencias: borra de verdad lo que cumplió su
+ * plazo sin que nadie lo recuperara. Va por tandas, como la del almacén, y no
+ * toca nada más: lo que está dentro de plazo espera a su noche.
+ */
+export const purgeExpired = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("incidents")
+      .withIndex("by_purgeAt", (q) => q.lt("purgeAt", Date.now()))
+      .take(PURGE_LIMIT);
+
+    let purged = 0;
+    for (const incident of rows) {
+      // El índice solo guarda lo retirado; aun así, un `purgeAt` suelto —un dato
+      // viejo— no borra una incidencia que está en la cola.
+      if (incident.deletedAt === undefined) continue;
+      await purgeIncident(ctx, incident);
+      purged += 1;
+    }
+    return purged;
+  },
+});
+
+/** Una incidencia en la papelera, tal y como la enseña el módulo Archivo. */
+export interface WithdrawnIncidentItem {
+  id: Id<"incidents">;
+  reference: string;
+  status: Doc<"incidents">["status"];
+  equipmentKind: string | null;
+  model: string | null;
+  location: string | null;
+  /** Lo notificado, en texto plano: en la lista se lee de una línea. */
+  description: string;
+  deletedAt: number;
+  deletedBy: string | null;
+  deletedReason: string | null;
+  purgeAt: number;
+  /** Salió del archivo: recuperarla la devuelve allí, no a la cola. */
+  archived: boolean;
+  /**
+   * Cómo fue el aviso a quien notificó —su correo, cuándo salió y, si no salió,
+   * por qué—: es lo que la papelera enseña para saber si se le explicó que su
+   * referencia dejaba de funcionar (`reporterNoticeText`).
+   */
+  reporterEmail: string | null;
+  emailedAt: number | null;
+  emailError: string | null;
+}
+
+/**
+ * La papelera de incidencias, para el módulo Archivo: lo retirado —lo que antes
+ * se borra, delante— y el plazo vigente. La ve quien coordina: es la pantalla
+ * desde la que se deshace, y lo retirado no es del día a día de nadie.
+ */
+export const trash = query({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requireActor(ctx);
+    if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
+      throw new ConvexError(
+        "No tienes permisos para ver la papelera de incidencias.",
+      );
+    }
+
+    const rows = await ctx.db
+      .query("incidents")
+      .withIndex("by_deletedAt")
+      .collect();
+    const items: WithdrawnIncidentItem[] = rows
+      .filter((row) => row.deletedAt !== undefined)
+      .map((row) => ({
+        id: row._id,
+        reference: row.reference,
+        status: row.status,
+        equipmentKind: row.equipmentKind ?? null,
+        model: row.model ?? null,
+        location: row.location ?? null,
+        description: richDocToPlainText(row.description),
+        deletedAt: row.deletedAt!,
+        deletedBy: row.deletedBy ?? null,
+        deletedReason: row.deletedReason ?? null,
+        // Sin fecha de borrado —dato viejo— se cuenta desde que se retiró.
+        purgeAt: row.purgeAt ?? row.deletedAt!,
+        archived: row.archivedAt !== undefined,
+        reporterEmail: row.reporterEmail ?? null,
+        emailedAt: row.emailedAt ?? null,
+        emailError: row.emailError ?? null,
+      }))
+      // Lo que antes se va, delante: es lo que pide una decisión.
+      .sort((a, b) => a.purgeAt - b.purgeAt);
+
+    return {
+      items,
+      nextPurgeAt: items[0]?.purgeAt ?? null,
+      retentionDays: await trashRetentionDays(ctx),
+    };
   },
 });
 
@@ -1547,8 +2056,12 @@ async function createHistorySheet(
   },
 ): Promise<Id<"maintenanceRecords">> {
   const { incident } = args;
+  // Lo retirado no se cita: una petición que está en la papelera es la que se
+  // pidió por error o se duplicó, así que el historial del equipo no la cuenta
+  // como el material que se puso.
   const linkedRequest = (await ctx.db.query("partRequests").collect()).find(
-    (request) => request.incidentId === incident._id,
+    (request) =>
+      request.incidentId === incident._id && request.deletedAt === undefined,
   );
 
   const reported = new Date(incident.reportedAt).toLocaleDateString("es-ES", {

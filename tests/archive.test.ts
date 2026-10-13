@@ -79,9 +79,24 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
   expect(message).toContain(fragment);
 }
 
+/**
+ * Cada aviso de las pruebas va a nombre de una persona distinta: el
+ * anti-inundación de `incidents.report` corta dos notificaciones seguidas del
+ * mismo notificador, y aquí hacen falta varias incidencias en la misma base.
+ */
+let avisos = 0;
+
+function avisoDeOtraPersona() {
+  avisos += 1;
+  return { ...reportArgs, reporterName: `Reportante ${avisos}` };
+}
+
 /** Incidencia resuelta in situ: devuelve su id y su referencia. */
 async function closedIncident(t: Test, manager: Authed, tech: Authed) {
-  const reference = await t.mutation(api.incidents.report, reportArgs);
+  const reference = await t.mutation(
+    api.incidents.report,
+    avisoDeOtraPersona(),
+  );
   const incident = await incidentByReference(manager, reference);
   expect(incident).toBeDefined();
   await tech.mutation(api.incidents.selfAssign, {
@@ -218,7 +233,10 @@ describe("archivo de incidencias", () => {
     const { t, manager, tech } = await setup();
     const old = await closedIncident(t, manager, tech);
     const recent = await closedIncident(t, manager, tech);
-    const openReference = await t.mutation(api.incidents.report, reportArgs);
+    const openReference = await t.mutation(
+      api.incidents.report,
+      avisoDeOtraPersona(),
+    );
     const open = await incidentByReference(manager, openReference);
 
     // La antigua se cerró hace dos meses; la reciente, ahora mismo.
@@ -248,16 +266,45 @@ describe("archivo de incidencias", () => {
     ).toBe(0);
   });
 
-  test("sin sesión no hay cola ni archivo", async () => {
+  test("lo retirado no se archiva: espera en la papelera, no en el archivo", async () => {
+    const { t, manager, tech } = await setup();
+    const retirada = await closedIncident(t, manager, tech);
+    const viva = await closedIncident(t, manager, tech);
+    // Un duplicado cerrado por error se retira a la papelera…
+    await manager.mutation(api.incidents.withdraw, {
+      incidentId: retirada.id,
+      reason: "Duplicada",
+    });
+
+    // …y con el mismo corte la limpieza a mano se lleva solo la otra: sacar de
+    // la papelera lo retirado lo escondería de la pantalla que lo guarda.
+    expect(
+      await manager.mutation(api.incidents.archiveClosedBefore, {
+        before: Date.now() + DAY,
+      }),
+    ).toBe(1);
+    expect(
+      (await t.run((ctx) => ctx.db.get(retirada.id)))?.archivedAt,
+    ).toBeUndefined();
+    expect(
+      (await t.run((ctx) => ctx.db.get(viva.id)))?.archivedAt,
+    ).toBeTypeOf("number");
+
+    // Y la pasada de la noche tampoco la toca.
+    expect(await t.mutation(internal.archive.runAutoArchive, {})).toBe(0);
+    expect(
+      (await t.run((ctx) => ctx.db.get(retirada.id)))?.archivedAt,
+    ).toBeUndefined();
+  });
+
+  test("sin sesión no hay cola ni archivo: las listas llegan vacías", async () => {
+    // El panel pide las dos listas al montar: sin sesión degradan a vacío en
+    // vez de tumbar la pantalla (las acciones de archivar sí exigen cuenta).
     const { t } = await setup();
-    await expectConvexError(
-      t.query(api.incidents.list, { includeArchived: true }),
-      "Debes iniciar sesión",
-    );
-    await expectConvexError(
-      t.query(api.partRequests.list, {}),
-      "Debes iniciar sesión",
-    );
+    expect(
+      await t.query(api.incidents.list, { includeArchived: true }),
+    ).toEqual([]);
+    expect(await t.query(api.partRequests.list, {})).toEqual([]);
   });
 });
 

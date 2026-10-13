@@ -85,12 +85,19 @@ async function currentMarginDays(ctx: QueryCtx | MutationCtx): Promise<number> {
  */
 async function buildReport(ctx: QueryCtx | MutationCtx) {
   const incidents = await ctx.db.query("incidents").collect();
-  const requests = await ctx.db.query("partRequests").collect();
+  // Lo retirado no cuenta: se retiró porque era duplicado o equivocado, así que
+  // no es trabajo del taller ni caso abierto. Su rastro se lo queda la papelera.
+  const live = incidents.filter((incident) => incident.deletedAt === undefined);
+  // Y lo retirado de peticiones tampoco: se retiró porque se pidió por error o
+  // era duplicada, así que no es trabajo del taller ni caso abierto.
+  const requests = (await ctx.db.query("partRequests").collect()).filter(
+    (request) => request.deletedAt === undefined,
+  );
   const users = await ctx.db.query("users").collect();
   const settings = await readSettings(ctx);
   const roleKeys = settings?.roleKeys ?? [...DEFAULT_WEEKLY_REPORT_ROLES];
   return {
-    incidents,
+    incidents: live,
     requests,
     roleKeys,
     recipients: weeklyRecipients(users, roleKeys),

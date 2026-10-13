@@ -3,7 +3,11 @@ import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
-import { hasAnyCapability, hasCapability } from "./permissions";
+import {
+  hasAnyCapability,
+  hasCapability,
+  memberOrNull,
+} from "./permissions";
 
 /** Toda la gestión de repuestos requiere sesión iniciada. */
 async function requireUser(ctx: QueryCtx) {
@@ -67,8 +71,10 @@ async function compatibleDocs(
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireUser(ctx);
-    const me = await ctx.db.get(userId);
+    // Invitado o cuenta de baja: vacío en vez de error. El panel pide esta lista
+    // al montar, así que lanzar aquí rompía la entrada como invitado; las
+    // escrituras siguen exigiendo una cuenta con `requireManager`.
+    const me = await memberOrNull(ctx);
     if (
       !me ||
       !(await hasAnyCapability(ctx, me, ["viewInventory", "lookupCatalog"]))

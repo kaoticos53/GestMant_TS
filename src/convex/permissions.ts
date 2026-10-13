@@ -6,7 +6,7 @@ import {
   isKnownCapability,
   type Capability,
 } from "../lib/permissions";
-import { DEFAULT_ROLE, ROLE_META, SYSTEM_ROLES, type Role } from "../lib/roles";
+import { DEFAULT_ROLE, ROLE_META, STAFF_ROLES, type Role } from "../lib/roles";
 import { Doc, Id } from "./_generated/dataModel";
 import {
   MutationCtx,
@@ -67,11 +67,12 @@ export interface SettingsRoleOption {
 }
 
 /**
- * Roles a los que se puede apuntar un aviso: los del sistema y los propios, con
+ * Roles a los que se puede apuntar un aviso: los del taller y los propios, con
  * la etiqueta que tienen hoy. Los personalizados van por nombre, para que la
  * lista no cambie de orden según se vayan creando. Lo comparten los ajustes de
  * los avisos (trabajo sin constancia, expediente y resumen semanal), que si no
- * repetirían la misma consulta y acabarían enseñando cosas distintas.
+ * repetirían la misma consulta y acabarían enseñando cosas distintas. El
+ * invitado no está: a una sesión anónima no se le manda nada.
  */
 export async function settingsRoleOptions(
   ctx: Ctx,
@@ -81,7 +82,7 @@ export async function settingsRoleOptions(
     .filter((row) => row.kind === "custom")
     .sort((a, b) => a.label.localeCompare(b.label, "es"));
   return [
-    ...SYSTEM_ROLES.map((key) => ({
+    ...STAFF_ROLES.map((key) => ({
       key: key as string,
       label: ROLE_META[key].label,
       description: ROLE_META[key].description,
@@ -193,6 +194,20 @@ export async function hasAnyCapability(
   return false;
 }
 
+/**
+ * La persona de la sesión, o `null` si no es del taller: sin sesión, invitado o
+ * cuenta dada de baja. Es para las lecturas que el panel pide al montar y que
+ * deben degradar a vacío en vez de lanzar: un error ahí tumbaba la entrada como
+ * invitado —y a una cuenta desactivada— en vez de dejar el panel sin datos.
+ * Las escrituras no usan esto: siguen exigiendo una cuenta con su capacidad.
+ */
+export async function memberOrNull(ctx: Ctx): Promise<Doc<"users"> | null> {
+  const userId = await getAuthUserId(ctx);
+  const user = userId === null ? null : await ctx.db.get(userId);
+  if (!user || user.active === false || user.isAnonymous === true) return null;
+  return user;
+}
+
 /** Usuario autenticado o error. */
 async function requireActor(ctx: Ctx): Promise<Doc<"users">> {
   const userId = await getAuthUserId(ctx);
@@ -282,7 +297,11 @@ export const myPermissions = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireActor(ctx);
-    const key = user.role ?? DEFAULT_ROLE;
+    // El invitado no tiene permisos de taller: se le responde con los del rol
+    // guest aunque el backend todavía no se lo haya asignado, para que el menú
+    // no enseñe módulos que luego no puede abrir.
+    const key =
+      user.isAnonymous === true ? ROLES.GUEST : (user.role ?? DEFAULT_ROLE);
     const row = await getRoleRow(ctx, key);
     const fallback = fallbackLabel(key);
     return {
@@ -302,8 +321,10 @@ export const roleKeyExists = internalQuery({
 });
 
 /**
- * Matriz de roles y permisos (solo administrador): los tres del sistema más
- * los personalizados, con el número de personas que tienen cada uno.
+ * Matriz de roles y permisos (solo administrador): los del sistema que se
+ * reparten entre el taller más los personalizados, con el número de personas
+ * que tienen cada uno. El invitado no sale: no se asigna ni tiene permisos que
+ * configurar (solo puede consultar una incidencia por su referencia).
  */
 export const listRoles = query({
   args: {},
@@ -325,7 +346,7 @@ export const listRoles = query({
       grants: Record<Capability, boolean>;
       userCount: number;
     }[] = [];
-    for (const key of SYSTEM_ROLES) {
+    for (const key of STAFF_ROLES) {
       const row = rows.find((item) => item.key === key);
       const fallback = fallbackLabel(key);
       roles.push({

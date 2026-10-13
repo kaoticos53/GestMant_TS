@@ -193,18 +193,15 @@ describe("conversación y lectura", () => {
     ).toBe(0);
   });
 
-  test("sin sesión no se puede consultar", async () => {
+  test("sin sesión las listas llegan vacías y abrir un hilo sí falla", async () => {
+    // El centro de mensajes vive en la cabecera del panel y pide estas dos al
+    // montar: degradan a vacío para no tumbar la pantalla. Abrir un hilo
+    // concreto, en cambio, exige cuenta.
     const { t, bobId } = await setup();
-    await expectConvexError(
-      t.query(api.messages.list, {}),
-      "Debes iniciar sesión",
-    );
+    expect(await t.query(api.messages.list, {})).toEqual([]);
+    expect(await t.query(api.messages.contacts, {})).toEqual([]);
     await expectConvexError(
       t.query(api.messages.thread, { userId: bobId }),
-      "Debes iniciar sesión",
-    );
-    await expectConvexError(
-      t.query(api.messages.contacts, {}),
       "Debes iniciar sesión",
     );
   });

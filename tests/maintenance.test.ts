@@ -198,12 +198,11 @@ describe("historial de mantenimiento", () => {
     );
   });
 
-  test("el historial requiere sesión iniciada", async () => {
+  test("sin sesión el historial llega vacío, no con un error", async () => {
+    // El panel pide esta lista al montar y, además, el historial no es del
+    // invitado: sin sesión degrada a vacío (las escrituras sí exigen cuenta).
     const { t } = await setup("manager");
-    await expectConvexError(
-      t.query(api.maintenance.list, {}),
-      "Debes iniciar sesión para consultar el historial",
-    );
+    expect(await t.query(api.maintenance.list, {})).toEqual([]);
   });
 });
 

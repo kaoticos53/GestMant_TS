@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import { matchesQuery } from "./browse";
 import { richDocBlocks, richDocToPlainText } from "./richDoc";
 import { diffRichDoc, type RichDocChanges } from "./richDocDiff";
 import { COORDINATION_ROLES, type RoleKey } from "./roles";
@@ -239,6 +240,43 @@ export const INCIDENT_STATUS_META: Record<
     description: "Cerrada sin poder resolverla",
   },
 };
+
+/**
+ * La referencia de una incidencia. Es el número que se le da a quien la
+ * notifica —«Incidencia INC-0004 registrada»— y con el que se sigue el caso
+ * después, desde dentro del taller y desde una sesión de invitado.
+ */
+export const INCIDENT_REFERENCE_PREFIX = "INC";
+
+/**
+ * Lo que alguien teclea → la referencia canónica: «inc-4», «INC-4» o «4» dan
+ * «INC-0004». Devuelve `null` si no hay ningún número que sacar: entonces no hay
+ * nada que buscar, y quien pregunta lo dice en vez de buscar a ciegas.
+ */
+export function normalizeIncidentReference(input: string): string | null {
+  const digits = /(\d+)/.exec(String(input ?? ""));
+  return digits === null
+    ? null
+    : `${INCIDENT_REFERENCE_PREFIX}-${digits[1].padStart(4, "0")}`;
+}
+
+/**
+ * ¿Esta incidencia es la que se busca? Por sus datos —igual que el resto de
+ * listas del panel— o por su referencia escrita a mano: «INC-0004», «inc-4» o
+ * el número suelto. Los ceros de delante son un detalle del formato, no algo
+ * que nadie teclee, y la referencia es lo que se le dio a quien notificó la
+ * avería: tiene que encontrarse como la escriba.
+ */
+export function matchesIncidentQuery(
+  fields: readonly (string | undefined)[],
+  reference: string,
+  query: string,
+): boolean {
+  return (
+    matchesQuery(fields, query) ||
+    reference === normalizeIncidentReference(query)
+  );
+}
 
 /** Filtros de la cola de incidencias, en orden de avance del flujo. */
 export const INCIDENT_FILTERS: { id: IncidentStatus | "all"; label: string }[] =

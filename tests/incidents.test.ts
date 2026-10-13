@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import schema from "../src/convex/schema";
 import {
@@ -11,6 +11,7 @@ import {
   endOfDay,
 } from "../src/lib/audit";
 import { richDocBlocks, richDocToPlainText } from "../src/lib/richDoc";
+import { DEFAULT_TRASH_RETENTION_DAYS } from "../src/lib/trash";
 import { noteRestoreUndoIndex, noteVersionChanges } from "../src/lib/workshop";
 
 /** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
@@ -116,6 +117,39 @@ describe("reporte público de incidencias", () => {
     expect(notifications[0].read).toBe(false);
   });
 
+  test("la referencia nueva no repite una del histórico más antiguo", async () => {
+    const { t } = await setup();
+    // Un histórico largo: cuanto más alta la referencia, más vieja la fecha, así
+    // que la más alta queda fuera de las últimas 100 por fecha de creación. El
+    // aviso nuevo tiene que contar desde ahí y no reutilizar un número ya dado:
+    // con la referencia repetida, quien la recibió no sabría qué caso sigue.
+    const DAY = 24 * 60 * 60 * 1000;
+    for (let n = 1; n <= 120; n += 1) {
+      const at = Date.now() - n * DAY;
+      await t.run((ctx) =>
+        ctx.db.insert("incidents", {
+          reference: `INC-${String(n).padStart(4, "0")}`,
+          reporterName: "Muestra del histórico",
+          description: "Incidencia de la muestra.",
+          reportedAt: at,
+          status: "reported",
+          history: [{ status: "reported", at, by: "Muestra del histórico" }],
+          createdAt: at,
+          updatedAt: at,
+        }),
+      );
+    }
+
+    expect(await t.mutation(api.incidents.report, reportArgs)).toBe("INC-0121");
+
+    // Y ninguna referencia queda repetida.
+    const incidents = await t.run((ctx) =>
+      ctx.db.query("incidents").collect(),
+    );
+    const references = incidents.map((item) => item.reference);
+    expect(new Set(references).size).toBe(references.length);
+  });
+
   test("valida los campos mínimos y la fecha", async () => {
     const { t } = await setup();
     await expectConvexError(
@@ -152,11 +186,192 @@ describe("reporte público de incidencias", () => {
     );
   });
 
-  test("el historial de la cola requiere sesión", async () => {
+  test("el freno de 30 segundos corta a quien repite, no a otra persona", async () => {
     const { t } = await setup();
+
+    expect(await t.mutation(api.incidents.report, reportArgs)).toBe("INC-0001");
+    // El mismo nombre —aunque cambie de mayúsculas— no vuelve a colar dentro de
+    // la ventana: el formulario público es una puerta abierta y sin el freno una
+    // misma persona podría inundar la cola.
     await expectConvexError(
-      t.query(api.incidents.list, {}),
-      "Debes iniciar sesión para gestionar incidencias.",
+      t.mutation(api.incidents.report, {
+        ...reportArgs,
+        reporterName: "laura peña",
+      }),
+      "espera 30 segundos",
+    );
+    // Otra persona sí notifica en el mismo momento: el freno es de quien
+    // escribe, no de la cola entera.
+    expect(
+      await t.mutation(api.incidents.report, {
+        ...reportArgs,
+        reporterName: "Marta Ruiz",
+      }),
+    ).toBe("INC-0002");
+  });
+
+  test("sin sesión la cola llega vacía, no con un error", async () => {
+    // El panel pide esta lista al montar: sin sesión o como invitado degrada a
+    // vacío en vez de tumbar la pantalla (las acciones sí exigen cuenta).
+    const { t } = await setup();
+    expect(await t.query(api.incidents.list, {})).toEqual([]);
+  });
+});
+
+describe("consulta de una incidencia por su referencia", () => {
+  /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
+  async function reported() {
+    const contexto = await setup();
+    const reference = await contexto.t.mutation(
+      api.incidents.report,
+      reportArgs,
+    );
+    const [incident] = await contexto.coordinator.query(api.incidents.list, {});
+    return { ...contexto, reference, incident, incidentId: incident._id };
+  }
+
+  test("se encuentra tecleando la referencia como sea: copiada, en minúsculas o el número suelto", async () => {
+    const { coordinator } = await reported();
+
+    // Las formas que alguien escribe de verdad: la que le dieron, sin el prefijo
+    // o con el prefijo en minúsculas.
+    for (const typed of ["INC-0001", "inc-1", "1", " incidencia 1 "]) {
+      const tracking = await coordinator.query(api.incidents.byReference, {
+        reference: typed,
+      });
+      expect(tracking?.reference, `«${typed}»`).toBe("INC-0001");
+      expect(tracking?.status, `«${typed}»`).toBe("reported");
+      // La descripción viaja tal cual (el editor la guarda como documento),
+      // pero se lee igual: es lo que contó quien notificó la avería.
+      expect(richDocToPlainText(tracking?.description), `«${typed}»`).toBe(
+        reportArgs.description,
+      );
+    }
+  });
+
+  test("devuelve el seguimiento, no el expediente del taller", async () => {
+    const { coordinator, reference, incidentId, techId } = await reported();
+
+    // El cuaderno se llena: quién la lleva, una nota interna y un documento del
+    // expediente. Nada de eso es cosa de quien notificó la avería.
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId,
+      assigneeId: techId,
+    });
+    await coordinator.mutation(api.incidents.addNote, {
+      incidentId,
+      note: "Se habló con el proveedor; el módulo no llega hasta el jueves.",
+    });
+    await coordinator.mutation(api.incidents.attachDocument, {
+      incidentId,
+      name: "Presupuesto.pdf",
+    });
+
+    const tracking = await coordinator.query(api.incidents.byReference, {
+      reference,
+    });
+    expect(tracking).not.toBeNull();
+
+    // Lo que sale es una lista de campos explícita, no «todo menos esto»: una
+    // columna nueva del esquema no se cuela sola en el seguimiento.
+    expect(Object.keys(tracking!).sort()).toEqual([
+      "assigneeName",
+      "closedAt",
+      "description",
+      "equipmentKind",
+      "history",
+      "location",
+      "model",
+      "reference",
+      "reportedAt",
+      "serialNumber",
+      "status",
+      "workshopAssigneeName",
+    ]);
+    expect(tracking).not.toHaveProperty("notes");
+    expect(tracking).not.toHaveProperty("lifecycleNotes");
+    expect(tracking).not.toHaveProperty("documents");
+    // Quién notificó la avería tampoco: el caso se sigue por la referencia.
+    expect(tracking).not.toHaveProperty("reporterName");
+    expect(tracking!.assigneeName).toBe("Iván Torres");
+  });
+
+  test("el paso a paso llega con su fecha, pero sin quién lo dio ni lo que se anotó", async () => {
+    const { coordinator, reference, incidentId, techId } = await reported();
+    const before = Date.now();
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId,
+      assigneeId: techId,
+    });
+
+    const tracking = await coordinator.query(api.incidents.byReference, {
+      reference,
+    });
+    expect(tracking!.history.map((entry) => entry.status)).toEqual([
+      "reported",
+      "assigned",
+    ]);
+    for (const entry of tracking!.history) {
+      expect(Object.keys(entry).sort()).toEqual(["at", "status"]);
+    }
+    // La fecha de la notificación es la que se le dio al avisar, y la del paso
+    // nuevo la de ahora: el seguimiento se lee en orden.
+    expect(tracking!.history[0].at).toBe(reportArgs.reportedAt);
+    expect(tracking!.history[1].at).toBeGreaterThanOrEqual(before);
+  });
+
+  test("una referencia que no existe, o que no lleva número, no devuelve nada", async () => {
+    const { coordinator } = await reported();
+
+    // No hay ninguna con ese número…
+    expect(
+      await coordinator.query(api.incidents.byReference, {
+        reference: "INC-9999",
+      }),
+    ).toBeNull();
+    // …y sin ningún número no hay nada que buscar: se dice, no se busca a ciegas.
+    for (const typed of ["", "   ", "la de la cámara"]) {
+      expect(
+        await coordinator.query(api.incidents.byReference, {
+          reference: typed,
+        }),
+        `«${typed}»`,
+      ).toBeNull();
+    }
+  });
+
+  test("una referencia repetida en datos viejos contesta en vez de reventar", async () => {
+    const { t, coordinator } = await setup();
+    // Lo que dejó una generación anterior y una muestra cargada encima: dos
+    // incidencias con el mismo número. La consulta tiene que resolverse con una
+    // —la más antigua—, no tumbar la pantalla de quien tecleó su referencia.
+    for (const reporterName of ["Laura Peña", "Marcos Vega"]) {
+      await t.run((ctx) =>
+        ctx.db.insert("incidents", {
+          reference: "INC-0007",
+          reporterName,
+          description: "Duplicada a propósito.",
+          reportedAt: Date.now(),
+          status: "reported",
+          history: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }),
+      );
+    }
+
+    const tracking = await coordinator.query(api.incidents.byReference, {
+      reference: "7",
+    });
+    expect(tracking?.reference).toBe("INC-0007");
+    expect(tracking?.status).toBe("reported");
+  });
+
+  test("sin sesión no se consulta, ni con una referencia buena", async () => {
+    const { t, reference } = await reported();
+    await expectConvexError(
+      t.query(api.incidents.byReference, { reference }),
+      "Debes iniciar sesión para consultar una incidencia por su referencia.",
     );
   });
 });
@@ -377,6 +592,125 @@ describe("verificación, taller y cierre", () => {
     expect(updated.status).toBe("unresolved");
     expect(updated.maintenanceId).toBeUndefined();
     expect(updated.notes).toContain("No se pudo reproducir");
+  });
+});
+
+describe("corrección de los datos del equipo", () => {
+  test("el técnico asignado añade el nº de serie que la notificación no traía", async () => {
+    const { t, coordinator, tech } = await setup();
+    await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      serialNumber: undefined,
+    });
+    const incident = await firstIncident(coordinator);
+    expect(incident.serialNumber).toBeUndefined();
+
+    // Todavía no es suya: quien no lleva la incidencia no toca el dato
+    await expectConvexError(
+      tech.mutation(api.incidents.updateEquipment, {
+        incidentId: incident._id,
+        serialNumber: "HDC3500-2505-0147",
+      }),
+      "Solo el técnico asignado o quien coordina la incidencia",
+    );
+
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+    // Solo el nº de serie: el modelo que traía la notificación se queda como está
+    await tech.mutation(api.incidents.updateEquipment, {
+      incidentId: incident._id,
+      serialNumber: "HDC3500-2505-0147",
+    });
+
+    const updated = await firstIncident(coordinator);
+    expect(updated.serialNumber).toBe("HDC3500-2505-0147");
+    expect(updated.model).toBe("HDC-3500");
+
+    // El cambio queda en la ficha con lo que se cambió y quién lo cambió...
+    const last = updated.history[updated.history.length - 1];
+    expect(last.by).toBe("Iván Torres");
+    expect(last.note).toContain("nº de serie HDC3500-2505-0147");
+    // ...y sin mover el estado: corregir el dato no es un paso del flujo
+    expect(last.status).toBe("assigned");
+    expect(updated.status).toBe("assigned");
+  });
+
+  test("el coordinador corrige el modelo y quita el nº de serie equivocado", async () => {
+    const { t, coordinator } = await setup();
+    await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      model: "HDC 350",
+      serialNumber: "S/N 123",
+    });
+    const incident = await firstIncident(coordinator);
+
+    // El nº de serie vacío es «quítalo»: el que había era erróneo
+    await coordinator.mutation(api.incidents.updateEquipment, {
+      incidentId: incident._id,
+      model: "HDC-3500",
+      serialNumber: "",
+    });
+
+    const updated = await firstIncident(coordinator);
+    expect(updated.model).toBe("HDC-3500");
+    expect(updated.serialNumber).toBeUndefined();
+    const last = updated.history[updated.history.length - 1];
+    expect(last.note).toContain("modelo HDC-3500");
+    expect(last.note).toContain("sin nº de serie");
+  });
+
+  test("sin nada que cambiar se rechaza en vez de anotar un paso vacío", async () => {
+    const { t, coordinator } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    await expectConvexError(
+      coordinator.mutation(api.incidents.updateEquipment, {
+        incidentId: incident._id,
+        model: reportArgs.model,
+        serialNumber: reportArgs.serialNumber,
+      }),
+      "Esos son los datos que ya tiene la incidencia",
+    );
+    // Y el modelo no se queda en blanco: es lo que identifica la máquina
+    await expectConvexError(
+      coordinator.mutation(api.incidents.updateEquipment, {
+        incidentId: incident._id,
+        model: "  ",
+      }),
+      "Escribe el modelo del equipo",
+    );
+
+    const unchanged = await firstIncident(coordinator);
+    expect(unchanged.history).toHaveLength(1);
+    expect(unchanged.model).toBe(reportArgs.model);
+  });
+
+  test("los datos corregidos son los que se llevan a la ficha del equipo", async () => {
+    const { t, coordinator, tech, equipmentId } = await setup();
+    await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      serialNumber: "S/N 123",
+    });
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+    await tech.mutation(api.incidents.updateEquipment, {
+      incidentId: incident._id,
+      serialNumber: "HDC3500-2505-0147",
+    });
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "onsite",
+      equipmentId,
+      notes: "Conector de alimentación cambiado.",
+    });
+
+    // La intervención del historial de la máquina se compone con estos campos
+    const sheets = await t.run((ctx) =>
+      ctx.db.query("maintenanceRecords").collect(),
+    );
+    expect(sheets).toHaveLength(1);
+    expect(sheets[0].description).toContain("S/N HDC3500-2505-0147");
+    expect(sheets[0].description).not.toContain("S/N 123");
   });
 });
 
@@ -1963,6 +2297,9 @@ describe("auditoría de documentos de todas las incidencias", () => {
     await t.mutation(api.incidents.report, reportArgs);
     await t.mutation(api.incidents.report, {
       ...reportArgs,
+      // Otra persona: el aviso anti-inundación corta dos avisos seguidos del
+      // mismo notificador, y aquí hacen falta dos incidencias.
+      reporterName: "Nacho Gil",
       description: "El monitor de plató parpadea durante la emisión.",
     });
     const incidentes = await porReferencia(coordinator);
@@ -2740,12 +3077,16 @@ describe("rastro de documentos de un lote de incidencias", () => {
   test("devuelve los movimientos del lote pedido, y solo de esas incidencias", async () => {
     const { t, coordinator } = await setup();
     await t.mutation(api.incidents.report, reportArgs);
+    // Cada aviso, de una persona distinta: el anti-inundación de `report` corta
+    // dos notificaciones seguidas del mismo notificador.
     await t.mutation(api.incidents.report, {
       ...reportArgs,
+      reporterName: "Nacho Gil",
       description: "El monitor de plató parpadea durante la emisión.",
     });
     await t.mutation(api.incidents.report, {
       ...reportArgs,
+      reporterName: "Sara Muro",
       description: "El foco no mantiene la intensidad al 100 %.",
     });
     const incidencias = await porReferencia(coordinator);
@@ -2815,5 +3156,175 @@ describe("rastro de documentos de un lote de incidencias", () => {
         incidentIds: [incident._id],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("papelera de incidencias", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
+  async function reported() {
+    const contexto = await setup();
+    const reference = await contexto.t.mutation(
+      api.incidents.report,
+      reportArgs,
+    );
+    const [incident] = await contexto.coordinator.query(api.incidents.list, {});
+    return { ...contexto, reference, incident, incidentId: incident._id };
+  }
+
+  test("retirar la saca de la cola y del seguimiento, y la deja en la papelera con su plazo", async () => {
+    const { coordinator, reference, incidentId } = await reported();
+
+    await coordinator.mutation(api.incidents.withdraw, {
+      incidentId,
+      reason: "Duplicada de la INC-0001",
+    });
+
+    // Fuera de las dos caras de la cola y del seguimiento por su referencia:
+    // una retirada no se sigue, y si se recupera vuelve a contestar.
+    expect(
+      await coordinator.query(api.incidents.list, { includeArchived: true }),
+    ).toEqual([]);
+    expect(
+      await coordinator.query(api.incidents.byReference, { reference }),
+    ).toBeNull();
+
+    const papelera = await coordinator.query(api.incidents.trash, {});
+    expect(papelera.items).toHaveLength(1);
+    expect(papelera.items[0].reference).toBe(reference);
+    expect(papelera.items[0].deletedBy).toBe("Elena Vidal");
+    expect(papelera.items[0].deletedReason).toBe("Duplicada de la INC-0001");
+    expect(papelera.items[0].archived).toBe(false);
+    expect(papelera.retentionDays).toBe(DEFAULT_TRASH_RETENTION_DAYS);
+    // El plazo se apunta al retirarla: se cuenta desde ahora, no desde el plazo
+    // que tenga el taller el día que caduque.
+    expect(papelera.items[0].purgeAt - papelera.items[0].deletedAt).toBe(
+      DEFAULT_TRASH_RETENTION_DAYS * DAY,
+    );
+  });
+
+  test("recuperarla la devuelve tal y como estaba, con su traza", async () => {
+    const { t, coordinator, reference, incidentId } = await reported();
+    await coordinator.mutation(api.incidents.withdraw, { incidentId });
+
+    await coordinator.mutation(api.incidents.restore, { incidentId });
+
+    const cola = await coordinator.query(api.incidents.list, {});
+    expect(cola.map((item) => item.reference)).toEqual([reference]);
+    expect(
+      await coordinator.query(api.incidents.byReference, { reference }),
+    ).not.toBeNull();
+    expect((await coordinator.query(api.incidents.trash, {})).items).toEqual(
+      [],
+    );
+
+    const stored = await t.run((ctx) => ctx.db.get(incidentId));
+    expect(stored?.deletedAt).toBeUndefined();
+    expect(stored?.purgeAt).toBeUndefined();
+    expect(stored?.deletedReason).toBeUndefined();
+    // Los dos pasos quedan escritos en la ficha, detrás del aviso original.
+    expect(stored?.history.at(-2)?.note).toBe("Retirada a la papelera");
+    expect(stored?.history.at(-1)?.note).toBe("Recuperada de la papelera");
+  });
+
+  test("retirar es cosa de coordinación, y borrar exige haber retirado antes", async () => {
+    const { t, coordinator, tech, incidentId } = await reported();
+
+    await expectConvexError(
+      tech.mutation(api.incidents.withdraw, { incidentId }),
+      "Solo el coordinador puede retirar una incidencia",
+    );
+    await expectConvexError(
+      tech.query(api.incidents.trash, {}),
+      "No tienes permisos para ver la papelera de incidencias",
+    );
+    // Borrar de un tirón lo que nunca pasó por la papelera no se puede: sería
+    // irreversible sin margen para arrepentirse.
+    await expectConvexError(
+      coordinator.mutation(api.incidents.deleteNow, { incidentId }),
+      "Retira la incidencia antes de borrarla",
+    );
+    expect(await t.run((ctx) => ctx.db.get(incidentId))).not.toBeNull();
+  });
+
+  test("borrar ya se lleva la incidencia, su expediente y sus avisos", async () => {
+    const { t, coordinator, incidentId } = await reported();
+    await coordinator.mutation(api.incidents.attachDocument, {
+      incidentId,
+      name: "Parte interno.pdf",
+    });
+    await coordinator.mutation(api.incidents.withdraw, { incidentId });
+
+    await coordinator.mutation(api.incidents.deleteNow, { incidentId });
+
+    expect(await t.run((ctx) => ctx.db.get(incidentId))).toBeNull();
+    expect(
+      await t.run((ctx) => ctx.db.query("incidentDocuments").collect()),
+    ).toEqual([]);
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    expect(notifications).toEqual([]);
+    // Lo que sí se queda es el rastro de auditoría de los documentos: no se
+    // borra nunca (es la única constancia de un adjunto retirado), y la
+    // auditoría del taller resuelve la incidencia que ya no está sin romperse.
+    const audit = await t.run((ctx) =>
+      ctx.db.query("incidentDocumentLog").collect(),
+    );
+    expect(audit).toHaveLength(1);
+    expect(audit[0].name).toBe("Parte interno.pdf");
+  });
+
+  test("la pasada de la papelera borra lo caducado y respeta lo que está en plazo", async () => {
+    const { t, coordinator, incidentId } = await reported();
+    await coordinator.mutation(api.incidents.withdraw, { incidentId });
+
+    // Dentro de plazo: la pasada no la toca.
+    expect(await t.mutation(internal.incidents.purgeExpired, {})).toBe(0);
+    expect(await t.run((ctx) => ctx.db.get(incidentId))).not.toBeNull();
+
+    // Cumplido el plazo: se va de verdad.
+    await t.run((ctx) =>
+      ctx.db.patch(incidentId, { purgeAt: Date.now() - 1000 }),
+    );
+    expect(await t.mutation(internal.incidents.purgeExpired, {})).toBe(1);
+    expect(await t.run((ctx) => ctx.db.get(incidentId))).toBeNull();
+  });
+
+  test("el plazo que se le apunta es el que tiene ajustado el taller", async () => {
+    const { t, coordinator, incidentId } = await reported();
+    // El plazo de la papelera es el mismo que el del almacén: 30 días.
+    await t.run((ctx) =>
+      ctx.db.insert("storageSettings", {
+        key: "default",
+        trashRetentionDays: 30,
+        updatedAt: Date.now(),
+        updatedBy: "Ada Admin",
+      }),
+    );
+
+    await coordinator.mutation(api.incidents.withdraw, { incidentId });
+
+    const papelera = await coordinator.query(api.incidents.trash, {});
+    expect(papelera.retentionDays).toBe(30);
+    expect(
+      (papelera.items[0].purgeAt - papelera.items[0].deletedAt) / DAY,
+    ).toBe(30);
+  });
+
+  test("una retirada no aparece en la cola de nadie más", async () => {
+    const { t, coordinator, tech, incidentId } = await reported();
+    await coordinator.mutation(api.incidents.withdraw, {
+      incidentId,
+      reason: "Aviso equivocado",
+    });
+
+    // El técnico tampoco la ve: la retirada vale para todo el taller, y el
+    // motivo queda apuntado para saber por qué está en la papelera.
+    expect(await tech.query(api.incidents.list, {})).toEqual([]);
+    expect(
+      (await t.run((ctx) => ctx.db.get(incidentId)))?.deletedReason,
+    ).toBe("Aviso equivocado");
   });
 });

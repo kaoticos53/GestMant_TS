@@ -8,6 +8,15 @@ export type SystemRole = "admin" | "manager" | "technician" | "guest";
 export const SYSTEM_ROLES: SystemRole[] = ["admin", "manager", "technician", "guest"];
 
 /**
+ * Los roles del sistema que se reparten entre las personas del taller, en el
+ * orden en que se muestran: los que se asignan a una cuenta y a los que se
+ * puede apuntar un aviso o un resumen. «Invitado» queda fuera a propósito: no
+ * es un rol que se le dé a nadie —es la sesión anónima de consulta— y por eso no
+ * sale en la matriz de permisos, en el alta de usuarios ni en los avisos.
+ */
+export const STAFF_ROLES: SystemRole[] = ["admin", "manager", "technician"];
+
+/**
  * Roles que coordinan el taller: los que deciden sobre el día a día de todos.
  * Es el reparto de partida de los avisos que no se dirigen a una sola persona.
  */

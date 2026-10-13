@@ -337,7 +337,11 @@ docker compose up -d --build
 
 El contenedor `funciones` sube el esquema y las funciones y **se para con
 `exited (0)`** —ha hecho su recado—. Su última línea, en `docker compose logs
-funciones`, es «listo: el esquema y las funciones están al día». A partir de ahí
+funciones`, es «listo: el esquema y las funciones están al día». Antes de irse
+deja hecha la **cuenta de administrador** de una instalación nueva —el taller
+arranca con la base **vacía**, sin datos de ejemplo—, con las credenciales de la
+guía o con las que pongas en `ADMIN_EMAIL` / `ADMIN_PASSWORD`; con
+`PULSO_INSTALL=no` en el `.env` no se toca ninguna cuenta. A partir de ahí
 los cambios llegan solos: el contenedor `vigilante`, que sí se queda, mira
 `./codigo/src/convex` (lo que hay en el servidor) y vuelve a subir el esquema y
 las funciones **solo cuando cambian**, sin reiniciar ni reconstruir nada. Tampoco
@@ -352,7 +356,9 @@ mismos: la clave, las variables de auth o el WebSocket).
 1. `https://taller.tudominio.com` carga la presentación.
 2. `https://taller.tudominio.com/auth` → pestaña **Contraseña** → botón **«Usar
    credenciales»** → en el taller entra con `admin@taller.es` / `admin12345`
-   (la cuenta de administrador se crea sola la primera vez que se entra).
+   (la cuenta de administrador **ya está creada**: la dejó el contenedor
+   `funciones` en la primera puesta en marcha). Si en el `.env` pusiste
+   `ADMIN_EMAIL` y `ADMIN_PASSWORD`, entra con esas.
 3. Dentro, el panel del taller carga con sus módulos, y en la consola del
    navegador la petición `api/sync` acaba en **101 Switching Protocols** (es la
    conexión en vivo por el WebSocket). Si se queda «pendiente», es el

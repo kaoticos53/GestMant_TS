@@ -1,8 +1,13 @@
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { richDocToPlainText } from "@/lib/richDoc";
 import { cn } from "@/lib/utils";
-import { STATUS_META, equipmentLabel } from "@/lib/workshop";
-import { Boxes, ClipboardList, Cpu, Search } from "lucide-react";
+import {
+  INCIDENT_STATUS_META,
+  STATUS_META,
+  equipmentLabel,
+  normalizeIncidentReference,
+} from "@/lib/workshop";
+import { Boxes, ClipboardList, Cpu, Search, Siren } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 // Tipos tolerantes (campos opcionales/nulos según lleguen de Convex en caliente)
@@ -29,6 +34,18 @@ type SearchPart = {
   stock: number;
 };
 
+type SearchIncident = {
+  _id: Id<"incidents">;
+  reference: string;
+  status: Doc<"incidents">["status"];
+  equipmentKind?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  location?: string | null;
+  reporterName: string;
+  description: string;
+};
+
 type SearchEquipment = {
   _id: Id<"equipment">;
   code?: string | null;
@@ -42,6 +59,7 @@ type SearchEquipment = {
 
 /** Resultado de la búsqueda global: el módulo al que navega y qué abrir. */
 export type SearchHit =
+  | { kind: "incident"; id: Id<"incidents">; title: string; subtitle: string }
   | { kind: "request"; id: Id<"partRequests">; title: string; subtitle: string }
   | {
       kind: "part";
@@ -80,11 +98,16 @@ function includesQuery(haystack: string, query: string): boolean {
 }
 
 /**
- * Buscador global del taller: peticiones (siempre) y, para quien gestiona el
- * catálogo, repuestos y equipos. Al elegir un resultado, `onSelect` lleva al
- * módulo correspondiente con el elemento abierto o pre-filtrado.
+ * Buscador global del taller: incidencias y peticiones (siempre) y, para quien
+ * gestiona el catálogo, repuestos y equipos. Al elegir un resultado, `onSelect`
+ * lleva al módulo correspondiente con el elemento abierto o pre-filtrado.
+ *
+ * Las incidencias se encuentran también por su referencia —«INC-0004», «inc-4»
+ * o «4»—, que es el número que se le da a quien notifica la avería; además de
+ * por su texto, como el resto.
  */
 export function GlobalSearch({
+  incidents = [],
   requests = [],
   parts = [],
   equipment = [],
@@ -92,6 +115,7 @@ export function GlobalSearch({
   onSelect,
   className,
 }: {
+  incidents?: SearchIncident[];
   requests?: SearchRequest[];
   parts?: SearchPart[];
   equipment?: SearchEquipment[];
@@ -149,7 +173,45 @@ export function GlobalSearch({
         }`,
       }));
 
+    // Las incidencias se buscan también por su referencia —el número que se le
+    // da a quien la notifica—, y no solo por texto: «inc-4», «INC-4» y «4»
+    // encuentran la misma ficha, igual que en la consulta de invitado.
+    const reference = normalizeIncidentReference(q);
+    const incidentHits: SearchHit[] = incidents
+      .filter(
+        (incident) =>
+          incident.reference === reference ||
+          [
+            incident.reference,
+            incident.equipmentKind ?? "",
+            incident.model ?? "",
+            incident.serialNumber ?? "",
+            incident.location ?? "",
+            incident.reporterName,
+            richDocToPlainText(incident.description),
+          ].some((value) => includesQuery(value, q)),
+      )
+      .slice(0, MAX_PER_GROUP)
+      .map((incident) => ({
+        kind: "incident",
+        id: incident._id,
+        title: incident.reference,
+        subtitle: [
+          INCIDENT_STATUS_META[incident.status]?.label,
+          [incident.equipmentKind, incident.model].filter(Boolean).join(" "),
+          incident.location,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      }));
+
     const result: SearchGroup[] = [
+      {
+        kind: "incident",
+        label: "Incidencias",
+        icon: Siren,
+        hits: incidentHits,
+      },
       {
         kind: "request",
         label: "Peticiones",
@@ -212,7 +274,7 @@ export function GlobalSearch({
     }
 
     return result.filter((group) => group.hits.length > 0);
-  }, [query, requests, parts, equipment, canSearchCatalog]);
+  }, [query, incidents, requests, parts, equipment, canSearchCatalog]);
 
   const flatHits = useMemo(
     () => groups.flatMap((group) => group.hits),
@@ -265,7 +327,7 @@ export function GlobalSearch({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        placeholder="Buscar peticiones, repuestos..."
+        placeholder="Buscar por referencia o texto..."
         aria-label="Búsqueda global"
         className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-signal/50 focus:ring-2 focus:ring-signal/20"
       />

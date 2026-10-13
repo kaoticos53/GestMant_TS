@@ -3,6 +3,7 @@ import { COORDINATION_ROLES } from "../src/lib/roles";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   DEFAULT_WORK_WITHOUT_TRACE_ROLES,
+  INCIDENT_REFERENCE_PREFIX,
   MAX_WORK_WITHOUT_TRACE_DAYS,
   MIN_WORK_WITHOUT_TRACE_DAYS,
   NOTE_EDIT_WINDOW_MS,
@@ -14,11 +15,13 @@ import {
   inProgressSince,
   isNoteWithinEditWindow,
   liveNotes,
+  matchesIncidentQuery,
   noteEditDeadline,
   noteRestoration,
   noteRestoreUndoIndex,
   noteVersionChanges,
   noteVersions,
+  normalizeIncidentReference,
   retiredNotes,
   requestMatchesEquipment,
   stockState,
@@ -486,6 +489,74 @@ describe("notas vivas y retiradas del cuaderno", () => {
   test("sin notas no hay nada que separar", () => {
     expect(liveNotes(undefined)).toEqual([]);
     expect(retiredNotes([])).toEqual([]);
+  });
+});
+
+describe("normalizeIncidentReference — el número con el que se sigue una incidencia", () => {
+  test("la referencia que se le da a quien notifica se escribe con prefijo y ceros", () => {
+    expect(normalizeIncidentReference("INC-0004")).toBe("INC-0004");
+    expect(INCIDENT_REFERENCE_PREFIX).toBe("INC");
+  });
+
+  test("se acepta escrita como sea: en minúsculas, sin el prefijo o el número suelto", () => {
+    for (const typed of ["inc-4", "INC-4", "4", " la 4 ", "Incidencia nº 4"]) {
+      expect(normalizeIncidentReference(typed), `«${typed}»`).toBe("INC-0004");
+    }
+  });
+
+  test("más de cuatro cifras se respetan tal cual", () => {
+    expect(normalizeIncidentReference("INC-12345")).toBe("INC-12345");
+  });
+
+  test("sin ningún número no hay referencia que buscar", () => {
+    for (const typed of ["", "   ", "la de la cámara", null, undefined]) {
+      expect(
+        normalizeIncidentReference(typed as string),
+        `«${String(typed)}»`,
+      ).toBeNull();
+    }
+  });
+
+  test("el primer número es el que cuenta", () => {
+    // Un correo con la referencia dentro: se queda con el número de delante, que
+    // es el que se copia y se pega.
+    expect(normalizeIncidentReference("INC-0004 (2026)")).toBe("INC-0004");
+  });
+});
+
+describe("matchesIncidentQuery — encontrar la incidencia en la lista", () => {
+  const campos = [
+    "INC-0004",
+    "Cámara de estudio",
+    "HDC-3500",
+    "Plató 1",
+    "Alba Moreno",
+  ];
+
+  test("la referencia se encuentra escrita como se escriba", () => {
+    for (const typed of ["INC-0004", "inc-4", "4", " la 0004 ", "Incidencia 4"]) {
+      expect(
+        matchesIncidentQuery(campos, "INC-0004", typed),
+        `«${typed}»`,
+      ).toBe(true);
+    }
+  });
+
+  test("el número de otra incidencia no la saca", () => {
+    expect(matchesIncidentQuery(campos, "INC-0004", "INC-0005")).toBe(false);
+    expect(matchesIncidentQuery(campos, "INC-0004", "tripié")).toBe(false);
+  });
+
+  test("la referencia sola basta, aunque no venga en los campos", () => {
+    // La comparación por número va aparte del texto: así «4» encuentra la
+    // incidencia aunque lo que se busque no sea cómo se enseña la referencia.
+    expect(matchesIncidentQuery([], "INC-0004", "4")).toBe(true);
+    expect(matchesIncidentQuery([], "INC-0004", "otra cosa")).toBe(false);
+  });
+
+  test("los datos siguen buscándose como en el resto de listas", () => {
+    expect(matchesIncidentQuery(campos, "INC-0004", "cámara 3500")).toBe(true);
+    expect(matchesIncidentQuery(campos, "INC-0004", "tripié")).toBe(false);
   });
 });
 

@@ -42,7 +42,16 @@ describe("members.ensureRole — rol inicial", () => {
   });
 
   test("el resto de usuarios entra como técnico y es idempotente", async () => {
-    const { authed } = await setup(undefined, "tecnico@taller.es");
+    const { t, authed } = await setup(undefined, "tecnico@taller.es");
+    // El taller ya tiene administrador: el primero que entra lo es, así que sin
+    // uno previo este usuario también saldría administrador.
+    await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Ada Admin",
+        email: "admin@taller.es",
+        role: "admin",
+      }),
+    );
     expect(await authed.mutation(api.members.ensureRole, {})).toBe("technician");
     expect(await authed.mutation(api.members.ensureRole, {})).toBe("technician");
   });

@@ -107,12 +107,11 @@ describe("alerts.roleOptions — a qué roles se puede apuntar el aviso", () => 
     });
 
     const options = await manager.query(api.alerts.roleOptions, {});
-    expect(options.map((option) => option.key)).toEqual([
-      "admin",
-      "manager",
-      "technician",
-      key,
-    ]);
+    const keys = options.map((option) => option.key);
+    expect(keys).toEqual(["admin", "manager", "technician", key]);
+    // «Invitado» no está: es la sesión anónima de consulta, no un rol al que
+    // apuntar un aviso —ni uno que se le dé a una persona—.
+    expect(keys).not.toContain("guest");
     const custom = options.find((option) => option.key === key);
     expect(custom?.label).toBe("Auxiliar de almacén");
     expect(custom?.description).toBe("Gestiona estanterías y avisos de stock");

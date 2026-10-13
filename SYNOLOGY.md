@@ -362,6 +362,13 @@ Lo que hace, en orden, y por qué:
 - **Sube el esquema y las funciones** (`convex dev --once`, el mismo
   `npm run convex:push` con el que se trabaja en local) y reintenta un par de veces
   si el primer intento tropieza con un arranque recién hecho.
+- **Deja hecha la cuenta de administrador** cuando la base todavía no tiene
+  ninguna cuenta (una instalación nueva): la crea por el mismo camino que usa la
+  app en el primer «Entrar», con las credenciales de la guía o con las que pongas
+  en `ADMIN_EMAIL` y `ADMIN_PASSWORD`. El taller arranca con la base **vacía**
+  —sin datos de ejemplo, que se dan de alta a mano—, así que esa cuenta es lo
+  único que hay dentro. Con `PULSO_INSTALL=no` en el `.env` no se toca ninguna
+  cuenta.
 
 Nada de esto toca los datos: se puede repetir tantas veces como haga falta.
 
@@ -434,7 +441,9 @@ o en el certificado, no en la app.
 1. `https://taller.tudominio.com` carga la presentación.
 2. `https://taller.tudominio.com/auth` → pestaña **Contraseña** → botón **«Usar
    credenciales»** → en el taller entra con `admin@taller.es` / `admin12345`
-   (la cuenta de administrador **se crea sola** la primera vez que se entra).
+   (la cuenta de administrador **ya está creada**: la dejó el contenedor
+   `funciones` en la primera puesta en marcha). Si en el `.env` pusiste
+   `ADMIN_EMAIL` y `ADMIN_PASSWORD`, entra con esas.
 3. Dentro, el panel del taller carga con sus módulos. Si tienes la consola del
    navegador abierta verás una petición `api/sync` en **101 Switching Protocols**:
    eso es la conexión en vivo. Si se queda «pendiente», revisa el WebSocket de la

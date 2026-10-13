@@ -54,3 +54,12 @@ esperar_backend ||
 preparar_deployment
 
 subir || exit 1
+
+# 6. **Deja hecha la cuenta de administrador** de una instalación nueva. El
+#    taller que despliega en producción no quiere la muestra de ejemplo —sus
+#    datos son los suyos y los da de alta a mano—, pero sí conviene que la
+#    cuenta de administrador esté creada desde el principio: así no hay que
+#    entrar a crearla y el primero que se registre no acaba siendo el
+#    administrador por ser el primero. Solo actúa con la base **sin ninguna
+#    cuenta**; en un taller que ya está en marcha no toca nada.
+crear_cuenta_de_administrador

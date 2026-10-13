@@ -151,6 +151,11 @@ services:
     # levantarlo a mano (`sudo docker compose up funciones`) en lugar de que el
     # NAS lo reintente en bucle sin decir nada.
     #
+    # Antes de irse deja hecha la **cuenta de administrador** de una instalación
+    # nueva: la base arranca vacía —sin datos de ejemplo— y esa cuenta es lo
+    # único que hay dentro. Solo actúa si no hay ninguna cuenta; el detalle está
+    # en `funciones-lib.sh`.
+    #
     # El que se queda vigilando es `vigilante`, aquí debajo: los dos salen de la
     # misma imagen y se reparten el trabajo —este el primer envío, ese los demás—.
     build:
@@ -179,6 +184,17 @@ services:
       # email y el resumen semanal).
       VLY_INTEGRATION_KEY: ${VLY_INTEGRATION_KEY:-}
       VLY_INTEGRATION_BASE_URL: ${VLY_INTEGRATION_BASE_URL:-}
+      # El **modo de instalación**. Con una base recién hecha —sin ninguna
+      # cuenta— el taller queda listo de una sola pasada: la base vacía y la
+      # cuenta de administrador ya creada, sin cargar ningún dato de ejemplo. Con
+      # `no` no se toca ninguna cuenta: el primero que se registre pasa a ser
+      # administrador, como antes.
+      PULSO_INSTALL: ${PULSO_INSTALL:-empty}
+      # Las credenciales de esa cuenta. Si van vacías se usan las de la guía
+      # (admin@taller.es / admin12345); cámbialas antes de la primera puesta en
+      # marcha si el taller va a estar publicado en internet.
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     depends_on:
       # Y en el backend, para no intentarlo antes de que esté escuchando. El NAS
       # arranca los dos al encender: primero el backend, luego este, que sube y

@@ -32,6 +32,7 @@ import {
   readDismissal,
   writeDismissal,
 } from "@/lib/workAlert";
+import { readStartedEmpty, writeStartedEmpty } from "@/lib/emptyWorkshop";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
@@ -59,6 +60,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShieldCheck,
+  Search,
   Siren,
   SlidersHorizontal,
   Sparkles,
@@ -78,6 +80,7 @@ import { WeeklyReportDialog } from "./dashboard/WeeklyReportDialog";
 import { AuditView } from "./dashboard/AuditView";
 import { EquipmentView } from "./dashboard/EquipmentView";
 import { GlobalSearch, type SearchHit } from "./dashboard/GlobalSearch";
+import { IncidentLookup } from "./dashboard/IncidentLookup";
 import { IncidentsView } from "./dashboard/IncidentsView";
 import { InventoryView } from "./dashboard/InventoryView";
 import { ManualsView } from "./dashboard/ManualsView";
@@ -274,6 +277,11 @@ function resetSidebarWidth(): number {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
+  // Una sesión de invitado no es del taller: no tiene ningún permiso, el
+  // backend tampoco le contesta (sus listas degradan a vacío) y no puede guardar
+  // preferencias en el perfil. Se decide aquí arriba porque lo usan el menú
+  // lateral y los permisos.
+  const isGuest = user?.isAnonymous === true;
   const navigate = useNavigate();
   const parts = useQuery(api.spareParts.list);
   // Lo archivado viaja en la misma consulta (una sola suscripción): el día a
@@ -303,6 +311,12 @@ export default function Dashboard() {
   const [tab, setTab] = useState<NavId>("incidents");
   const [isSeeding, setIsSeeding] = useState(false);
   const [isSeedingMore, setIsSeedingMore] = useState(false);
+  // «Empezar con el taller vacío»: la elección de no cargar la muestra cuando
+  // la base está recién instalada. Se recuerda en el navegador para que el
+  // aviso no vuelva a tapar los módulos en cada visita mientras no haya datos.
+  const [startedEmpty, setStartedEmpty] = useState(() =>
+    readStartedEmpty(safeLocalStorage()),
+  );
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
   // Aviso de trabajo sin constancia: lo que esta persona ya cerró (qué
   // incidencias y con qué margen), para no repetírselo tal cual. Cerrarlo es
@@ -331,6 +345,9 @@ export default function Dashboard() {
   useEffect(() => {
     writeDismissal(safeLocalStorage(), alertDismissal);
   }, [alertDismissal]);
+  // El menú lateral: un invitado no tiene perfil donde guardar la preferencia,
+  // así que se le pasa `null` y se queda solo con la copia local, sin la
+  // escritura que le fallaría en cada ajuste.
   const {
     width: sidebarWidth,
     resizing: sidebarResizing,
@@ -338,7 +355,7 @@ export default function Dashboard() {
     toggleCollapsed: toggleSidebar,
     asideRef: sidebarRef,
     resizeHandleProps,
-  } = useSidebarPanel(user);
+  } = useSidebarPanel(isGuest ? null : user);
   const [requestsEquipmentFilter, setRequestsEquipmentFilter] =
     useState<string>("all");
 
@@ -369,14 +386,14 @@ export default function Dashboard() {
   const roleAttempts = useRef(0);
   const role = user?.role ?? DEFAULT_ROLE;
   const adminOk = isAdmin(user?.role);
-  // Permisos configurados por el administrador (defaults mientras cargan).
-  const grants =
-    permissions?.grants ??
-    DEFAULT_GRANTS[isSystemRole(role) ? role : DEFAULT_ROLE];
+  // Permisos configurados por el administrador (defaults mientras cargan). El
+  // invitado va directo a los del rol guest, para no enseñar un menú de técnico
+  // mientras el backend todavía no le ha asignado su rol.
+  const grants = isGuest
+    ? DEFAULT_GRANTS.guest
+    : (permissions?.grants ??
+      DEFAULT_GRANTS[isSystemRole(role) ? role : DEFAULT_ROLE]);
   const can = (capability: Capability) => grants[capability] === true;
-  // Una sesión de invitado no es del taller: los manuales no se le ofrecen
-  // aunque su rol de partida sea el de técnico (el backend tampoco se los da).
-  const isGuest = user?.isAnonymous === true;
   // El resumen semanal es de los mandos del taller: los mismos que coordinan
   // las incidencias o deciden las peticiones (igual que el archivo).
   const canConfigureReport = can("manageIncidents") || can("decideRequests");
@@ -392,6 +409,19 @@ export default function Dashboard() {
   );
   const purchaseOrders = useQuery(api.purchasing.listOrders, purchasingArgs);
   const receptions = useQuery(api.purchasing.listReceptions, purchasingArgs);
+  // La papelera de incidencias: lo retirado esperando su plazo. Se pide solo a
+  // quien puede deshacer (el backend no contesta a nadie más); de aquí salen la
+  // lista que enseña el módulo Archivo y el plazo que tiene ajustado el taller.
+  const incidentTrash = useQuery(
+    api.incidents.trash,
+    can("manageIncidents") ? {} : ("skip" as const),
+  );
+  // La de peticiones, con la misma forma y la misma pantalla: lo retirado de
+  // cada tipo se deshace desde el módulo Archivo, con el plazo de la papelera.
+  const requestTrash = useQuery(
+    api.partRequests.trash,
+    can("decideRequests") ? {} : ("skip" as const),
+  );
   const needsRole =
     user !== undefined && user !== null && user.role === undefined;
 
@@ -560,6 +590,9 @@ export default function Dashboard() {
   );
   const isEmpty =
     !loading && allParts.length === 0 && activeRequests.length === 0;
+  // El aviso de «todavía no hay datos» solo sale si no se ha pedido empezar sin
+  // muestra: en cuanto se elige el taller vacío, mandan los módulos.
+  const showEmptyNotice = isEmpty && !startedEmpty;
 
   // Margen y audiencia del aviso: lo último que dejó configurado quien
   // coordina (mientras cargan los ajustes valen los valores de partida).
@@ -641,6 +674,20 @@ export default function Dashboard() {
     navigate("/");
   };
 
+  /** Cambiar de cuenta desde una sesión de invitado: hay que cerrarla primero,
+   * porque `/auth` devuelve al panel a quien ya tiene sesión. */
+  const handleSwitchAccount = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
+  /** Empieza sin muestra: se oculta el aviso y quedan los módulos a la vista,
+   * cada uno con su alta (repuesto, equipo, petición...). */
+  const handleStartEmpty = () => {
+    setStartedEmpty(true);
+    writeStartedEmpty(safeLocalStorage(), true);
+  };
+
   const handleSeed = async () => {
     setIsSeeding(true);
     try {
@@ -663,6 +710,9 @@ export default function Dashboard() {
           ? `Datos de ejemplo cargados · ${telling.join(" · ")}`
           : "Datos de ejemplo cargados",
       );
+      // Cargar la muestra deshace la elección de empezar vacío.
+      setStartedEmpty(false);
+      writeStartedEmpty(safeLocalStorage(), false);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -863,6 +913,15 @@ export default function Dashboard() {
   /** Abre el resultado de la búsqueda global en su módulo (si el rol tiene
    * permiso para verlo: el catálogo solo si concede ver repuestos/equipos). */
   const handleSearchSelect = (hit: SearchHit) => {
+    if (hit.kind === "incident") {
+      if (!can("viewIncidents")) return;
+      setInitialIncidentId(hit.id);
+      // Vuelve a montar la vista: abrir la ficha de una incidencia ya abierta
+      // tiene que funcionar igual que la primera vez.
+      setIncidentsViewKey((key) => key + 1);
+      setTab("incidents");
+      return;
+    }
     if (hit.kind === "request") {
       if (!can("viewRequests")) return;
       setInitialRequestId(hit.id);
@@ -979,24 +1038,33 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Búsqueda global */}
-        <div className="border-b border-border/70 p-3">
-          <GlobalSearch
-            requests={activeRequests}
-            parts={allParts}
-            equipment={allEquipment}
-            canSearchCatalog={can("viewInventory")}
-            onSelect={handleSearchSelect}
-          />
-        </div>
+        {/* Búsqueda global. El invitado no la tiene: sus listas llegan vacías,
+            así que buscar ahí no encontraría ni la incidencia que sí puede
+            seguir; su puerta es la consulta por referencia. */}
+        {!isGuest && (
+          <div className="border-b border-border/70 p-3">
+            <GlobalSearch
+              incidents={activeIncidents}
+              requests={activeRequests}
+              parts={allParts}
+              equipment={allEquipment}
+              canSearchCatalog={can("viewInventory")}
+              onSelect={handleSearchSelect}
+            />
+          </div>
+        )}
 
         <nav
           aria-label="Módulos"
           className="flex flex-1 flex-col gap-1 overflow-y-auto p-3"
         >
-          <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Módulos
-          </p>
+          {/* Sin módulos que ofrecer —el caso del invitado— no se deja el
+              epígrafe solo, que parecería una sección a medio hacer. */}
+          {navItems.length > 0 && (
+            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Módulos
+            </p>
+          )}
           {navItems.map(renderNavButton)}
         </nav>
 
@@ -1190,16 +1258,19 @@ export default function Dashboard() {
             })}
           </nav>
 
-          {/* Búsqueda global (móvil) */}
-          <div className="border-t border-border/70 px-3 py-2">
-            <GlobalSearch
-              requests={allRequests}
-              parts={allParts}
-              equipment={allEquipment}
-              canSearchCatalog={can("viewInventory")}
-              onSelect={handleSearchSelect}
-            />
-          </div>
+          {/* Búsqueda global (móvil); el invitado tampoco la tiene (ver arriba). */}
+          {!isGuest && (
+            <div className="border-t border-border/70 px-3 py-2">
+              <GlobalSearch
+                incidents={allIncidents}
+                requests={allRequests}
+                parts={allParts}
+                equipment={allEquipment}
+                canSearchCatalog={can("viewInventory")}
+                onSelect={handleSearchSelect}
+              />
+            </div>
+          )}
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-8 sm:px-6">
@@ -1207,30 +1278,34 @@ export default function Dashboard() {
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-signal">{roleLabel}</p>
               <h1 className="text-3xl font-semibold tracking-tight">
-                {activeTab === "profile"
-                  ? "Mi perfil"
-                  : activeTab === "permissions"
-                    ? "Roles y permisos"
-                    : activeTab === "settings"
-                      ? "Ajustes del taller"
-                      : activeTab === "archive"
-                        ? "Archivo del taller"
-                        : activeTab === "manuals"
-                          ? "Manuales del taller"
-                          : "Incidencias, peticiones y stock del taller"}
+                {isGuest
+                  ? "Sesión de invitado"
+                  : activeTab === "profile"
+                    ? "Mi perfil"
+                    : activeTab === "permissions"
+                      ? "Roles y permisos"
+                      : activeTab === "settings"
+                        ? "Ajustes del taller"
+                        : activeTab === "archive"
+                          ? "Archivo del taller"
+                          : activeTab === "manuals"
+                            ? "Manuales del taller"
+                            : "Incidencias, peticiones y stock del taller"}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                {activeTab === "profile"
-                  ? "Tu ficha en el taller: datos de contacto, incidencias asignadas, peticiones y avisos."
-                  : activeTab === "permissions"
-                    ? "Crea los roles del taller y configura qué ve y qué puede modificar cada uno. Solo el administrador tiene acceso a esta pantalla."
-                    : activeTab === "settings"
-                      ? "Las reglas de fondo del taller: qué se archiva solo cada noche, a quién le avisa el panel del trabajo que avanza sin dejar rastro en el cuaderno y a quién le llegan los avisos del expediente."
-                      : activeTab === "archive"
-                        ? "El archivo del taller: incidencias cerradas y peticiones ya decididas que ya no están en el día a día. Búscalas aquí o recupera las que vuelvan a hacer falta."
-                        : activeTab === "manuals"
-                          ? "La documentación de los equipos: los manuales en PDF y las notas del taller, clasificados por tipo, marca y modelo. Descárgalos o consulta los de un equipo desde su ficha."
-                          : "Revisa las peticiones de plató, realización y audio, aprueba el material y mantén el catálogo del almacén AV siempre al día."}
+                {isGuest
+                  ? "Has entrado como invitado: puedes seguir una incidencia con la referencia que te dieron al notificarla. El resto del taller es para quien entra con su cuenta."
+                  : activeTab === "profile"
+                    ? "Tu ficha en el taller: datos de contacto, incidencias asignadas, peticiones y avisos."
+                    : activeTab === "permissions"
+                      ? "Crea los roles del taller y configura qué ve y qué puede modificar cada uno. Solo el administrador tiene acceso a esta pantalla."
+                      : activeTab === "settings"
+                        ? "Las reglas de fondo del taller: qué se archiva solo cada noche, a quién le avisa el panel del trabajo que avanza sin dejar rastro en el cuaderno y a quién le llegan los avisos del expediente."
+                        : activeTab === "archive"
+                          ? "El archivo del taller: incidencias cerradas y peticiones ya decididas que ya no están en el día a día. Búscalas aquí o recupera las que vuelvan a hacer falta."
+                          : activeTab === "manuals"
+                            ? "La documentación de los equipos: los manuales en PDF y las notas del taller, clasificados por tipo, marca y modelo. Descárgalos o consulta los de un equipo desde su ficha."
+                            : "Revisa las peticiones de plató, realización y audio, aprueba el material y mantén el catálogo del almacén AV siempre al día."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1363,12 +1438,37 @@ export default function Dashboard() {
           </section>
 
           <section className="mt-8">
-            {isEmpty &&
-            activeTab !== "profile" &&
-            activeTab !== "permissions" &&
-            activeTab !== "settings" &&
-            activeTab !== "archive" &&
-            activeTab !== "audit" ? (
+            {isGuest ? (
+              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
+                <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-signal/10 text-signal">
+                  <Search className="size-5" />
+                </span>
+                <h2 className="mt-4 text-lg font-semibold tracking-tight">
+                  Sigue tu incidencia
+                </h2>
+                <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                  Estás en una sesión de invitado: escribe la referencia que te
+                  dieron al notificarla y verás en qué punto va. Es lo único que
+                  un invitado puede consultar; la cola del taller, las
+                  peticiones y el almacén son para quien entra con su cuenta.
+                </p>
+                <IncidentLookup className="mx-auto mt-5 max-w-md" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-5 gap-2"
+                  onClick={() => void handleSwitchAccount()}
+                >
+                  <LogOut className="size-4" />
+                  Entrar con mi cuenta
+                </Button>
+              </div>
+            ) : showEmptyNotice &&
+              activeTab !== "profile" &&
+              activeTab !== "permissions" &&
+              activeTab !== "settings" &&
+              activeTab !== "archive" &&
+              activeTab !== "audit" ? (
               <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
                 <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-signal/10 text-signal">
                   <Sparkles className="size-5" />
@@ -1377,24 +1477,35 @@ export default function Dashboard() {
                   El taller todavía no tiene datos
                 </h2>
                 <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Carga un catálogo de repuestos y unas peticiones de ejemplo
-                  para recorrer el flujo completo de principio a fin.
+                  Puedes cargar la muestra de ejemplo para recorrer el flujo
+                  completo, o empezar con el taller vacío y dar de alta tus
+                  propios repuestos, equipos e incidencias.
                 </p>
-                {can("manageInventory") ? (
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {can("manageInventory") && (
+                    <Button
+                      type="button"
+                      className="gap-2"
+                      onClick={handleSeed}
+                      disabled={isSeeding}
+                    >
+                      <Sparkles className="size-4" />
+                      {isSeeding
+                        ? "Cargando datos..."
+                        : "Cargar datos de ejemplo"}
+                    </Button>
+                  )}
                   <Button
                     type="button"
-                    className="mt-5 gap-2"
-                    onClick={handleSeed}
-                    disabled={isSeeding}
+                    variant="outline"
+                    onClick={handleStartEmpty}
                   >
-                    <Sparkles className="size-4" />
-                    {isSeeding
-                      ? "Cargando datos..."
-                      : "Cargar datos de ejemplo"}
+                    Empezar con el taller vacío
                   </Button>
-                ) : (
-                  <p className="mt-5 text-sm text-muted-foreground">
-                    Los datos del taller los carga quien puede modificar el
+                </div>
+                {!can("manageInventory") && (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Los datos de ejemplo los carga quien puede modificar el
                     catálogo de repuestos.
                   </p>
                 )}
@@ -1490,6 +1601,11 @@ export default function Dashboard() {
                 activeRequests={activeRequests}
                 canArchiveIncidents={can("manageIncidents")}
                 canArchiveRequests={can("decideRequests")}
+                trashedIncidents={incidentTrash?.items ?? []}
+                trashedRequests={requestTrash?.items ?? []}
+                trashRetentionDays={
+                  incidentTrash?.retentionDays ?? requestTrash?.retentionDays
+                }
                 onOpenSettings={
                   can("manageIncidents") || can("decideRequests")
                     ? () => goToTab("settings")
@@ -1508,6 +1624,7 @@ export default function Dashboard() {
                 canPurgeUploads={
                   can("manageIncidents") || can("decideRequests")
                 }
+                canManageData={can("manageInventory")}
               />
             ) : activeTab === "audit" && adminOk ? (
               <AuditView onOpenIncident={(id) => openIncident(id)} />

@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +30,16 @@ import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import type { WithdrawnIncidentItem } from "@/convex/incidents";
+import type { WithdrawnRequestItem } from "@/convex/partRequests";
 import { AFTER_MONTHS_OPTIONS, archivableBefore } from "@/lib/archive";
 import { groupByDate, matchesQuery, monthsAgo, sortByDate } from "@/lib/browse";
+import { reporterNoticeText } from "@/lib/incidentMail";
 import { richDocToPlainText } from "@/lib/richDoc";
+import {
+  DEFAULT_TRASH_RETENTION_DAYS,
+  trashRemainingLabel,
+} from "@/lib/trash";
 import { cn } from "@/lib/utils";
 import {
   INCIDENT_STATUS_META,
@@ -30,6 +47,7 @@ import {
   formatDate,
   formatDateTime,
   getErrorMessage,
+  normalizeIncidentReference,
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
@@ -42,8 +60,9 @@ import {
   SearchX,
   SlidersHorizontal,
   Siren,
+  Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   QueueToolbar,
@@ -192,6 +211,83 @@ const KIND_META: Record<
 };
 
 /**
+ * Una ficha de la papelera. Incidencias y peticiones comparten la pantalla de
+ * recuperación —y el plazo—, así que cada una lleva consigo de qué es, para
+ * deshacerla o borrarla de verdad con la mutación que le toca.
+ */
+type TrashRow =
+  | { kind: "incident"; item: WithdrawnIncidentItem }
+  | { kind: "request"; item: WithdrawnRequestItem };
+
+/**
+ * Un grupo de la papelera —incidencias retiradas, peticiones retiradas—: el
+ * rótulo con su cuenta y, debajo, las fichas. El alto va acotado y lo que no
+ * cabe se recorre por dentro: la papelera puede crecer y no debe estirar la
+ * página del archivo.
+ */
+function TrashGroup({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+        <span className="ml-1.5 tabular-nums opacity-70">{count}</span>
+      </h3>
+      <div className="mt-2 grid max-h-72 gap-2 overflow-y-auto pr-1">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** Recuperar o borrar una ficha de la papelera, sea incidencia o petición. */
+function TrashButtons({
+  row,
+  busyId,
+  onRestore,
+  onDelete,
+}: {
+  row: TrashRow;
+  busyId: string | null;
+  onRestore: (row: TrashRow) => Promise<void>;
+  onDelete: (row: TrashRow) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        disabled={busyId === row.item.id}
+        onClick={() => void onRestore(row)}
+      >
+        <ArchiveRestore className="size-4" />
+        Recuperar
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="gap-2 text-destructive hover:text-destructive"
+        disabled={busyId === row.item.id}
+        onClick={() => onDelete(row)}
+      >
+        <Trash2 className="size-4" />
+        Borrar ya
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Archivo del taller: lo que ya está cerrado y decidido sale del día a día y
  * vive aquí. Se busca y se ordena igual que las colas (misma barra), se agrupa
  * por fecha de archivo y desde aquí se recupera lo que haga falta. También es
@@ -209,10 +305,19 @@ export function ArchiveView({
   activeRequests = [],
   canArchiveIncidents = false,
   canArchiveRequests = false,
+  trashedIncidents = [],
+  trashedRequests = [],
+  trashRetentionDays = DEFAULT_TRASH_RETENTION_DAYS,
   onOpenSettings,
 }: {
   /** Incidencias ya archivadas. */
   incidents?: IncidentDoc[];
+  /** Incidencias retiradas: esperan en la papelera antes de borrarse de verdad. */
+  trashedIncidents?: WithdrawnIncidentItem[];
+  /** Lo mismo con las peticiones: retiradas desde su ficha, esperan el plazo. */
+  trashedRequests?: WithdrawnRequestItem[];
+  /** El plazo vigente de la papelera, en días (lo ajusta el taller). */
+  trashRetentionDays?: number;
   /** Peticiones ya archivadas. */
   requests?: RequestDoc[];
   /** Cola viva de incidencias (para saber cuántas se archivarían). */
@@ -228,6 +333,10 @@ export function ArchiveView({
   const unarchiveRequest = useMutation(api.partRequests.unarchive);
   const archiveIncidents = useMutation(api.incidents.archiveClosedBefore);
   const archiveRequests = useMutation(api.partRequests.archiveDecidedBefore);
+  const restoreIncident = useMutation(api.incidents.restore);
+  const deleteIncident = useMutation(api.incidents.deleteNow);
+  const restoreRequest = useMutation(api.partRequests.restore);
+  const deleteRequest = useMutation(api.partRequests.deleteNow);
 
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<QueueSortId>("recent");
@@ -239,12 +348,36 @@ export function ArchiveView({
     null,
   );
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Papelera: la ficha que se está recuperando o borrando, y la que espera la
+  // confirmación del borrado definitivo. Incidencias y peticiones comparten
+  // pantalla —y plazo—, así que cada ficha lleva consigo de qué es.
+  const [trashBusyId, setTrashBusyId] = useState<string | null>(null);
+  const [trashDeleting, setTrashDeleting] = useState<TrashRow | null>(null);
+  // Lo retirado se enseña por tandas: cada cara solo con quien puede deshacerla
+  // (el backend no contesta la papelera a quien no tiene la capacidad).
+  const trashedIncidentRows: Extract<TrashRow, { kind: "incident" }>[] =
+    canArchiveIncidents
+      ? trashedIncidents.map((item) => ({ kind: "incident" as const, item }))
+      : [];
+  const trashedRequestRows: Extract<TrashRow, { kind: "request" }>[] =
+    canArchiveRequests
+      ? trashedRequests.map((item) => ({ kind: "request" as const, item }))
+      : [];
+  const trashCount =
+    trashedIncidentRows.length + trashedRequestRows.length;
 
   const entries = [
     ...incidents.map(incidentEntry),
     ...requests.map(requestEntry),
   ];
-  const matched = entries.filter((entry) => matchesQuery(entry.fields, search));
+  // Las incidencias archivadas también se encuentran por su referencia escrita
+  // sin los ceros de delante («inc-4»), como en la cola.
+  const matched = entries.filter(
+    (entry) =>
+      matchesQuery(entry.fields, search) ||
+      (entry.kind === "incident" &&
+        entry.reference === normalizeIncidentReference(search)),
+  );
   const counts: Record<ArchiveKind, number> = {
     all: matched.length,
     incident: matched.filter((entry) => entry.kind === "incident").length,
@@ -302,6 +435,51 @@ export function ArchiveView({
       toast.error(getErrorMessage(error));
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleTrashRestore = async (row: TrashRow) => {
+    setTrashBusyId(row.item.id);
+    try {
+      if (row.kind === "incident") {
+        await restoreIncident({ incidentId: row.item.id });
+        toast.success(
+          row.item.archived
+            ? `${row.item.reference} vuelve al archivo`
+            : `${row.item.reference} vuelve a la cola de incidencias`,
+        );
+      } else {
+        await restoreRequest({ requestId: row.item.id });
+        toast.success(
+          row.item.archived
+            ? `${row.item.reference} vuelve al archivo`
+            : `${row.item.reference} vuelve a la cola de peticiones`,
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setTrashBusyId(null);
+    }
+  };
+
+  const handleTrashDelete = async () => {
+    if (!trashDeleting) return;
+    setTrashBusyId(trashDeleting.item.id);
+    try {
+      if (trashDeleting.kind === "incident") {
+        await deleteIncident({ incidentId: trashDeleting.item.id });
+      } else {
+        await deleteRequest({ requestId: trashDeleting.item.id });
+      }
+      toast.success(
+        `${trashDeleting.item.reference} borrada definitivamente`,
+      );
+      setTrashDeleting(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setTrashBusyId(null);
     }
   };
 
@@ -607,6 +785,176 @@ export function ArchiveView({
           />
         </div>
       )}
+
+      {/* La papelera: lo que se retiró desde su ficha —una incidencia o una
+          petición— espera aquí el plazo antes de borrarse de verdad. Las dos
+          caras comparten pantalla y plazo; lo que cambia es de dónde se
+          recuperan. Se enseña solo cuando hay algo y solo a quien puede
+          deshacerlo. */}
+      {trashCount > 0 && (
+        <div className="rounded-xl border border-destructive/25 bg-card p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+              <Trash2 className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold tracking-tight">Papelera</p>
+              <p className="mt-0.5 max-w-xl text-xs leading-5 text-muted-foreground">
+                Los avisos equivocados o duplicados y las peticiones pedidas por
+                error que se retiraron desde su ficha. Se borran de verdad al
+                cumplir {trashRetentionDays}{" "}
+                {trashRetentionDays === 1 ? "día" : "días"}; hasta entonces se
+                recuperan tal y como están, con su expediente, sus notas y sus
+                repuestos asociados.
+              </p>
+            </div>
+          </div>
+
+          {trashedIncidentRows.length > 0 && (
+            <TrashGroup
+              title="Incidencias retiradas"
+              count={trashedIncidentRows.length}
+            >
+              {trashedIncidentRows.map((row) => {
+                const item = row.item;
+                const meta = INCIDENT_STATUS_META[item.status];
+                return (
+                  <article
+                    key={item.id}
+                    className="flex flex-wrap items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-3"
+                  >
+                    <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-muted-foreground">
+                          {item.reference}
+                        </span>
+                        <Badge variant="outline" className={meta.badgeClassName}>
+                          {meta.label}
+                        </Badge>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
+                          {trashRemainingLabel(item.purgeAt)}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium leading-5">
+                        {[item.equipmentKind, item.model]
+                          .filter(Boolean)
+                          .join(" ") || "Incidencia sin equipo"}
+                      </p>
+                      {item.description !== "" && (
+                        <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                          {item.description}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Retirada el {formatDateTime(item.deletedAt)}
+                        {item.deletedBy ? ` por ${item.deletedBy}` : ""}
+                        {item.deletedReason ? ` · ${item.deletedReason}` : ""}
+                        {item.archived
+                          ? " · saldrá del archivo al recuperarla"
+                          : ""}
+                      </p>
+                      {/* Su referencia ya no sigue el caso: esto es lo único que
+                          dice si se le explicó por correo, o por qué no. */}
+                      <p className="text-xs text-muted-foreground">
+                        Aviso a quien notificó: {reporterNoticeText(item)}
+                      </p>
+                    </div>
+                    <TrashButtons row={row} busyId={trashBusyId} onRestore={handleTrashRestore} onDelete={setTrashDeleting} />
+                  </article>
+                );
+              })}
+            </TrashGroup>
+          )}
+
+          {trashedRequestRows.length > 0 && (
+            <TrashGroup
+              title="Peticiones retiradas"
+              count={trashedRequestRows.length}
+            >
+              {trashedRequestRows.map((row) => {
+                const item = row.item;
+                const meta = STATUS_META[item.status] ?? STATUS_META.pending;
+                const context = [item.requesterName, item.requesterTeam, item.equipment]
+                  .filter(Boolean)
+                  .join(" · ");
+                return (
+                  <article
+                    key={item.id}
+                    className="flex flex-wrap items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-3"
+                  >
+                    <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-muted-foreground">
+                          {item.reference}
+                        </span>
+                        <Badge variant="outline" className={meta.badgeClassName}>
+                          {meta.label}
+                        </Badge>
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
+                          {trashRemainingLabel(item.purgeAt)}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium leading-5">
+                        {item.summary || "Petición sin repuesto"}
+                      </p>
+                      {context !== "" && (
+                        <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                          {context}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Retirada el {formatDateTime(item.deletedAt)}
+                        {item.deletedBy ? ` por ${item.deletedBy}` : ""}
+                        {item.deletedReason ? ` · ${item.deletedReason}` : ""}
+                        {item.archived
+                          ? " · saldrá del archivo al recuperarla"
+                          : ""}
+                      </p>
+                    </div>
+                    <TrashButtons row={row} busyId={trashBusyId} onRestore={handleTrashRestore} onDelete={setTrashDeleting} />
+                  </article>
+                );
+              })}
+            </TrashGroup>
+          )}
+        </div>
+      )}
+
+      <AlertDialog
+        open={trashDeleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setTrashDeleting(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Borrar {trashDeleting?.item.reference} definitivamente?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {trashDeleting?.kind === "request"
+                ? "Se borra ahora, sin esperar el plazo de la papelera: la petición y los archivos que adjuntaba. Las compras que se pidieron por ella se quedan en su módulo. No se puede recuperar."
+                : "Se borra ahora, sin esperar el plazo de la papelera, y con ella su expediente: sus documentos, sus notas y los avisos que la señalaban. No se puede recuperar."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={trashBusyId !== null}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={trashBusyId !== null}
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleTrashDelete();
+              }}
+            >
+              <Trash2 className="size-4" />
+              {trashBusyId !== null ? "Borrando..." : "Borrar definitivamente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {bulkTarget && (
         <Dialog open onOpenChange={(open) => !open && setBulkTarget(null)}>

@@ -72,11 +72,38 @@ crons.daily(
 );
 
 /**
+ * Papelera de incidencias: borra de verdad las retiradas que cumplieron su
+ * plazo sin que nadie las recuperara. Va después de la papelera del almacén y
+ * comparte su plazo: es el mismo ajuste de «Ajustes del taller», el de lo que se
+ * guarda antes de borrar. Lo retirado no se pierde mientras espera, y desde el
+ * módulo Archivo se recupera en cualquier momento.
+ */
+crons.daily(
+  "vaciar la papelera de incidencias",
+  { hourUTC: 5, minuteUTC: 15 },
+  internal.incidents.purgeExpired,
+  {},
+);
+
+/**
  * Resumen semanal por correo: la pasada es diaria a propósito (temprano, antes
  * de que abra el taller) y es el propio trabajo el que decide si hoy toca: solo
  * envía el día de la semana que hay configurado en el panel. Así el día se
  * cambia desde la app sin tocar este horario.
  */
+/**
+ * Papelera de peticiones: borra de verdad las retiradas que cumplieron su plazo
+ * sin que nadie las recuperara. Va después de la papelera de incidencias y
+ * comparte su plazo —el mismo ajuste de «Ajustes del taller»—, y como ella no
+ * toca nada más: lo que está dentro de plazo espera a su noche.
+ */
+crons.daily(
+  "vaciar la papelera de peticiones",
+  { hourUTC: 5, minuteUTC: 30 },
+  internal.partRequests.purgeExpired,
+  {},
+);
+
 crons.daily(
   "resumen semanal",
   { hourUTC: 7, minuteUTC: 0 },

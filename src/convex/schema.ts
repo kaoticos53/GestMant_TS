@@ -336,6 +336,10 @@ const schema = defineSchema(
       // Datos de quien notifica (no tiene por qué estar registrado)
       reporterName: v.string(), // nombre y apellidos
       reporterRole: v.optional(v.string()), // puesto
+      // Correo de quien notifica, si lo deja: es a donde se le avisa cuando el
+      // caso cambia de estado. Opcional a propósito —avisar sin cuenta no debe
+      // exigir dar datos de contacto— y solo para eso (`lib/incidentMail`).
+      reporterEmail: v.optional(v.string()),
       location: v.optional(v.string()), // ubicación
       // Equipo afectado tal y como lo describe el notificador
       equipmentKind: v.optional(v.string()), // tipo de equipo
@@ -452,12 +456,38 @@ const schema = defineSchema(
       // consultables. Sin el campo, la incidencia está en la cola activa.
       archivedAt: v.optional(v.number()),
       archivedBy: v.optional(v.string()),
+      // Papelera: una incidencia equivocada o duplicada se retira y espera unos
+      // días antes de borrarse de verdad (`lib/trash`). Mientras esté aquí no
+      // sale en la cola, ni en el archivo, ni en el resumen, y su referencia ya
+      // no sigue el caso: se ve —y se recupera— desde la papelera del módulo
+      // Archivo. Lo que se retire a partir de ahora cumple el plazo vigente; lo
+      // ya retirado, el que tenía cuando entró.
+      deletedAt: v.optional(v.number()),
+      deletedBy: v.optional(v.string()),
+      // Por qué se retiró (duplicada, aviso equivocado…): es lo que se lee en la
+      // papelera para saber si merece la pena volver a por ella.
+      deletedReason: v.optional(v.string()),
+      // Cuándo se borra de verdad, si nadie la recupera.
+      purgeAt: v.optional(v.number()),
+      // Último estado que se le avisó por correo a quien notificó, con cuándo y,
+      // si el envío no salió, por qué. Guardar el estado es lo que evita repetir
+      // el mismo aviso cada vez que la ficha se toca sin cambiar de estado.
+      emailedStatus: v.optional(v.string()),
+      emailedAt: v.optional(v.number()),
+      emailError: v.optional(v.string()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
       .index("by_status", ["status"])
       .index("by_createdAt", ["createdAt"])
-      .index("by_archivedAt", ["archivedAt"]),
+      .index("by_archivedAt", ["archivedAt"])
+      // Los dos índices de la papelera: uno para listarla (solo tiene filas lo
+      // retirado) y otro para la pasada que borra lo caducado.
+      .index("by_deletedAt", ["deletedAt"])
+      .index("by_purgeAt", ["purgeAt"])
+      // Por referencia: es el número que se le da a quien notifica y con el que
+      // se consulta el caso después (también desde una sesión de invitado).
+      .index("by_reference", ["reference"]),
 
     // Notificaciones in-app a los interesados de cada incidencia
     notifications: defineTable({
@@ -625,11 +655,29 @@ const schema = defineSchema(
       // pero siguen consultables en el módulo de archivo.
       archivedAt: v.optional(v.number()),
       archivedBy: v.optional(v.string()),
+      // Papelera: una petición equivocada o duplicada se retira y espera unos
+      // días antes de borrarse de verdad (`lib/trash`), con el mismo plazo que
+      // lo retirado del almacén y de las incidencias. Mientras esté aquí no
+      // sale en la cola, ni en el archivo, ni en el resumen, y se ve —y se
+      // recupera— desde la papelera del módulo Archivo. Lo que se retire a
+      // partir de ahora cumple el plazo vigente; lo ya retirado, el que tenía
+      // cuando entró.
+      deletedAt: v.optional(v.number()),
+      deletedBy: v.optional(v.string()),
+      // Por qué se retiró (duplicada, pedida por error…): es lo que se lee en la
+      // papelera para saber si merece la pena volver a por ella.
+      deletedReason: v.optional(v.string()),
+      // Cuándo se borra de verdad, si nadie la recupera.
+      purgeAt: v.optional(v.number()),
       createdAt: v.number(),
     })
       .index("by_status", ["status"])
       .index("by_createdAt", ["createdAt"])
-      .index("by_archivedAt", ["archivedAt"]),
+      .index("by_archivedAt", ["archivedAt"])
+      // Los dos índices de la papelera: uno para listarla (solo tiene filas lo
+      // retirado) y otro para la pasada que borra lo caducado.
+      .index("by_deletedAt", ["deletedAt"])
+      .index("by_purgeAt", ["purgeAt"]),
 
     // Auditoría de decisiones sobre peticiones: cada vía explicable (rechazo,
     // suspensión, devolución, cancelación, presupuesto externo, entrega) deja

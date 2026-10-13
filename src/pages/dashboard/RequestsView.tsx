@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +91,7 @@ import {
   RotateCcw,
   SearchX,
   ShoppingCart,
+  Trash2,
   Upload,
   User,
   Wrench,
@@ -1313,7 +1324,11 @@ function RequestDetailSheet({
   resuming: boolean;
 }) {
   const archiveRequest = useMutation(api.partRequests.archive);
+  const withdrawRequest = useMutation(api.partRequests.withdraw);
   const [archiving, setArchiving] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
   const partById = new Map(parts.map((part) => [part._id, part]));
@@ -1332,6 +1347,32 @@ function RequestDetailSheet({
       toast.error(getErrorMessage(error));
     } finally {
       setArchiving(false);
+    }
+  };
+
+  /**
+   * Retirar: para la petición pedida por error o el duplicado de otra. No borra
+   * —eso sería irreversible—, deja la petición en la papelera unos días, con el
+   * mismo plazo que lo retirado del almacén.
+   */
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    try {
+      const reason = withdrawReason.trim();
+      await withdrawRequest({
+        requestId: request._id,
+        ...(reason ? { reason } : {}),
+      });
+      toast.success(
+        `${request.reference} retirada: queda en la papelera por si hay que volver a por ella`,
+      );
+      onClose();
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setWithdrawing(false);
+      setWithdrawOpen(false);
+      setWithdrawReason("");
     }
   };
 
@@ -1642,8 +1683,88 @@ function RequestDetailSheet({
                 Archivar
               </Button>
             )}
+
+            {/* Retirar: para la petición pedida por error o el duplicado de
+                otra. No borra —eso sería irreversible—, deja la petición en la
+                papelera unos días, con el mismo plazo que lo retirado del
+                almacén. */}
+            {canManage && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 text-destructive hover:text-destructive"
+                disabled={withdrawing}
+                onClick={() => setWithdrawOpen(true)}
+                title="Se guarda unos días en la papelera antes de borrarse de verdad"
+              >
+                <Trash2 className="size-4" />
+                Retirar
+              </Button>
+            )}
           </div>
         </SheetFooter>
+
+        {/* La confirmación de la retirada: es lo que evita que una petición
+            buena se vaya por pulsar donde no era, y lo que apunta por qué se
+            retira. */}
+        <AlertDialog
+          open={withdrawOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setWithdrawOpen(false);
+              setWithdrawReason("");
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                ¿Retirar {request.reference}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Sale de la cola y del archivo: es para la petición pedida por
+                error o el duplicado de otra. No se borra ahora: queda en la
+                papelera —en el módulo Archivo— el plazo que tenga ajustado el
+                taller, y desde ahí se recupera tal y como está, con sus
+                repuestos asociados y sus decisiones. No toca el stock ni las
+                compras que ya estén pedidas.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="grid gap-2">
+              <Label htmlFor="peticion-retirar-motivo">
+                Por qué se retira (opcional)
+              </Label>
+              <Input
+                id="peticion-retirar-motivo"
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value)}
+                placeholder="Duplicada, pedida por error…"
+                maxLength={160}
+                disabled={withdrawing}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se apunta en la papelera, para saber de un vistazo por qué está
+                ahí.
+              </p>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={withdrawing}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={withdrawing}
+                className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleWithdraw();
+                }}
+              >
+                <Trash2 className="size-4" />
+                {withdrawing ? "Retirando..." : "Retirar a la papelera"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
     </Sheet>
   );

@@ -1,7 +1,7 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "Pulso Taller",
+  "short_name": "Pulso Taller",
+  "description": "Incidencias, repuestos y mantenimiento del taller audiovisual.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

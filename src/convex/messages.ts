@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
-import { hasCapability } from "./permissions";
+import { hasCapability, memberOrNull } from "./permissions";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 
 /** Longitud máxima del texto de un mensaje (lo que se lee, sin su formato). */
@@ -76,7 +76,10 @@ function oldestFirst(a: Message, b: Message): number {
 export const contacts = query({
   args: {},
   handler: async (ctx) => {
-    const me = await requireActor(ctx);
+    // Invitado o cuenta de baja: vacío en vez de error. El centro de mensajes
+    // vive en la cabecera del panel y pide esta lista al montar.
+    const me = await memberOrNull(ctx);
+    if (!me) return [];
     const users = await ctx.db.query("users").collect();
     return users
       .filter((user) => user._id !== me._id && user.active !== false)
@@ -98,7 +101,9 @@ export const contacts = query({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const me = await requireActor(ctx);
+    // Invitado o cuenta de baja: vacío en vez de error (ver `contacts`).
+    const me = await memberOrNull(ctx);
+    if (!me) return [];
     const messages = await myMessages(ctx, me._id);
     return messages.sort(newestFirst);
   },
