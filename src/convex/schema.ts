@@ -283,7 +283,9 @@ const schema = defineSchema(
           references: v.array(v.string()),
         }),
       ),
-    }).index("email", ["email"]), // index for the email. do not remove or modify
+    })
+      .index("email", ["email"]) // index for the email. do not remove or modify
+      .index("by_role", ["role"]),
 
     // Catálogo de repuestos del taller (código interno, stock, ubicación...)
     spareParts: defineTable({
@@ -677,7 +679,9 @@ const schema = defineSchema(
       // Los dos índices de la papelera: uno para listarla (solo tiene filas lo
       // retirado) y otro para la pasada que borra lo caducado.
       .index("by_deletedAt", ["deletedAt"])
-      .index("by_purgeAt", ["purgeAt"]),
+      .index("by_purgeAt", ["purgeAt"])
+      .index("by_incident", ["incidentId"])
+      .index("by_requester", ["requesterId"]),
 
     // Auditoría de decisiones sobre peticiones: cada vía explicable (rechazo,
     // suspensión, devolución, cancelación, presupuesto externo, entrega) deja

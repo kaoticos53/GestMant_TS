@@ -2059,10 +2059,11 @@ async function createHistorySheet(
   // Lo retirado no se cita: una petición que está en la papelera es la que se
   // pidió por error o se duplicó, así que el historial del equipo no la cuenta
   // como el material que se puso.
-  const linkedRequest = (await ctx.db.query("partRequests").collect()).find(
-    (request) =>
-      request.incidentId === incident._id && request.deletedAt === undefined,
-  );
+  const linkedRequest = await ctx.db
+    .query("partRequests")
+    .withIndex("by_incident", (q) => q.eq("incidentId", incident._id))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .first();
 
   const reported = new Date(incident.reportedAt).toLocaleDateString("es-ES", {
     day: "2-digit",

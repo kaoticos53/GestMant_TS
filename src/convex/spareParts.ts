@@ -81,7 +81,10 @@ export const list = query({
     ) {
       return [];
     }
-    const parts = await ctx.db.query("spareParts").collect();
+    const parts = await ctx.db
+      .query("spareParts")
+      .withIndex("by_name")
+      .collect();
     return parts.sort(
       (a, b) =>
         a.name.localeCompare(b.name, "es") || a.code.localeCompare(b.code, "es"),

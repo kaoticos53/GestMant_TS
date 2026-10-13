@@ -99,7 +99,7 @@ export const ensureRole = mutation({
     const initialAdmin = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
     const existingAdmin = await ctx.db
       .query("users")
-      .filter((q) => q.eq(q.field("role"), ROLES.ADMIN))
+      .withIndex("by_role", (q) => q.eq("role", ROLES.ADMIN))
       .first();
 
     const role =

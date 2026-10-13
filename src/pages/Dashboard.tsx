@@ -67,6 +67,8 @@ import {
   Users,
 } from "lucide-react";
 import {
+  Suspense,
+  lazy,
   useEffect,
   useRef,
   useState,
@@ -75,23 +77,72 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { ArchiveView } from "./dashboard/ArchiveView";
-import { WeeklyReportDialog } from "./dashboard/WeeklyReportDialog";
-import { AuditView } from "./dashboard/AuditView";
-import { EquipmentView } from "./dashboard/EquipmentView";
 import { GlobalSearch, type SearchHit } from "./dashboard/GlobalSearch";
 import { IncidentLookup } from "./dashboard/IncidentLookup";
-import { IncidentsView } from "./dashboard/IncidentsView";
-import { InventoryView } from "./dashboard/InventoryView";
-import { ManualsView } from "./dashboard/ManualsView";
-import { PermissionsView } from "./dashboard/PermissionsView";
-import { ProfileView } from "./dashboard/ProfileView";
-import { PurchasingView } from "./dashboard/PurchasingView";
-import { RequestsView, type RequestFilterId } from "./dashboard/RequestsView";
-import { UsersView } from "./dashboard/UsersView";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
-import { WorkshopSettingsView } from "./dashboard/WorkshopSettingsView";
+import type { RequestFilterId } from "./dashboard/RequestsView";
 import { FULL_VERSION, DETAILED_VERSION } from "@/version";
+
+const ArchiveView = lazy(() =>
+  import("./dashboard/ArchiveView").then((m) => ({ default: m.ArchiveView })),
+);
+const WeeklyReportDialog = lazy(() =>
+  import("./dashboard/WeeklyReportDialog").then((m) => ({
+    default: m.WeeklyReportDialog,
+  })),
+);
+const AuditView = lazy(() =>
+  import("./dashboard/AuditView").then((m) => ({ default: m.AuditView })),
+);
+const EquipmentView = lazy(() =>
+  import("./dashboard/EquipmentView").then((m) => ({ default: m.EquipmentView })),
+);
+const IncidentsView = lazy(() =>
+  import("./dashboard/IncidentsView").then((m) => ({ default: m.IncidentsView })),
+);
+const InventoryView = lazy(() =>
+  import("./dashboard/InventoryView").then((m) => ({ default: m.InventoryView })),
+);
+const ManualsView = lazy(() =>
+  import("./dashboard/ManualsView").then((m) => ({ default: m.ManualsView })),
+);
+const PermissionsView = lazy(() =>
+  import("./dashboard/PermissionsView").then((m) => ({
+    default: m.PermissionsView,
+  })),
+);
+const ProfileView = lazy(() =>
+  import("./dashboard/ProfileView").then((m) => ({ default: m.ProfileView })),
+);
+const PurchasingView = lazy(() =>
+  import("./dashboard/PurchasingView").then((m) => ({
+    default: m.PurchasingView,
+  })),
+);
+const RequestsView = lazy(() =>
+  import("./dashboard/RequestsView").then((m) => ({ default: m.RequestsView })),
+);
+const UsersView = lazy(() =>
+  import("./dashboard/UsersView").then((m) => ({ default: m.UsersView })),
+);
+const WorkshopSettingsView = lazy(() =>
+  import("./dashboard/WorkshopSettingsView").then((m) => ({
+    default: m.WorkshopSettingsView,
+  })),
+);
+
+function ViewSkeleton() {
+  return (
+    <div className="grid gap-4 animate-pulse">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-8 w-44 rounded-lg" />
+        <Skeleton className="h-8 w-28 rounded-lg" />
+      </div>
+      <Skeleton className="h-64 rounded-xl border border-border/70 bg-card/50" />
+      <Skeleton className="h-36 rounded-xl border border-border/70 bg-card/50" />
+    </div>
+  );
+}
 
 type NavId =
   | "incidents"
@@ -1510,137 +1561,143 @@ export default function Dashboard() {
                   </p>
                 )}
               </div>
-            ) : activeTab === "profile" ? (
-              <ProfileView
-                user={user}
-                incidents={activeIncidents}
-                requests={activeRequests}
-                onOpenIncidents={() => goToTab("incidents")}
-                onOpenRequests={() => goToTab("requests")}
-              />
-            ) : loading && activeTab !== "permissions" ? (
-              <div className="grid gap-4">
-                <Skeleton className="h-40 rounded-xl" />
-                <Skeleton className="h-40 rounded-xl" />
-              </div>
-            ) : activeTab === "incidents" ? (
-              <IncidentsView
-                key={`incidents-${incidentsViewKey}`}
-                incidents={activeIncidents}
-                equipment={allEquipment}
-                requests={allRequests}
-                currentUserId={user?._id ?? null}
-                currentUserName={displayName}
-                canAssign={can("manageIncidents")}
-                initialDetailId={initialIncidentId}
-              />
-            ) : activeTab === "requests" ? (
-              <RequestsView
-                key={`requests-${requestsViewKey}`}
-                requests={activeRequests}
-                parts={allParts}
-                equipment={allEquipment}
-                equipmentFilter={requestsEquipmentFilter}
-                onEquipmentFilterChange={setRequestsEquipmentFilter}
-                canManage={can("decideRequests")}
-                canPurchase={can("managePurchasing") && can("viewPurchasing")}
-                initialDetailId={initialRequestId}
-                initialFilter={requestsInitialFilter}
-              />
-            ) : activeTab === "purchasing" && canSeePurchasing ? (
-              <PurchasingView
-                purchaseRequests={purchaseRequests?.requests ?? []}
-                orders={purchaseOrders ?? []}
-                receptions={receptions ?? []}
-                partRequests={allRequests}
-                parts={allParts}
-                canManage={can("managePurchasing")}
-              />
-            ) : activeTab === "inventory" && can("viewInventory") ? (
-              <InventoryView
-                key={`inventory-${inventoryViewKey}`}
-                parts={allParts}
-                equipment={allEquipment}
-                canManage={can("manageInventory")}
-                currentUserId={user?._id ?? null}
-                initialSearch={inventoryInitialSearch}
-                initialLowStockOnly={inventoryLowStockOnly}
-              />
-            ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
-              <ManualsView
-                manuals={allManuals}
-                equipment={allEquipment}
-                canManage={can("manageManuals")}
-                currentUserId={user?._id ?? null}
-              />
-            ) : activeTab === "equipment" && can("viewEquipment") ? (
-              <EquipmentView
-                key={`equipment-${equipmentViewKey}`}
-                equipment={allEquipment}
-                parts={allParts}
-                requests={allRequests}
-                maintenance={allMaintenance}
-                manuals={allManuals}
-                canManage={can("manageEquipment")}
-                canWriteManuals={can("viewManuals") && !isGuest}
-                canManageManuals={can("manageManuals")}
-                currentUserId={user?._id ?? null}
-                initialSearch={equipmentInitialSearch}
-                onViewRequests={(equipmentId) => {
-                  setRequestsEquipmentFilter(equipmentId);
-                  setInitialRequestId(null);
-                  setRequestsViewKey((key) => key + 1);
-                  setTab("requests");
-                }}
-              />
-            ) : activeTab === "archive" ? (
-              <ArchiveView
-                incidents={archivedIncidents}
-                requests={archivedRequests}
-                activeIncidents={activeIncidents}
-                activeRequests={activeRequests}
-                canArchiveIncidents={can("manageIncidents")}
-                canArchiveRequests={can("decideRequests")}
-                trashedIncidents={incidentTrash?.items ?? []}
-                trashedRequests={requestTrash?.items ?? []}
-                trashRetentionDays={
-                  incidentTrash?.retentionDays ?? requestTrash?.retentionDays
-                }
-                onOpenSettings={
-                  can("manageIncidents") || can("decideRequests")
-                    ? () => goToTab("settings")
-                    : undefined
-                }
-              />
-            ) : activeTab === "settings" ? (
-              <WorkshopSettingsView
-                incidents={activeIncidents}
-                requests={activeRequests}
-                canManageArchive={
-                  can("manageIncidents") || can("decideRequests")
-                }
-                canManageAlert={can("manageIncidents")}
-                canManageAudit={adminOk && can("viewAudit")}
-                canPurgeUploads={
-                  can("manageIncidents") || can("decideRequests")
-                }
-                canManageData={can("manageInventory")}
-              />
-            ) : activeTab === "audit" && adminOk ? (
-              <AuditView onOpenIncident={(id) => openIncident(id)} />
-            ) : activeTab === "users" && adminOk ? (
-              <UsersView />
-            ) : activeTab === "permissions" && adminOk ? (
-              <PermissionsView />
-            ) : null}
+            ) : (
+              <Suspense fallback={<ViewSkeleton />}>
+                {activeTab === "profile" ? (
+                  <ProfileView
+                    user={user}
+                    incidents={activeIncidents}
+                    requests={activeRequests}
+                    onOpenIncidents={() => goToTab("incidents")}
+                    onOpenRequests={() => goToTab("requests")}
+                  />
+                ) : loading && activeTab !== "permissions" ? (
+                  <div className="grid gap-4">
+                    <Skeleton className="h-40 rounded-xl" />
+                    <Skeleton className="h-40 rounded-xl" />
+                  </div>
+                ) : activeTab === "incidents" ? (
+                  <IncidentsView
+                    key={`incidents-${incidentsViewKey}`}
+                    incidents={activeIncidents}
+                    equipment={allEquipment}
+                    requests={allRequests}
+                    currentUserId={user?._id ?? null}
+                    currentUserName={displayName}
+                    canAssign={can("manageIncidents")}
+                    initialDetailId={initialIncidentId}
+                  />
+                ) : activeTab === "requests" ? (
+                  <RequestsView
+                    key={`requests-${requestsViewKey}`}
+                    requests={activeRequests}
+                    parts={allParts}
+                    equipment={allEquipment}
+                    equipmentFilter={requestsEquipmentFilter}
+                    onEquipmentFilterChange={setRequestsEquipmentFilter}
+                    canManage={can("decideRequests")}
+                    canPurchase={can("managePurchasing") && can("viewPurchasing")}
+                    initialDetailId={initialRequestId}
+                    initialFilter={requestsInitialFilter}
+                  />
+                ) : activeTab === "purchasing" && canSeePurchasing ? (
+                  <PurchasingView
+                    purchaseRequests={purchaseRequests?.requests ?? []}
+                    orders={purchaseOrders ?? []}
+                    receptions={receptions ?? []}
+                    partRequests={allRequests}
+                    parts={allParts}
+                    canManage={can("managePurchasing")}
+                  />
+                ) : activeTab === "inventory" && can("viewInventory") ? (
+                  <InventoryView
+                    key={`inventory-${inventoryViewKey}`}
+                    parts={allParts}
+                    equipment={allEquipment}
+                    canManage={can("manageInventory")}
+                    currentUserId={user?._id ?? null}
+                    initialSearch={inventoryInitialSearch}
+                    initialLowStockOnly={inventoryLowStockOnly}
+                  />
+                ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
+                  <ManualsView
+                    manuals={allManuals}
+                    equipment={allEquipment}
+                    canManage={can("manageManuals")}
+                    currentUserId={user?._id ?? null}
+                  />
+                ) : activeTab === "equipment" && can("viewEquipment") ? (
+                  <EquipmentView
+                    key={`equipment-${equipmentViewKey}`}
+                    equipment={allEquipment}
+                    parts={allParts}
+                    requests={allRequests}
+                    maintenance={allMaintenance}
+                    manuals={allManuals}
+                    canManage={can("manageEquipment")}
+                    canWriteManuals={can("viewManuals") && !isGuest}
+                    canManageManuals={can("manageManuals")}
+                    currentUserId={user?._id ?? null}
+                    initialSearch={equipmentInitialSearch}
+                    onViewRequests={(equipmentId) => {
+                      setRequestsEquipmentFilter(equipmentId);
+                      setInitialRequestId(null);
+                      setRequestsViewKey((key) => key + 1);
+                      setTab("requests");
+                    }}
+                  />
+                ) : activeTab === "archive" ? (
+                  <ArchiveView
+                    incidents={archivedIncidents}
+                    requests={archivedRequests}
+                    activeIncidents={activeIncidents}
+                    activeRequests={activeRequests}
+                    canArchiveIncidents={can("manageIncidents")}
+                    canArchiveRequests={can("decideRequests")}
+                    trashedIncidents={incidentTrash?.items ?? []}
+                    trashedRequests={requestTrash?.items ?? []}
+                    trashRetentionDays={
+                      incidentTrash?.retentionDays ?? requestTrash?.retentionDays
+                    }
+                    onOpenSettings={
+                      can("manageIncidents") || can("decideRequests")
+                        ? () => goToTab("settings")
+                        : undefined
+                    }
+                  />
+                ) : activeTab === "settings" ? (
+                  <WorkshopSettingsView
+                    incidents={activeIncidents}
+                    requests={activeRequests}
+                    canManageArchive={
+                      can("manageIncidents") || can("decideRequests")
+                    }
+                    canManageAlert={can("manageIncidents")}
+                    canManageAudit={adminOk && can("viewAudit")}
+                    canPurgeUploads={
+                      can("manageIncidents") || can("decideRequests")
+                    }
+                    canManageData={can("manageInventory")}
+                  />
+                ) : activeTab === "audit" && adminOk ? (
+                  <AuditView onOpenIncident={(id) => openIncident(id)} />
+                ) : activeTab === "users" && adminOk ? (
+                  <UsersView />
+                ) : activeTab === "permissions" && adminOk ? (
+                  <PermissionsView />
+                ) : null}
+              </Suspense>
+            )}
           </section>
         </main>
 
         {weeklyReportOpen && (
-          <WeeklyReportDialog
-            open={weeklyReportOpen}
-            onOpenChange={setWeeklyReportOpen}
-          />
+          <Suspense fallback={null}>
+            <WeeklyReportDialog
+              open={weeklyReportOpen}
+              onOpenChange={setWeeklyReportOpen}
+            />
+          </Suspense>
         )}
       </div>
     </div>
