@@ -407,9 +407,18 @@ npx convex env set SITE_URL http://localhost:5173
 npm run auth:keys
 ```
 
-**`src/convex/_generated/` no existe**
-Es código generado y está en `.gitignore`; se crea al desplegar:
+**`src/convex/_generated/` no existe, o la app se queja de un módulo que ya está**
+Es código generado, y va **en el repositorio**: es lo que `tsc -b` lee para saber qué
+funciones existen (`api.dashboard`, `api.incidents`…), así que sin él no compila ni aquí
+ni en el NAS. Viaja con el código a propósito —también con `git pull`, que es como se
+actualiza el NAS—, y por eso se regenera y **se añade al commit** cuando se toca un
+módulo:
 
 ```bash
-npm run convex:push
+npm run convex:up        # la primera vez: levanta el backend local
+npm run convex:push      # sube el esquema y las funciones, y reescribe _generated
+git add src/convex/_generated
 ```
+
+Si se queda atrás, no hay que adivinar nada: «npm run nas» lo comprueba antes de
+empaquetar y para diciendo qué módulos faltan.

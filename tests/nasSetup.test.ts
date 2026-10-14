@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -16,9 +17,13 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, test } from "vitest";
 import {
   DEFAULT_PROJECT_PATH,
+  apiModulesVerdict,
   checkPanelLines,
   checkReport,
   checkScript,
+  listedModules,
+  moduleEntries,
+  moduleNames,
   panelLines,
   parseCheckResult,
   parseSetupResult,
@@ -1180,5 +1185,131 @@ describe.skipIf(!shListo)("la comprobación, de verdad", () => {
     ]) {
       expect(guion).toContain(clave);
     }
+  });
+});
+
+/**
+ * El índice de módulos (`src/convex/_generated/api.d.ts`) es lo que `tsc -b` lee
+ * para saber qué funciones existen: con él atrasado, la imagen del NAS no compila
+ * —`api.dashboard` sin tipo— y el fallo aparece al construir, lejos de donde se
+ * arregla. Estas pruebas sujetan las dos mitades del guardián que lo mira antes de
+ * empaquetar: los módulos que hay en el código (con la regla del CLI) y los que
+ * nombra el índice.
+ */
+describe("el índice de módulos, antes de llevarse el código al NAS", () => {
+  const convexDir = join(root, "src", "convex");
+  const apiPath = join(convexDir, "_generated", "api.d.ts");
+  const herramientas = { existsSync, readFileSync, readdirSync };
+
+  test("se cuentan los módulos del CLI: sin esquema, sin configuración de auth y sin pruebas", () => {
+    expect(
+      moduleNames([
+        {
+          path: "alerts.ts",
+          source: 'import { query } from "./_generated/server";',
+        },
+        { path: "schema.ts", source: "export default defineSchema({});" },
+        { path: "auth.config.ts", source: "export default {};" },
+        { path: "dashboard.test.ts", source: "export const a = 1;" },
+        { path: "auth/emailOtp.ts", source: "export const b = 1;" },
+        { path: "_generated/api.d.ts", source: "export {};" },
+        { path: "_deps/algo.ts", source: "export {};" },
+        { path: ".oculto.ts", source: "export {};" },
+        { path: "#nota.ts", source: "export {};" },
+        { path: "tsconfig.json", source: null },
+        { path: "guardado.ts.bak", source: null },
+        // Un TypeScript sin import ni export no es módulo de nada, igual que para
+        // el CLI: no habría nada que desplegar de él.
+        { path: "suelto.ts", source: "const suelto = 1;" },
+        { path: "con espacio.ts", source: "export {};" },
+      ]),
+    ).toEqual(["alerts", "auth/emailOtp"]);
+  });
+
+  test("el recorrido baja a las subcarpetas y no entra en una carpeta que es un componente", () => {
+    const arbol: Record<string, { name: string; isDirectory: () => boolean }[]> = {
+      mock: [
+        { name: "saludo.ts", isDirectory: () => false },
+        { name: "auth", isDirectory: () => true },
+        { name: "componente", isDirectory: () => true },
+      ],
+      "mock/auth": [
+        { name: "emailOtp.ts", isDirectory: () => false },
+      ],
+      "mock/componente": [
+        { name: "ajeno.ts", isDirectory: () => false },
+      ],
+    };
+    const inventado = {
+      readdirSync: (directory: string) => arbol[directory] ?? [],
+      existsSync: (path: string) => path === "mock/componente/convex.config.ts",
+      readFileSync: () => "export const x = 1;",
+    };
+    expect(moduleNames(moduleEntries("mock", inventado))).toEqual([
+      "auth/emailOtp",
+      "saludo",
+    ]);
+  });
+
+  test("del índice se leen sus módulos, no lo que importa cada uno", () => {
+    const texto = [
+      'import type * as dashboard from "../dashboard.js";',
+      'import type * as emailOtp from "../auth/emailOtp.js";',
+      "",
+      "declare const fullApi: ApiFromModules<{",
+      "  alerts: typeof alerts;",
+      '  "auth/emailOtp": typeof emailOtp;',
+      "  dashboard: typeof dashboard;",
+      "}>;",
+    ].join("\n");
+    expect(listedModules(texto)).toEqual([
+      "alerts",
+      "auth/emailOtp",
+      "dashboard",
+    ]);
+  });
+
+  test("con el índice al día, el veredicto deja seguir", () => {
+    const verdict = apiModulesVerdict({
+      modules: ["alerts", "dashboard"],
+      listed: ["alerts", "dashboard"],
+    });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.detail).toBe("el índice nombra los 2 módulos del código");
+  });
+
+  test("un módulo nuevo sin regenerar el índice para el envío", () => {
+    const verdict = apiModulesVerdict({
+      modules: ["alerts", "dashboard", "publicCodes"],
+      listed: ["alerts", "dashboard"],
+    });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.detail).toContain("no nombra publicCodes");
+    expect(verdict.fix).toContain("convex:push");
+  });
+
+  test("un módulo borrado que el índice sigue nombrando también para el envío", () => {
+    const verdict = apiModulesVerdict({
+      modules: ["alerts"],
+      listed: ["alerts", "fantasma"],
+    });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.detail).toContain("ya no están: fantasma");
+    expect(verdict.fix).toContain("convex codegen");
+  });
+
+  // El repositorio que se empaqueta tiene que cuadrar consigo mismo: si esto
+  // falla, la imagen del NAS no compilaría. Se salta si el índice no está (recién
+  // clonado, sin desplegar nunca), que es cuando no hay nada que comprobar.
+  describe.skipIf(!existsSync(apiPath))("el repositorio que se empaqueta", () => {
+    test("nombra todos sus módulos y ninguno que ya no esté", () => {
+      const modules = moduleNames(moduleEntries(convexDir, herramientas));
+      expect(modules.length).toBeGreaterThan(20);
+      const verdict = apiModulesVerdict({
+        modules,
+        listed: listedModules(readFileSync(apiPath, "utf8")),
+      });
+      expect(verdict.ok, verdict.detail).toBe(true);
+    });
   });
 });

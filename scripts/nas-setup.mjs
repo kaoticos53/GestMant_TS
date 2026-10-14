@@ -34,14 +34,23 @@
 // dónde entrar.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  apiModulesVerdict,
   checkPanelLines,
   checkReport,
   checkScript,
+  listedModules,
+  moduleEntries,
+  moduleNames,
   panelLines,
   parseCheckResult,
   parseSetupResult,
@@ -367,6 +376,41 @@ step("Paso 2 — la plantilla del .env");
 
 step("Paso 3 — llevar el código");
 {
+  // Antes de empaquetar, el índice de módulos: `_generated/api.d.ts` es lo que
+  // `tsc -b` lee para saber qué funciones existen. Si se quedó atrás —un módulo
+  // nuevo sin regenerar, un módulo borrado que el índice sigue nombrando—, la
+  // compilación falla **dentro del NAS**, al construir la imagen, que es donde ya
+  // no se puede arreglar. Aquí es el último momento en el que arreglarlo es
+  // barato, así que se para antes de mandar nada.
+  const apiPath = join(root, "src", "convex", "_generated", "api.d.ts");
+  let apiText = "";
+  try {
+    apiText = readFileSync(apiPath, "utf8");
+  } catch {
+    abort(
+      "no encuentro el índice de módulos que la app necesita: src/convex/_generated/api.d.ts",
+      [
+        "Es código generado: lo escribe el CLI de Convex al desplegar, y sin él la app no compila.",
+        "Con el backend local a mano: «npm run convex:up» y «npm run convex:push».",
+        "O contra tu deployment: «npx convex codegen».",
+      ].join("\n"),
+    );
+  }
+  const verdict = apiModulesVerdict({
+    modules: moduleNames(
+      moduleEntries(join(root, "src", "convex"), {
+        existsSync,
+        readFileSync,
+        readdirSync,
+      }),
+    ),
+    listed: listedModules(apiText),
+  });
+  if (!verdict.ok) {
+    abort(`no puedo llevar el código: ${verdict.detail}`, verdict.fix);
+  }
+  ok(verdict.detail);
+
   // Se manda comprimido por la misma conexión y se descomprime en una carpeta
   // nueva, que sustituye a la anterior solo si llegó entera. Lo que no viaja:
   // `node_modules/` (los binarios del ordenador no valen en el NAS), `dist/` (lo

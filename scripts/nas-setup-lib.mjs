@@ -234,6 +234,174 @@ export function shQuote(value) {
 }
 
 /**
+ * Las extensiones con las que el CLI admite un módulo —`entryPoints`, en el
+ * paquete `convex/bundler`—: es la primera criba de lo que acaba en el índice.
+ */
+const MODULE_EXTENSIONS = [
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".jsx",
+];
+
+/** El contenido de un archivo, o `null` si no se puede leer (no es lo normal). */
+function readText(fs, path) {
+  try {
+    return fs.readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Lo que hay en la carpeta de las funciones (`src/convex`), listo para contar
+ * módulos: cada archivo con su ruta relativa —con barras normales, que es como la
+ * nombra el índice en cualquier sistema— y su contenido si es TypeScript, que es
+ * lo único que hay que mirar por dentro.
+ *
+ * Recorre las subcarpetas, como el CLI, y descarta lo que solo se ve en el
+ * directorio: una carpeta con su propio `convex.config.ts` es un **componente** de
+ * verdad, y lo que tiene dentro no son módulos de esta aplicación.
+ *
+ * Las herramientas del sistema de archivos entran como argumento (`fs`, con
+ * `readdirSync`, `readFileSync` y `existsSync`) para que esto siga siendo una
+ * función pura: la prueba le pasa las que quiera y el guion, las de Node.
+ */
+export function moduleEntries(directory, fs, base = directory) {
+  let listing;
+  try {
+    listing = fs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const entry of listing) {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      const componente = ["convex.config.ts", "convex.config.js"].some((name) =>
+        fs.existsSync(`${path}/${name}`),
+      );
+      if (!componente) entries.push(...moduleEntries(path, fs, base));
+      continue;
+    }
+    entries.push({
+      path: path.slice(base.length + 1),
+      source: /\.(ts|tsx)$/.test(entry.name) ? readText(fs, path) : null,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Los módulos de Convex que hay en el código, con la regla del CLI —la misma que
+ * decide después qué aparece en `_generated/api.d.ts`—: entran los archivos con su
+ * ruta relativa a `src/convex` y su contenido, y salen los nombres, ordenados
+ * (`alerts`, `auth/emailOtp`).
+ *
+ * El CLI no cuenta todo lo que hay ahí, y esto hace lo mismo por los mismos
+ * motivos: `schema.ts` no es una función sino la forma de los datos; `auth.config.ts`
+ * y los `*.test.ts` llevan más de un punto, que el CLI lee como «no es un módulo»
+ * (y con ellos cae cualquier `.d.ts`); `tsconfig.json` no tiene extensión de
+ * entrada; se quedan fuera los archivos ocultos y los que empiezan por `#`; las
+ * rutas con espacios; lo que el propio CLI genera (`_generated/`, `_deps/`); y los
+ * TypeScript sin un solo `import` o `export`, que no son módulos de nada.
+ *
+ * Una carpeta que es un componente no llega aquí: la descarta `moduleEntries`,
+ * que es quien ve el directorio.
+ */
+export function moduleNames(entries = []) {
+  const names = [];
+  for (const entry of entries) {
+    const path = String(entry?.path ?? "");
+    const base = path.slice(path.lastIndexOf("/") + 1);
+    const puntos = (base.match(/\./g) ?? []).length;
+    if (
+      !MODULE_EXTENSIONS.some((extension) => path.endsWith(extension)) ||
+      path.startsWith("_generated/") ||
+      path.startsWith("_deps/") ||
+      path.includes(" ") ||
+      base.startsWith(".") ||
+      base.startsWith("#") ||
+      base === "schema.ts" ||
+      base === "schema.js" ||
+      puntos > 1
+    ) {
+      continue;
+    }
+    if (
+      (path.endsWith(".ts") || path.endsWith(".tsx")) &&
+      typeof entry?.source === "string" &&
+      !/^\s{0,100}(import|export)/m.test(entry.source)
+    ) {
+      continue;
+    }
+    names.push(path.replace(/\.[^/.]+$/, ""));
+  }
+  return names.sort();
+}
+
+/**
+ * Los módulos que nombra un índice generado (`_generated/api.d.ts`): las claves
+ * del objeto que envuelve `ApiFromModules`, que son las que la app usa como
+ * `api.<módulo>.<función>`. Se leen del texto, no del archivo, para que esto siga
+ * siendo una función pura.
+ */
+export function listedModules(text = "") {
+  return [
+    ...String(text).matchAll(
+      /^\s*"?([A-Za-z0-9_/]+)"?\s*:\s*typeof\s+[A-Za-z0-9_]+;\s*$/gm,
+    ),
+  ]
+    .map((match) => match[1])
+    .sort();
+}
+
+/**
+ * El índice de módulos, mirado como el resto de la puesta en marcha: dice si
+ * `_generated/api.d.ts` nombra todos los módulos que hay en el código.
+ *
+ * Importa porque es lo que `tsc -b` lee para saber qué funciones existen: con el
+ * índice atrasado, la compilación de la app falla —`api.dashboard` sin tipo— y
+ * falla **dentro del NAS**, al construir la imagen, lejos de donde se puede
+ * arreglar. Por eso el guion lo mira antes de empaquetar.
+ *
+ * Y en los dos sentidos, porque los dos rompen igual: un módulo nuevo sin
+ * regenerar deja la app sin tipo, y un módulo borrado que el índice sigue nombrando
+ * deja un `import` a un archivo que ya no está.
+ */
+export function apiModulesVerdict({ modules = [], listed = [] } = {}) {
+  const base = { id: "modulos", label: "Índice de módulos" };
+  const faltan = modules.filter((name) => !listed.includes(name));
+  const sobran = listed.filter((name) => !modules.includes(name));
+  if (faltan.length === 0 && sobran.length === 0) {
+    return {
+      ...base,
+      ok: true,
+      detail: `el índice nombra los ${modules.length} módulos del código`,
+    };
+  }
+  const averia = [];
+  if (faltan.length > 0) averia.push(`no nombra ${faltan.join(", ")}`);
+  if (sobran.length > 0)
+    averia.push(`nombra módulos que ya no están: ${sobran.join(", ")}`);
+  return {
+    ...base,
+    ok: false,
+    detail: `_generated/api.d.ts está atrasado: ${averia.join(" · ")}`,
+    fix: [
+      "Regenera el índice antes de llevarlo al NAS: con el backend a mano,",
+      "«npm run convex:up» (una vez) y «npm run convex:push»; o «npx convex codegen»",
+      "contra tu deployment. La imagen del NAS compila con lo que hay en «src/convex»",
+      "y con este índice: atrasado, la compilación falla dentro del NAS.",
+    ].join("\n"),
+  };
+}
+
+/**
  * El archivo del proyecto que se lleva al NAS: solo lo que hace falta para
  * construirlo. Fuera `node_modules/` (los binarios del ordenador no valen en el
  * NAS), `dist/` (lo construye la imagen) y `.env.local` (lleva la clave de
