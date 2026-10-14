@@ -77,6 +77,13 @@ y espera a que el contenedor `funciones` suba el esquema y las funciones —de a
 en adelante las mantiene al día el `vigilante`, solo—. Termina con un panel que
 dice cómo ha quedado todo, y la última línea es la URL de la app.
 
+Antes de llevarse nada comprueba una cosa que, si se queda atrás, rompe la
+compilación **dentro del NAS**: que el índice de módulos
+(`src/convex/_generated`, el archivo generado que el `tsc` lee para saber qué
+funciones existen) nombre todos los módulos de `src/convex/`. Si falta alguno,
+para y los dice, en vez de dejarte un «Property 'dashboard' does not exist» al
+construir la imagen. Mira «Problemas frecuentes» si te encuentras con él.
+
 Se puede lanzar tantas veces como haga falta, y ese es su punto: **nunca cambia
 nada que ya esté hecho**. El `docker-compose.yml` del NAS se conserva si tiene
 cambios propios (los puertos de la variante sin dominio, por ejemplo), el `.env`
@@ -245,10 +252,13 @@ NAS: si eso no te encaja, copia el código como arriba y déjalo ahí.
 
 **Actualizar, entonces, es `git pull`**: dentro del NAS,
 `cd /volume1/docker/pulso-taller/codigo && git pull`, y recompilar como en el
-apartado «Actualizar». Eso sí, no mezcles las dos vías: `npm run nas` sustituye
-`codigo/` entero por el código del ordenador —y el `.git` se va con él—, así que
-o clonas en el NAS y actualizas con `git pull`, o llevas el código desde el
-ordenador.
+apartado «Actualizar». El **índice de módulos** (`src/convex/_generated`, lo que la
+compilación lee para saber qué funciones existen) va dentro del repositorio a
+propósito, así que el pull lo trae también: no hay ningún paso extra que dar en el
+NAS, ni que esperar a que el `vigilante` suba nada antes de reconstruir. Eso sí, no
+mezcles las dos vías: `npm run nas` sustituye `codigo/` entero por el código del
+ordenador —y el `.git` se va con él—, así que o clonas en el NAS y actualizas con
+`git pull`, o llevas el código desde el ordenador.
 
 ## Paso 4 — Crear el proyecto en Container Manager
 
@@ -551,8 +561,13 @@ El camino recomendado, de un tirón:
 
    Lleva el código, recompila las imágenes y espera a que el contenedor
    `funciones` suba el esquema y las funciones. Se puede repetir sin miedo: si
-   algo se corta a mitad, volver a lanzarlo sigue donde se quedó. Si el código
-   llegó al NAS con `git clone`, antes toca `git pull` allí (abajo).
+   algo se corta a mitad, volver a lanzarlo sigue donde se quedó.
+
+   **Si el código llegó al NAS con `git clone`, este paso no es este.** Allí se
+   actualiza con `git pull` —que trae también el índice de módulos— y se
+   reconstruye; está contado en «A mano, pieza a pieza», justo debajo. No mezcles
+   las dos vías: `npm run nas` sustituye `codigo/` entero y el `.git` se va con
+   él.
 
 3. **Comprobación después.** Primero sin tocar nada, con el modo de solo
    comprobación —los contenedores, el `.env` y si el esquema quedó al día—, que
@@ -570,13 +585,24 @@ El camino recomendado, de un tirón:
 
 Si llevaste el código con `git clone` (paso 3), «volver a llevar el código» es
 **`git pull` dentro del NAS** —`cd /volume1/docker/pulso-taller/codigo && git
-pull`—, sin tocar el ordenador. Lo de después (recompilar) es exactamente igual.
+pull`—, sin tocar el ordenador. El pull trae el código **y el índice de módulos**
+(`src/convex/_generated`), que va en el repositorio a propósito: la compilación de
+la app lo necesita para saber qué funciones existen. Lo de después (recompilar) es
+exactamente igual.
 
 - **La app** (lo que se ve y sus textos): vuelve a llevar el código al NAS
   (paso 3) y recompila el proyecto —**Container Manager → Project → Build**, o
   `sudo docker compose up -d --build`—. El sitio va dentro de la imagen, así que
   hasta que no se recompila no cambia; y como la imagen se sustituye entera, no
   quedan restos de la versión anterior mezclados con la nueva.
+
+  Lo único que hay que cuidar es el índice de módulos: si el commit que te traes
+  **añade o quita** un módulo de `src/convex/`, tiene que venir con
+  `src/convex/_generated` regenerado (`npm run convex:push` y commitearlo). Si no,
+  la compilación falla al construir la imagen —está en «Problemas frecuentes»—; el
+  comando del ordenador, en cambio, lo comprueba antes de llevar nada y para
+  diciendo qué módulos faltan.
+
 - **Las funciones** (lo que hay en `src/convex/`): basta con dejar el código nuevo
   en el NAS. El `vigilante` ve que `./codigo/src/convex` ha cambiado y vuelve a
   subir el esquema y las funciones solo, **sin reiniciar ni reconstruir nada** —y
@@ -713,6 +739,40 @@ devuelve el documento de configuración, el problema está ahí.
 Otro servicio de DSM o de otro contenedor tiene el 8080, el 3210 o el 6791. Mira
 quién es y cambia el puerto **en el compose y en la regla del proxy** (o libera el
 puerto). En el NAS: `sudo netstat -tulpn | grep 8080`.
+
+**La app no compila dentro del NAS: «Property 'dashboard' does not exist…».**
+Le falta al **índice de módulos** de Convex (`src/convex/_generated/api.d.ts`): es
+el archivo generado que el `tsc` de la compilación lee para saber qué funciones
+existen (`api.dashboard`, `api.incidents`…). El commit que has traído añade o quita
+un módulo de `src/convex/` y el índice no se regeneró con él, así que el sitio se
+compila llamando a funciones que su `api` no conoce. Se ve al construir la imagen,
+que es donde corre el `tsc`:
+
+```bash
+cd /volume1/docker/pulso-taller
+sudo docker compose build app
+```
+
+Se arregla donde está el código, regenerándolo y **subiéndolo al repositorio**:
+
+```bash
+npm run convex:up      # la primera vez: levanta el backend local
+npm run convex:push    # reescribe src/convex/_generated
+git add src/convex/_generated
+git commit -m "chore: regenera el índice de módulos" && git push
+```
+
+Y en el NAS, antes de reconstruir, `cd /volume1/docker/pulso-taller/codigo &&
+git pull`. Dos cosas que evitan el problema entero: en el ordenador, `npm run nas`
+lo comprueba antes de llevar el código y para nombrando los módulos que faltan; y
+con `git pull`, el índice viaja en el mismo commit que el código, así que no hay
+nada que ordenar. Si alguna vez el pull se queja de cambios locales en
+`_generated` —los escribe también el `vigilante` al subir las funciones—, se
+descartan y se sigue:
+
+```bash
+git -C /volume1/docker/pulso-taller/codigo checkout -- src/convex/_generated
+```
 
 **La construcción de la app se queda sin memoria o sin espacio.**
 Compilar el sitio pide su momento: alrededor de un giga de memoria libre y un par

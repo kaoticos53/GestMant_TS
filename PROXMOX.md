@@ -227,10 +227,13 @@ cp codigo/docker/synology/.env.example .
 
 Y ese `.env.example` se convierte en `.env` como dice la nota de abajo.
 **Actualizar, entonces, es `git pull`**: `cd /srv/pulso-taller/codigo && git pull`
-y `docker compose up -d --build`. Ojo con mezclar las dos vías: `npm run nas`
-sustituye `codigo/` entero por el código del ordenador —el `.git` se va con él—,
-así que o clonas en el servidor y actualizas con `git pull`, o llevas el código
-desde el ordenador.
+y `docker compose up -d --build`. El pull trae el código y también el **índice de
+módulos** (`src/convex/_generated`), que va en el repositorio a propósito porque la
+compilación lo necesita para saber qué funciones existen: no hay ningún paso
+extra, ni que esperar a que el `vigilante` suba nada antes de reconstruir. Ojo con
+mezclar las dos vías: `npm run nas` sustituye `codigo/` entero por el código del
+ordenador —el `.git` se va con él—, así que o clonas en el servidor y actualizas
+con `git pull`, o llevas el código desde el ordenador.
 
 De la otra forma —copiando—, el compose y la plantilla del `.env` van aparte:
 
@@ -414,7 +417,12 @@ root` desde el ordenador (se puede repetir, y es idempotente). A mano:
 
 Si llevaste el código con `git clone` (paso 3), «llevar el código otra vez» es
 **`git pull` dentro del servidor** —`cd /srv/pulso-taller/codigo && git pull`—,
-sin tocar el ordenador; lo de después, igual.
+sin tocar el ordenador; lo de después, igual. El pull trae también el índice de
+módulos, así que no hay que ordenar nada; lo único que hay que cuidar es que el
+commit que **añade o quita** un módulo de `src/convex/` venga con
+`src/convex/_generated` regenerado (`npm run convex:push` y commitearlo), o la
+compilación fallará al construir la imagen. Está contado, con el arreglo, en
+[SYNOLOGY.md](./SYNOLOGY.md) → «Problemas frecuentes».
 
 - **La app** (lo que se ve y sus textos): lleva el código otra vez (paso 3) y
   `docker compose up -d --build`. El sitio va dentro de la imagen, así que
