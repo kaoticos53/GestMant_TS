@@ -28,6 +28,14 @@ import { afterAll, describe, expect, test } from "vitest";
  *  - que con `PULSO_INSTALL=no` no llame siquiera al CLI;
  *  - que no se cargue nunca la muestra (el taller de producción arranca vacío) y
  *    que no salga ninguna contraseña por la salida.
+ *
+ * Y lo mismo con el preparativo que comparten los dos contenedores que suben
+ * funciones (`preparar_deployment`: las variables del deployment y las claves de
+ * Convex Auth), que se prueba con los dos papeles: el del contenedor del arranque,
+ * que las escribe, y el del vigilante, que **no escribe ninguna** y espera a que
+ * estén. Esa es la avería que hay que dejar atrás: cuando escribían los dos a la
+ * vez, el que llegaba segundo se llevaba un 503 del backend y el arranque entero
+ * se caía, con el esquema sin llegar a subirse.
  */
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -68,6 +76,8 @@ interface Equipo {
   llamadas: string;
   store: string;
   marca: string;
+  fallos: string;
+  miradas: string;
 }
 
 /**
@@ -98,6 +108,28 @@ function montarEquipo(): Equipo {
     '    printf "%s\\n" "$*" >> "$PULSO_STORE"',
     '    [ -z "${PULSO_FALLA_STORE:-}" ] || exit 1',
     "    ;;",
+    "  *--names-only*)",
+    "    # Lo que tiene puesto el deployment. De partida, todo (el caso normal); con",
+    "    # PULSO_NOMBRES_VACIAS se simulan las primeras miradas, en las que el",
+    "    # contenedor del arranque todavía no ha llegado a poner las variables.",
+    '    miradas=$(cat "$PULSO_NOMBRES_VUELTAS" 2>/dev/null || printf 0)',
+    '    printf "%s" "$((miradas + 1))" > "$PULSO_NOMBRES_VUELTAS"',
+    '    if [ "$miradas" -lt "${PULSO_NOMBRES_VACIAS:-0}" ]; then',
+    '      printf "%s\\n" JWT_PRIVATE_KEY JWKS',
+    "    else",
+    '      printf "%s\\n" JWT_PRIVATE_KEY JWKS SITE_URL VLY_CONVEX_AUTH_ISSUER',
+    "    fi",
+    "    ;;",
+    "  *'env set'*)",
+    "    # Las primeras veces que se pide puede fallar, como puede fallarle al",
+    "    # backend de verdad: se le pide más veces la misma escritura.",
+    '    fallos=$(cat "$PULSO_FALLOS_ENV" 2>/dev/null || printf 0)',
+    '    if [ "$fallos" -lt "${PULSO_FALLA_ENV:-0}" ]; then',
+    '      printf "%s" "$((fallos + 1))" > "$PULSO_FALLOS_ENV"',
+    '      printf "%s\\n" "503 Service Unavailable: OptimisticConcurrencyControlFailure" >&2',
+    "      exit 1",
+    "    fi",
+    "    ;;",
     "esac",
     "exit 0",
     "",
@@ -113,6 +145,8 @@ function montarEquipo(): Equipo {
     llamadas: join(base, "llamadas.log"),
     store: join(base, "store.log"),
     marca: join(base, "marca"),
+    fallos: join(base, "fallos-env"),
+    miradas: join(base, "miradas"),
   };
 }
 
@@ -269,5 +303,145 @@ describe.skipIf(!shListo)("la instalación del taller, de verdad", () => {
     expect(run.status).toBe(0);
     expect(run.stdout).not.toContain("secreto-de-prueba");
     expect(run.stderr).not.toContain("secreto-de-prueba");
+  });
+});
+
+/**
+ * Ejecuta el preparativo del deployment como lo hacen los dos contenedores que
+ * suben funciones: leyendo el guion con `.` y llamando a `preparar_deployment`.
+ *
+ * Sin nada más, hace el papel del contenedor del arranque (el que escribe); con
+ * `ESPERAR_ARRANQUE=si`, el del vigilante (el que espera).
+ */
+function preparar(equipo: Equipo, entorno: Record<string, string> = {}) {
+  const cadena = [
+    `export PATH='${shPath(equipo.bin)}':"$PATH"`,
+    "export PREFIJO=prueba",
+    `export PULSO_LLAMADAS='${shPath(equipo.llamadas)}'`,
+    `export PULSO_FALLOS_ENV='${shPath(equipo.fallos)}'`,
+    `export PULSO_NOMBRES_VUELTAS='${shPath(equipo.miradas)}'`,
+    "export CONVEX_SELF_HOSTED_URL='https://api.taller.es'",
+    "export SITE_URL='https://taller.es'",
+    ...Object.entries(entorno).map(
+      ([clave, valor]) => `export ${clave}='${valor}'`,
+    ),
+    `. '${shPath(LIB)}'`,
+    "preparar_deployment",
+  ].join("\n");
+  const result = spawnSync("sh", ["-c", cadena], { encoding: "utf8" });
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    llamadas: lineas(leer(equipo.llamadas)),
+  };
+}
+
+describe.skipIf(!shListo)("el deployment, antes de subir el código", () => {
+  test("deja puestas las variables y no rehace las claves de Convex Auth", () => {
+    const run = preparar(conEquipo());
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("variables del deployment al día");
+    expect(run.stdout).toContain("las claves de Convex Auth ya estaban");
+    // Una sola escritura por variable: lo que ya está bien no se reescribe.
+    expect(
+      run.llamadas.filter((linea) => linea.includes("env set SITE_URL")),
+    ).toHaveLength(1);
+    expect(
+      run.llamadas.filter((linea) =>
+        linea.includes("env set VLY_CONVEX_AUTH_ISSUER"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("una escritura que el backend rechaza no se lleva por delante el arranque", () => {
+    const run = preparar(conEquipo(), {
+      PULSO_FALLA_ENV: "2",
+      PULSO_ESPERA_ENTRE_INTENTOS: "0",
+    });
+
+    // Lo que se escribe es siempre el mismo valor, así que volver a pedirlo no
+    // tiene ningún peligro: se reintenta y el código se sube igual. Sin esto, el
+    // contenedor del arranque sale con error 1 y el esquema se queda sin subir.
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("no ha entrado: se reintenta");
+    expect(run.stdout).toContain("variables del deployment al día");
+    // Tres intentos para la primera variable (los dos que fallan y el que entra)
+    // y uno solo para la segunda, que ya no se encuentra la puerta cerrada.
+    expect(
+      run.llamadas.filter((linea) => linea.includes("env set SITE_URL")),
+    ).toHaveLength(3);
+    expect(
+      run.llamadas.filter((linea) =>
+        linea.includes("env set VLY_CONVEX_AUTH_ISSUER"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("si no entra en sus intentos, lo cuenta y no sigue", () => {
+    const run = preparar(conEquipo(), {
+      PULSO_FALLA_ENV: "9",
+      PULSO_ESPERA_ENTRE_INTENTOS: "0",
+      PULSO_INTENTOS_VARIABLES: "2",
+    });
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toContain(
+      "no se ha podido dejar puesta SITE_URL en 2 intentos",
+    );
+    expect(run.stderr).toContain(
+      "no se han podido fijar las variables del deployment",
+    );
+  });
+
+  test("el vigilante no escribe ninguna variable: espera a que las deje el arranque", () => {
+    const equipo = conEquipo();
+    const run = preparar(equipo, { ESPERAR_ARRANQUE: "si" });
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("las variables del deployment ya están puestas");
+    expect(run.stdout).toContain("las claves de Convex Auth ya estaban");
+    // Ni una escritura: las variables y las claves son del contenedor del
+    // arranque. Con dos escritores a la vez, el que llegaba segundo se llevaba un
+    // 503 y el arranque se caía; con uno solo, esa puerta no existe.
+    expect(run.llamadas.filter((linea) => linea.includes("env set"))).toEqual(
+      [],
+    );
+  });
+
+  test("espera a que el arranque las deje puestas, y sigue sin escribir", () => {
+    const equipo = conEquipo();
+    const run = preparar(equipo, {
+      ESPERAR_ARRANQUE: "si",
+      // Las dos primeras miradas no las ven puestas: el arranque todavía está
+      // poniéndolas, que es lo que pasa en un arranque del NAS de verdad.
+      PULSO_NOMBRES_VACIAS: "2",
+      PULSO_ESPERA_ENTRE_RONDAS: "0",
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("las variables del deployment ya están puestas");
+    expect(run.llamadas.filter((linea) => linea.includes("env set"))).toEqual(
+      [],
+    );
+  });
+
+  test("si el arranque no llega a dejarlas puestas, lo cuenta y no las escribe él", () => {
+    const equipo = conEquipo();
+    const run = preparar(equipo, {
+      ESPERAR_ARRANQUE: "si",
+      PULSO_NOMBRES_VACIAS: "99",
+      PULSO_INTENTOS_ESPERA: "2",
+      PULSO_ESPERA_ENTRE_RONDAS: "0",
+    });
+
+    // Se acaban las miradas y se dice quién las escribe, en lugar de escribirlas
+    // por su cuenta —que es lo que volvería a poner a los dos a la vez—.
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("las deja puestas el contenedor «funciones»");
+    expect(run.llamadas.filter((linea) => linea.includes("env set"))).toEqual(
+      [],
+    );
   });
 });

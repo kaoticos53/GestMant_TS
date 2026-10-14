@@ -348,7 +348,10 @@ guía o con las que pongas en `ADMIN_EMAIL` / `ADMIN_PASSWORD`; con
 los cambios llegan solos: el contenedor `vigilante`, que sí se queda, mira
 `./codigo/src/convex` (lo que hay en el servidor) y vuelve a subir el esquema y
 las funciones **solo cuando cambian**, sin reiniciar ni reconstruir nada. Tampoco
-genera las claves de Convex Auth: espera a que las deje `funciones`. Se ve en
+escribe nada en el deployment —ni las claves de Convex Auth ni las variables del
+taller—: espera a que las deje `funciones`, que arranca a la vez que él (los dos
+escribiendo, el que llegaba segundo se llevaba un 503 del backend y el arranque se
+caía). Se ve en
 `docker compose logs -f vigilante`. Si sale con
 error, lo dice con palabras; el apartado de **Problemas frecuentes** está al
 final, y es el mismo catálogo que el de la guía del NAS (los motivos son los
@@ -556,7 +559,10 @@ version` se queda en un error de TLS. En los registros lo dice:
 El que las sube solo es el `vigilante`: mira `docker compose logs vigilante`. Si
 dice que no ha podido subir el código en tres intentos, el motivo está en las
 líneas de arriba —casi siempre la clave de administrador o el backend—, y después
-de arreglarlo lo reintenta solo. Si el contenedor está parado, levántalo con
+de arreglarlo lo reintenta solo. Y si dice que el deployment sigue sin claves de
+Convex Auth o sin las variables del taller, arranca antes el contenedor de las
+funciones (`docker compose up funciones`): las claves y las variables las escribe
+él, no el vigilante. Si el contenedor está parado, levántalo con
 `docker compose up -d vigilante`; para una subida puntual, `docker compose up
 funciones`.
 

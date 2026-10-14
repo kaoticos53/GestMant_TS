@@ -18,10 +18,14 @@
 #      enlaces— y el emisor de las sesiones. Van **antes** de subir el código
 #      porque el despliegue se niega a entrar si la configuración de auth pide una
 #      variable que no está puesta. Manda el `.env` del proyecto: cambiar de
-#      dominio es editarlo y volver a arrancar.
+#      dominio es editarlo y volver a arrancar. Las escribe **solo este
+#      contenedor**: el `vigilante`, que arranca a la vez, espera a que estén
+#      puestas (si escribieran los dos, el que llegara segundo se llevaría un 503
+#      del backend y el arranque se caería).
 #   4. **Genera las claves de Convex Auth solo si faltan.** Con las que el
 #      deployment firma y valida sus propias sesiones. Rotarlas cerraría todas las
-#      sesiones abiertas, así que no se regeneran en cada arranque.
+#      sesiones abiertas, así que no se regeneran en cada arranque. Las genera
+#      también solo este; el `vigilante` las espera.
 #   5. **Sube el esquema y las funciones** (`convex dev --once`, el mismo
 #      `npm run convex:push` del repositorio) y se va, dejando el resultado en los
 #      registros del contenedor.

@@ -50,6 +50,7 @@ const VALUE_OPTIONS = {
 /** Las opciones que no llevan valor: están o no están. */
 const SWITCH_OPTIONS = {
   "--check": "check",
+  "--doctor": "doctor",
   "--force-compose": "forceCompose",
   "--new-key": "newKey",
   "--no-build": "noBuild",
@@ -64,6 +65,7 @@ export function usage(name = "npm run nas --") {
     "",
     `${name} --host IP-del-NAS [opciones]`,
     `  ${name} --check --host IP-del-NAS`,
+    `  ${name} --doctor --host IP-del-NAS`,
     `  ${name} --host 192.168.1.20 --app-url https://taller.mi-taller.es \\`,
     "    --api-url https://api.mi-taller.es",
     "",
@@ -78,10 +80,18 @@ export function usage(name = "npm run nas --") {
     ".env y si el esquema está al día— y lo cuenta. Ni construye ni arranca ni",
     "sube código: se puede lanzar en cualquier momento, también con gente dentro.",
     "",
+    "Con --doctor se mira el entorno del NAS —dónde está el binario de Docker, si",
+    "hace falta sudo y qué grupos y qué PATH tiene, si Compose lee el proyecto, qué",
+    "contenedores hay y si se puede escribir donde van las copias— y se explica lo",
+    "que falta antes de intentar nada. Tampoco cambia nada.",
+    "",
     "Opciones:",
     "",
     "  --check                  solo mira cómo está el taller (contenedores, .env",
     "                           y esquema). No cambia nada",
+    "  --doctor                 mira el entorno del NAS y explica lo que falta",
+    "                           (Docker, sudo y sus grupos, Compose, contenedores y",
+    "                           las copias). No cambia nada",
     "  --host IP-del-NAS        el NAS (también NAS_HOST)",
     "  --user admin             la cuenta con la que se entra (NAS_USER)",
     "  --port 22                el puerto de SSH (NAS_PORT)",
@@ -120,6 +130,7 @@ export function resolveConfig(argv = [], env = {}) {
     apiUrl: "",
     instance: DEFAULT_INSTANCE,
     check: false,
+    doctor: false,
     forceCompose: false,
     newKey: false,
     build: true,
@@ -160,15 +171,24 @@ export function resolveConfig(argv = [], env = {}) {
   if (config.noBuild) config.build = false;
   delete config.noBuild;
 
-  // Mirar y cambiar son dos cosas distintas: con --check no hay nada que forzar
-  // ni clave que pedir, y prometerlo sería peor que no aceptarlo.
+  // Mirar y cambiar son dos cosas distintas: ni --check ni --doctor cambian nada,
+  // así que no hay nada que forzar ni clave que pedir, y prometerlo sería peor que
+  // no aceptarlo.
+  const soloMira = config.check ? "--check" : config.doctor ? "--doctor" : null;
   const noCheck = [
     config.forceCompose ? "--force-compose" : null,
     config.newKey ? "--new-key" : null,
   ].filter(Boolean);
-  if (config.check && noCheck.length > 0) {
+  if (soloMira && noCheck.length > 0) {
     config.errors.push(
-      `--check no cambia nada, así que no se combina con ${noCheck.join(" ni ")}`,
+      `${soloMira} no cambia nada, así que no se combina con ${noCheck.join(" ni ")}`,
+    );
+  }
+  // Y son dos miradas distintas: el doctor mira el entorno —Docker, sudo, las
+  // copias— y la comprobación mira el taller. Juntas no dicen más, dicen menos.
+  if (config.check && config.doctor) {
+    config.errors.push(
+      "--doctor y --check miran cosas distintas: lánzalos por separado",
     );
   }
 
@@ -231,6 +251,97 @@ export function normalizeProjectPath(path) {
 /** Un valor tal cual para la shell, entre comillas simples. */
 export function shQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * El guion con finales de linea de Unix, venga como venga.
+ *
+ * Los guiones del NAS se editan en Windows y corren en el `sh` de Linux de los
+ * contenedores, y ahi un `\r` no es un espacio en blanco: deja el `#!` como
+ * `#!/bin/sh\r`, asi que la shell busca un interprete que se llama `/bin/sh\r`
+ * --con su retorno de carro pegado--, no lo encuentra y el contenedor sale con
+ * «not found» y el codigo 127. Y una comilla de mas: en una linea que acabe en
+ * una variable, el `\r` se queda **dentro del valor**.
+ *
+ * En el repositorio estan en LF, pero el proyecto se edita en Windows y un
+ * editor de alli los puede dejar con `\r` sin que nadie lo note. Se quitan aqui,
+ * al armar la orden, que es el ultimo sitio por el que pasan antes de cruzar.
+ *
+ * Lo que entra en la imagen no pasa por aqui y se limpia al construirla: mira el
+ * paso de las funciones del `docker/synology/Dockerfile`.
+ */
+export function sinRetornos(text) {
+  return text.replace(/\r\n?/g, "\n");
+}
+
+/**
+ * Cuanto puede medir un argumento de la linea de ordenes al cruzar de Windows a
+ * un `ssh` de MSYS --el de Git Bash--, que es por donde viajan los guiones.
+ *
+ * No es un limite de Windows ni del NAS: es del paso de un proceso nativo a uno
+ * de MSYS, y corta **en silencio**. Medido en Windows con el guion de la copia:
+ * 9767 bytes de guion llegaban cortados a los 8186 caracteres --a media palabra,
+ * sin error ni aviso--, mientras que relleno plano de 16000 pasaba entero. El
+ * corte depende del contenido, asi que se deja un margen de dos a uno: los
+ * guiones viajan troceados y se vuelven a juntar en el NAS.
+ *
+ * Se veia como una comilla sin cerrar en la shell del NAS: la mitad del guion
+ * que llegaba estaba a medias.
+ */
+export const COMMAND_CHUNK = 4000;
+
+/** El guion en trozos que quepan, cada uno, en un argumento de la orden. */
+export function commandChunks(text, size = COMMAND_CHUNK) {
+  const trozos = [];
+  for (let i = 0; i < text.length; i += size) {
+    trozos.push(text.slice(i, i + size));
+  }
+  return trozos;
+}
+
+/**
+ * Lo que hace el `sh` del NAS con lo que le llega por el tubo: se lo guarda
+ * **entero** antes de ejecutar nada.
+ *
+ * Y no es un detalle: el guion no se le puede dar a `sh -s`, que lee de su
+ * entrada segun lo va necesitando, porque cualquier orden de dentro que lea de
+ * esa entrada --`docker compose run`, sin ir mas lejos-- se lleva por delante lo
+ * que quede de guion. La shell se queda sin nada que leer y termina **en
+ * silencio, a medias**. Medido con la copia previa: el export salia bien y el
+ * guion moria justo despues, sin un solo mensaje y sin resumen con el que el
+ * ordenador pudiera saber que habia pasado.
+ *
+ * Con el guion ya en una variable, lo que haga cada orden de dentro con la
+ * entrada da igual: no queda guion por leer.
+ */
+const COGER_Y_EJECUTAR = 'pulso_guion=$(cat); eval "$pulso_guion"';
+
+/**
+ * La orden que le pasa un guion a la shell del NAS sin dejarlo alli, **en
+ * palabras sueltas**: los trozos viajan cada uno por su cuenta y alli un
+ * `printf` los vuelve a juntar por el tubo para que los ejecute un `sh -c`.
+ *
+ * Se devuelven sueltas y no en una linea porque lo que se corta es **cada
+ * argumento**: `ssh` las junta con un espacio al otro lado, asi que la orden sale
+ * entera sin que ningun argumento se acerque al corte.
+ *
+ * Y no lleva ningun argumento corto entrecomillado a proposito: al cruzar de
+ * Windows a un `ssh` de MSYS, un argumento con comillas y sin espacios pierde las
+ * comillas (medido: `'7'` llega como `7`). Los trozos no, porque llevan espacios
+ * y Node los protege con comillas dobles; los valores que el guion necesite
+ * saber van **escritos dentro del guion** —una linea `CLAVE=valor` delante—, y
+ * asi no hay ninguna palabra corta que cruce sola.
+ */
+export function scriptWords(script) {
+  return [
+    "printf",
+    "%s",
+    ...commandChunks(sinRetornos(script)).map(shQuote),
+    "|",
+    "sh",
+    "-c",
+    shQuote(COGER_Y_EJECUTAR),
+  ];
 }
 
 /**
@@ -522,16 +633,35 @@ cd "$RAIZ"
 # --- Con quien se habla con Docker --------------------------------------------
 # En un Synology hay que ser root para hablar con Docker, pero no siempre: si el
 # usuario esta en el grupo que toca, no hace falta sudo. Se pregunta una vez.
-if docker info >/dev/null 2>&1; then
+#
+# Y no vale con el \`docker\` a secas: el \`sudo\` del NAS impone su propio PATH
+# --sin /usr/local/bin, que es donde vive el binario--, asi que \`sudo docker\`
+# contesta «command not found» con el taller en pie. Se busca el binario por sus
+# rutas de siempre y se llama despues por la que aparezca.
+buscar_binario() {
+  opcion=$(command -v "$1" 2>/dev/null || true)
+  for candidato in "$opcion" "/usr/local/bin/$1" "/var/packages/ContainerManager/target/usr/bin/$1"; do
+    if [ -n "$candidato" ] && [ -x "$candidato" ]; then
+      echo "$candidato"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKER=$(buscar_binario docker) ||
+  fail "no encuentro el binario docker en el NAS: instala Container Manager desde el Centro de paquetes"
+if $DOCKER info >/dev/null 2>&1; then
   SUDO=""
 else
   SUDO="sudo"
 fi
-if $SUDO docker compose version >/dev/null 2>&1; then
-  COMPOSE_CMD="docker compose"
-elif $SUDO docker-compose version >/dev/null 2>&1; then
-  # Las versiones mas antiguas de Container Manager traen la orden con guion.
-  COMPOSE_CMD="docker-compose"
+# El compose nuevo va dentro del propio docker; el antiguo, aparte y con guion.
+DOCKER_COMPOSE=$(buscar_binario docker-compose || true)
+if $SUDO $DOCKER compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER compose"
+elif [ -n "$DOCKER_COMPOSE" ] && $SUDO "$DOCKER_COMPOSE" version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER_COMPOSE"
 else
   fail "no encuentro docker compose en el NAS: instala Container Manager desde el Centro de paquetes"
 fi
@@ -734,7 +864,7 @@ if [ -z "$id" ]; then
 else
   intento=1
   while [ "$intento" -le 150 ]; do
-    en_marcha=$($SUDO docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null || printf 'false')
+    en_marcha=$($SUDO $DOCKER inspect -f '{{.State.Running}}' "$id" 2>/dev/null || printf 'false')
     [ "$en_marcha" = "true" ] || break
     [ $((intento % 15)) -ne 0 ] || log "subiendo el esquema y las funciones... ($intento/150)"
     intento=$((intento + 1))
@@ -748,7 +878,7 @@ else
     log "  (como va, con «$COMPOSE_CMD logs -f funciones»; el esquema y las funciones"
     log "  suelen subir bastante antes)"
   else
-    codigo_salida=$($SUDO docker inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || printf '?')
+    codigo_salida=$($SUDO $DOCKER inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || printf '?')
     if [ "$codigo_salida" != "0" ]; then
       printf '\n'
       compose logs --tail=30 funciones || true
@@ -836,20 +966,46 @@ fi
 raiz="si"
 log "carpeta del proyecto: $RAIZ"
 
+# Y se entra en ella. Lo que se le pregunta a Compose --qué contenedores hay--
+# solo se sabe desde dentro, contra el docker-compose.yml de la carpeta: desde
+# fuera contesta «no configuration file provided: not found» y parecería que no
+# hay ni uno. Este guion llega por SSH desde donde entre el usuario, así que la
+# carpeta no es un detalle que se pueda dar por hecho.
+cd "$RAIZ" 2>/dev/null || log "no he podido entrar en $RAIZ: los contenedores quedan a medias"
+
 # --- Con quien se habla con Docker -------------------------------------------
 # La misma pregunta que hace la puesta en marcha, sin cambiar nada: en un
 # Synology hace falta root para hablar con Docker, aunque no siempre (si el
 # usuario esta en el grupo que toca, no).
-if docker info >/dev/null 2>&1; then
+#
+# Y no vale con el \`docker\` a secas: el \`sudo\` del NAS impone su propio PATH
+# --sin /usr/local/bin, que es donde vive el binario--, asi que \`sudo docker\`
+# contestaria «command not found» con el taller en pie. Se busca el binario por
+# sus rutas de siempre y se llama despues por la que aparezca.
+buscar_binario() {
+  opcion=$(command -v "$1" 2>/dev/null || true)
+  for candidato in "$opcion" "/usr/local/bin/$1" "/var/packages/ContainerManager/target/usr/bin/$1"; do
+    if [ -n "$candidato" ] && [ -x "$candidato" ]; then
+      echo "$candidato"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKER=$(buscar_binario docker || true)
+DOCKER_COMPOSE=$(buscar_binario docker-compose || true)
+if [ -n "$DOCKER" ] && $DOCKER info >/dev/null 2>&1; then
   SUDO=""
 else
   SUDO="sudo"
 fi
-if $SUDO docker compose version >/dev/null 2>&1; then
-  COMPOSE_CMD="docker compose"
+# El compose nuevo va dentro del propio docker; el antiguo, aparte y con guion.
+if [ -n "$DOCKER" ] && $SUDO $DOCKER compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER compose"
   docker_estado="si"
-elif $SUDO docker-compose version >/dev/null 2>&1; then
-  COMPOSE_CMD="docker-compose"
+elif [ -n "$DOCKER_COMPOSE" ] && $SUDO "$DOCKER_COMPOSE" version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER_COMPOSE"
   docker_estado="si"
 else
   log "no encuentro docker compose: sin Container Manager no hay contenedores que mirar"
@@ -864,7 +1020,7 @@ if [ "$docker_estado" = "si" ]; then
     id=$($SUDO $COMPOSE_CMD ps -a -q "$servicio" 2>/dev/null || true)
     estado="falta"
     if [ -n "$id" ]; then
-      estado=$($SUDO docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
+      estado=$($SUDO $DOCKER inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
       [ "$estado" = "running" ] || estado="parado"
     fi
     if [ -z "$contenedores" ]; then
@@ -881,14 +1037,14 @@ if [ "$docker_estado" = "si" ]; then
   if [ -z "$id" ]; then
     funciones="falta"
   else
-    estado=$($SUDO docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
+    estado=$($SUDO $DOCKER inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
     case "$estado" in
       running) funciones="en-marcha" ;;
       exited) funciones="terminado" ;;
       *) funciones="$estado" ;;
     esac
-    salida=$($SUDO docker inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || printf '')
-    fin=$($SUDO docker inspect -f '{{.State.FinishedAt}}' "$id" 2>/dev/null || printf '')
+    salida=$($SUDO $DOCKER inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || printf '')
+    fin=$($SUDO $DOCKER inspect -f '{{.State.FinishedAt}}' "$id" 2>/dev/null || printf '')
   fi
   if [ -z "$salida" ]; then
     log "funciones: $funciones"
@@ -1106,7 +1262,7 @@ function serviceStates(contenedores = "") {
 }
 
 /** «en pie», «parado», «no está»: el estado de un contenedor, en palabras. */
-function stateWords(state) {
+export function stateWords(state) {
   if (state === "running") return "en pie";
   if (state === "parado") return "parado";
   if (state === undefined || state === "falta") return "no está";

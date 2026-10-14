@@ -59,6 +59,15 @@ const shListo =
     encoding: "utf8",
   }).status === 0;
 
+/**
+ * Los guiones que se lanzan de verdad tardan lo suyo: una puesta en marcha ronda
+ * los tres segundos —los procesos que abre y las esperas que se toma— y hay
+ * pruebas que la hacen dos veces. El límite de Vitest, cinco segundos, se queda
+ * corto en cuanto la máquina tiene algo más que hacer, y entonces falla la
+ * prueba por lo que tarda el ordenador, no por lo que hace el guion.
+ */
+const DE_VERDAD = { timeout: 30_000 };
+
 /** Las líneas con algo de un texto, que es como se leen los resúmenes. */
 const lineas = (text: string) =>
   text
@@ -254,6 +263,21 @@ describe("lo que se le manda al NAS", () => {
     });
   });
 
+  test("el binario de Docker se busca por su ruta, no se da por hecho en el PATH", () => {
+    // El `sudo` de un Synology impone su propio PATH —sin `/usr/local/bin`, que
+    // es donde vive el binario—, así que `sudo docker` contesta «command not
+    // found» con el taller en pie. Los dos guiones buscan el binario antes de
+    // usarlo y lo llaman después por la ruta que aparezca.
+    for (const guion of [setupScript({}), checkScript({})]) {
+      expect(guion).toContain('command -v "$1"');
+      expect(guion).toContain('"/usr/local/bin/$1"');
+      expect(guion).toContain("DOCKER=$(buscar_binario docker");
+      expect(guion).toContain("$DOCKER info");
+      // Nunca a secas: era justo lo que fallaba.
+      expect(guion).not.toContain("$SUDO docker ");
+    }
+  });
+
   test("sin resumen, no hay resumen: no se inventa uno", () => {
     expect(parseSetupResult("nas: algo se torció")).toBeNull();
     expect(parseSetupResult("")).toBeNull();
@@ -378,8 +402,17 @@ function montarNas() {
       "  info) exit 0 ;;",
       "  compose)",
       "    shift",
+      "    # como el de verdad: `version` no necesita ningún proyecto delante, el",
+      "    # resto sí. Si el guion no ha entrado en la carpeta del taller --que es",
+      "    # lo que pasa al lanzarlo por SSH desde el HOME del NAS--, aquí se planta.",
       '    case "$1" in',
       "      version) exit 0 ;;",
+      "    esac",
+      '    if [ ! -f docker-compose.yml ]; then',
+      '      printf "no configuration file provided: not found\\n" >&2',
+      "      exit 1",
+      "    fi",
+      '    case "$1" in',
       '      exec) printf "Admin key:\\npulso-taller|0123456789abcdef\\n" ;;',
       '      ps) case "$*" in *funciones*)',
       '            [ -n "${PULSO_SIN_FUNCIONES:-}" ] && exit 0 ;; esac',
@@ -752,7 +785,7 @@ describe("el panel de la comprobación", () => {
   });
 });
 
-describe.skipIf(!shListo)("el guion del NAS, de verdad", () => {
+describe.skipIf(!shListo)("el guion del NAS, de verdad", DE_VERDAD, () => {
   test("la primera vez lo deja todo hecho: pasos 1 a 5 de una tacada", () => {
     const { nas } = conNas();
     const run = nas.lanzar({
@@ -980,7 +1013,7 @@ describe.skipIf(!shListo)("el guion del NAS, de verdad", () => {
   });
 });
 
-describe.skipIf(!shListo)("la comprobación, de verdad", () => {
+describe.skipIf(!shListo)("la comprobación, de verdad", DE_VERDAD, () => {
   test("en un taller recién puesto en marcha, todo en pie y sin dejar rastro", () => {
     const { nas } = conNas();
     nas.lanzar({

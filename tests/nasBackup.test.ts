@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, test } from "vitest";
 import {
+  backupWords,
   DEFAULT_BACKUP_PATH,
   DEFAULT_KEEP,
   DEFAULT_PROJECT_PATH,
@@ -22,6 +23,11 @@ import {
   resolveConfig,
   usage,
 } from "../scripts/nas-backup-lib.mjs";
+import {
+  COMMAND_CHUNK,
+  commandChunks,
+  scriptWords,
+} from "../scripts/nas-setup-lib.mjs";
 
 /**
  * La copia previa tiene dos mitades y se prueban por separado:
@@ -55,6 +61,14 @@ const shListo =
     encoding: "utf8",
   }).status === 0;
 
+/**
+ * El guion se lanza de verdad y tarda lo suyo —abre unos cuantos procesos y se
+ * toma sus esperas—; el límite de Vitest, cinco segundos, se queda corto en
+ * cuanto la máquina tiene algo más que hacer, y entonces falla la prueba por lo
+ * que tarda el ordenador, no por lo que hace el guion.
+ */
+const DE_VERDAD = { timeout: 30_000 };
+
 /** Las líneas con algo de un texto. */
 const lineas = (text: string) =>
   text
@@ -66,7 +80,87 @@ const lineas = (text: string) =>
 /* Lo que decide el comando, sin NAS                                   */
 /* ------------------------------------------------------------------ */
 
+describe("el guion que viaja al NAS", () => {
+  test("va troceado, en palabras sueltas y muy por debajo del corte de MSYS", () => {
+    const guion = readFileSync(GUION, "utf8");
+    const trozos = commandChunks(guion);
+    // El guion no cabe en un argumento: al cruzar de Windows a un `ssh` de MSYS
+    // un argumento de casi 10 KB llegaba cortado a media palabra, en silencio.
+    expect(trozos.length).toBeGreaterThan(1);
+    expect(trozos.join("")).toBe(guion);
+
+    const palabras = scriptWords(guion);
+    expect(palabras).toContain("|");
+    // Y la shell del NAS se guarda el guion entero antes de ejecutar nada: si lo
+    // fuera leyendo segun lo necesita (`sh -s`), una orden que lea de la entrada
+    // se llevaria por delante el resto del guion (ver la prueba de mas abajo).
+    expect(palabras.at(-1)).toContain("$(cat)");
+    for (const palabra of palabras) {
+      expect(Buffer.byteLength(palabra, "utf8")).toBeLessThan(COMMAND_CHUNK + 200);
+    }
+  });
+
+  test.skipIf(!shListo)(
+    "el guion llega entero aunque una orden de dentro lea de la entrada",
+    () => {
+      // `docker compose run` lee de la entrada: con el guion viajando por ella
+      // —como con `sh -s`— se lleva por delante lo que quede de guion, la shell
+      // se queda sin nada que leer y termina en silencio, a medias. Le pasó a la
+      // copia previa: el export salía bien y el guion moría justo después.
+      const guion = [
+        "#!/bin/sh",
+        'printf "antes\\n"',
+        "cat >/dev/null",
+        'printf "despues\\n"',
+        "",
+      ].join("\n");
+      const r = spawnSync("sh", ["-c", scriptWords(guion).join(" ")], {
+        encoding: "utf8",
+      });
+
+      expect(r.stdout).toContain("antes");
+      expect(r.stdout).toContain("despues");
+    },
+  );
+
+  test.skipIf(!shListo)("en el NAS se vuelve a juntar y el guion se ejecuta con sus valores", () => {
+    const guion = readFileSync(GUION, "utf8");
+    const orden = backupWords({
+      script: guion,
+      root: "/volume1/inexistente",
+      backups: "/volume1/docker/respaldos",
+      keep: "7",
+    }).join(" ");
+    // Se le da al `sh` por un archivo, no como argumento: pasarlo como argumento
+    // sería caer en el mismo corte que se está probando.
+    const carpeta = mkdtempSync(join(tmpdir(), "pulso-orden-"));
+    const fichero = join(carpeta, "orden.sh");
+    writeFileSync(fichero, orden);
+    const r = spawnSync("sh", [shPath(fichero)], { encoding: "utf8" });
+    rmSync(carpeta, { recursive: true, force: true });
+
+    // El guion se ha ejecutado de verdad —el mensaje es suyo— y con el valor
+    // dentro: la carpeta se la ha dicho el ordenador, no un valor de mentira.
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("no veo el proyecto en /volume1/inexistente");
+  });
+});
+
 describe("la configuración de la copia previa", () => {
+  test("el binario de Docker se busca por su ruta, no se da por hecho en el PATH", () => {
+    // Como en la puesta en marcha y la comprobación: el `sudo` de un NAS impone
+    // su propio PATH —sin `/usr/local/bin`, que es donde vive el binario—, así
+    // que `sudo docker` contestaba «command not found» con el taller en pie y la
+    // copia se quedaba sin hacer.
+    const guion = readFileSync(GUION, "utf8");
+    expect(guion).toContain('command -v "$1"');
+    expect(guion).toContain('"/usr/local/bin/$1"');
+    expect(guion).toContain("DOCKER=$(buscar_binario docker");
+    expect(guion).toContain("$DOCKER info");
+    // Nunca a secas: era justo lo que fallaba.
+    expect(guion).not.toContain("$SUDO docker ");
+  });
+
   test("sin nada, solo el host es obligatorio: lo demás tiene valores de partida", () => {
     const sinHost = resolveConfig([]);
     expect(sinHost.errors).toEqual([
@@ -288,8 +382,17 @@ function montarNas() {
       "    ;;",
       "  compose)",
       "    shift",
+      "    # Como el de verdad: `version` no necesita ningún proyecto delante, el",
+      "    # resto sí. Si el guion no ha entrado en la carpeta del taller --que es lo",
+      "    # que pasa al lanzarlo por SSH desde el HOME del NAS--, aquí se planta.",
       '    case "$1" in',
       "      version) exit 0 ;;",
+      "    esac",
+      '    if [ ! -f docker-compose.yml ]; then',
+      '      printf "no configuration file provided: not found\\n" >&2',
+      "      exit 1",
+      "    fi",
+      '    case "$1" in',
       "      run)",
       '        if [ -n "${PULSO_FALLA_EXPORT:-}" ]; then',
       '          printf "el deployment no contesta\\n" >&2',
@@ -385,7 +488,7 @@ afterAll(() => {
   for (const base of nasCreados) rmSync(base, { recursive: true, force: true });
 });
 
-describe.skipIf(!shListo)("el guion de la copia previa, de verdad", () => {
+describe.skipIf(!shListo)("el guion de la copia previa, de verdad", DE_VERDAD, () => {
   test("hace las dos copias y dice dónde están", () => {
     const { nas } = conNas();
     const run = nas.copiar();

@@ -74,6 +74,19 @@ npm run nas:backup -- --host IP-del-NAS
 No cambia datos, no toca el `.env` y no imprime ningún secreto; termina diciendo
 dónde han quedado las copias.
 
+Y cuando algo no sale —o antes de tocar nada—, el **doctor** mira el entorno del
+NAS y explica lo que falta, que es lo primero que se echa de menos justo cuando
+nada funciona: dónde está el binario de Docker, si hace falta `sudo` y con qué
+grupos y qué `PATH` cuenta, si Compose lee el proyecto desde su carpeta, qué
+contenedores hay y si se puede escribir donde van las copias.
+
+```bash
+npm run nas:doctor -- --host IP-del-NAS
+```
+
+Como `nas:check`, solo mira: no escribe, ni arranca, ni para nada. Devuelve 0 si el
+entorno está listo y 1 si hay algo que mirar.
+
 Y si lo tuyo es un **servidor Proxmox** — una **VM Debian** en casa o en el
 taller, con Docker y **Caddy** poniendo el HTTPS donde en el Synology lo pone DSM
 —, esa guía está en **[PROXMOX.md](./PROXMOX.md)**. El montaje de contenedores

@@ -6,8 +6,14 @@
 #
 # Cómo se reparte el trabajo con el otro servicio:
 #
-#   funciones   sube el código una vez, al arrancar el proyecto, y se va.
-#   vigilante   se queda. Repite esa subida cuando ve que el código ha cambiado.
+#   funciones   sube el código una vez, al arrancar el proyecto, y se va. Es
+#               también **el único que escribe en el deployment**: las variables
+#               (SITE_URL y el emisor) y las claves de Convex Auth.
+#   vigilante   se queda. Repite esa subida cuando ve que el código ha cambiado, y
+#               del deployment no escribe nada: espera a que el arranque lo haya
+#               dejado puesto. Si lo que cambia es el `.env` —por ejemplo
+#               `SITE_URL`—, quien lo lleva al deployment es el arranque:
+#               `sudo docker compose up -d funciones`.
 #
 # De dónde sale lo que vigila: `./codigo/src/convex` del NAS está montado en
 # `/app/src/convex` del contenedor (mira el `volumes` del servicio en el
@@ -15,16 +21,22 @@
 # la copia que trae la imagen. Da igual cómo llegue el cambio: `npm run nas` desde
 # el ordenador, un `git pull` dentro del NAS o un archivo que toques por SSH.
 #
-# Tres cosas que hace a propósito, y por qué:
+# Cuatro cosas que hace a propósito, y por qué:
 #
-#   1. **No sube nada al arrancar.** El primer envío es de `funciones`, que ya se
+#   1. **No escribe nada del deployment.** Las variables y las claves de Convex
+#      Auth las deja puestas el contenedor del arranque; aquí solo se espera a que
+#      estén. Escribir los dos a la vez fue lo que tumbó un arranque entero: el que
+#      llegaba segundo se comía un 503 del backend («OptimisticConcurrencyControlFailure»,
+#      que no significa que falte nada) y el contenedor de las funciones salía con
+#      error, con el esquema sin llegar a subirse.
+#   2. **No sube nada al arrancar.** El primer envío es de `funciones`, que ya se
 #      encarga. Subir también aquí sería subir dos veces lo mismo a la vez, y dos
 #      despliegues a la vez se estorban. Lo que hace es apuntar cómo está el
 #      código y esperar a que cambie.
-#   2. **Solo mira los archivos de verdad.** `_generated/` la escribe el propio
+#   3. **Solo mira los archivos de verdad.** `_generated/` la escribe el propio
 #      CLI al subir: si contara, cada subida dispararía la siguiente y esto sería
 #      un bucle que no para.
-#   3. **Espera a que el árbol se quede quieto** antes de subir. `npm run nas`
+#   4. **Espera a que el árbol se quede quieto** antes de subir. `npm run nas`
 #      deja el código por capas, y no queremos subir una versión a medias.
 #
 # Si un envío falla (el backend reiniciándose, la red a medias), no se pierde
@@ -48,10 +60,16 @@
 #   PULSO_REINTENTO_SEGUNDOS  pausa entre reintentos de un mismo envío (10)
 #   PULSO_ESPERA_CLAVES       cuánto espera a que el arranque deje las claves de
 #                             Convex Auth puestas, en vez de generarlas él (120)
+#   PULSO_INTENTOS_ESPERA     cuántas veces mira si el arranque ya dejó puestas
+#                             las variables del deployment (24)
+#   PULSO_ESPERA_ENTRE_RONDAS cuánto espera entre esas miradas (5)
 #
-# Las claves de Convex Auth las genera el contenedor `funciones`, no este: los dos
-# arrancan a la vez al levantar el proyecto, y generar un par cada uno dejaría
-# fuera a quien se hubiera autenticado en medio. Aquí solo se esperan.
+# Las variables del deployment y las claves de Convex Auth las deja puestas el
+# contenedor `funciones`, no este: los dos arrancan a la vez al levantar el
+# proyecto, y está visto lo que pasa cuando escriben los dos —el que llega segundo
+# se lleva un 503 del backend y el arranque se cae entero—. Aquí solo se esperan. Y
+# por lo mismo las claves tampoco se generan aquí: un par cada uno dejaría fuera a
+# quien se hubiera autenticado en medio.
 #
 # No imprime ningún secreto: la clave de administrador viaja por el entorno, como
 # en `funciones.sh`, y no se escribe en ningún sitio.
@@ -59,8 +77,9 @@
 set -eu
 
 PREFIJO=vigilante
-# El vigilante espera las claves de Convex Auth; no las genera (mira arriba).
-ESPERAR_CLAVES=si
+# Este contenedor no escribe en el deployment: espera a que el arranque lo haya
+# dejado puesto —las variables y las claves de Convex Auth—. Mira arriba.
+ESPERAR_ARRANQUE=si
 . "$(dirname "$0")/funciones-lib.sh"
 
 SEGUNDOS="${PULSO_VIGILA_SEGUNDOS:-20}"

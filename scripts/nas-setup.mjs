@@ -44,6 +44,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  doctorPanelLines,
+  doctorReport,
+  doctorScript,
+  parseDoctorResult,
+} from "./nas-doctor-lib.mjs";
+import {
   apiModulesVerdict,
   checkPanelLines,
   checkReport,
@@ -55,6 +61,7 @@ import {
   parseCheckResult,
   parseSetupResult,
   resolveConfig,
+  scriptWords,
   setupScript,
   shQuote,
   tarArgs,
@@ -266,15 +273,13 @@ if (config.check) {
   ensureReachable();
 
   step("Mirar el taller desde dentro del NAS");
-  // El guion viaja como argumento de la conexión, no se sube a ningún sitio: la
-  // comprobación no deja ni un archivo en el NAS. Hereda la terminal para que el
-  // `sudo` de dentro pueda preguntar la contraseña si Docker la pide.
+  // El guion viaja por la conexión —troceado y en palabras sueltas, ver
+  // `scriptWords`—, no se sube a ningún sitio: la comprobación no deja ni un
+  // archivo en el NAS. Hereda la terminal para que el `sudo` de dentro pueda
+  // preguntar la contraseña si Docker la pide.
   const result = await stream(
     "ssh",
-    [
-      ...sshArgs(ttyArgs),
-      `sh -c ${shQuote(checkScript({ root: config.root }))}`,
-    ],
+    [...sshArgs(ttyArgs), ...scriptWords(checkScript({ root: config.root }))],
     { capture: true },
   );
   const summary = parseCheckResult(result.stdout);
@@ -303,6 +308,82 @@ if (config.check) {
     console.log(line);
   }
   // El código de salida es el de la comprobación: 0 si todo está en pie y 1 si hay
+  // algo que mirar, para que sirva también desde un guion.
+  process.exit(report.every((finding) => finding.ok) ? 0 : 1);
+}
+
+/* ------------------------------------------------------------------ */
+/* --doctor: el entorno del NAS, sin tocar nada                        */
+/* ------------------------------------------------------------------ */
+
+if (config.doctor) {
+  console.log(
+    `\n${c.bold("Pulso Taller · el entorno del NAS")} ${c.dim(`· ${destinoLargo}`)}`,
+  );
+  console.log(
+    c.dim(
+      "Solo mira el entorno: Docker y su sudo, Compose, los contenedores y dónde van las copias. No cambia nada.",
+    ),
+  );
+
+  step("Comprobar que se llega al NAS");
+  // La contraseña del NAS se teclea aquí, a ciegas: no se enseña nada mientras
+  // se escribe, así que se avisa —lo peor de pedir una contraseña es que parezca
+  // que el comando se ha colgado—.
+  console.log(
+    c.dim(
+      "   (si el NAS pide la contraseña, se teclea aquí: no se ve nada mientras se escribe)",
+    ),
+  );
+  ensureReachable();
+
+  step("Mirar el entorno desde dentro del NAS");
+  // El guion viaja por la conexión —troceado y en palabras sueltas, ver
+  // `scriptWords`— y no deja ni un archivo en el NAS. Hereda la terminal para que
+  // el `sudo` de dentro pueda pedir la contraseña: en un Synology la cuenta normal
+  // no habla con Docker, así que sin sudo no habría nada que preguntarle. Sin
+  // terminal no se intenta, y el guion dice lo que ha quedado sin mirar.
+  const result = await stream(
+    "ssh",
+    [
+      ...sshArgs(ttyArgs),
+      ...scriptWords(
+        doctorScript({
+          root: config.root,
+          interactive: Boolean(process.stdin.isTTY),
+        }),
+      ),
+    ],
+    { capture: true },
+  );
+  const summary = parseDoctorResult(result.stdout);
+  if (result.status !== 0 || !summary) {
+    abort(
+      "no he podido mirar el entorno del NAS",
+      [
+        "Arriba está el motivo, tal como lo ha contado el NAS.",
+        "Comprueba el host y la carpeta (--host, --path) y vuelve a intentarlo: el doctor no toca nada, así que repetirlo es gratis.",
+      ].join("\n"),
+    );
+  }
+
+  const report = doctorReport(summary, {
+    reachable: true,
+    host: config.host,
+    user: config.user,
+    port: config.port,
+  });
+  for (const line of doctorPanelLines({
+    host: config.host,
+    user: config.user,
+    port: config.port,
+    root: config.root,
+    result: summary,
+    report,
+  })) {
+    console.log(line);
+  }
+  // El código de salida es el del doctor: 0 si el entorno está listo y 1 si hay
   // algo que mirar, para que sirva también desde un guion.
   process.exit(report.every((finding) => finding.ok) ? 0 : 1);
 }

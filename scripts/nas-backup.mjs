@@ -26,12 +26,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  backupWords,
   panelLines,
   parseBackupResult,
   resolveConfig,
   usage,
 } from "./nas-backup-lib.mjs";
-import { shQuote } from "./nas-setup-lib.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -178,21 +178,18 @@ ensureReachable();
 
 step("Copiar el taller desde dentro del NAS");
 // El guion vive en el repositorio y viaja por la conexión: no se deja en el NAS
-// ni depende de la versión del código que haya allí ahora mismo. Las opciones se
-// le pasan como argumentos (el primero es su `$0`).
+// ni depende de la versión del código que haya allí ahora mismo. Cómo viaja
+// —troceado, en palabras sueltas y con lo que hay que copiar dentro— lo arma
+// `backupWords`, que es la parte que se puede probar sin un NAS delante.
 const guion = readFileSync(BACKUP_SCRIPT, "utf8");
-const orden = [
-  `sh -c ${shQuote(guion)}`,
-  "copia-previa",
-  "--raiz",
-  shQuote(config.path),
-  "--respaldos",
-  shQuote(config.backups),
-  "--conservar",
-  shQuote(config.keep),
-].join(" ");
+const orden = backupWords({
+  script: guion,
+  root: config.path,
+  backups: config.backups,
+  keep: config.keep,
+});
 
-const result = await stream("ssh", [...sshArgs(ttyArgs), orden], {
+const result = await stream("ssh", [...sshArgs(ttyArgs), ...orden], {
   capture: true,
 });
 const summary = parseBackupResult(result.stdout);

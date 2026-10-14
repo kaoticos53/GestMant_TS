@@ -214,9 +214,11 @@ services:
     # Es la misma imagen que `funciones` —salen de la misma fase del Dockerfile—
     # con otra orden: en lugar de subir una vez y marcharse, vigila. Están los dos
     # a propósito: `funciones` se encarga del primer envío al arrancar y este de
-    # los siguientes, así que nunca coinciden subiendo a la vez. Y por eso mismo
-    # este **no sube nada al arrancar**: lo que hace es apuntar cómo está el
-    # código y esperar a que cambie.
+    # los siguientes, así que nunca coinciden subiendo a la vez —ni escribiendo en
+    # el deployment: las variables y las claves de Convex Auth las pone el
+    # arranque, y este las espera—. Y por eso mismo este **no sube nada al
+    # arrancar**: lo que hace es apuntar cómo está el código y esperar a que
+    # cambie.
     #
     # `on-failure:3` es a propósito: si el problema es de configuración —falta la
     # clave de administrador, el deployment no contesta—, lo cuenta y se para
@@ -244,6 +246,13 @@ services:
     environment:
       # Las mismas que `funciones`, y por lo mismo: a dónde sube, con qué clave y
       # qué variables lleva el deployment. Mira allí el detalle de cada una.
+      #
+      # De dónde salen esas variables no es cosa de este contenedor: aquí no se
+      # escribe ninguna. Las deja puestas `funciones`, que arranca a la vez que
+      # este, y el vigilante espera a que estén (si escribieran los dos a la vez,
+      # el que llegara segundo se llevaría un 503 del backend y el arranque se
+      # caería). Si lo que cambia es el `.env`, quien lo lleva al deployment es
+      # el arranque: `sudo docker compose up -d funciones`.
       CONVEX_SELF_HOSTED_URL: ${CONVEX_CLOUD_ORIGIN:?falta CONVEX_CLOUD_ORIGIN en el .env}
       CONVEX_SELF_HOSTED_ADMIN_KEY: ${CONVEX_ADMIN_KEY:-}
       SITE_URL: ${SITE_URL:?falta SITE_URL en el .env}

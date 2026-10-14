@@ -83,7 +83,19 @@ FROM base AS funciones
 COPY docker/synology/funciones.sh /usr/local/bin/funciones
 COPY docker/synology/vigila-funciones.sh /usr/local/bin/vigila-funciones
 COPY docker/synology/funciones-lib.sh /usr/local/bin/funciones-lib.sh
-RUN chmod +x /usr/local/bin/funciones /usr/local/bin/vigila-funciones
+
+# Y se les quitan los finales de linea de Windows, si los traen, antes de darles
+# permiso de ejecucion. No es un detalle de estilo: el codigo entra en la imagen
+# **tal cual esta en el ordenador que lo edita** --el NAS la construye desde su
+# copia del arbol de trabajo, asi que no pasa por git y el `.gitattributes` no
+# llega hasta aqui--, y en un archivo con finales de linea de Windows el `#!`
+# queda como `#!/bin/sh\r`: la shell busca un interprete con ese nombre, no lo
+# encuentra y el contenedor sale con «not found» y el codigo 127. Paso de verdad
+# --el vigilante no llego a arrancar ni una vez-- y cuesta un rato verlo, porque
+# el archivo esta ahi y el mensaje no habla de finales de linea. Se limpian aqui
+# para que el contenedor arranque igual, venga el archivo como venga.
+RUN sed -i 's/\r$//' /usr/local/bin/funciones /usr/local/bin/vigila-funciones /usr/local/bin/funciones-lib.sh \
+  && chmod +x /usr/local/bin/funciones /usr/local/bin/vigila-funciones
 
 CMD ["/usr/local/bin/funciones"]
 

@@ -93,20 +93,57 @@ esac
 [ -f "$RAIZ/.env" ] ||
   fail "no veo el .env en $RAIZ: sin él Compose no sabe qué instancia es (paso 2 de la guía)"
 
+# --- Desde dónde se trabaja ---------------------------------------------------
+
+# Todo lo que se le pide a Compose —el export, los contenedores, el volumen— se
+# resuelve contra el `docker-compose.yml` de la carpeta del proyecto. Si se lanza
+# desde otro sitio contesta «no configuration file provided: not found» y no hace
+# nada, así que se entra aquí una vez y ya el resto del guion habla del taller.
+# Este guion llega por SSH, desde el directorio en el que entre el usuario: la
+# carpeta no es un detalle que se pueda dar por hecho.
+#
+# Las copias se resuelven antes de entrar, para que una ruta relativa siga
+# significando lo que significaba al llegar y no se metan dentro del proyecto.
+case "$RESPALDOS" in
+  /*) ;;
+  *) RESPALDOS="$PWD/$RESPALDOS" ;;
+esac
+cd "$RAIZ" || fail "no he podido entrar en $RAIZ"
+
 # --- Con quién se habla con Docker -------------------------------------------
 
 # La misma pregunta que hacen la puesta en marcha y la comprobación: en un
 # Synology hace falta root para hablar con Docker, aunque no siempre (si el
 # usuario está en el grupo que toca, no).
-if docker info >/dev/null 2>&1; then
+#
+# Y no vale con el `docker` a secas: el `sudo` de un NAS impone su propio PATH
+# —sin `/usr/local/bin`, que es donde vive el binario—, así que `sudo docker`
+# contesta «command not found» aunque el taller esté en pie. Por eso se busca el
+# binario primero y se llama después por su ruta.
+buscar_binario() {
+  opcion=$(command -v "$1" 2>/dev/null || true)
+  for candidato in "$opcion" "/usr/local/bin/$1" "/var/packages/ContainerManager/target/usr/bin/$1"; do
+    if [ -n "$candidato" ] && [ -x "$candidato" ]; then
+      echo "$candidato"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKER=$(buscar_binario docker) ||
+  fail "no encuentro el binario docker en el NAS: instala Container Manager desde el Centro de paquetes"
+if $DOCKER info >/dev/null 2>&1; then
   SUDO=""
 else
   SUDO="sudo"
 fi
-if $SUDO docker compose version >/dev/null 2>&1; then
-  COMPOSE_CMD="docker compose"
-elif $SUDO docker-compose version >/dev/null 2>&1; then
-  COMPOSE_CMD="docker-compose"
+# El compose nuevo va dentro del propio docker; el antiguo, aparte y con guion.
+DOCKER_COMPOSE=$(buscar_binario docker-compose || true)
+if $SUDO $DOCKER compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER compose"
+elif [ -n "$DOCKER_COMPOSE" ] && $SUDO "$DOCKER_COMPOSE" version >/dev/null 2>&1; then
+  COMPOSE_CMD="$DOCKER_COMPOSE"
 else
   fail "no encuentro docker compose: sin Container Manager no hay nada que copiar"
 fi
@@ -124,7 +161,7 @@ mkdir -p "$RESPALDOS" 2>/dev/null || $SUDO mkdir -p "$RESPALDOS"
 # se le pregunta a Docker en vez de dar por hecho que se llama `<carpeta>_datos`
 # —lo normal, pero cambia si el proyecto tiene otro nombre—.
 volumen_de_datos() {
-  encontrado=$($SUDO docker volume ls \
+  encontrado=$($SUDO $DOCKER volume ls \
     --filter label=com.docker.compose.volume=datos \
     --format '{{.Name}}' 2>/dev/null | head -n 1 || true)
   if [ -z "$encontrado" ]; then
@@ -163,7 +200,7 @@ VOLUMEN=$(volumen_de_datos)
 # Si el tar falla, el backend se vuelve a arrancar igual: se anota el fallo y se
 # sale con error después, con el taller en pie.
 copiar_volumen() {
-  $SUDO docker run --rm -v "$VOLUMEN":/datos -v "$RESPALDOS":/respaldo alpine \
+  $SUDO $DOCKER run --rm -v "$VOLUMEN":/datos -v "$RESPALDOS":/respaldo alpine \
     tar czf "/respaldo/$ARCHIVO_DATOS" -C /datos .
 }
 

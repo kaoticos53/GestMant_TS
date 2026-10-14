@@ -11,6 +11,15 @@
 # faltan y subir el código con reintentos—, para que no haya dos versiones del
 # mismo criterio: el día que haya una variable más, se añade en un solo sitio.
 #
+# Lo que **no** es igual en los dos es quién escribe. Las variables del deployment
+# y las claves de Convex Auth las deja puestas el contenedor del arranque, y el
+# vigilante solo espera a que estén (`ESPERAR_ARRANQUE`). Los dos arrancan a la
+# vez al levantar el proyecto, y con dos escritores el que llegaba segundo se
+# llevaba un 503 del backend —un «OptimisticConcurrencyControlFailure», que no
+# significa que falte nada— y se caía el arranque entero: el contenedor de las
+# funciones salía con error y el esquema no llegaba a subirse. Un solo escritor
+# quita esa puerta de en medio.
+#
 # No se ejecuta solo: lo leen los otros dos con
 #
 #   . "$(dirname "$0")/funciones-lib.sh"
@@ -33,6 +42,26 @@ EMISOR="${VLY_CONVEX_AUTH_ISSUER:-https://freebuff.com}"
 # Cuánto espera el vigilante a que el contenedor del arranque deje puestas las
 # claves de Convex Auth (segundos). El arranque no espera: las genera.
 ESPERA_CLAVES="${PULSO_ESPERA_CLAVES:-120}"
+
+# Si este contenedor espera a que el arranque deje el deployment puesto en lugar
+# de escribirlo él. Lo pone el vigilante (`ESPERAR_ARRANQUE=si`); el contenedor del
+# arranque lo deja como está —escribe él—.
+ESPERAR_ARRANQUE="${ESPERAR_ARRANQUE:-no}"
+
+# Cuántas veces se intenta dejar puesta una variable del deployment y cuánto se
+# espera entre intentos (segundos). Las escribe **un solo contenedor**, el del
+# arranque, así que ya no hay dos escrituras a la vez; los reintentos se quedan
+# porque la escritura es idempotente —se escribe siempre el mismo valor— y volver
+# a intentarla cuesta cinco segundos, mientras que darla por perdida se lleva por
+# delante el arranque entero.
+INTENTOS_VARIABLES="${PULSO_INTENTOS_VARIABLES:-4}"
+ESPERA_ENTRE_INTENTOS="${PULSO_ESPERA_ENTRE_INTENTOS:-5}"
+
+# Cuántas veces mira el vigilante si el arranque ya dejó puestas las variables del
+# deployment, y cuánto espera entre miradas (segundos). Veinticuatro miradas cada
+# cinco segundos son los dos minutos que tarda un NAS en arrancar del todo.
+INTENTOS_ESPERA="${PULSO_INTENTOS_ESPERA:-24}"
+ESPERA_ENTRE_RONDAS="${PULSO_ESPERA_ENTRE_RONDAS:-5}"
 
 # El CLI viene con las dependencias del proyecto, así que se llama al que ya está
 # instalado en la imagen. Se hace por su `bin/main.js` y no con `npx` porque el
@@ -97,38 +126,120 @@ nombres_del_deployment() {
 
 tiene() { printf '%s\n' "$1" | grep -qx "$2"; }
 
+# Deja puesta una variable del deployment, con reintentos. Solo lo llama el
+# contenedor del arranque: el vigilante espera a que estén puestas (mira
+# `esperar_variables`).
+#
+# Reintentar es lo correcto aquí y no tiene peligro: lo que se escribe es el mismo
+# valor, así que no hay nada que pisar. Un fallo de verdad —la clave que no vale,
+# la dirección que no contesta— no se arregla reintentando, y por eso los intentos
+# se acaban y el fallo se cuenta.
+fijar_variable() {
+  intento=1
+  while :; do
+    if convex env set "$1" "$2"; then
+      return 0
+    fi
+    if [ "$intento" -ge "$INTENTOS_VARIABLES" ]; then
+      log "no se ha podido dejar puesta $1 en $intento intentos"
+      return 1
+    fi
+    intento=$((intento + 1))
+    log "$1 no ha entrado: se reintenta en ${ESPERA_ENTRE_INTENTOS} s (intento ${intento}/${INTENTOS_VARIABLES})"
+    sleep "$ESPERA_ENTRE_INTENTOS"
+  done
+}
+
 # Las variables que leen las funciones dentro del deployment.
 fijar_variables() {
-  convex env set SITE_URL "$SITE_URL" || return 1
-  convex env set VLY_CONVEX_AUTH_ISSUER "$EMISOR" || return 1
+  fijar_variable SITE_URL "$SITE_URL" || return 1
+  fijar_variable VLY_CONVEX_AUTH_ISSUER "$EMISOR" || return 1
   # Las integraciones de la plataforma —el código por email y el resumen semanal—
   # solo hacen falta si el taller las usa: si están en el `.env`, se pasan.
   if [ -n "${VLY_INTEGRATION_KEY:-}" ]; then
-    convex env set VLY_INTEGRATION_KEY "$VLY_INTEGRATION_KEY" || return 1
+    fijar_variable VLY_INTEGRATION_KEY "$VLY_INTEGRATION_KEY" || return 1
   fi
   if [ -n "${VLY_INTEGRATION_BASE_URL:-}" ]; then
-    convex env set VLY_INTEGRATION_BASE_URL "$VLY_INTEGRATION_BASE_URL" || return 1
+    fijar_variable VLY_INTEGRATION_BASE_URL "$VLY_INTEGRATION_BASE_URL" || return 1
   fi
+}
+
+# Los nombres de las variables que tienen que estar puestas en el deployment: las
+# que leen las funciones de dentro. Las de las integraciones de la plataforma solo
+# cuentan si este contenedor las lleva en el entorno, que es lo mismo que mira
+# quien las escribe.
+variables_esperadas() {
+  printf 'SITE_URL VLY_CONVEX_AUTH_ISSUER'
+  if [ -n "${VLY_INTEGRATION_KEY:-}" ]; then
+    printf ' VLY_INTEGRATION_KEY'
+  fi
+  if [ -n "${VLY_INTEGRATION_BASE_URL:-}" ]; then
+    printf ' VLY_INTEGRATION_BASE_URL'
+  fi
+}
+
+# ¿Están puestas todas las que se esperan? Recibe la lista de nombres del
+# deployment —uno por línea, como la devuelve el CLI—.
+variables_puestas() {
+  for nombre in $(variables_esperadas); do
+    tiene "$1" "$nombre" || return 1
+  done
+  return 0
+}
+
+# Espera a que el contenedor del arranque haya dejado puestas las variables del
+# deployment. Aquí no se escribe ninguna: escribir los dos a la vez fue justo lo
+# que se llevó por delante un arranque entero.
+#
+# Devuelve 1 si se acaban las miradas sin verlas puestas; quien llama lo cuenta
+# con su propio mensaje.
+esperar_variables() {
+  ronda=1
+  while :; do
+    nombres_actuales="$(nombres_del_deployment)" || fail_sin_respuesta
+    if variables_puestas "$nombres_actuales"; then
+      log "las variables del deployment ya están puestas: sigo (las deja el contenedor «funciones»)"
+      return 0
+    fi
+    if [ "$ronda" -ge "$INTENTOS_ESPERA" ]; then
+      return 1
+    fi
+    ronda=$((ronda + 1))
+    sleep "$ESPERA_ENTRE_RONDAS"
+  done
+}
+
+# El deployment no contesta. Es el mensaje de siempre, que repiten el arranque y
+# el vigilante porque es lo único que se puede decir sin ver nada.
+fail_sin_respuesta() {
+  fail "el deployment no contesta: comprueba CONVEX_CLOUD_ORIGIN en el .env (la dirección pública de la API) y que la clave de administrador sea la de esta instancia"
 }
 
 # Deja el deployment como tiene que estar antes de subir código:
 #
 #   1. Pregunta qué tiene puesto. Es también la comprobación de que la clave de
 #      administrador vale: si no contesta, no tiene sentido seguir.
-#   2. Pone las variables que leen las funciones. Van **antes** de subir el
+#   2. Deja puestas las variables que leen las funciones. Van **antes** de subir el
 #      código porque el despliegue se niega a entrar si la configuración de auth
-#      pide una variable que no está puesta.
+#      pide una variable que no está puesta. Las escribe **solo el contenedor del
+#      arranque**: el vigilante, que arranca a la vez, espera a que estén.
 #   3. Genera las claves de Convex Auth **solo si faltan**. Con ellas el
 #      deployment firma y valida sus propias sesiones, así que rotarlas cerraría
-#      todas las sesiones abiertas: no se regeneran porque sí.
+#      todas las sesiones abiertas: no se regeneran porque sí. Las genera también
+#      solo el arranque; el vigilante las espera.
 preparar_deployment() {
   nombres_actuales=""
   if ! nombres_actuales="$(nombres_del_deployment)"; then
-    fail "el deployment no contesta: comprueba CONVEX_CLOUD_ORIGIN en el .env (la dirección pública de la API) y que la clave de administrador sea la de esta instancia"
+    fail_sin_respuesta
   fi
 
-  fijar_variables || fail "no se han podido fijar las variables del deployment"
-  log "variables del deployment al día: SITE_URL=${SITE_URL} · emisor=${EMISOR}"
+  if [ "$ESPERAR_ARRANQUE" = "si" ]; then
+    esperar_variables ||
+      fail "el deployment sigue sin las variables del taller (${INTENTOS_ESPERA} miradas, una cada ${ESPERA_ENTRE_RONDAS} s): las deja puestas el contenedor «funciones», que es el que las escribe — mira sus registros con «docker compose logs funciones»"
+  else
+    fijar_variables || fail "no se han podido fijar las variables del deployment"
+    log "variables del deployment al día: SITE_URL=${SITE_URL} · emisor=${EMISOR}"
+  fi
 
   # Se vuelve a preguntar en lugar de reutilizar la lista de antes: ahora tiene
   # una variable más, y así la decisión sobre las claves se toma con lo que hay
@@ -144,7 +255,7 @@ preparar_deployment() {
   # vigilante solo las espera: los dos arrancan a la vez al levantar el proyecto,
   # y generar un par cada uno dejaría fuera a quien se hubiera autenticado en
   # medio. En un arranque normal están puestas en unos segundos.
-  if [ "${ESPERAR_CLAVES:-no}" = "si" ]; then
+  if [ "$ESPERAR_ARRANQUE" = "si" ]; then
     log "esperando a que el contenedor de las funciones deje puestas las claves de Convex Auth…"
     esperadas=0
     while [ "$esperadas" -lt "$ESPERA_CLAVES" ]; do

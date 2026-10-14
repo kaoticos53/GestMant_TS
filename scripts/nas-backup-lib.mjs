@@ -9,7 +9,7 @@
 //
 // No importa nada de Node a propósito: son funciones puras.
 
-import { parseSummary } from "./nas-setup-lib.mjs";
+import { parseSummary, scriptWords, shQuote } from "./nas-setup-lib.mjs";
 
 /** Colores del script; sin nada, el texto sale tal cual (como en las pruebas). */
 const NO_COLOR = {
@@ -22,6 +22,21 @@ const NO_COLOR = {
 
 /** Dónde vive el proyecto en el NAS, igual que en la puesta en marcha. */
 export const DEFAULT_PROJECT_PATH = "/volume1/docker/pulso-taller";
+
+/**
+ * La orden con la que el guion de la copia viaja al NAS: el guion entero, con lo
+ * que hay que copiar y dónde escrito dentro —como las variables de entorno que el
+ * propio guion dice que lee— y troceado en palabras sueltas (ver `scriptWords`),
+ * que es como cruza sin que ningún argumento llegue cortado.
+ */
+export function backupWords({ script, root, backups, keep }) {
+  const preludio = [
+    `PULSO_RAIZ=${shQuote(root)}`,
+    `PULSO_RESPALDOS=${shQuote(backups)}`,
+    `PULSO_CONSERVAR=${shQuote(keep)}`,
+  ].join("\n");
+  return scriptWords(`${preludio}\n${script}`);
+}
 
 /** Dónde se dejan las copias, como en el apartado de copias de la guía. */
 export const DEFAULT_BACKUP_PATH = "/volume1/docker/respaldos";

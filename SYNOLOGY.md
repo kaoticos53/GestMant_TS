@@ -108,6 +108,25 @@ que el panel se puede enseñar sin cuidado. Termina con la URL de la app y devue
 0 si todo está en pie y 1 si hay algo que mirar, de modo que también sirve desde un
 guion.
 
+Y cuando no arranca y no se sabe por dónde empezar, el **doctor** mira el entorno
+del NAS de una vez y explica lo que falta: es lo que conviene leer **antes** de
+tocar nada, en vez de ir probando a ciegas.
+
+```bash
+npm run nas:doctor -- --host IP-del-NAS
+```
+
+Dice dónde está el binario de Docker y con quién se le habla (`sin sudo` o `con
+sudo`), qué grupos lleva la cuenta y si el `PATH` del `sudo` del NAS lleva Docker
+—la trampa clásica: el `sudo` de un NAS impone su propio `PATH`, sin
+`/usr/local/bin`, así que `sudo docker` contesta «command not found» aunque
+Container Manager esté instalado; los comandos del taller lo llaman **por su
+ruta**, así que a ellos no les afecta—, si Compose lee el proyecto desde su
+carpeta, qué contenedores hay —y que el de las funciones esté terminado es lo
+normal, que es un recado que pasa y se va— y si la carpeta de las copias existe, se
+puede escribir en ella y queda sitio. Como `--check`, no cambia nada: solo
+pregunta. Devuelve 0 si el entorno está listo y 1 si hay algo que mirar.
+
 Dos detalles que conviene saber antes:
 
 - **La primera vez, las direcciones.** Si no le pasas `--app-url` y `--api-url`,
@@ -396,10 +415,13 @@ sudo docker compose logs -f vigilante
 Cuando no hay nada que hacer lo dice: «sin cambios en /app/src/convex: el esquema
 y las funciones siguen al día».
 
-Dos cosas las hace a propósito distinto que el contenedor del arranque: **las
-claves de Convex Auth no las genera él** —espera a que las deje `funciones`, para
-no generar dos pares a la vez en el primer arranque—, y no sube nada al
-arrancar: apunta cómo está el código y espera al primer cambio.
+Tres cosas las hace a propósito distinto que el contenedor del arranque: **no
+escribe nada en el deployment** —las variables y las claves de Convex Auth las deja
+`funciones`, que arranca a la vez que él, y el vigilante solo espera a que
+estén: con los dos escribiendo, el que llegaba segundo se llevaba un 503 del
+backend y el arranque se caía entero—, **no genera las claves de Convex Auth**
+—un par cada uno dejaría fuera a quien se hubiera autenticado en medio— y **no sube
+nada al arrancar**: apunta cómo está el código y espera al primer cambio.
 
 > `CONVEX_SITE_URL` no se toca: viene incorporada en el backend y sale del
 > `CONVEX_SITE_ORIGIN` del compose (el `127.0.0.1:3211` de dentro del NAS). Es la
@@ -700,13 +722,47 @@ pico `|` que lleva en medio: en un `bash` va entre comillas, o la shell se queda
 con lo de después. Puesta la clave, `sudo docker compose up -d funciones` y ya no
 sale más.
 
+**El `vigilante` (o el contenedor `funciones`) sale con el código 127 y en los
+registros pone «not found».**
+Es el `#!` de los guiones, y cuesta un rato verlo porque el mensaje no habla de
+lo que pasa y el archivo está donde dice. Cuando un guion de shell llega con
+finales de línea de Windows, su primera línea queda como `#!/bin/sh\r`: la shell
+busca un intérprete que se llama así —con el retorno de carro pegado—, no lo
+encuentra, y el proceso sale con el código 127. Se ve en los dos sitios:
+
+```bash
+sudo docker compose ps -a             # Exited (127), no «Exited (0)»
+sudo docker compose logs vigilante    # …/vigila-funciones: not found
+```
+
+Desde que la imagen los limpia al construirse no puede volver a pasar: los
+guiones del repositorio se guardan en LF (lo fija el `.gitattributes` y lo
+vigila `tests/finalesDeLinea.test.ts`), lo que cruza por SSH se limpia al
+mandarlo y lo que entra en la imagen se limpia en el paso de las funciones del
+`Dockerfile`. En un NAS que se quedó así, se arregla llevando el código otra vez
+y reconstruyendo **solo esa imagen** —no toca los datos ni el resto del taller—:
+
+```bash
+npm run nas -- --host IP-del-NAS        # o un `git pull` dentro de `codigo/`
+cd /volume1/docker/pulso-taller
+sudo docker compose build funciones && sudo docker compose up -d
+```
+
+Y se comprueba de un vistazo con `npm run nas:doctor -- --host IP-del-NAS`, que
+dice cómo terminó cada contenedor: un 127 ahí es justo esto.
+
 **He cambiado una función y no se ha subido.**
 El que las sube solo es el `vigilante`: mira `sudo docker compose logs vigilante`.
 Si dice que no ha podido subir el código en tres intentos, el motivo está en las
 líneas de arriba —casi siempre la clave de administrador o el backend—, y después
 de arreglarlo lo reintenta solo. Y si dice que el deployment sigue sin claves de
-Convex Auth, arranca antes el contenedor de las funciones (`sudo docker compose up
-funciones`): las claves son suyas, no del vigilante. Si el contenedor está parado (los tres intentos
+Convex Auth o sin las variables del taller, arranca antes el contenedor de las
+funciones (`sudo docker compose up funciones`): las claves y las variables las
+escribe él, no el vigilante, que solo espera a que estén. Es a propósito —cuando
+escribían los dos a la vez, el que llegaba segundo se llevaba un 503 del backend y
+el arranque se caía entero—, así que el vigilante no las pondrá por su cuenta: lo
+cuenta y se para. Por lo mismo, si lo que cambia es el `.env` (por ejemplo
+`SITE_URL`), quien lo lleva al deployment es el arranque. Si el contenedor está parado (los tres intentos
 fallidos lo dejan así, en vez de estar reintentando en bucle sin decir nada),
 levántalo:
 
@@ -839,3 +895,15 @@ Al rotarlo se invalidan las claves de administrador y las sesiones: hay que saca
 una clave nueva —como en el apartado «Me he quedado fuera»—, actualizar
 `CONVEX_ADMIN_KEY` en el `.env`, arrancar el proyecto y volver a entrar en la app.
 Los datos siguen ahí.
+
+**«`sudo docker` contesta `command not found»`, o el comando no encuentra Docker.**
+El `sudo` de un NAS impone su propio `PATH` —sin `/usr/local/bin`, que es donde
+vive el binario de Container Manager—, así que `sudo docker` tecleado a mano puede
+no encontrarlo aunque Docker esté instalado y el taller en pie. Los comandos del
+taller lo llaman **por su ruta** (`/usr/local/bin/docker`), así que a ellos no les
+afecta. Para verlo todo de un tirón —el binario, los grupos, el `PATH` del `sudo`,
+Compose, los contenedores y las copias— antes de tocar nada:
+
+```bash
+npm run nas:doctor -- --host IP-del-NAS
+```

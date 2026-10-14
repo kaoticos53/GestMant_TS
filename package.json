@@ -19,6 +19,7 @@
     "local:stop": "node scripts/local-dev.mjs --stop",
     "nas": "node scripts/nas-setup.mjs",
     "nas:check": "node scripts/nas-setup.mjs --check",
+    "nas:doctor": "node scripts/nas-setup.mjs --doctor",
     "nas:backup": "node scripts/nas-backup.mjs",
     "convex:up": "docker compose -f docker/convex/docker-compose.yml up -d",
     "convex:down": "docker compose -f docker/convex/docker-compose.yml down",

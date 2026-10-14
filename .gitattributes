@@ -1,0 +1,17 @@
+# Los finales de línea, fijados por tipo de archivo.
+#
+# El taller se escribe en Windows y se ejecuta en Linux —el NAS y los contenedores
+# que construye—, y los guiones de shell son el único sitio donde esa diferencia
+# se nota: en un archivo con finales de línea de Windows el `#!` queda como
+# `#!/bin/sh\r`, la shell busca un intérprete que se llama así —con su retorno de
+# carro pegado—, no lo encuentra y el contenedor sale con «not found» y el código
+# 127. Le pasó al `vigilante` de las funciones: no llegó a arrancar ni una vez.
+#
+# Aquí se fija que un guion de shell se guarde y se saque **siempre** en LF,
+# también en un Windows con `core.autocrlf=true`. Es la mitad del arreglo: al NAS
+# el código no le llega por git sino por `tar` —y a la imagen, desde esa misma
+# copia—, así que la imagen además los limpia al construirse (mira el paso de las
+# funciones del `docker/synology/Dockerfile`) y lo que cruza por SSH se limpia en
+# `scriptWords`. Las tres puertas están vigiladas por
+# `tests/finalesDeLinea.test.ts`.
+*.sh text eol=lf
