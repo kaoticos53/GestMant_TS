@@ -30,7 +30,9 @@ import {
   resolveConfig,
   setupScript,
   shQuote,
+  packVerdict,
   tarArgs,
+  tarOnlyGitWarnings,
   unpackCommand,
 } from "../scripts/nas-setup-lib.mjs";
 
@@ -196,6 +198,50 @@ describe("lo que se le manda al NAS", () => {
       "--exclude=./.env.local",
       ".",
     ]);
+  });
+
+  test("un aviso de git escribiendo a mitad del envío no para la puesta en marcha", () => {
+    // Es lo que dice `tar` de verdad —y sale con 1— cuando el git del ordenador
+    // reescribe su índice mientras el código va viajando: el archivo llega igual y
+    // lo único que cambia es el código de salida. Sin dejarlo pasar, el envío se
+    // caía antes de construir nada y el NAS se quedaba con el código de antes.
+    const conAviso = packVerdict({
+      status: 1,
+      stderr: "tar: ./.git: file changed as we read it\n",
+    });
+    expect(conAviso.ok).toBe(true);
+    expect(conAviso.warning).not.toBe("");
+    // Las dos formas que tiene el mismo aviso: la carpeta `.git` y un archivo de
+    // dentro (el índice que reescribe git).
+    expect(
+      tarOnlyGitWarnings("tar: ./.git/index: file changed as we read it"),
+    ).not.toBe("");
+
+    // Lo que sí corta: el aviso de `.git` acompañado de cualquier otra queja...
+    const conError = packVerdict({
+      status: 1,
+      stderr:
+        "tar: ./.git: file changed as we read it\ntar: ./src: Cannot stat: No such file or directory",
+    });
+    expect(conError.ok).toBe(false);
+    expect(conError.reason).toBe("tar salió con 1");
+    // ...un archivo del código a medias (con `tar` avisando y siguiendo, eso sí
+    // que no puede pasar: lo que se subiría podría estar a medias)...
+    expect(
+      packVerdict({
+        status: 1,
+        stderr: "tar: ./src/main.ts: file changed as we read it",
+      }).ok,
+    ).toBe(false);
+    // ...y un `tar` que no está, o que falla sin decir nada de git.
+    expect(packVerdict({ error: new Error("spawn tar ENOENT") }).ok).toBe(false);
+    expect(packVerdict({ status: 2, stderr: "" }).ok).toBe(false);
+    // Y el envío bueno, que es el de casi siempre.
+    expect(packVerdict({ status: 0 })).toEqual({
+      ok: true,
+      warning: "",
+      reason: "",
+    });
   });
 
   test("el código nuevo sustituye al viejo solo cuando ha llegado entero", () => {

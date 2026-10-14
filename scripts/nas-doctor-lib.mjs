@@ -17,6 +17,7 @@
 //
 // No importa nada de Node a propósito: son funciones puras.
 
+import { envoltorioClave } from "./nas-clave-lib.mjs";
 import { DEFAULT_BACKUP_PATH } from "./nas-backup-lib.mjs";
 import {
   DEFAULT_PROJECT_PATH,
@@ -35,7 +36,13 @@ const NO_COLOR = {
 };
 
 /** Los contenedores de los que habla el doctor, en el orden en que se enseñan. */
-export const SERVICIOS = ["app", "backend", "dashboard", "vigilante", "funciones"];
+export const SERVICIOS = [
+  "app",
+  "backend",
+  "dashboard",
+  "vigilante",
+  "funciones",
+];
 
 /** El puerto donde el backend contesta, dentro del NAS (igual que en `--check`). */
 const BACKEND_HEALTH_URL = "http://127.0.0.1:3210/version";
@@ -55,9 +62,10 @@ export const MIN_FREE_MB = 2048;
  * Lo que no puede saber desde dentro es lo primero que se comprueba en el
  * ordenador —que se llega por SSH—, y lo que no puede saber sin permiso es todo
  * lo que depende de `sudo`: en un Synology el usuario normal no habla con Docker,
- * así que hace falta root para preguntarle. Con terminal delante se usa el `sudo`
- * que pide la contraseña —la pide por el `/dev/tty` de la conexión, igual que la
- * copia y la puesta en marcha—; sin terminal se miran solo las cosas que no
+ * así que hace falta root para preguntarle. Cuando hay con qué contestar, se usa el
+ * `sudo` que pide la contraseña: la trae ya tecleada el comando del ordenador —una
+ * vez, para todo— o la pide por el `/dev/tty` de la conexión, igual que la copia y
+ * la puesta en marcha. Sin ninguna de las dos se miran solo las cosas que no
  * necesitan contraseña, y el panel dice lo que ha quedado sin mirar en vez de
  * inventarlo.
  *
@@ -81,10 +89,19 @@ set -u
 RAIZ=${shQuote(root)}
 RESPALDOS=${shQuote(backups)}
 SALUD=${shQuote(BACKEND_HEALTH_URL)}
-# Con terminal delante, el sudo que pide contrasena se puede usar (la pide por el
-# /dev/tty de la conexion). Sin terminal, no: se quedaria esperando una
-# contrasena que nadie va a teclear.
+# Cuando hay con que contestarla, el sudo que pide contrasena se puede usar: o la
+# trae el comando del ordenador --ya tecleada una vez-- o la pide por el /dev/tty
+# de la conexion (con terminal delante). Sin ninguna de las dos, no: se quedaria
+# esperando una contrasena que nadie va a teclear.
 MIRAR_SUDO=${shQuote(interactive ? "si" : "no")}
+
+${envoltorioClave()}
+
+# Y si la clave ha llegado, ya no hay nada que preguntar: se mira todo, tenga
+# terminal delante o no.
+if [ "$con_clave" = "si" ]; then
+  MIRAR_SUDO="si"
+fi
 
 log() { printf 'nas: %s\\n' "$*"; }
 
@@ -149,8 +166,12 @@ fi
 
 # Y con quien se le habla: sin sudo si la cuenta ya puede, y con sudo si hace
 # falta y se puede usar.
+# Y el sudo de aqui dentro puede estar tapado por la funcion que le da la clave
+# (mira el principio del guion): la pregunta se le hace al binario, con command,
+# para que el resumen diga lo que pasa de verdad --si la cuenta necesita
+# contrasena-- y no lo que parece cuando ya se tiene.
 if command -v sudo >/dev/null 2>&1; then
-  if sudo -n true 2>/dev/null; then
+  if command sudo -n true 2>/dev/null; then
     sudo="libre"
   else
     sudo="pide-clave"
@@ -174,7 +195,11 @@ if [ "$sin_sudo" = "no" ]; then
     SUDO="sudo"
   elif [ "$sudo" = "pide-clave" ] && [ "$MIRAR_SUDO" = "si" ]; then
     SUDO="sudo"
-    log "hace falta sudo para hablar con Docker: pedira la contrasena (se teclea igual que en la copia)"
+    if [ "$con_clave" = "si" ]; then
+      log "hace falta sudo para hablar con Docker: se usa la contrasena que ya se ha tecleado"
+    else
+      log "hace falta sudo para hablar con Docker: pedira la contrasena (se teclea igual que en la copia)"
+    fi
   fi
 fi
 if [ -n "$DOCKER" ] && $SUDO $DOCKER info >/dev/null 2>&1; then
@@ -287,8 +312,8 @@ fi
 espacio=$(df -Pk "$RESPALDOS" 2>/dev/null | tail -n 1 | awk '{print $4}' || true)
 log "copias en $RESPALDOS: $respaldos · espacio libre: ${"${espacio:-desconocido}"} KB"
 
-printf 'PULSO_DOCTOR raiz=%s compose=%s env=%s grupos=%s docker=%s compose_cmd=%s docker_ok=%s sin_sudo=%s sudo=%s sudo_path=%s compose_lee=%s contenedores=%s volumen=%s salud=%s respaldos=%s espacio=%s\\n' \\
-  "$raiz" "$compose" "$env" "$grupos" "$docker" "$compose_cmd" "$docker_ok" "$sin_sudo" "$sudo" "$sudo_path" "$compose_lee" "$contenedores" "$volumen" "$salud" "$respaldos" "$espacio"
+printf 'PULSO_DOCTOR raiz=%s compose=%s env=%s grupos=%s docker=%s compose_cmd=%s docker_ok=%s sin_sudo=%s sudo=%s sudo_path=%s compose_lee=%s contenedores=%s volumen=%s salud=%s respaldos=%s espacio=%s con_clave=%s\\n' \\
+  "$raiz" "$compose" "$env" "$grupos" "$docker" "$compose_cmd" "$docker_ok" "$sin_sudo" "$sudo" "$sudo_path" "$compose_lee" "$contenedores" "$volumen" "$salud" "$respaldos" "$espacio" "$con_clave"
 log "listo"
 `;
 }
@@ -425,10 +450,15 @@ export function sudoVerdict(result = {}) {
       : result.sudo_path === "no"
         ? "«sudo docker» no lo encuentra (el sudo del NAS impone su PATH): los comandos del taller lo llaman por su ruta, así que les da igual"
         : "el PATH de sudo no se ha mirado (pediría la contraseña)";
+  // Con la contraseña ya tecleada —una vez, para todo el comando— se dice, porque
+  // lo contrario («se teclea cuando la pide») se leería como que hay que volver a
+  // teclearla, y no es así: el `sudo` de dentro la recibe por la entrada estándar.
   const clave =
     result.sudo === "libre"
       ? "sudo no pide contraseña"
-      : "sudo pide contraseña (se teclea cuando la pide, igual que en la copia)";
+      : result.con_clave === "si"
+        ? "sudo pide contraseña, ya tecleada una vez: la usan todas las conexiones y el sudo de dentro"
+        : "sudo pide contraseña (se teclea cuando la pide, igual que en la copia)";
   return { ...base, ok: true, detail: `${clave} · ${path}` };
 }
 
@@ -601,12 +631,15 @@ export function copiesVerdict(result = {}, { minFreeMb = MIN_FREE_MB } = {}) {
   const freeKb = Number(result.espacio);
   const freeMb = Number.isFinite(freeKb) ? Math.round(freeKb / 1024) : null;
   const espacio =
-    freeMb === null ? "espacio libre: desconocido" : `${cantidad(freeMb)} libres`;
+    freeMb === null
+      ? "espacio libre: desconocido"
+      : `${cantidad(freeMb)} libres`;
   if (result.respaldos === "no" || result.respaldos === undefined) {
     return {
       ...base,
       ok: true,
-      detail: "la carpeta de las copias todavía no existe (la crea la primera copia)",
+      detail:
+        "la carpeta de las copias todavía no existe (la crea la primera copia)",
     };
   }
   if (result.respaldos === "sin-permiso") {
@@ -676,7 +709,8 @@ export function doctorPanelLines(
   },
   color = NO_COLOR,
 ) {
-  const findings = report ?? doctorReport(result, { reachable, host, user, port });
+  const findings =
+    report ?? doctorReport(result, { reachable, host, user, port });
   const lines = [
     "",
     color.bold("El NAS, punto por punto"),
@@ -712,7 +746,9 @@ export function doctorPanelLines(
     );
   }
   lines.push(
-    color.dim("  Del .env solo se ha mirado si está: el doctor no lee ningún valor."),
+    color.dim(
+      "  Del .env solo se ha mirado si está: el doctor no lee ningún valor.",
+    ),
     "",
   );
 

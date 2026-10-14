@@ -13,6 +13,11 @@
 // con el taller en marcha: no cambia datos, no toca el `.env` y no imprime
 // ningún secreto.
 //
+// La contraseña del NAS se teclea **una sola vez**, y solo si hace falta: si la
+// cuenta entra con clave SSH no se pide nada. Con ella entran todas las conexiones
+// —por el ayudante de `ssh`— y también el `sudo` de dentro, que es quien hace el
+// export y la copia en frío. Los detalles, en `nas-clave-lib.mjs`.
+//
 // Los valores de configuración se leen de los flags y, si no están, del entorno
 // (`NAS_HOST`, `NAS_PATH`, `NAS_RESPALDOS`, `NAS_KEEP`, …), igual que en la
 // puesta en marcha.
@@ -32,6 +37,12 @@ import {
   resolveConfig,
   usage,
 } from "./nas-backup-lib.mjs";
+import { admiteAyudante, pedirClave, prepararAyudante } from "./nas-clave.mjs";
+import {
+  AVISO_ANTES,
+  AVISO_SSH_SIN_AYUDANTE,
+  haceFaltaClave,
+} from "./nas-clave-lib.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -96,11 +107,40 @@ const sshArgs = (extra = []) => [
 // Con terminal delante se pide una seudo-terminal: es lo que hace que el `sudo`
 // de dentro pueda pedir la contraseña. Sin terminal (una ejecución desatendida)
 // se ahorra, porque no habría dónde teclearla.
-const ttyArgs = process.stdin.isTTY ? ["-t"] : ["-T"];
+//
+// Y con la contraseña ya tecleada no se pide ninguna: lo que hay que hacer dentro
+// del NAS no pregunta nada —el `sudo` de dentro la recibe por la entrada estándar,
+// mira `envoltorioClave`—, así que una seudo-terminal solo serviría para que la
+// clave cruzara por un sitio donde el NAS la repite en pantalla.
+const ttyArgs = () => (clave ? ["-T"] : process.stdin.isTTY ? ["-t"] : ["-T"]);
+
+// La contraseña del NAS, si ha habido que teclearla (**una sola vez**: mira
+// `nas-clave.mjs`) y el ayudante con el que la reciben las conexiones siguientes.
+// Vive aquí, en memoria, mientras dura el comando: no se escribe en ningún sitio.
+let clave = null;
+let ayudante = null;
+
+/** El entorno de cada `ssh`: el de siempre, más el ayudante cuando lo hay. */
+const entornoSsh = () => ({ ...process.env, ...(ayudante?.entorno ?? {}) });
+
+/**
+ * Lo que se le da a un `ssh` cuya orden empieza leyendo la clave: el entorno con el
+ * ayudante —para que la conexión entre sin preguntar— y la clave por la entrada
+ * estándar, que es de donde la lee el `read` del principio. Sin clave no se le manda
+ * nada y la entrada queda como estaba (la terminal, para lo que pregunte).
+ */
+const conEntradaDeClave = () => ({
+  env: entornoSsh(),
+  input: clave ? `${clave}\n` : null,
+});
 
 /** Ejecuta y captura, sin heredar nada: para preguntar, no para trabajar. */
-function capture(command, args) {
-  const result = spawnSync(command, args, { cwd: root, encoding: "utf8" });
+function capture(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: root,
+    encoding: "utf8",
+    ...options,
+  });
   return {
     status: result.status ?? 1,
     stdout: (result.stdout ?? "").trim(),
@@ -114,12 +154,24 @@ function capture(command, args) {
  * con `capture` además se queda con lo que salió por la salida estándar —hace
  * falta para leer el resumen del guion— sin dejar de enseñarlo.
  */
-function stream(command, args, { capture: keep = false } = {}) {
+function stream(
+  command,
+  args,
+  { capture: keep = false, input = null, env = process.env } = {},
+) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: root,
-      stdio: ["inherit", keep ? "pipe" : "inherit", "inherit"],
+      env,
+      stdio: [
+        input === null ? "inherit" : "pipe",
+        keep ? "pipe" : "inherit",
+        "inherit",
+      ],
     });
+    // Lo que se le manda por la entrada —la contraseña del NAS, cuando toca— va de
+    // una vez y se cierra: lo que hay dentro la lee y no se queda esperando nada.
+    if (input !== null) child.stdin?.end(input);
     let text = "";
     if (keep && child.stdout) {
       child.stdout.setEncoding("utf8");
@@ -134,23 +186,62 @@ function stream(command, args, { capture: keep = false } = {}) {
 }
 
 /**
- * ¿Se llega al NAS por SSH? Delante de una terminal se deja preguntar la
- * contraseña; en una ejecución desatendida —sin terminal— se pide `BatchMode`,
- * que convierte una clave que falta en un fallo inmediato en vez de en una
- * pregunta esperando para siempre. Es la misma regla que en la puesta en marcha.
+ * Todo lo que ha dicho SSH. Para **decidir** hay que mirarlo entero y no solo la
+ * primera línea: un `ssh` que no puede entrar suelta antes otras cosas —la
+ * advertencia de que la conexión no usa tal o cual cifrado, sin ir más lejos—, y el
+ * motivo de verdad viene detrás.
  */
-function ensureReachable() {
-  const preflight = [...sshArgs(), "echo hola"];
-  if (!process.stdin.isTTY) preflight.unshift("-o", "BatchMode=yes");
-  const ping = capture("ssh", preflight);
-  if (ping.status !== 0) {
+function textoDeSsh(result = {}) {
+  return [result.stderr, result.stdout, result.error?.message]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Y lo que se le enseña a quien llama: la primera línea que dice algo. Las que
+ * empiezan por `**` son advertencias de la conexión, no motivos por los que se ha
+ * quedado fuera.
+ */
+function motivoDeSsh(result = {}) {
+  const linea = textoDeSsh(result)
+    .split(/\r?\n/)
+    .map((one) => one.trim())
+    .find((one) => one !== "" && !one.startsWith("**"));
+  return linea ?? result.error?.message ?? "";
+}
+
+/**
+ * ¿Se llega al NAS por SSH? Es lo primero de la copia y lo único que no se puede
+ * intentar sin conseguirlo. De aquí sale además la contraseña, cuando hace falta.
+ *
+ * Se comprueba **sin preguntar nada**: `BatchMode` convierte «hace falta
+ * contraseña» en un fallo inmediato en vez de en una pregunta en la terminal, y eso
+ * es lo que deja decidir aquí si hay que pedirla, cómo y cuándo. Una cuenta que
+ * entra con clave SSH —o una ejecución desatendida— pasa por aquí sin teclear nada.
+ *
+ * Y si el NAS la pide, se teclea **una vez**: a ciegas, por esta terminal, y de ahí
+ * sale todo lo demás —el ayudante de `ssh` y el `sudo` de dentro, que es quien hace
+ * el export y la copia en frío—, así que las veces de antes se quedan en una. El
+ * segundo intento es lo que lo confirma: si el NAS no la acepta, se dice aquí y no
+ * a mitad de camino, con el backend parado a medias.
+ */
+async function ensureReachable() {
+  const ping = capture(
+    "ssh",
+    ["-o", "BatchMode=yes", ...sshArgs(), "echo hola"],
+    { env: entornoSsh() },
+  );
+  if (ping.status === 0) {
+    console.log(`   ${c.green("✓")} entra ${destino} sin pedir contraseña`);
+    return;
+  }
+
+  const dicho = textoDeSsh(ping);
+  if (!haceFaltaClave(dicho) || !process.stdin.isTTY) {
     abort(
       `no he podido entrar en ${destino} por SSH`,
       [
-        firstLine(ping.stderr) ||
-          firstLine(ping.stdout) ||
-          ping.error?.message ||
-          "",
+        motivoDeSsh(ping) || firstLine(ping.stdout),
         "Comprueba la dirección y el usuario, y que entras a mano con esa misma cuenta:",
         `«ssh ${destino}» tiene que dejarte en la línea del NAS.`,
         process.stdin.isTTY
@@ -161,7 +252,46 @@ function ensureReachable() {
         .join("\n"),
     );
   }
-  console.log(`   ${c.green("✓")} entra ${destino}`);
+
+  console.log(c.dim(`   ${AVISO_ANTES}`));
+  clave = await pedirClave();
+  if (!clave) {
+    abort(
+      "no hay contraseña con la que entrar en el NAS",
+      [
+        "Se teclea a ciegas y no se ve nada mientras se escribe: vuelve a lanzar el comando",
+        "y escríbela entera, o entra con clave SSH para no tener que teclearla.",
+      ].join("\n"),
+    );
+  }
+
+  // El ayudante es lo que hace que las demás conexiones no vuelvan a preguntar. Sin
+  // él —el `ssh` de Windows, que no lo admite, o un `/tmp` donde no se puede
+  // escribir— se dice y se sigue: preguntará cada conexión, como preguntaba antes.
+  ayudante = admiteAyudante() ? prepararAyudante(clave) : null;
+  if (!ayudante) console.log(c.dim(`   (${AVISO_SSH_SIN_AYUDANTE})`));
+
+  const otra = capture(
+    "ssh",
+    ["-o", "BatchMode=no", ...sshArgs(), "echo hola"],
+    { env: entornoSsh() },
+  );
+  if (otra.status !== 0) {
+    abort(
+      "el NAS no me ha dejado entrar con esa contraseña",
+      [
+        motivoDeSsh(otra),
+        "Se teclea a ciegas, así que puede ser un despiste: vuelve a lanzar el comando.",
+        `Y si «ssh ${destino}» no te pide contraseña, esa cuenta entra con clave: la del NAS`,
+        "solo hace falta para sudo, y se pide cuando toque.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+  console.log(
+    `   ${c.green("✓")} entra ${destino} (la contraseña, tecleada una vez para todas las conexiones)`,
+  );
 }
 
 console.log(
@@ -174,7 +304,7 @@ console.log(
 );
 
 step("Comprobar que se llega al NAS");
-ensureReachable();
+await ensureReachable();
 
 step("Copiar el taller desde dentro del NAS");
 // El guion vive en el repositorio y viaja por la conexión: no se deja en el NAS
@@ -187,10 +317,12 @@ const orden = backupWords({
   root: config.path,
   backups: config.backups,
   keep: config.keep,
+  clave: Boolean(clave),
 });
 
-const result = await stream("ssh", [...sshArgs(ttyArgs), ...orden], {
+const result = await stream("ssh", [...sshArgs(ttyArgs()), ...orden], {
   capture: true,
+  ...conEntradaDeClave(),
 });
 const summary = parseBackupResult(result.stdout);
 if (result.status !== 0 || !summary) {

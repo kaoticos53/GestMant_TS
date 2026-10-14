@@ -77,6 +77,13 @@ y espera a que el contenedor `funciones` suba el esquema y las funciones —de a
 en adelante las mantiene al día el `vigilante`, solo—. Termina con un panel que
 dice cómo ha quedado todo, y la última línea es la URL de la app.
 
+La contraseña del NAS se teclea **una sola vez**, y solo si la cuenta no entra con
+clave SSH: con clave no se pide nada. Se escribe a ciegas —no se ve lo que se
+teclea—, sirve tanto para entrar como para lo que necesita root (`sudo`, que en un
+Synology es todo lo que habla con Docker) y no se guarda en ningún archivo ni sale
+por pantalla. Es lo que quita de en medio las siete veces seguidas que se pedía
+antes, una por conexión.
+
 Antes de llevarse nada comprueba una cosa que, si se queda atrás, rompe la
 compilación **dentro del NAS**: que el índice de módulos
 (`src/convex/_generated`, el archivo generado que el `tsc` lee para saber qué
@@ -511,7 +518,10 @@ la copia en frío del volumen —parando el backend un momento— y deja las dos
 `/volume1/docker/respaldos`, conservando las últimas 7 de cada tipo: las más
 viejas se van borrando para que no se acumulen. No cambia datos, no toca el
 `.env` y no imprime ningún secreto; la última línea que escribe es dónde han
-quedado las copias. Se puede repetir cuando se quiera —cada copia lleva su fecha
+quedado las copias. La contraseña del NAS se teclea aquí **una sola vez** y solo
+si la cuenta no entra con clave SSH; con ella entran todas las conexiones y
+también el `sudo` de dentro, que es quien hace las dos copias. Se puede repetir
+cuando se quiera —cada copia lleva su fecha
 en el nombre, así que no se pisa ninguna— y las opciones salen con
 `npm run nas:backup -- --help` (`--respaldos`, `--keep`, `--path`). Como en
 `npm run nas`, el host se puede dejar fijado en `NAS_HOST` —y la carpeta de las

@@ -9,7 +9,15 @@
 // guion del NAS se puede ejecutar de verdad, con dobles en el `PATH`, para
 // comprobar que repetirlo no cambia nada.
 //
-// No importa nada de Node a propósito: son funciones puras.
+// No importa nada de Node a propósito: son funciones puras. Del envoltorio de la
+// contraseña sí se tira, que también lo es: vive en `nas-clave-lib.mjs`, con sus
+// pruebas al lado.
+
+import {
+  PALABRA_CLAVE_PASAR,
+  PALABRAS_CLAVE_LEER,
+  envoltorioClave,
+} from "./nas-clave-lib.mjs";
 
 /** Colores del script; sin nada, el texto sale tal cual (como en las pruebas). */
 const NO_COLOR = {
@@ -84,6 +92,10 @@ export function usage(name = "npm run nas --") {
     "hace falta sudo y qué grupos y qué PATH tiene, si Compose lee el proyecto, qué",
     "contenedores hay y si se puede escribir donde van las copias— y se explica lo",
     "que falta antes de intentar nada. Tampoco cambia nada.",
+    "",
+    "La contraseña del NAS se teclea una sola vez, y solo si hace falta: se escribe",
+    "a ciegas, sirve para entrar y para el `sudo` de dentro, y no se guarda en",
+    "ningún sitio. Si la cuenta entra con clave SSH, no se pide nada.",
     "",
     "Opciones:",
     "",
@@ -332,12 +344,18 @@ const COGER_Y_EJECUTAR = 'pulso_guion=$(cat); eval "$pulso_guion"';
  * saber van **escritos dentro del guion** —una linea `CLAVE=valor` delante—, y
  * asi no hay ninguna palabra corta que cruce sola.
  */
-export function scriptWords(script) {
+export function scriptWords(script, { clave = false } = {}) {
   return [
+    // Con clave, lo primero de todo es leerla de la entrada estándar —el tubo por el
+    // que la manda el comando del ordenador— y dejársela en el entorno al `sh` que
+    // ejecuta el guion, que es quien la usa para su `sudo` (mira `envoltorioClave`).
+    // Va delante de todo para que el guion no llegue a ejecutar nada sin ella.
+    ...(clave ? PALABRAS_CLAVE_LEER : []),
     "printf",
     "%s",
     ...commandChunks(sinRetornos(script)).map(shQuote),
     "|",
+    ...(clave ? [PALABRA_CLAVE_PASAR] : []),
     "sh",
     "-c",
     shQuote(COGER_Y_EJECUTAR),
@@ -535,6 +553,58 @@ export function tarArgs(root = ".") {
 }
 
 /**
+ * Los avisos con los que `tar` sale con 1 sin que nada haya ido mal: los archivos
+ * que **cambiaron mientras los estaba leyendo**.
+ *
+ * Pasa con `.git` cada vez que hay git trabajando en el ordenador, y no es un
+ * fallo del envío: git reescribe su índice —escribe `index.lock` y lo renombra
+ * encima de `index`—, ese `rename` cambia la fecha de la carpeta `.git` y `tar`
+ * avisa de `./.git` a mitad del envío y termina con 1. El archivo viaja igual
+ * —`tar` avisa y sigue— y `.git` no lo construye nadie: sirve para poder trabajar
+ * con git dentro de `codigo/`, como cuenta la guía.
+ *
+ * Devuelve los avisos **solo cuando son todos de eso**, y vacío en cualquier otro
+ * caso: con un archivo de código a medias o un error de verdad, quien llama corta
+ * como siempre. El mensaje se reconoce en inglés porque es el que imprime el `tar`
+ * que viene con Git para Windows (y el de Linux con sus avisos sin traducir); si
+ * viniera en otro idioma, no se reconoce y se corta, que es lo seguro.
+ */
+export function tarOnlyGitWarnings(stderr) {
+  const avisos = String(stderr ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  if (avisos.length === 0) return "";
+  const deGit = avisos.filter((line) =>
+    /^(?:tar: )?\.\/\.git(?:\/\S*)?: file changed as we read it$/.test(line),
+  );
+  return deGit.length === avisos.length ? avisos.join("\n") : "";
+}
+
+/**
+ * Qué hacer con lo que ha dicho `tar` al empaquetar el código: seguir o cortar.
+ *
+ * Es la decisión, no el manejo de las tuberías: por eso vive aquí y se prueba sin
+ * encender nada. Corta con lo que no sea un envío bueno —no se pudo ejecutar `tar`,
+ * salió con un código que no es el de los avisos— y deja pasar el aviso de `.git`
+ * que `tar` da cuando git escribe a la vez, que es lo que dejaba la puesta en
+ * marcha a medias sin que nada estuviera mal.
+ */
+export function packVerdict({ status = 0, error = null, stderr = "" } = {}) {
+  if (error) {
+    return {
+      ok: false,
+      warning: "",
+      reason: error.message ?? "tar no se pudo ejecutar",
+    };
+  }
+  if (status === 0) return { ok: true, warning: "", reason: "" };
+  const aviso = tarOnlyGitWarnings(stderr);
+  if (aviso !== "") return { ok: true, warning: aviso, reason: "" };
+  return { ok: false, warning: "", reason: `tar salió con ${status}` };
+}
+
+/**
  * El pretexto del paso 3, que corre dentro del NAS: descomprime lo que llega por
  * la entrada estándar en una carpeta nueva y **solo entonces** sustituye la
  * anterior, para que un corte a mitad no deje el proyecto a medias. Si no había
@@ -607,6 +677,8 @@ FORZAR_COMPOSE=${shQuote(forceCompose ? "si" : "no")}
 CLAVE_NUEVA=${shQuote(newKey ? "si" : "no")}
 CONSTRUIR=${shQuote(build ? "si" : "no")}
 SALUD=${shQuote(healthUrl)}
+
+${envoltorioClave()}
 
 ENV="$RAIZ/.env"
 COMPOSE="$RAIZ/docker-compose.yml"
@@ -938,6 +1010,9 @@ set -u
 
 RAIZ=${shQuote(root)}
 SALUD=${shQuote(healthUrl)}
+
+${envoltorioClave()}
+
 ENV="$RAIZ/.env"
 COMPOSE="$RAIZ/docker-compose.yml"
 

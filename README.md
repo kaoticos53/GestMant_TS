@@ -72,7 +72,9 @@ npm run nas:backup -- --host IP-del-NAS
 ```
 
 No cambia datos, no toca el `.env` y no imprime ningún secreto; termina diciendo
-dónde han quedado las copias.
+dónde han quedado las copias. La contraseña del NAS se teclea una sola vez —y solo
+si hace falta, que con clave SSH no se pide—: sirve para entrar y para el `sudo`
+de dentro, que es quien hace las dos copias.
 
 Y cuando algo no sale —o antes de tocar nada—, el **doctor** mira el entorno del
 NAS y explica lo que falta, que es lo primero que se echa de menos justo cuando

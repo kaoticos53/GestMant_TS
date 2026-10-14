@@ -100,6 +100,54 @@ describe("el guion que viaja al NAS", () => {
     }
   });
 
+  test("con la contraseña ya tecleada, el guion viaja con el envoltorio que le tapa el sudo", () => {
+    const guion = readFileSync(GUION, "utf8");
+    const comun = {
+      script: guion,
+      root: "/volume1/docker/pulso-taller",
+      backups: "/volume1/docker/respaldos",
+      keep: "7",
+    };
+
+    // Sin contraseña —el guion lanzado a mano en el NAS, o una cuenta que entra con
+    // clave SSH pero necesita sudo— la orden es la de siempre: no se prepara nada de
+    // esto y el `sudo` del NAS pregunta cuando le toque.
+    const sinClave = backupWords(comun);
+    expect(sinClave.join(" ")).not.toContain("read -r PULSO_CLAVE");
+    expect(sinClave.join(" ")).not.toContain("command sudo -S");
+
+    // Con ella, la orden viaja como la de la puesta en marcha: primero se lee la
+    // clave de la entrada estándar —el tubo por el que la manda el ordenador— y el
+    // guion lleva delante el envoltorio que convierte su `sudo` en uno que la recibe
+    // por ahí en vez de preguntarla.
+    const conClave = backupWords({ ...comun, clave: true });
+    expect(conClave.slice(0, 3)).toEqual(["read", "-r", "PULSO_CLAVE;"]);
+    expect(conClave).toContain("PULSO_CLAVE=$PULSO_CLAVE");
+
+    // El envoltorio va dentro de uno de los trozos —allí el `printf` los junta—,
+    // entrecomillado como los demás: se busca el texto que no lleva comillas.
+    const portador = conClave.indexOf(
+      conClave.find((palabra) => palabra.includes("command sudo -S -p")) ?? "",
+    );
+    expect(portador).toBeGreaterThan(-1);
+
+    // Y el orden importa: el envoltorio va después de lo que el guion lee del
+    // entorno —las carpetas las tiene que saber— y antes del guion, porque el `sudo`
+    // ha de estar tapado desde su primera llamada.
+    const trozo = conClave[portador];
+    expect(trozo.indexOf("command sudo -S")).toBeGreaterThan(
+      trozo.indexOf("PULSO_RAIZ="),
+    );
+    expect(trozo.indexOf("CONSERVAR_POR_DEFECTO")).toBeGreaterThan(
+      trozo.indexOf("command sudo -S"),
+    );
+    // Y el guion entero viaja detrás, hasta su última línea —el resumen que lee el
+    // comando del ordenador—: el envoltorio no se lleva nada por delante.
+    expect(
+      conClave.some((palabra) => palabra.includes("PULSO_BACKUP raiz=%s")),
+    ).toBe(true);
+  });
+
   test.skipIf(!shListo)(
     "el guion llega entero aunque una orden de dentro lea de la entrada",
     () => {
@@ -371,7 +419,13 @@ function montarNas() {
       '  printf "copia de mentira\\n" > "$montaje/$(basename "$destino")"',
       "}",
       'case "$1" in',
-      "  info) exit 0 ;;",
+      "  info)",
+      "    # `info` contesta si se puede hablar con Docker sin root; con",
+      "    # `PULSO_SIN_RAIZ` no, y entonces el guion pasa a usar `sudo`, que es",
+      "    # lo que se mira en la prueba de la contraseña.",
+      '    [ -z "${PULSO_SIN_RAIZ:-}" ] || exit 1',
+      "    exit 0",
+      "    ;;",
       "  run)",
       '    [ -z "${PULSO_FALLA_VOLUMEN:-}" ] || exit 3',
       '    fabricar "$@" || exit 1',
@@ -404,6 +458,27 @@ function montarNas() {
       "    ;;",
       "esac",
       "exit 0",
+    ].join("\n"),
+  );
+
+  // El sudo de mentira: apunta lo que le llega —y, cuando viene con `-S`, la
+  // contraseña que lee de la entrada estándar, que es como se la da el envoltorio
+  // que el guion lleva delante cuando el comando ya la ha tecleado— y ejecuta lo
+  // que le piden tal cual, sin cambiar de usuario ni preguntar nada. Sin él, un
+  // `sudo` de verdad en la prueba se quedaría esperando una contraseña que nadie
+  // va a teclear.
+  doble(
+    "sudo",
+    [
+      'if [ "$1" = "-S" ]; then',
+      "  shift",
+      '  [ "$1" != "-p" ] || shift 2',
+      '  IFS= read -r entregada || entregada=""',
+      '  printf \'sudo -S clave=%s orden=%s\\n\' "$entregada" "$*" >> "$PULSO_LOG"',
+      "else",
+      '  printf \'sudo sin-clave orden=%s\\n\' "$*" >> "$PULSO_LOG"',
+      "fi",
+      'exec "$@"',
     ].join("\n"),
   );
 
@@ -473,7 +548,58 @@ function montarNas() {
     utimesSync(path, fecha, fecha);
   };
 
-  return { base, proyecto, respaldos, copiar, ordenes, copias, copiaVieja };
+  /**
+   * Lanza el guion como lo lanza el comando del ordenador **cuando ya tiene la
+   * contraseña tecleada**: la orden que arma `backupWords` —la clave por la entrada
+   * estándar, el guion por el tubo y el envoltorio delante—, que es la mitad que no
+   * se puede probar sin un NAS.
+   */
+  const copiarConClave = (
+    clave: string,
+    entorno: Record<string, string> = {},
+  ) => {
+    const orden = backupWords({
+      script: readFileSync(GUION, "utf8"),
+      root: shPath(proyecto),
+      backups: shPath(respaldos),
+      keep: "7",
+      clave: true,
+    });
+    const extra = Object.entries(entorno)
+      .map(([nombre, valor]) => `${nombre}='${valor}'`)
+      .join(" ");
+    // La orden se le da al `sh` por un archivo, no como argumento: es el guion
+    // entero troceado y entrecomillado —unos 25 KB—, y como argumento de Windows se
+    // corta por donde le pille. La contraseña, por la entrada estándar, que es por
+    // donde la recibe el `read` del principio.
+    const fichero = join(base, "orden-con-clave.sh");
+    writeFileSync(fichero, `${orden.join(" ")}\n`);
+    const result = spawnSync(
+      "sh",
+      [
+        "-c",
+        `PATH='${shPath(bin)}':"$PATH" PULSO_LOG='${shPath(log)}' ${extra} sh '${shPath(fichero)}'`,
+      ],
+      { encoding: "utf8", input: `${clave}\n` },
+    );
+    return {
+      status: result.status ?? 1,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+      resumen: parseBackupResult(result.stdout),
+    };
+  };
+
+  return {
+    base,
+    proyecto,
+    respaldos,
+    copiar,
+    copiarConClave,
+    ordenes,
+    copias,
+    copiaVieja,
+  };
 }
 
 const nasCreados: string[] = [];
@@ -535,6 +661,49 @@ describe.skipIf(!shListo)("el guion de la copia previa, de verdad", DE_VERDAD, (
     expect(
       ordenes.filter((orden) => orden.includes("start backend")),
     ).toHaveLength(1);
+  });
+
+  test("con la contraseña ya tecleada, el sudo de dentro la recibe y no la pregunta", () => {
+    const { nas } = conNas();
+    const clave = "clave-de-mentira";
+
+    // El export y la copia en frío necesitan root en un NAS. Primero, sin
+    // contraseña —el guion lanzado a mano—: tira del `sudo` de siempre.
+    expect(nas.copiar({}, { PULSO_SIN_RAIZ: "1" }).status).toBe(0);
+    const primera = nas.ordenes();
+    const sinClave = primera.filter((linea) => linea.startsWith("sudo"));
+    expect(sinClave.length).toBeGreaterThan(0);
+    expect(
+      sinClave.every((linea) => linea.startsWith("sudo sin-clave orden=")),
+    ).toBe(true);
+
+    // Y ahora con ella, por el camino del comando: la clave va por la entrada
+    // estándar, el envoltorio tapa el `sudo` del guion y todas sus llamadas —las del
+    // export, las de los contenedores y las del volumen— la llevan sin preguntar.
+    const run = nas.copiarConClave(clave, { PULSO_SIN_RAIZ: "1" });
+    expect(run.status).toBe(0);
+    expect(run.resumen).toMatchObject({ volumen: "taller_datos" });
+    expect(run.stdout).toContain("volumen copiado");
+
+    const conClave = nas
+      .ordenes()
+      .slice(primera.length)
+      .filter((linea) => linea.startsWith("sudo"));
+    expect(conClave.length).toBeGreaterThanOrEqual(3);
+    expect(
+      conClave.every((linea) =>
+        linea.startsWith(`sudo -S clave=${clave} orden=`),
+      ),
+    ).toBe(true);
+    // Las dos copias pasan por ahí, y el backend también (se para y se arranca en
+    // frío para el volumen).
+    expect(conClave.some((linea) => linea.includes("export"))).toBe(true);
+    expect(conClave.some((linea) => linea.includes("stop backend"))).toBe(true);
+    expect(conClave.some((linea) => linea.includes("start backend"))).toBe(true);
+    expect(nas.copias()).toEqual([
+      "datos-2026-10-11-093042.tar.gz",
+      "export-2026-10-11-093042.zip",
+    ]);
   });
 
   test("el volumen es el que dice Docker, no el que se supone", () => {

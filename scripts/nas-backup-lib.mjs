@@ -9,6 +9,7 @@
 //
 // No importa nada de Node a propósito: son funciones puras.
 
+import { envoltorioClave } from "./nas-clave-lib.mjs";
 import { parseSummary, scriptWords, shQuote } from "./nas-setup-lib.mjs";
 
 /** Colores del script; sin nada, el texto sale tal cual (como en las pruebas). */
@@ -28,14 +29,23 @@ export const DEFAULT_PROJECT_PATH = "/volume1/docker/pulso-taller";
  * que hay que copiar y dónde escrito dentro —como las variables de entorno que el
  * propio guion dice que lee— y troceado en palabras sueltas (ver `scriptWords`),
  * que es como cruza sin que ningún argumento llegue cortado.
+ *
+ * Con `clave` —la contraseña del NAS ya tecleada en el ordenador— se le pone delante
+ * el envoltorio que hace que el `sudo` de dentro no la vuelva a pedir (ver
+ * `envoltorioClave`), y viaja como la puesta en marcha y la comprobación: la clave
+ * por la entrada estándar y el guion por el tubo. El guion del repositorio se queda
+ * sin el envoltorio a propósito, porque también se lanza **a mano** en el NAS —ahí
+ * el `sudo` de siempre pregunta, que es justo lo que se espera—; se le pone al
+ * viajar, que es cuando la contraseña existe.
  */
-export function backupWords({ script, root, backups, keep }) {
+export function backupWords({ script, root, backups, keep, clave = false }) {
   const preludio = [
     `PULSO_RAIZ=${shQuote(root)}`,
     `PULSO_RESPALDOS=${shQuote(backups)}`,
     `PULSO_CONSERVAR=${shQuote(keep)}`,
   ].join("\n");
-  return scriptWords(`${preludio}\n${script}`);
+  const guion = clave ? `${envoltorioClave()}\n${script}` : script;
+  return scriptWords(`${preludio}\n${guion}`, { clave });
 }
 
 /** Dónde se dejan las copias, como en el apartado de copias de la guía. */
@@ -82,6 +92,11 @@ export function usage(name = "npm run nas:backup --") {
     "por la conexión, así que siempre es el de este repositorio y no deja nada en",
     "el NAS. Con las copias hechas, se borran las más viejas: se conservan las",
     `últimas ${DEFAULT_KEEP} de cada tipo.`,
+    "",
+    "La contraseña del NAS se teclea una sola vez, y solo si hace falta: se escribe",
+    "a ciegas, sirve para entrar y para el `sudo` de dentro —que es quien hace el",
+    "export y la copia en frío—, y no se guarda en ningún sitio. Si la cuenta entra",
+    "con clave SSH, no se pide nada.",
     "",
     "No cambia datos, no toca el .env y no imprime ningún secreto. La clave de",
     "administrador —la que necesita el export— la lleva el contenedor desde el",

@@ -133,7 +133,9 @@ describe("el doctor, pedido y leído", () => {
     const texto = usage().join("\n");
     expect(texto).toContain("--doctor --host IP-del-NAS");
     expect(texto).toContain("--doctor                 mira el entorno del NAS");
-    expect(texto).toContain("Docker, sudo y sus grupos, Compose, contenedores y");
+    expect(texto).toContain(
+      "Docker, sudo y sus grupos, Compose, contenedores y",
+    );
     expect(texto).toContain("Tampoco cambia nada");
   });
 
@@ -141,7 +143,7 @@ describe("el doctor, pedido y leído", () => {
     const salida = [
       "nas: cuenta: ricardo · grupos: users,administrators",
       "nas: docker: /usr/local/bin/docker",
-      `PULSO_DOCTOR raiz=si compose=si env=si grupos=users,administrators docker=/usr/local/bin/docker compose_cmd=plugin docker_ok=si sin_sudo=no sudo=pide-clave sudo_path=no compose_lee=si contenedores=app:running,backend:running,dashboard:running,vigilante:running,funciones:exited volumen=pulso-taller_datos salud=si respaldos=si espacio=13000000`,
+      `PULSO_DOCTOR raiz=si compose=si env=si grupos=users,administrators docker=/usr/local/bin/docker compose_cmd=plugin docker_ok=si sin_sudo=no sudo=pide-clave sudo_path=no compose_lee=si contenedores=app:running,backend:running,dashboard:running,vigilante:running,funciones:exited volumen=pulso-taller_datos salud=si respaldos=si espacio=13000000 con_clave=no`,
       "nas: listo",
       "PULSO_CHECK raiz=si",
     ].join("\r\n");
@@ -164,9 +166,12 @@ describe("el doctor, pedido y leído", () => {
       salud: "si",
       respaldos: "si",
       espacio: "13000000",
+      con_clave: "no",
     });
     // El resumen de otro comando no se confunde con este.
-    expect(parseDoctorResult("PULSO_CHECK raiz=si\nPULSO_SETUP env=si\n")).toBeNull();
+    expect(
+      parseDoctorResult("PULSO_CHECK raiz=si\nPULSO_SETUP env=si\n"),
+    ).toBeNull();
     expect(parseDoctorResult("nada que leer\n")).toBeNull();
   });
 });
@@ -193,8 +198,7 @@ describe("lo que dice el doctor", () => {
   test("de Docker: dónde está, con quién se le habla y si contesta", () => {
     expect(dockerVerdict(sano())).toMatchObject({
       ok: true,
-      detail:
-        "en /usr/local/bin/docker y contesta con sudo · «docker compose»",
+      detail: "en /usr/local/bin/docker y contesta con sudo · «docker compose»",
     });
     expect(dockerVerdict(sano({ sin_sudo: "si" }))).toMatchObject({
       ok: true,
@@ -239,11 +243,14 @@ describe("lo que dice el doctor", () => {
       "el PATH de sudo sí lleva docker",
     );
     // Sin sudo y sin acceso a Docker, el taller no se puede ni mirar.
-    expect(
-      sudoVerdict(sano({ sudo: "no", sin_sudo: "no" })).ok,
-    ).toBe(false);
+    expect(sudoVerdict(sano({ sudo: "no", sin_sudo: "no" })).ok).toBe(false);
     expect(sudoVerdict(sano({ sudo: "libre" })).detail).toContain(
       "sudo no pide contraseña",
+    );
+    // Y cuando la contraseña se ha tecleado ya —una vez, para todo el comando— se
+    // dice, en vez de dejar creer que hay que volver a teclearla.
+    expect(sudoVerdict(sano({ con_clave: "si" })).detail).toContain(
+      "ya tecleada una vez",
     );
   });
 
@@ -281,7 +288,12 @@ describe("lo que dice el doctor", () => {
     expect(containersVerdict(sano()).ok).toBe(true);
     expect(containersVerdict(sano()).detail).toContain("funciones terminado");
     expect(
-      containersVerdict(sano({ contenedores: "app:running,backend:running,dashboard:running,vigilante:running,funciones:parado" })).detail,
+      containersVerdict(
+        sano({
+          contenedores:
+            "app:running,backend:running,dashboard:running,vigilante:running,funciones:parado",
+        }),
+      ).detail,
     ).toContain("funciones parado");
     // Un backend parado, sí.
     const parado = containersVerdict(
@@ -319,7 +331,9 @@ describe("lo que dice el doctor", () => {
       }),
     );
     expect(fallo).toMatchObject({ ok: false });
-    expect(fallo.detail).toContain("funciones terminado con error (salida 127)");
+    expect(fallo.detail).toContain(
+      "funciones terminado con error (salida 127)",
+    );
     expect(fallo.fix).toContain("logs");
     // Y con salida 0 sí es lo normal: el recado está hecho.
     const bien = containersVerdict(
@@ -349,9 +363,9 @@ describe("lo que dice el doctor", () => {
       ok: true,
       detail: "carpeta lista · 12 GB libres",
     });
-    expect(copiesVerdict(sano({ espacio: String(500 * 1024 * 1024) })).detail).toContain(
-      "500 GB libres",
-    );
+    expect(
+      copiesVerdict(sano({ espacio: String(500 * 1024 * 1024) })).detail,
+    ).toContain("500 GB libres");
     // Y en teras, como el NAS de verdad: 13384612052 KB son 12 TB.
     expect(copiesVerdict(sano({ espacio: "13384612052" })).detail).toContain(
       "12 TB libres",
@@ -363,7 +377,9 @@ describe("lo que dice el doctor", () => {
       detail: expect.stringContaining("no puede escribir"),
     });
     // Casi sin sitio: un tar a medias se descubre el día que hace falta.
-    const lleno = copiesVerdict(sano({ espacio: String((MIN_FREE_MB - 100) * 1024) }));
+    const lleno = copiesVerdict(
+      sano({ espacio: String((MIN_FREE_MB - 100) * 1024) }),
+    );
     expect(lleno.ok).toBe(false);
     expect(lleno.detail).toContain("casi sin sitio: quedan 1948 MB");
     expect(lleno.detail).toContain("(las copias piden unos 2048 MB)");
@@ -394,7 +410,11 @@ describe("lo que dice el doctor", () => {
     });
     expect(informe.every((finding) => finding.ok)).toBe(true);
     // Si no se llega, es lo primero y con su arreglo.
-    const sinSsh = doctorReport(sano(), { reachable: false, host: "nas", user: "admin" });
+    const sinSsh = doctorReport(sano(), {
+      reachable: false,
+      host: "nas",
+      user: "admin",
+    });
     expect(sinSsh[0]).toMatchObject({
       ok: false,
       detail: "no se llega a admin@nas",
@@ -448,7 +468,9 @@ describe("el panel del doctor", () => {
     const texto = panel(
       sano({ contenedores: "", sudo_path: "no-mira", compose_lee: "no-mira" }),
     );
-    expect(texto).toContain("Sin mirar: los contenedores y Compose y el PATH de sudo");
+    expect(texto).toContain(
+      "Sin mirar: los contenedores y Compose y el PATH de sudo",
+    );
     expect(texto).toContain("Se ve al lanzar la copia o la puesta en marcha.");
     // Y ese «sin mirar» no se cuenta como avería del entorno.
     expect(texto).toContain("2 cosas que mirar");
@@ -497,7 +519,7 @@ function montarNas() {
       '    case "$1" in',
       "      version) exit 0 ;;",
       "    esac",
-      '    if [ ! -f docker-compose.yml ]; then',
+      "    if [ ! -f docker-compose.yml ]; then",
       '      printf "no configuration file provided: not found\\n" >&2',
       "      exit 1",
       "    fi",
@@ -541,7 +563,7 @@ function montarNas() {
       '    printf "sudo: a password is required\\n" >&2',
       "    exit 1",
       "  fi",
-      '  [ $# -gt 0 ] || exit 0',
+      "  [ $# -gt 0 ] || exit 0",
       "  export PULSO_CON_SUDO=1",
       '  exec "$@"',
       "fi",
@@ -661,7 +683,8 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
     const rastro = (directory: string, prefijo = ""): string[] => {
       const lines: string[] = [];
       for (const entry of readdirSync(directory, { withFileTypes: true })) {
-        const relative = prefijo === "" ? entry.name : `${prefijo}/${entry.name}`;
+        const relative =
+          prefijo === "" ? entry.name : `${prefijo}/${entry.name}`;
         const path = join(directory, entry.name);
         if (entry.isDirectory()) lines.push(...rastro(path, relative));
         else lines.push(`${relative}:${statSync(path).size}`);
@@ -685,7 +708,9 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
     expect(preguntas).toContain("compose config -q");
     expect(preguntas).toContain("compose ps -a -q app");
     expect(preguntas).toContain("volume ls");
-    expect(preguntas).not.toMatch(/up |build|down|stop|restart|rm |create |prune/);
+    expect(preguntas).not.toMatch(
+      /up |build|down|stop|restart|rm |create |prune/,
+    );
   });
 
   test("sin terminal no se le pide la contraseña a sudo, y se dice lo que queda sin mirar", () => {
@@ -700,12 +725,17 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
       sudo_path: "no-mira",
       contenedores: "",
     });
-    const informe = doctorReport(run.resumen ?? {}, { host: "nas", user: "ricardo" });
+    const informe = doctorReport(run.resumen ?? {}, {
+      host: "nas",
+      user: "ricardo",
+    });
     expect(informe.find((finding) => finding.id === "docker")).toMatchObject({
       ok: false,
       detail: expect.stringContaining("la contraseña de sudo"),
     });
-    expect(informe.find((finding) => finding.id === "containers")).toMatchObject({
+    expect(
+      informe.find((finding) => finding.id === "containers"),
+    ).toMatchObject({
       ok: false,
     });
     // Y con terminal delante, lo mismo se mira entero: el sudo se usa y contesta.
@@ -721,9 +751,10 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
         "app:running,backend:running,dashboard:running,vigilante:running,funciones:running",
     });
     expect(
-      doctorReport(conTerminal.resumen ?? {}, { host: "nas", user: "ricardo" }).every(
-        (finding) => finding.ok,
-      ),
+      doctorReport(conTerminal.resumen ?? {}, {
+        host: "nas",
+        user: "ricardo",
+      }).every((finding) => finding.ok),
     ).toBe(true);
   });
 
@@ -733,7 +764,10 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
     const run = nas.mirar({ interactive: true }, { PULSO_SUDO_SIN_PATH: "1" });
 
     expect(run.resumen).toMatchObject({ sudo_path: "no", docker_ok: "si" });
-    const informe = doctorReport(run.resumen ?? {}, { host: "nas", user: "ricardo" });
+    const informe = doctorReport(run.resumen ?? {}, {
+      host: "nas",
+      user: "ricardo",
+    });
     // No es una avería —los comandos llaman al binario por su ruta— pero se cuenta.
     expect(informe.find((finding) => finding.id === "sudo")).toMatchObject({
       ok: true,
@@ -770,9 +804,10 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
     // El recado hecho: el contenedor de las funciones terminó y se fue.
     const recado = nas.mirar({}, { PULSO_ESTADOS: "funciones" });
     expect(recado.resumen?.contenedores).toContain("funciones:exited");
-    expect(
-      containersVerdict(recado.resumen ?? {}),
-    ).toMatchObject({ ok: true, detail: expect.stringContaining("funciones terminado") });
+    expect(containersVerdict(recado.resumen ?? {})).toMatchObject({
+      ok: true,
+      detail: expect.stringContaining("funciones terminado"),
+    });
 
     // Y el recado que salió mal —el error 127 es «no encuentro ese comando», que
     // es lo que pasa cuando a la imagen le falta el guion dentro— se cuenta con su
@@ -820,7 +855,10 @@ describe.skipIf(!shListo)("el guion del doctor, de verdad", DE_VERDAD, () => {
     // Y sigue contando lo que sí puede mirar: Docker y las copias.
     expect(run.resumen?.docker).toBe(shPath(join(nas.base, "bin", "docker")));
     expect(run.resumen?.respaldos).toBe("si");
-    const informe = doctorReport(run.resumen ?? {}, { host: "nas", user: "ricardo" });
+    const informe = doctorReport(run.resumen ?? {}, {
+      host: "nas",
+      user: "ricardo",
+    });
     expect(informe.find((finding) => finding.id === "project")).toMatchObject({
       ok: false,
       detail: expect.stringContaining("no hay carpeta del proyecto"),
