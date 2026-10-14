@@ -84,7 +84,7 @@ import {
   stockState,
   type MaintenanceKind,
 } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { ManualDeleteDialog } from "./ManualDeleteDialog";
 import { ManualDetailSheet } from "./ManualDetailSheet";
 import { ManualFormDialog } from "./ManualFormDialog";
@@ -110,11 +110,6 @@ type EquipmentDoc = Doc<"equipment">;
 type RecordDoc = Doc<"maintenanceRecords">;
 
 export function EquipmentView({
-  equipment: equipmentProp,
-  parts,
-  requests: requestsProp,
-  maintenance: maintenanceProp,
-  manuals: manualsProp,
   canManage = false,
   canWriteManuals = false,
   canManageManuals = false,
@@ -122,8 +117,6 @@ export function EquipmentView({
   onViewRequests = () => {},
   initialSearch = "",
 }: {
-  equipment: EquipmentDoc[];
-  parts: Doc<"spareParts">[];
   /** Solo responsable de repuestos/admin escriben en el inventario (fail-closed). */
   canManage?: boolean;
   /** Puede escribir notas del taller desde la ficha del equipo. */
@@ -132,23 +125,22 @@ export function EquipmentView({
   canManageManuals?: boolean;
   /** Quién mira: es lo que permite corregir su propia nota del taller. */
   currentUserId?: string | null;
-  /** Peticiones del taller (opcional por tolerancia a módulos en caliente). */
-  requests?: Doc<"partRequests">[];
-  /** Historial de averías y revisiones (opcional por tolerancia en caliente). */
-  maintenance?: RecordDoc[];
-  /** Manuales del taller: los del equipo y los de su modelo (opcional). */
-  manuals?: ManualDoc[];
   /** Lleva a la cola de peticiones filtrada por este equipo. */
   onViewRequests?: (equipmentId: string) => void;
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
 }) {
+  // La ficha del equipo carga lo suyo: el inventario, el catálogo (para los
+  // repuestos compatibles), las peticiones —con las archivadas, porque la ficha
+  // las sigue citando—, el historial de mantenimiento y los manuales del equipo
+  // y de su modelo. Se pide al abrir la ficha, no al entrar al panel.
+  const equipment = useQuery(api.equipment.list, {}) ?? [];
+  const parts = useQuery(api.spareParts.list) ?? [];
+  const requests =
+    useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
+  const maintenance = useQuery(api.maintenance.list) ?? [];
+  const manuals = useQuery(api.manuals.list) ?? [];
   const removeEquipment = useMutation(api.equipment.remove);
-  // Tolerancia a módulos desactualizados en caliente (el prop puede faltar)
-  const equipment = equipmentProp ?? [];
-  const requests = requestsProp ?? [];
-  const maintenance = maintenanceProp ?? [];
-  const manuals = manualsProp ?? [];
 
   /** Intervenciones registradas para un equipo del inventario. */
   const recordsFor = (item: EquipmentDoc) =>

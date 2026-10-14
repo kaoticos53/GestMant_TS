@@ -1,29 +1,29 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { internal } from "./_generated/api";
 import { MutationCtx, QueryCtx, internalMutation, mutation, query } from "./_generated/server";
 import { archiveClosedIncidentsBefore } from "./archive";
 import { readAuditAlertRoles } from "./auditAlerts";
+import { scheduleReporterEmail } from "./incidentMail";
+import { registerIncidentIntake } from "./incidentIntake";
 import { notifyUsers } from "./notify";
 import {
-  grantsForRole,
   hasAnyCapability,
   hasCapability,
   memberOrNull,
+  moderatorIds,
 } from "./permissions";
-import { assertReportImages } from "./reportUploads";
 import { trashRetentionDays } from "./trash";
 import { documentMoveAlert, summarizeAudit } from "../lib/audit";
+import { INCIDENT_WITHDRAWN_NOTICE } from "../lib/incidentMail";
 import {
-  INCIDENT_WITHDRAWN_NOTICE,
-  isWithdrawnNotice,
-  looksLikeEmail,
-  mailableStatus,
-  normalizeReporterEmail,
-} from "../lib/incidentMail";
-import type { IncidentMailNotice } from "../lib/incidentMail";
-import type { Capability } from "../lib/permissions";
+  canAdvanceIncident,
+  incidentStepStatus,
+  isClosedIncident,
+  type IncidentAction,
+  type IncidentStepStatus,
+} from "../lib/incidentFlow";
+import { normalizePublicCode } from "../lib/publicCode";
 import { DEFAULT_ROLE } from "../lib/roles";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 import { trashPurgeAt } from "../lib/trash";
@@ -42,9 +42,6 @@ import {
 } from "./schema";
 
 /** Manejo de incidentes: ciclo de vida, asignación, taller, archivo, documentos y notas. */
-
-const H = 60 * 60 * 1000;
-const DAY = 24 * H;
 
 type Actor = Doc<"users">;
 type LifecycleNote = NonNullable<Doc<"incidents">["lifecycleNotes"]>[number];
@@ -171,38 +168,6 @@ async function requireEquipmentEditor(
   );
 }
 
-/** Usuarios activos cuyo rol tiene esa capacidad.
- * (Los permisos de cada rol se resuelven una sola vez por rol.) */
-async function idsWithCapability(
-  ctx: QueryCtx | MutationCtx,
-  capability: Capability,
-): Promise<Id<"users">[]> {
-  const users = await ctx.db.query("users").collect();
-  const byRole = new Map<string, Promise<Record<Capability, boolean>>>();
-  const grantsOf = (roleKey: string) => {
-    let pending = byRole.get(roleKey);
-    if (!pending) {
-      pending = grantsForRole(ctx, roleKey);
-      byRole.set(roleKey, pending);
-    }
-    return pending;
-  };
-  const ids: Id<"users">[] = [];
-  for (const user of users) {
-    if (user.active === false) continue;
-    const grants = await grantsOf(user.role ?? DEFAULT_ROLE);
-    if (grants[capability]) ids.push(user._id);
-  }
-  return ids;
-}
-
-/** Coordinadores del taller para los avisos: quien tiene «manageIncidents». */
-async function moderatorIds(
-  ctx: QueryCtx | MutationCtx,
-): Promise<Id<"users">[]> {
-  return await idsWithCapability(ctx, "manageIncidents");
-}
-
 /**
  * Quién recibe los avisos del expediente: los usuarios activos cuyo rol está en
  * la audiencia configurada en «Ajustes del taller». Es un reparto, no un
@@ -260,39 +225,15 @@ function historyEntry(
 }
 
 /**
- * Programa el aviso por correo a quien notificó. Se programa en vez de esperar:
- * el correo sale por la pasarela de la plataforma, y eso es cosa de una acción
- * —una mutación no puede salir a la red—, así que la ficha cierra su cambio de
- * estado sin quedarse mirando al cartero. No se programa nada si quien notificó
- * no dejó correo, si lo que hay que contarle no se cuenta por correo o si ya se
- * le contó lo mismo. La decisión fina vive en `convex/incidentMail`.
- */
-async function scheduleReporterEmail(
-  ctx: MutationCtx,
-  incident: Doc<"incidents">,
-  notice: IncidentMailNotice,
-  /** La retirada: cuándo se está apuntando, que la ficha leída aún no lo sabe. */
-  withdrawnAt?: number,
-): Promise<void> {
-  if (!incident.reporterEmail) return;
-  if (isWithdrawnNotice(notice)) {
-    // Sin fecha de retirada no hay nada que contar; y si el último aviso salió
-    // después de retirarla, esta retirada ya se contó.
-    const at = withdrawnAt ?? incident.deletedAt;
-    if (at === undefined) return;
-    if (incident.emailedAt !== undefined && incident.emailedAt >= at) return;
-  } else {
-    if (mailableStatus(notice) === null) return;
-    if (incident.emailedStatus === notice) return;
-  }
-  await ctx.scheduler.runAfter(0, internal.incidentMail.notifyReporter, {
-    incidentId: incident._id,
-  });
-}
-
-/**
  * Reporta una incidencia. Es la única función pública del módulo: el
  * notificador no tiene por qué estar registrado en la aplicación.
+ *
+ * El cuerpo es el de siempre y está en otro sitio: el caso de uso —qué se admite
+ * y cómo queda la ficha, `lib/incidentIntake`— y su adaptador —la referencia, el
+ * código, el alta, el aviso y el correo, `convex/incidentIntake`—. Aquí queda la
+ * puerta: los argumentos que manda el formulario público y lo que recibe de
+ * vuelta, que son las dos caras del mismo caso: la referencia con la que el
+ * taller lo cita y el código con el que lo sigue quien avisó.
  */
 export const report = mutation({
   args: {
@@ -309,126 +250,10 @@ export const report = mutation({
     reportedAt: v.number(),
   },
   handler: async (ctx, args) => {
-    const reporterName = args.reporterName.trim();
-    if (!reporterName) {
-      throw new ConvexError("Indica tu nombre y apellidos.");
-    }
-    const equipmentKind = args.equipmentKind.trim();
-    if (!equipmentKind) throw new ConvexError("Indica el tipo de equipo.");
-    const model = args.model.trim();
-    if (!model) throw new ConvexError("Indica el modelo del equipo.");
-    // El correo es opcional —avisar sin cuenta no debe exigir dejar datos de
-    // contacto—, pero si se escribe tiene que servir para responder. Una errata
-    // de dedo se avisa aquí, que es cuando todavía se puede corregir, y no
-    // cuando el correo se rebota semanas después sin que nadie lo vea.
-    const reporterEmail = args.reporterEmail?.trim()
-      ? normalizeReporterEmail(args.reporterEmail)
-      : undefined;
-    if (reporterEmail !== undefined && !looksLikeEmail(reporterEmail)) {
-      throw new ConvexError(
-        "Ese correo no parece una dirección válida. Revísalo o déjalo en blanco.",
-      );
-    }
-    // La descripción viene como documento del editor (párrafos, listas,
-    // imágenes) y así se guarda; el mínimo se cuenta sobre lo que dice, no
-    // sobre su estructura (si no, un documento sin texto colaría).
-    const description = richDocToStore(args.description);
-    if (
-      description === undefined ||
-      richDocToPlainText(description).length < 10
-    ) {
-      throw new ConvexError(
-        "Describe la incidencia con un poco más de detalle (mínimo 10 caracteres).",
-      );
-    }
-    // Las fotos las sube quien no tiene cuenta por el camino del formulario
-    // público, y aquí se comprueba que cada una es de las que él mismo aceptó:
-    // la puerta abierta no vale para colar cualquier archivo.
-    await assertReportImages(ctx, description);
-    if (args.reportedAt > Date.now() + DAY) {
-      throw new ConvexError("La fecha de notificación no puede ser futura.");
-    }
-
-    // Referencia autoincremental INC-0001 eficiente (sin cargar toda la tabla en memoria)
-    const latest = await ctx.db
-      .query("incidents")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(100);
-
-    // Protección anti-inundación básica
-    const recentFromReporter = latest.find(
-      (item) =>
-        item.reporterName.toLowerCase() === reporterName.toLowerCase() &&
-        item.createdAt > Date.now() - 30_000,
-    );
-    if (recentFromReporter) {
-      throw new ConvexError(
-        "Ya has notificado una incidencia recientemente. Por favor, espera 30 segundos antes de enviar otra.",
-      );
-    }
-
-    // La referencia es con lo que se sigue el caso —lo que se teclea para
-    // consultarlo—, así que no puede repetirse. Se parte de la más alta que hay
-    // (el índice va por referencia y, con el mismo ancho, eso es el número) y se
-    // avanza hasta la primera libre. Mirar solo las últimas 100 dejaría fuera la
-    // referencia más alta cuando el histórico trae fechas repartidas, y el aviso
-    // nuevo repetiría un número ya usado; con la referencia repetida, la consulta
-    // de quien la recibió ya no sabría a qué incidencia contesta.
-    const highest = await ctx.db
-      .query("incidents")
-      .withIndex("by_reference")
-      .order("desc")
-      .first();
-    let seq = Number(/^INC-(\d+)$/.exec(highest?.reference ?? "")?.[1] ?? 0);
-    let reference: string;
-    do {
-      seq += 1;
-      reference = `INC-${String(seq).padStart(4, "0")}`;
-    } while (
-      (await ctx.db
-        .query("incidents")
-        .withIndex("by_reference", (q) => q.eq("reference", reference))
-        .first()) !== null
-    );
-
-    const now = Date.now();
-    const incidentId = await ctx.db.insert("incidents", {
-      reference,
-      reporterName,
-      ...(reporterEmail ? { reporterEmail } : {}),
-      ...(args.reporterRole?.trim()
-        ? { reporterRole: args.reporterRole.trim() }
-        : {}),
-      ...(args.location?.trim() ? { location: args.location.trim() } : {}),
-      equipmentKind,
-      model,
-      ...(args.serialNumber?.trim()
-        ? { serialNumber: args.serialNumber.trim() }
-        : {}),
-      description,
-      reportedAt: args.reportedAt,
-      status: INCIDENT_STATUSES.REPORTED,
-      history: [
-        historyEntry(INCIDENT_STATUSES.REPORTED, args.reportedAt, reporterName),
-      ],
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    // Aviso a los interesados: coordinadores del taller
-    const reporterUserId = await getAuthUserId(ctx);
-    await notifyUsers(
-      ctx,
-      await moderatorIds(ctx),
-      `Nueva incidencia ${reference}: ${equipmentKind} ${model}${
-        args.location?.trim() ? ` · ${args.location.trim()}` : ""
-      }`,
-      incidentId,
-      reporterUserId ?? undefined,
-    );
-
-    return reference;
+    // Ni una regla aquí: el caso de uso y su adaptador están a un salto
+    // (`lib/incidentIntake` y `convex/incidentIntake`). Esta puerta solo existe
+    // para que el formulario público tenga a quién llamar.
+    return await registerIncidentIntake(ctx, args);
   },
 });
 
@@ -474,14 +299,21 @@ export const list = query({
 });
 
 /**
- * Lo que se enseña de una incidencia a quien no es del taller: el recorte del
- * seguimiento. Es una lista de campos explícita a propósito —y no «todo menos
- * esto»—: una columna nueva del esquema no se cuela aquí sola, y las notas
- * internas, el expediente y quién dio cada paso del historial se quedan dentro.
+ * El recorte del seguimiento: lo que se enseña de una incidencia fuera del
+ * expediente del taller. Lo sirven las dos consultas —la de quien notificó, por
+ * su código (`byCode`), y la del taller, por su referencia (`byReference`)—, y por
+ * eso habla en código y no en referencia.
+ *
+ * Es una lista de campos explícita a propósito —y no «todo menos esto»—: una
+ * columna nueva del esquema no se cuela aquí sola, y las notas internas, el
+ * expediente y quién dio cada paso del historial se quedan dentro.
  */
 function trackingOf(incident: Doc<"incidents">) {
   return {
-    reference: incident.reference,
+    // El código, no la referencia: fuera del taller el caso se llama por el
+    // código que se le dio a quien notificó. La referencia es el número con el
+    // que el taller se cita entre sí y no sale de aquí.
+    code: incident.publicCode ?? null,
     status: incident.status,
     equipmentKind: incident.equipmentKind ?? null,
     model: incident.model ?? null,
@@ -503,25 +335,69 @@ function trackingOf(incident: Doc<"incidents">) {
 }
 
 /**
- * Consultar una incidencia por su referencia («INC-0004»). Es el camino de quien
- * la notificó y no es del taller: recibe esa referencia al avisar y con ella
- * sigue el caso. La cola entera no la ve —`list` le devuelve vacío—; esto, en
- * cambio, sí, y con lo justo.
+ * Consultar una incidencia por el código que se le dio a quien la notificó
+ * («A7K2-QX9M»). Es la puerta de fuera del taller: la que usan el invitado que
+ * avisó de una avería y cualquiera al que le hayan pasado un código.
  *
- * Pide sesión, y una de invitado vale: la referencia circula por un correo o por
- * un papel, y esto no es una puerta abierta para quien ni siquiera ha entrado.
+ * Pide sesión, y una de invitado vale: el código circula por un correo o por un
+ * papel, y esto no es una puerta abierta para quien ni siquiera ha entrado.
  * Nunca devuelve la ficha entera: lo que sale de aquí es el recorte de
  * `trackingOf`, sin notas internas, documentos ni adjuntos.
  *
- * `null` si no hay ninguna con esa referencia —el panel lo cuenta como «no
- * encontramos ninguna»—, y también si lo escrito no lleva ningún número.
+ * El código es lo único que se acepta, y a propósito: la referencia interna —que
+ * es un correlativo, «INC-0001», «INC-0002»…— la consulta el taller
+ * (`byReference`). Aceptarla aquí sería dejar la cola entera al alcance de quien
+ * vaya probando números, que es justo lo que el código viene a evitar.
+ *
+ * `null` si no hay ninguno con ese código —el panel lo cuenta como «no
+ * encontramos ninguna»—, y también si lo escrito no tiene forma de código.
+ */
+export const byCode = query({
+  args: { code: v.string() },
+  handler: async (ctx, args) => {
+    if ((await getAuthUserId(ctx)) === null) {
+      throw new ConvexError(
+        "Debes iniciar sesión para consultar una incidencia por su código.",
+      );
+    }
+    const code = normalizePublicCode(args.code);
+    if (code === null) return null;
+    // `first` y no `unique`, por lo mismo que en la referencia: una muestra
+    // cargada o una instalación con datos viejos puede tener el mismo código dos
+    // veces, y eso tiene que contestar (con el más antiguo) en vez de tumbar la
+    // consulta de quien recibió el código.
+    const incident = await ctx.db
+      .query("incidents")
+      .withIndex("by_publicCode", (q) => q.eq("publicCode", code))
+      .first();
+    // Una incidencia retirada no se sigue: se retiró porque es duplicada o
+    // equivocada, así que su código deja de contar el caso. Si se recupera desde
+    // la papelera, vuelve a contestar como si nunca hubiera pasado.
+    if (incident === null || incident.deletedAt !== undefined) return null;
+    return trackingOf(incident);
+  },
+});
+
+/**
+ * Consultar una incidencia por su referencia interna («INC-0004»). Es el camino
+ * del taller: la referencia se cita de viva voz y en los avisos internos, y
+ * sirve para saber si el caso apuntado en un papel es el que ya está en la cola.
+ *
+ * Solo para quien es del taller —invitado y visitante se quedan fuera—: fuera
+ * del taller, un correlativo que se puede ir probando sería la cola entera al
+ * alcance de cualquiera. Quien notificó sigue su caso por el código que se le
+ * dio (`byCode`).
+ *
+ * Nunca devuelve la ficha entera: lo que sale de aquí es el recorte de
+ * `trackingOf`, sin notas internas, documentos ni adjuntos. `null` si no hay
+ * ninguna con esa referencia o si lo escrito no lleva ningún número.
  */
 export const byReference = query({
   args: { reference: v.string() },
   handler: async (ctx, args) => {
-    if ((await getAuthUserId(ctx)) === null) {
+    if ((await memberOrNull(ctx)) === null) {
       throw new ConvexError(
-        "Debes iniciar sesión para consultar una incidencia por su referencia.",
+        "Solo el taller puede consultar una incidencia por su referencia. Para seguir un caso de fuera hace falta el código que se dio al notificarlo.",
       );
     }
     const reference = normalizeIncidentReference(args.reference);
@@ -557,14 +433,9 @@ export const assign = mutation({
       );
     }
     const incident = await getIncident(ctx, args.incidentId);
-    if (
-      incident.status !== INCIDENT_STATUSES.REPORTED &&
-      incident.status !== INCIDENT_STATUSES.ASSIGNED
-    ) {
-      throw new ConvexError(
-        "Solo se puede asignar una incidencia pendiente o ya en curso.",
-      );
-    }
+    const assigned = requireIncidentStep(incident, "assign", () =>
+      "Solo se puede asignar una incidencia pendiente o ya en curso.",
+    );
     const assignee = await ctx.db.get(args.assigneeId);
     if (!assignee)
       throw new ConvexError("El técnico seleccionado ya no existe.");
@@ -572,21 +443,21 @@ export const assign = mutation({
     const now = Date.now();
     const assigneeName = actorName(assignee);
     await ctx.db.patch(args.incidentId, {
-      status: INCIDENT_STATUSES.ASSIGNED,
+      status: assigned,
       assigneeId: assignee._id,
       assigneeName,
       updatedAt: now,
       history: [
         ...incident.history,
         historyEntry(
-          INCIDENT_STATUSES.ASSIGNED,
+          assigned,
           now,
           actorName(actor),
           `Asignada a ${assigneeName}`,
         ),
       ],
     });
-    await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.ASSIGNED);
+    await scheduleReporterEmail(ctx, incident, assigned);
     await notifyUsers(
       ctx,
       [assignee._id],
@@ -618,32 +489,30 @@ export const selfAssign = mutation({
       );
     }
     const incident = await getIncident(ctx, args.incidentId);
-    if (incident.status !== INCIDENT_STATUSES.REPORTED) {
-      throw new ConvexError(
-        incident.assigneeName
-          ? `Ya está asignada a ${incident.assigneeName}.`
-          : "Esta incidencia ya no está pendiente de asignación.",
-      );
-    }
+    const assigned = requireIncidentStep(incident, "selfAssign", () =>
+      incident.assigneeName
+        ? `Ya está asignada a ${incident.assigneeName}.`
+        : "Esta incidencia ya no está pendiente de asignación.",
+    );
 
     const now = Date.now();
     const name = actorName(actor);
     await ctx.db.patch(args.incidentId, {
-      status: INCIDENT_STATUSES.ASSIGNED,
+      status: assigned,
       assigneeId: actor._id,
       assigneeName: name,
       updatedAt: now,
       history: [
         ...incident.history,
         historyEntry(
-          INCIDENT_STATUSES.ASSIGNED,
+          assigned,
           now,
           name,
           "Autoasignada por el técnico",
         ),
       ],
     });
-    await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.ASSIGNED);
+    await scheduleReporterEmail(ctx, incident, assigned);
     await notifyUsers(
       ctx,
       await moderatorIds(ctx),
@@ -653,6 +522,13 @@ export const selfAssign = mutation({
     );
   },
 });
+
+/** El paso que corresponde a lo que se elige en el diálogo de verificación. */
+const VERIFY_STEPS = {
+  onsite: "verifyOnsite",
+  workshop: "verifyWorkshop",
+  unresolved: "verifyUnresolved",
+} as const satisfies Record<string, IncidentAction>;
 
 /**
  * Verificación de una incidencia asignada:
@@ -665,10 +541,13 @@ export const selfAssign = mutation({
 export const verify = mutation({
   args: {
     incidentId: v.id("incidents"),
+    // «onsite» no es un estado: es dónde acaba el paso. Los otros dos sí —el
+    // cierre deja la incidencia en ellos tal cual—, así que se nombran por su
+    // tabla.
     outcome: v.union(
       v.literal("onsite"),
-      v.literal("workshop"),
-      v.literal("unresolved"),
+      v.literal(INCIDENT_STATUSES.WORKSHOP),
+      v.literal(INCIDENT_STATUSES.UNRESOLVED),
     ),
     equipmentId: v.optional(v.id("equipment")),
     notes: v.optional(v.string()),
@@ -686,7 +565,9 @@ export const verify = mutation({
         "Solo el técnico asignado o el coordinador pueden verificar esta incidencia.",
       );
     }
-    if (incident.status !== INCIDENT_STATUSES.ASSIGNED) {
+    // El paso se comprueba antes de nada: verificar solo se puede desde una
+    // incidencia asignada, y a dónde lleva cada uno lo dice la máquina.
+    if (!canAdvanceIncident(incident.status, VERIFY_STEPS[args.outcome])) {
       throw new ConvexError(
         "La incidencia debe estar asignada para verificarla.",
       );
@@ -701,9 +582,10 @@ export const verify = mutation({
     const now = Date.now();
     const name = actorName(actor);
 
-    if (args.outcome === "workshop") {
+    if (args.outcome === INCIDENT_STATUSES.WORKSHOP) {
+      const workshopStatus = incidentStepStatus("verifyWorkshop");
       await ctx.db.patch(args.incidentId, {
-        status: INCIDENT_STATUSES.WORKSHOP,
+        status: workshopStatus,
         workshopAssigneeId: actor._id,
         workshopAssigneeName: name,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
@@ -711,7 +593,7 @@ export const verify = mutation({
         history: [
           ...incident.history,
           historyEntry(
-            INCIDENT_STATUSES.WORKSHOP,
+            workshopStatus,
             now,
             name,
             notes ? `Derivada a taller · ${notes}` : "Derivada a taller",
@@ -728,15 +610,15 @@ export const verify = mutation({
         incident._id,
         actor._id,
       );
-      await scheduleReporterEmail(ctx, incident, INCIDENT_STATUSES.WORKSHOP);
+      await scheduleReporterEmail(ctx, incident, workshopStatus);
       return;
     }
 
-    // Cierre in situ o sin resolución: se crea la ficha si hay equipo
-    const status =
-      args.outcome === "onsite"
-        ? INCIDENT_STATUSES.RESOLVED
-        : INCIDENT_STATUSES.UNRESOLVED;
+    // Cierre in situ o sin resolución: se crea la ficha si hay equipo. El estado
+    // lo trae el paso correspondiente, no una cuenta a mano.
+    const status = incidentStepStatus(
+      args.outcome === "onsite" ? "verifyOnsite" : "verifyUnresolved",
+    );
     const equipmentId = args.equipmentId ?? incident.equipmentId;
     const maintenanceId = equipmentId
       ? await createHistorySheet(ctx, {
@@ -807,7 +689,7 @@ export const assignWorkshop = mutation({
         "Solo el coordinador o el técnico de la orden pueden reasignar la entrada a taller.",
       );
     }
-    if (incident.status !== INCIDENT_STATUSES.WORKSHOP) {
+    if (!canAdvanceIncident(incident.status, "reassignWorkshop")) {
       throw new ConvexError(
         "La incidencia no tiene ninguna entrada de taller abierta.",
       );
@@ -849,7 +731,10 @@ export const assignWorkshop = mutation({
 export const close = mutation({
   args: {
     incidentId: v.id("incidents"),
-    outcome: v.union(v.literal("resolved"), v.literal("unresolved")),
+    outcome: v.union(
+      v.literal(INCIDENT_STATUSES.RESOLVED),
+      v.literal(INCIDENT_STATUSES.UNRESOLVED),
+    ),
     equipmentId: v.optional(v.id("equipment")),
     notes: v.optional(v.string()),
   },
@@ -866,11 +751,13 @@ export const close = mutation({
         "Solo el técnico de la orden o el coordinador pueden cerrar esta incidencia.",
       );
     }
-    if (incident.status !== INCIDENT_STATUSES.WORKSHOP) {
-      throw new ConvexError(
-        "La incidencia no tiene una entrada de taller abierta.",
-      );
-    }
+    const closed = requireIncidentStep(
+      incident,
+      args.outcome === INCIDENT_STATUSES.RESOLVED
+        ? "closeResolved"
+        : "closeUnresolved",
+      () => "La incidencia no tiene una entrada de taller abierta.",
+    );
     if (args.equipmentId) {
       const equipment = await ctx.db.get(args.equipmentId);
       if (!equipment)
@@ -880,10 +767,7 @@ export const close = mutation({
     const notes = richDocToStore(args.notes);
     const now = Date.now();
     const name = actorName(actor);
-    const status =
-      args.outcome === "resolved"
-        ? INCIDENT_STATUSES.RESOLVED
-        : INCIDENT_STATUSES.UNRESOLVED;
+    const status = closed;
     const equipmentId = args.equipmentId ?? incident.equipmentId;
     const maintenanceId = equipmentId
       ? await createHistorySheet(ctx, {
@@ -1018,12 +902,20 @@ export const updateEquipment = mutation({
 /* Archivo: sacar del día a día lo cerrado y antiguo, sin perderlo      */
 /* ------------------------------------------------------------------ */
 
-/** ¿Está cerrada? El archivo es solo para lo ya terminado. */
-function isClosedIncident(status: string): boolean {
-  return (
-    status === INCIDENT_STATUSES.RESOLVED ||
-    status === INCIDENT_STATUSES.UNRESOLVED
-  );
+/* La máquina del ciclo de vida («¿desde aquí se puede dar este paso?») vive en
+ * `lib/incidentFlow`, compartida con los botones de la ficha. Aquí solo queda el
+ * aviso, que es cosa de quien lo intenta. */
+
+/** El paso, o el aviso de por qué no se puede dar desde donde está. */
+function requireIncidentStep<A extends IncidentAction>(
+  incident: Doc<"incidents">,
+  action: A,
+  blocked: () => string,
+): IncidentStepStatus<A> {
+  if (!canAdvanceIncident(incident.status, action)) {
+    throw new ConvexError(blocked());
+  }
+  return incidentStepStatus(action);
 }
 
 /** Archivar el histórico es tarea de coordinación. */
@@ -2049,7 +1941,8 @@ async function createHistorySheet(
   args: {
     incident: Doc<"incidents">;
     equipmentId: Id<"equipment">;
-    status: "resolved" | "unresolved";
+    /** Las dos únicas salidas de una incidencia: las de su tabla de estados. */
+    status: (typeof INCIDENT_STATUSES)["RESOLVED" | "UNRESOLVED"];
     notes?: string;
     technician: string;
     closedAt: number;
@@ -2085,7 +1978,7 @@ async function createHistorySheet(
     `Avería descrita: ${richDocToPlainText(incident.description)}`,
     args.notes ? `Notas del técnico: ${args.notes}` : "",
     `Cierre: ${
-      args.status === "resolved" ? "resuelta" : "sin resolución"
+      args.status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución"
     } por ${args.technician} el ${closed}.`,
     linkedRequest ? `Material: petición ${linkedRequest.reference}.` : "",
   ].filter(Boolean);

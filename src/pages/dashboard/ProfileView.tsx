@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
+import { isClosedIncident, isIncidentInProgress } from "@/lib/incidentFlow";
 import { richDocToPlainText } from "@/lib/richDoc";
 import {
   DEFAULT_ROLE,
@@ -47,17 +48,17 @@ import { toast } from "sonner";
  */
 export function ProfileView({
   user,
-  incidents,
-  requests,
   onOpenIncidents,
   onOpenRequests,
 }: {
   user: Doc<"users"> | null | undefined;
-  incidents: Doc<"incidents">[];
-  requests: Doc<"partRequests">[];
   onOpenIncidents: () => void;
   onOpenRequests: () => void;
 }) {
+  // «Mis incidencias» y «mis peticiones» salen de las colas vivas, que carga el
+  // propio perfil: el armazón no le pasa datos, solo la sesión.
+  const incidents = useQuery(api.incidents.list, {}) ?? [];
+  const requests = useQuery(api.partRequests.list, {}) ?? [];
   const notifications = useQuery(api.notifications.list);
   // Etiqueta real del miembro (los roles personalizados tienen nombre propio).
   const me = useQuery(api.permissions.myPermissions);
@@ -89,11 +90,13 @@ export function ProfileView({
         item.assigneeId === user._id || item.workshopAssigneeId === user._id,
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
-  const openIncidents = myIncidents.filter(
-    (item) => item.status === "assigned" || item.status === "workshop",
+  // «En curso» y «cerrada» son preguntas de la máquina de la incidencia
+  // (`lib/incidentFlow`): la ficha no las responde por su cuenta.
+  const openIncidents = myIncidents.filter((item) =>
+    isIncidentInProgress(item.status),
   );
-  const closedIncidents = myIncidents.filter(
-    (item) => item.status === "resolved" || item.status === "unresolved",
+  const closedIncidents = myIncidents.filter((item) =>
+    isClosedIncident(item.status),
   );
 
   const myRequests = requests

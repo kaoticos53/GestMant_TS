@@ -1,4 +1,5 @@
-import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { richDocToPlainText } from "@/lib/richDoc";
 import { cn } from "@/lib/utils";
 import {
@@ -8,54 +9,8 @@ import {
   normalizeIncidentReference,
 } from "@/lib/workshop";
 import { Boxes, ClipboardList, Cpu, Search, Siren } from "lucide-react";
+import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-// Tipos tolerantes (campos opcionales/nulos según lleguen de Convex en caliente)
-type SearchRequest = {
-  _id: Id<"partRequests">;
-  reference: string;
-  requesterName: string;
-  requesterTeam?: string | null;
-  equipment?: string | null;
-  description?: string | null;
-  lines?: { code: string; name: string }[] | null;
-  status: Doc<"partRequests">["status"];
-};
-
-type SearchPart = {
-  _id: Id<"spareParts">;
-  code: string;
-  name: string;
-  description?: string | null;
-  category: string;
-  partNumber?: string | null;
-  supplier?: string | null;
-  location?: string | null;
-  stock: number;
-};
-
-type SearchIncident = {
-  _id: Id<"incidents">;
-  reference: string;
-  status: Doc<"incidents">["status"];
-  equipmentKind?: string | null;
-  model?: string | null;
-  serialNumber?: string | null;
-  location?: string | null;
-  reporterName: string;
-  description: string;
-};
-
-type SearchEquipment = {
-  _id: Id<"equipment">;
-  code?: string | null;
-  brand?: string | null;
-  name: string;
-  model: string;
-  location?: string | null;
-  serialNumber?: string | null;
-  supplier?: string | null;
-};
 
 /** Resultado de la búsqueda global: el módulo al que navega y qué abrir. */
 export type SearchHit =
@@ -107,23 +62,47 @@ function includesQuery(haystack: string, query: string): boolean {
  * por su texto, como el resto.
  */
 export function GlobalSearch({
-  incidents = [],
-  requests = [],
-  parts = [],
-  equipment = [],
   canSearchCatalog = false,
   onSelect,
   className,
 }: {
-  incidents?: SearchIncident[];
-  requests?: SearchRequest[];
-  parts?: SearchPart[];
-  equipment?: SearchEquipment[];
   /** Solo responsable/admin acceden al catálogo: no se busca lo que no ven. */
   canSearchCatalog?: boolean;
   onSelect: (hit: SearchHit) => void;
   className?: string;
 }) {
+  // Lo que se busca lo carga el buscador: está en la cabecera y tiene que ver
+  // todo el taller —también lo archivado, que es lo que se busca cuando algo
+  // lleva tiempo cerrado—, así que no puede pedírselo a la pestaña que haya
+  // abierta. Lo que no se puede ver no se busca: el catálogo y los equipos solo
+  // se piden a quien los tiene (el backend tampoco le contestaría).
+  // La lista vacía de mientras carga se guarda en su propio `useMemo`: si se
+  // escribiera `?? []` en el cuerpo, cada render tendría una lista nueva y el
+  // filtro de abajo se recalcularía sin que haya cambiado nada.
+  const consultaIncidencias = useQuery(api.incidents.list, {
+    includeArchived: true,
+  });
+  const consultaPeticiones = useQuery(api.partRequests.list, {
+    includeArchived: true,
+  });
+  const consultaRepuestos = useQuery(
+    api.spareParts.list,
+    canSearchCatalog ? {} : "skip",
+  );
+  const consultaEquipos = useQuery(
+    api.equipment.list,
+    canSearchCatalog ? {} : "skip",
+  );
+  const incidents = useMemo(
+    () => consultaIncidencias ?? [],
+    [consultaIncidencias],
+  );
+  const requests = useMemo(
+    () => consultaPeticiones ?? [],
+    [consultaPeticiones],
+  );
+  const parts = useMemo(() => consultaRepuestos ?? [], [consultaRepuestos]);
+  const equipment = useMemo(() => consultaEquipos ?? [], [consultaEquipos]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);

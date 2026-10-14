@@ -288,7 +288,7 @@ describe("permisos de un rol personalizado en marcha", () => {
     const assignable = await tech.query(api.members.listAssignable, {});
     expect(assignable.length).toBe(3);
 
-    const reference = await t.mutation(api.incidents.report, {
+    const { reference } = await t.mutation(api.incidents.report, {
       reporterName: "Laura Peña",
       equipmentKind: "Cámara de estudio",
       model: "HDC-3500",

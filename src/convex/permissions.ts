@@ -195,6 +195,47 @@ export async function hasAnyCapability(
 }
 
 /**
+ * Usuarios activos cuyo rol tiene esa capacidad: a quién hay que avisar de algo.
+ *
+ * Es el reparto de los avisos, no un permiso de nadie: quien tenga la capacidad
+ * recibe el aviso. Los permisos de cada rol se resuelven una sola vez por rol
+ * —un rol repetido en veinte cuentas no se lee veinte veces— y la cuenta de baja
+ * no está en la lista.
+ */
+export async function idsWithCapability(
+  ctx: Ctx,
+  capability: Capability,
+): Promise<Id<"users">[]> {
+  const users = await ctx.db.query("users").collect();
+  const byRole = new Map<string, Promise<Record<Capability, boolean>>>();
+  const grantsOf = (roleKey: string) => {
+    let pending = byRole.get(roleKey);
+    if (!pending) {
+      pending = grantsForRole(ctx, roleKey);
+      byRole.set(roleKey, pending);
+    }
+    return pending;
+  };
+  const ids: Id<"users">[] = [];
+  for (const user of users) {
+    if (user.active === false) continue;
+    const grants = await grantsOf(user.role ?? DEFAULT_ROLE);
+    if (grants[capability]) ids.push(user._id);
+  }
+  return ids;
+}
+
+/**
+ * Coordinadores del taller para los avisos: quien tiene «manageIncidents». Es el
+ * destinatario de lo que se notifica fuera del ciclo de cada persona —una
+ * incidencia nueva que aún no es de nadie—, así que se pide por capacidad y no
+ * por rol: el día que un rol a medida pueda gestionar incidencias, entra solo.
+ */
+export async function moderatorIds(ctx: Ctx): Promise<Id<"users">[]> {
+  return await idsWithCapability(ctx, "manageIncidents");
+}
+
+/**
  * La persona de la sesión, o `null` si no es del taller: sin sesión, invitado o
  * cuenta dada de baja. Es para las lecturas que el panel pide al montar y que
  * deben degradar a vacío en vez de lanzar: un error ahí tumbaba la entrada como

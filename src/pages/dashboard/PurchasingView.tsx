@@ -21,6 +21,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { BlockedSteps } from "@/components/BlockedSteps";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import {
@@ -43,6 +44,15 @@ import {
   type PurchaseOrderLine,
   type PurchaseRequestDoc,
 } from "@/lib/purchasing";
+import {
+  PURCHASE_ORDER_STEP_LABELS,
+  blockedPurchaseOrderSteps,
+  canAdvancePurchaseOrder,
+  canAdvancePurchaseRequest,
+  isPurchaseOrderClosed,
+  isPurchaseRequestClosed,
+  isPurchaseRequestUntreated,
+} from "@/lib/purchaseFlow";
 import { formatDate, formatDateTime, getErrorMessage } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -72,11 +82,6 @@ const SECTIONS: { id: Section; label: string; icon: typeof Truck }[] = [
 ];
 
 interface PurchasingViewProps {
-  purchaseRequests: PurchaseRequestDoc[];
-  orders?: PurchaseOrderDoc[];
-  receptions?: ReceptionDoc[];
-  partRequests: PartRequestDoc[];
-  parts: PartDoc[];
   canManage: boolean;
 }
 
@@ -85,29 +90,24 @@ interface PurchasingViewProps {
  * orden (agrupado por proveedor, que es como se compra), las órdenes con lo que
  * ha llegado de cada una y los movimientos de recepción con su albarán.
  */
-export function PurchasingView({
-  purchaseRequests,
-  orders: ordersProp,
-  receptions: receptionsProp,
-  partRequests,
-  parts,
-  canManage,
-}: PurchasingViewProps) {
-  const queryOrders = useQuery(
-    api.purchasing.listOrders,
-    ordersProp !== undefined ? "skip" : {},
-  );
-  const queryReceptions = useQuery(
-    api.purchasing.listReceptions,
-    receptionsProp !== undefined ? "skip" : {},
-  );
-
-  const orders = ordersProp ?? queryOrders ?? [];
-  const receptions = receptionsProp ?? queryReceptions ?? [];
+export function PurchasingView({ canManage }: PurchasingViewProps) {
+  // El módulo carga las tres listas que enseña —lo que espera por proveedor, las
+  // órdenes y las recepciones— más lo que necesita para nombrar lo que se pide:
+  // el catálogo y las peticiones de repuesto de las que sale cada compra.
+  const purchasing = useQuery(api.purchasing.listPurchaseRequests, {});
+  const orders = useQuery(api.purchasing.listOrders, {}) ?? [];
+  const receptions = useQuery(api.purchasing.listReceptions, {}) ?? [];
+  const partRequests =
+    useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
+  const parts = useQuery(api.spareParts.list) ?? [];
+  const purchaseRequests = purchasing?.requests ?? [];
 
   const [section, setSection] = useState<Section>("pending");
 
-  const sinTratar = purchaseRequests.filter((row) => row.status === "pending");
+  // Sin tratar: lo que espera a que alguien monte la orden (`lib/purchaseFlow`).
+  const sinTratar = purchaseRequests.filter((row) =>
+    isPurchaseRequestUntreated(row.status),
+  );
   const pedidas = orders.filter((order) => order.status !== "cancelled").length;
 
   return (
@@ -197,7 +197,7 @@ function PendingSection({
     [partRequests, parts, purchaseRequests],
   );
   const elegidas = purchaseRequests.filter(
-    (row) => row.status === "pending" && seleccion.has(row._id),
+    (row) => isPurchaseRequestUntreated(row.status) && seleccion.has(row._id),
   );
   const proveedores = new Set(elegidas.map((row) => row.supplier));
 
@@ -439,7 +439,7 @@ function PurchaseRequestRow({
 
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
-      {canManage && row.status === "pending" && (
+      {canManage && isPurchaseRequestUntreated(row.status) && (
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
@@ -467,33 +467,43 @@ function PurchaseRequestRow({
           {row.notes ? ` · ${row.notes}` : ""}
         </p>
       </div>
+      {/* Lo que ofrece la ficha sale de la máquina de la compra
+          (`lib/purchaseFlow`), no del estado a pelo: antes se ofrecía «Proveedor»
+          y «Retirar» también en lo ya recibido o retirado, donde el servidor las
+          rechaza —se podía pulsar y comerse un error—. */}
       {canManage && (
         <div className="flex flex-wrap gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => abrir("note")}
-          >
-            Nota
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => abrir("supplier")}
-          >
-            Proveedor
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-destructive"
-            onClick={() => abrir("cancel")}
-          >
-            Retirar
-          </Button>
+          {!isPurchaseRequestClosed(row.status) && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => abrir("note")}
+            >
+              Nota
+            </Button>
+          )}
+          {isPurchaseRequestUntreated(row.status) && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => abrir("supplier")}
+            >
+              Proveedor
+            </Button>
+          )}
+          {canAdvancePurchaseRequest(row.status, "cancel") && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              onClick={() => abrir("cancel")}
+            >
+              Retirar
+            </Button>
+          )}
         </div>
       )}
 
@@ -746,6 +756,12 @@ function OrdersSection({
       {orders.map((order) => {
         const meta = PURCHASE_ORDER_STATUS_META[order.status];
         const total = orderTotals(order);
+        // Lo que ya no se puede hacer con esta orden, con su motivo: recepcionar
+        // y anular salen de la máquina (`lib/purchaseFlow`), y una orden cerrada
+        // los explica en vez de esconderlos sin decir por qué.
+        const blocked = canManage
+          ? blockedPurchaseOrderSteps(order.status)
+          : [];
         return (
           <Card key={order._id}>
             <CardContent className="grid gap-3 pt-6">
@@ -784,9 +800,11 @@ function OrdersSection({
                   >
                     Ver la orden
                   </Button>
+                  {/* Con la máquina delante: «Recepcionar» es el paso
+                      `receive` y «Anular», el `cancel`; ninguno se ofrece en una
+                      orden ya completada o anulada. */}
                   {canManage &&
-                    (order.status === "pending" ||
-                      order.status === "partial") && (
+                    canAdvancePurchaseOrder(order.status, "receive") && (
                       <>
                         <Button
                           type="button"
@@ -814,6 +832,16 @@ function OrdersSection({
                     )}
                 </div>
               </div>
+              {blocked.length > 0 && (
+                <BlockedSteps
+                  groups={blocked.map((group) => ({
+                    label: group.actions
+                      .map((action) => PURCHASE_ORDER_STEP_LABELS[action])
+                      .join(", "),
+                    reason: group.reason,
+                  }))}
+                />
+              )}
               <Progress value={Math.round(total.ratio * 100)} />
             </CardContent>
           </Card>
@@ -982,22 +1010,20 @@ function OrderSheet({
                 ) : (
                   <p className="flex items-center gap-2 text-xs text-muted-foreground">
                     {line.note ?? "Sin nota"}
-                    {canManage &&
-                      order.status !== "completed" &&
-                      order.status !== "cancelled" && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => {
-                            setNota(line.note ?? "");
-                            setEditando(line.purchaseRequestId);
-                          }}
-                        >
-                          Editar
-                        </Button>
-                      )}
+                    {canManage && !isPurchaseOrderClosed(order.status) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          setNota(line.note ?? "");
+                          setEditando(line.purchaseRequestId);
+                        }}
+                      >
+                        Editar
+                      </Button>
+                    )}
                   </p>
                 )}
               </div>
@@ -1044,13 +1070,12 @@ function OrderSheet({
             )}
           </div>
 
-          {canManage &&
-            (order.status === "pending" || order.status === "partial") && (
-              <Button type="button" className="gap-2" onClick={onReceive}>
-                <Truck className="size-4" />
-                Recepcionar material
-              </Button>
-            )}
+          {canManage && canAdvancePurchaseOrder(order.status, "receive") && (
+            <Button type="button" className="gap-2" onClick={onReceive}>
+              <Truck className="size-4" />
+              Recepcionar material
+            </Button>
+          )}
         </div>
       </SheetContent>
     </Sheet>

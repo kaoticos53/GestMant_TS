@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/export";
 import {
@@ -38,6 +39,7 @@ import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import { useTableSort } from "@/hooks/use-table-sort";
 import { sortRows } from "@/lib/tableSort";
+import { useQuery } from "convex/react";
 import { ManualDeleteDialog } from "./ManualDeleteDialog";
 import { ManualDetailSheet } from "./ManualDetailSheet";
 import { ManualFormDialog } from "./ManualFormDialog";
@@ -53,8 +55,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-type EquipmentDoc = Doc<"equipment">;
 
 /**
  * Un movimiento del historial con la dirección de su versión, si la guarda: es
@@ -85,14 +85,10 @@ const NO_EQUIPMENT = "__none__";
  * manuales sin equipo y equipos sin manuales.
  */
 export function ManualsView({
-  manuals: manualsProp,
-  equipment: equipmentProp,
   canManage = false,
   currentUserId = null,
   initialSearch = "",
 }: {
-  manuals: ManualDoc[];
-  equipment: EquipmentDoc[];
   /** Solo responsable/admin suben, cambian y borran manuales (fail-closed). */
   canManage?: boolean;
   /** Quién mira: es lo que permite corregir su propia nota del taller. */
@@ -100,9 +96,10 @@ export function ManualsView({
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
 }) {
-  // Tolerancia a módulos desactualizados en caliente (los props pueden faltar)
-  const manuals = manualsProp ?? [];
-  const equipment = equipmentProp ?? [];
+  // Los manuales los carga el módulo, y con ellos los equipos: son los que
+  // clasifican cada manual (marca, modelo y equipo concreto) y el filtro.
+  const manuals = useQuery(api.manuals.list) ?? [];
+  const equipment = useQuery(api.equipment.list, {}) ?? [];
 
   const [search, setSearch] = useState(initialSearch);
   const [type, setType] = useState<string>("all");

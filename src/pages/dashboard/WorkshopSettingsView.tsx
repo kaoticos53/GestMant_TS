@@ -21,7 +21,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
 import type { TrashItem } from "@/convex/trash";
 import {
   AFTER_MONTHS_OPTIONS,
@@ -72,9 +71,6 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-type IncidentDoc = Doc<"incidents">;
-type RequestDoc = Doc<"partRequests">;
-
 /**
  * Ajustes del taller: los ajustes de fondo que decide quien los gobierna, en
  * una sola pantalla. Antes vivían repartidos —el archivado automático dentro
@@ -88,18 +84,12 @@ type RequestDoc = Doc<"partRequests">;
  * tarjeta se enseña solo a quien puede configurarla.
  */
 export function WorkshopSettingsView({
-  incidents = [],
-  requests = [],
   canManageArchive = false,
   canManageAlert = false,
   canManageAudit = false,
   canPurgeUploads = false,
   canManageData = false,
 }: {
-  /** Cola viva de incidencias: con ella se cuenta lo que archiva el automático. */
-  incidents?: IncidentDoc[];
-  /** Cola viva de peticiones: lo mismo, para el archivado automático. */
-  requests?: RequestDoc[];
   /** Quien coordina incidencias o decide peticiones ajusta el archivo. */
   canManageArchive?: boolean;
   /** Quien coordina las incidencias ajusta el aviso de trabajo sin constancia. */
@@ -119,9 +109,7 @@ export function WorkshopSettingsView({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      {canManageArchive && (
-        <AutomaticArchiveCard incidents={incidents} requests={requests} />
-      )}
+      {canManageArchive && <AutomaticArchiveCard />}
       {canPurgeUploads && <UnusedUploadsCard />}
       {canPurgeUploads && <TrashCard />}
       {canPurgeUploads && <StorageCleanupCard />}
@@ -324,13 +312,12 @@ function WorkshopDataCard() {
  * entrarían se cuenta con la regla compartida (`lib/archive`), la misma que
  * aplica la pasada de la noche.
  */
-function AutomaticArchiveCard({
-  incidents,
-  requests,
-}: {
-  incidents: IncidentDoc[];
-  requests: RequestDoc[];
-}) {
+function AutomaticArchiveCard() {
+  // Lo que se llevaría el archivado automático se cuenta sobre las colas vivas,
+  // que carga la propia tarjeta: solo hacen falta cuando se enseña, y solo la
+  // ve quien puede configurarla.
+  const incidents = useQuery(api.incidents.list, {}) ?? [];
+  const requests = useQuery(api.partRequests.list, {}) ?? [];
   const settings = useQuery(api.archive.settings);
   const saveSettings = useMutation(api.archive.setSettings);
   const runNow = useMutation(api.archive.runNow);

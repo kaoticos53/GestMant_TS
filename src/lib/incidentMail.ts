@@ -1,10 +1,10 @@
 /**
  * El aviso por correo a quien notificó una incidencia.
  *
- * Quien avisa de una avería no tiene cuenta en el taller: se le da una
- * referencia —«Incidencia INC-0004 registrada»— y con ella sigue el caso. Este
- * correo es el otro extremo de esa referencia: cuando el caso cambia de estado,
- * se le cuenta lo que ha pasado, sin que tenga que volver a mirar.
+ * Quien avisa de una avería no tiene cuenta en el taller: se le da un código
+ * —«Tu código: A7K2-QX9M»— y con él sigue el caso. Este correo es el otro extremo
+ * de ese código: cuando el caso cambia de estado, se le cuenta lo que ha pasado,
+ * sin que tenga que volver a mirar.
  *
  * Aquí vive solo el texto, para poder probarlo sin servidor. El envío, que
  * necesita la pasarela de la plataforma, está en `convex/incidentMail`.
@@ -13,17 +13,31 @@
  *
  * - **Lo que sale es lo que se le enseña al invitado.** Ni notas internas, ni
  *   quién dio cada paso, ni el cuaderno del taller: lo mismo que ve al consultar
- *   su referencia (`incidents.byReference`). Un correo no puede ser la puerta de
- *   atrás del expediente.
- * - **Solo se avisa de lo que le importa:** que alguien se haya hecho cargo, que
- *   el equipo haya entrado en taller y que el caso se haya cerrado. Ni los pasos
- *   intermedios ni las correcciones de una nota son cosas de quien notificó.
+ *   su código (`incidents.byCode`). Un correo no puede ser la puerta de atrás
+ *   del expediente.
+ * - **Solo se avisa de lo que le importa:** el código con el que sigue el caso
+ *   —para que no se quede solo en la pantalla que va a cerrar—, que alguien se
+ *   haya hecho cargo, que el equipo haya entrado en taller y que el caso se haya
+ *   cerrado. Ni los pasos intermedios ni las correcciones de una nota son cosas
+ *   de quien notificó.
  */
 
+import { formatPublicCode } from "./publicCode";
 import { INCIDENT_STATUS_META, formatDate } from "./workshop";
 
-/** Los cambios de estado que se le cuentan a quien notificó. */
+/**
+ * El aviso del alta, que no cuenta un cambio de estado: cuenta el código.
+ *
+ * Es el estado con el que nace una incidencia (`INTAKE_STATUS`, en
+ * `lib/incidentIntake`), y por eso se decide igual que los demás —una incidencia
+ * recién notificada tiene este aviso y ninguno más— sin que nadie tenga que
+ * acordarse de escribir a quien avisó por un camino aparte.
+ */
+export const INCIDENT_INTAKE_NOTICE = "reported";
+
+/** Los avisos que se le cuentan a quien notificó, empezando por el alta. */
 export const INCIDENT_MAIL_STATUSES = [
+  "reported",
   "assigned",
   "workshop",
   "resolved",
@@ -97,6 +111,10 @@ const NOTICE_MAIL_TEXT: Record<
   IncidentMailNotice,
   { headline: string; what: string }
 > = {
+  reported: {
+    headline: "Tu aviso ya está en el taller",
+    what: "Guarda este código: con él sigues el caso sin cuenta del taller, y es lo que hay que decir si llamas para preguntar. El taller lo revisará y te avisará cuando cambie de estado.",
+  },
   assigned: {
     headline: "Ya hay un técnico a cargo",
     what: "El taller ha puesto tu aviso en manos de un técnico, que se encargará de revisarlo.",
@@ -115,7 +133,7 @@ const NOTICE_MAIL_TEXT: Record<
   },
   withdrawn: {
     headline: "Tu incidencia se ha retirado de la lista",
-    what: "El taller la ha retirado: es lo que se hace con los avisos equivocados o con los que se notificaron dos veces. No se ha borrado nada, pero mientras esté retirada tu referencia ya no cuenta el caso.",
+    what: "El taller la ha retirado: es lo que se hace con los avisos equivocados o con los que se notificaron dos veces. No se ha borrado nada, pero mientras esté retirada tu código ya no cuenta el caso.",
   },
 };
 
@@ -141,17 +159,18 @@ function appBase(appUrl: string | null | undefined): string | null {
 }
 
 /**
- * El enlace para seguir el caso: la consulta de la referencia con el número ya
- * puesto —`/dashboard?referencia=INC-0004`—, para que al invitado no le toque
- * teclearlo mirando el correo.
+ * El enlace para seguir el caso: la consulta del código con el código ya puesto
+ * —`/dashboard?codigo=A7K2QX9M`—, para que al invitado no le toque teclearlo
+ * mirando el correo. Va sin los guiones: en una dirección sobran, y la consulta
+ * los quita igualmente si alguien pega el que se lee.
  */
 export function incidentTrackingLink(
-  reference: string,
+  code: string,
   appUrl?: string | null,
 ): string | null {
   const base = appBase(appUrl);
   if (base === null) return null;
-  return `${base}/dashboard?referencia=${encodeURIComponent(reference)}`;
+  return `${base}/dashboard?codigo=${encodeURIComponent(code)}`;
 }
 
 /**
@@ -174,12 +193,13 @@ export function reporterNoticeText(input: {
   if (input.emailedAt) {
     return `Enviado a ${email} el ${formatDate(input.emailedAt)}.`;
   }
-  return `Se avisará a ${email} en cuanto el caso cambie de estado.`;
+  return `Se le enviará su código a ${email}.`;
 }
 
 /** Lo que hace falta saber de la incidencia para escribirle a quien la notificó. */
 export interface IncidentMailInput {
-  reference: string;
+  /** El código de seguimiento de la incidencia, en su forma canónica. */
+  code: string;
   reporterName: string;
   /**
    * Lo que se le cuenta: el estado nuevo que acaba de quedar en la ficha, o la
@@ -217,11 +237,17 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
     throw new Error(`El aviso «${input.notice}» no se cuenta por correo.`);
   }
   const withdrawn = isWithdrawnNotice(notice);
+  // El alta tampoco cuenta un estado nuevo: la incidencia nace con el que tiene,
+  // y «Nueva» no es una noticia que darle a quien acaba de avisar.
+  const receipt = notice === INCIDENT_INTAKE_NOTICE;
   // La retirada no es un estado: la incidencia sigue en el que estaba, así que
   // no hay etiqueta de estado que enseñar ni caso que seguir con la referencia.
-  const meta = withdrawn ? null : INCIDENT_STATUS_META[notice];
+  const meta = withdrawn || receipt ? null : INCIDENT_STATUS_META[notice];
   const copy = NOTICE_MAIL_TEXT[notice];
-  const subject = `${input.reference} · ${copy.headline}`;
+  // El código se enseña en dos grupos porque es lo que se dicta y se teclea:
+  // quien lee el correo lo copia tal cual en la consulta.
+  const code = formatPublicCode(input.code);
+  const subject = `${code} · ${copy.headline}`;
   const equipment = [input.equipmentKind, input.model]
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part))
@@ -232,14 +258,16 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
     : (input.workshopAssigneeName ?? input.assigneeName ?? null);
   const link = withdrawn
     ? null
-    : incidentTrackingLink(input.reference, input.appUrl);
+    : incidentTrackingLink(input.code, input.appUrl);
 
   const lines = [
     `Hola, ${reporterFirstName(input.reporterName)}:`,
     "",
     withdrawn
-      ? `Tu incidencia ${input.reference} ya no se sigue desde el taller.`
-      : `Tu incidencia ${input.reference} ha cambiado de estado.`,
+      ? `Tu incidencia ${code} ya no se sigue desde el taller.`
+      : receipt
+        ? `Hemos recibido tu aviso. Este es tu código: ${code}.`
+        : `Tu incidencia ${code} ha cambiado de estado.`,
     "",
     ...(meta ? [`ESTADO: ${meta.label}`] : []),
     copy.what,
@@ -249,17 +277,15 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
     ...(onIt ? [`Lo lleva: ${onIt}`] : []),
     `La notificaste el ${formatDate(input.reportedAt)}.`,
     "",
-    // Con la incidencia retirada no hay seguimiento que ofrecer —la referencia
-    // ya no contesta—, así que se le dice lo que puede hacer: volver a avisar.
+    // Con la incidencia retirada no hay seguimiento que ofrecer —el código ya no
+    // contesta—, así que se le dice lo que puede hacer: volver a avisar.
     ...(withdrawn
       ? [
-          "Si el problema sigue ahí, vuelve a notificarlo: se te dará una referencia nueva.",
+          "Si el problema sigue ahí, vuelve a notificarlo: se te dará un código nuevo.",
         ]
       : [
-          "Con tu referencia puedes ver en qué punto va el caso, sin cuenta del taller:",
-          ...(link
-            ? [link]
-            : [`Entra en la aplicación y consulta ${input.reference}.`]),
+          "Con tu código puedes ver en qué punto va el caso, sin cuenta del taller:",
+          ...(link ? [link] : [`Entra en la aplicación y consulta ${code}.`]),
         ]),
     "",
     "Pulso Taller · Repuestos de equipo audiovisual",
@@ -276,8 +302,10 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
   const html = [
     `<h1 style="font-size:18px;margin:0 0 4px">${
       withdrawn
-        ? `Tu incidencia ${escapeHtml(input.reference)} ya no se sigue desde el taller`
-        : `Tu incidencia ${escapeHtml(input.reference)} ha cambiado de estado`
+        ? `Tu incidencia ${escapeHtml(code)} ya no se sigue desde el taller`
+        : receipt
+          ? `Hemos recibido tu aviso: ${escapeHtml(code)}`
+          : `Tu incidencia ${escapeHtml(code)} ha cambiado de estado`
     }</h1>`,
     `<p style="margin:0 0 16px;color:#555">${escapeHtml(copy.headline)}</p>`,
     ...(meta
@@ -293,13 +321,13 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
     ),
     `</ul>`,
     withdrawn
-      ? `<p style="margin:0 0 16px">Si el problema sigue ahí, vuelve a notificarlo: se te dará una referencia nueva.</p>`
+      ? `<p style="margin:0 0 16px">Si el problema sigue ahí, vuelve a notificarlo: se te dará un código nuevo.</p>`
       : link
-        ? `<p style="margin:0 0 8px">Puedes ver en qué punto va el caso con tu referencia, sin cuenta del taller:</p><p style="margin:0 0 16px"><a href="${escapeHtml(
+        ? `<p style="margin:0 0 8px">Puedes ver en qué punto va el caso con tu código, sin cuenta del taller:</p><p style="margin:0 0 16px"><a href="${escapeHtml(
             link,
-          )}">Seguir la incidencia ${escapeHtml(input.reference)}</a></p>`
+          )}">Seguir la incidencia ${escapeHtml(code)}</a></p>`
         : `<p style="margin:0 0 16px">Entra en la aplicación y consulta ${escapeHtml(
-            input.reference,
+            code,
           )}.</p>`,
     `<p style="margin:0;color:#555;font-size:12px">Pulso Taller · Repuestos de equipo audiovisual<br>Este aviso es automático: no hace falta responder a este correo.</p>`,
   ].join("\n");

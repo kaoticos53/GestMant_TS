@@ -1,4 +1,9 @@
 import type { Doc } from "../convex/_generated/dataModel";
+import {
+  isPurchaseRequestAwaitingDelivery,
+  isPurchaseRequestUntreated,
+} from "./purchaseFlow";
+import { canBuyForRequest } from "./requestFlow";
 
 /**
  * Compras: la copia que lee la pantalla y las cuentas que hace.
@@ -120,7 +125,9 @@ export function groupBySupplier(
 ): SupplierGroup[] {
   const groups = new Map<string, SupplierGroup>();
   for (const row of requests) {
-    if (row.status !== "pending") continue;
+    // Solo lo sin tratar: lo que ya está en una orden o ha llegado no se compra
+    // otra vez (`lib/purchaseFlow`).
+    if (!isPurchaseRequestUntreated(row.status)) continue;
     const group = groups.get(row.supplier) ?? {
       supplier: row.supplier,
       items: [],
@@ -153,18 +160,13 @@ export function requestsMissingStock(
   const stock = new Map(parts.map((part) => [part._id, part.stock]));
   const covered = new Set(
     purchaseRequests
-      .filter(
-        (row) => row.status !== "cancelled" && row.receivedAt === undefined,
-      )
+      .filter(isPurchaseRequestAwaitingDelivery)
       .map((row) => `${row.requestId}:${row.sparePartId}`),
   );
   return requests
     .filter(
       (request) =>
-        request.archivedAt === undefined &&
-        (request.status === "pending" ||
-          request.status === "onHold" ||
-          request.status === "pendingSupplierQuote"),
+        request.archivedAt === undefined && canBuyForRequest(request.status),
     )
     .map((request) => {
       const missing = request.lines.filter((line) => {

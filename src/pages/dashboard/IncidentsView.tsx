@@ -39,6 +39,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { BlockedSteps } from "@/components/BlockedSteps";
 import { DocumentLink } from "@/components/DocumentLink";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
@@ -48,6 +49,12 @@ import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { groupByDate, sortByDate } from "@/lib/browse";
 import { downloadText } from "@/lib/export";
+import {
+  INCIDENT_STEP_LABELS,
+  blockedIncidentSteps,
+  canAdvanceIncident,
+  isClosedIncident,
+} from "@/lib/incidentFlow";
 import { reporterNoticeText } from "@/lib/incidentMail";
 import {
   noteRemovedToast,
@@ -56,6 +63,7 @@ import {
   noteVersionRestoredToast,
 } from "@/lib/noteToasts";
 import { downloadPdf, loadPdfImage } from "@/lib/pdfBrowser";
+import { formatPublicCode } from "@/lib/publicCode";
 import {
   REPORT_MIME,
   incidentReport,
@@ -192,17 +200,11 @@ function searchableFields(incident: IncidentDoc): (string | undefined)[] {
 }
 
 export function IncidentsView({
-  incidents = [],
-  equipment = [],
-  requests = [],
   currentUserId,
   currentUserName = "Técnico",
   canAssign = false,
   initialDetailId = null,
 }: {
-  incidents?: IncidentDoc[];
-  equipment?: EquipmentDoc[];
-  requests?: Doc<"partRequests">[];
   /** Identidad actual (para autoasignación y permisos de atención). */
   currentUserId?: Id<"users"> | null;
   currentUserName?: string;
@@ -211,6 +213,13 @@ export function IncidentsView({
   /** Incidencia abierta al montar (la elige el aviso del panel). */
   initialDetailId?: Id<"incidents"> | null;
 }) {
+  // La cola la carga el módulo, con lo que necesita para trabajar cada
+  // incidencia: el equipo que se averió y la petición que nació de ella, que
+  // puede estar ya archivada.
+  const incidents = useQuery(api.incidents.list, {}) ?? [];
+  const equipment = useQuery(api.equipment.list, {}) ?? [];
+  const requests =
+    useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
   const [filter, setFilter] = useState<IncidentStatus | "all">("all");
   const [detailId, setDetailId] = useState<Id<"incidents"> | null>(
     initialDetailId ?? null,
@@ -427,9 +436,7 @@ export function IncidentsView({
                   <div className={compact ? "grid gap-2" : "grid gap-4"}>
                     {section.items.map((incident) => {
                       const status = INCIDENT_STATUS_META[incident.status];
-                      const isClosed =
-                        incident.status === "resolved" ||
-                        incident.status === "unresolved";
+                      const isClosed = isClosedIncident(incident.status);
                       return (
                         <div key={incident._id} data-row className="relative">
                           <button
@@ -784,6 +791,10 @@ function IncidentDetailSheet({
     (incident.assigneeId === currentUserId ||
       incident.workshopAssigneeId === currentUserId);
   const canWork = canAssign || isAssignee;
+  // Lo que la máquina deja hacer desde aquí y lo que no: los pasos que no se
+  // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/incidentFlow`).
+  // Solo se cuentan a quien va a actuar: al resto le basta saber que no le toca.
+  const blocked = canWork ? blockedIncidentSteps(incident.status) : [];
   // El rastro llega con la consulta: mientras está en camino (solo se pide a
   // quien coordina) no se exporta un informe al que le falte la auditoría.
   const trailPending = canAssign && trail === undefined;
@@ -1178,8 +1189,10 @@ function IncidentDetailSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2">
-            {/* La referencia es lo que se le da a quien notificó la avería: se
-                queda a la vista y se puede seleccionar de un clic para pasarla. */}
+            {/* La referencia es el número con el que el taller cita el caso
+                («la INC-0004»): se queda a la vista y se puede seleccionar de un
+                clic. Quien notificó no la usa —sigue el suyo por el código, que
+                está en los datos de la notificación—. */}
             <span className="select-all font-mono text-sm font-semibold text-muted-foreground">
               {incident.reference}
             </span>
@@ -1252,6 +1265,18 @@ function IncidentDetailSheet({
                 <dt className="text-xs text-muted-foreground">Nº de serie</dt>
                 <dd className="font-mono">{incident.serialNumber ?? "—"}</dd>
               </div>
+              {incident.publicCode && (
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">
+                    Código con el que lo sigue quien notificó
+                  </dt>
+                  {/* El único identificador que sale del taller: es lo que se le
+                      dicta por teléfono a quien pregunte por su caso. */}
+                  <dd className="select-all font-mono">
+                    {formatPublicCode(incident.publicCode)}
+                  </dd>
+                </div>
+              )}
               <div className="col-span-2">
                 <dt className="text-xs text-muted-foreground">
                   Aviso a quien notificó
@@ -1664,7 +1689,17 @@ function IncidentDetailSheet({
         </div>
 
         <div className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
-          <div className="flex flex-wrap justify-end gap-2">
+          {blocked.length > 0 && (
+            <BlockedSteps
+              groups={blocked.map((group) => ({
+                label: group.actions
+                  .map((action) => INCIDENT_STEP_LABELS[action])
+                  .join(", "),
+                reason: group.reason,
+              }))}
+            />
+          )}
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -1714,7 +1749,7 @@ function IncidentDetailSheet({
               Cerrar
             </Button>
 
-            {incident.status === "reported" && (
+            {canAdvanceIncident(incident.status, "selfAssign") && (
               <>
                 <Button
                   type="button"
@@ -1739,44 +1774,43 @@ function IncidentDetailSheet({
               </>
             )}
 
-            {incident.status === "assigned" && canWork && (
-              <>
-                {canAssign && (
+            {canAdvanceIncident(incident.status, "verifyWorkshop") &&
+              canWork && (
+                <>
+                  {canAssign && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setAssignTarget("assign")}
+                    >
+                      <UserPlus className="size-4" />
+                      Reasignar
+                    </Button>
+                  )}
                   <Button
                     type="button"
-                    variant="outline"
                     className="gap-2"
-                    onClick={() => setAssignTarget("assign")}
+                    onClick={() => setVerifyOpen(true)}
                   >
-                    <UserPlus className="size-4" />
-                    Reasignar
+                    <Check className="size-4" />
+                    Verificar incidencia
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  className="gap-2"
-                  onClick={() => setVerifyOpen(true)}
-                >
-                  <Check className="size-4" />
-                  Verificar incidencia
-                </Button>
-              </>
-            )}
-
-            {(incident.status === "resolved" ||
-              incident.status === "unresolved") &&
-              canAssign && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={busy}
-                  onClick={() => void handleArchive()}
-                >
-                  <Archive className="size-4" />
-                  Archivar
-                </Button>
+                </>
               )}
+
+            {isClosedIncident(incident.status) && canAssign && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={busy}
+                onClick={() => void handleArchive()}
+              >
+                <Archive className="size-4" />
+                Archivar
+              </Button>
+            )}
 
             {/* Retirar: para el aviso equivocado o el duplicado. No borra —eso
                 sería irreversible—, deja la incidencia en la papelera unos
@@ -1795,40 +1829,41 @@ function IncidentDetailSheet({
               </Button>
             )}
 
-            {incident.status === "workshop" && canWork && (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => setRequestOpen(true)}
-                >
-                  <PackagePlus className="size-4" />
-                  Petición de repuestos
-                </Button>
-                {canAssign && (
+            {canAdvanceIncident(incident.status, "closeResolved") &&
+              canWork && (
+                <>
                   <Button
                     type="button"
                     variant="outline"
                     className="gap-2"
-                    onClick={() => setAssignTarget("workshop")}
+                    onClick={() => setRequestOpen(true)}
                   >
-                    <UserPlus className="size-4" />
-                    Asignar orden
+                    <PackagePlus className="size-4" />
+                    Petición de repuestos
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  className="gap-2"
-                  onClick={() => setCloseOpen(true)}
-                >
-                  <Wrench className="size-4" />
-                  Finalizar trabajo
-                </Button>
-              </>
-            )}
+                  {canAssign && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setAssignTarget("workshop")}
+                    >
+                      <UserPlus className="size-4" />
+                      Asignar orden
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    className="gap-2"
+                    onClick={() => setCloseOpen(true)}
+                  >
+                    <Wrench className="size-4" />
+                    Finalizar trabajo
+                  </Button>
+                </>
+              )}
           </div>
-          {!canWork && incident.status !== "reported" && (
+          {!canWork && !canAdvanceIncident(incident.status, "selfAssign") && (
             <p className="mt-2 text-right text-xs text-muted-foreground">
               Solo el técnico asignado o el coordinador pueden actuar sobre esta
               incidencia.
@@ -2160,11 +2195,12 @@ function IncidentDetailSheet({
                 ¿Retirar {incident.reference}?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Sale de la cola y su referencia deja de seguir el caso: es para
-                el aviso equivocado o el duplicado de otra. No se borra ahora:
-                queda en la papelera —en el módulo Archivo— el plazo que tenga
-                ajustado el taller, y desde ahí se recupera tal y como está,
-                con su expediente y sus notas.
+                Sale de la cola, y el código con el que la seguía quien notificó
+                deja de contar el caso: es para el aviso equivocado o el
+                duplicado de otra. No se borra ahora: queda en la papelera —en
+                el módulo Archivo— el plazo que tenga ajustado el taller, y
+                desde ahí se recupera tal y como está, con su expediente y sus
+                notas.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="grid gap-2">

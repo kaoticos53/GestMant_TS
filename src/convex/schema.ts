@@ -335,6 +335,13 @@ const schema = defineSchema(
     // Incidencias/averías notificadas por cualquier usuario del taller
     incidents: defineTable({
       reference: v.string(), // "INC-0001"
+      // El código corto con el que se sigue el caso desde fuera del taller, el
+      // que se le da a quien notificó: aleatorio y sin relación con la
+      // referencia, que es un correlativo interno y no puede salir de aquí (ver
+      // `lib/publicCode`). Opcional porque las incidencias anteriores a esta
+      // columna no lo tienen: se les reparte uno la primera vez que hace falta
+      // (`ensurePublicCode`).
+      publicCode: v.optional(v.string()), // "A7K2QX9M"
       // Datos de quien notifica (no tiene por qué estar registrado)
       reporterName: v.string(), // nombre y apellidos
       reporterRole: v.optional(v.string()), // puesto
@@ -487,9 +494,12 @@ const schema = defineSchema(
       // retirado) y otro para la pasada que borra lo caducado.
       .index("by_deletedAt", ["deletedAt"])
       .index("by_purgeAt", ["purgeAt"])
-      // Por referencia: es el número que se le da a quien notifica y con el que
-      // se consulta el caso después (también desde una sesión de invitado).
-      .index("by_reference", ["reference"]),
+      // Por referencia: el número con el que el taller cita un caso entre sí
+      // («la INC-0004»). Quien notificó no lo usa: sigue el suyo por el código.
+      .index("by_reference", ["reference"])
+      // Por código: es la única puerta de quien no es del taller, y por eso el
+      // índice no vale para enumerar nada —los códigos no van en orden—.
+      .index("by_publicCode", ["publicCode"]),
 
     // Notificaciones in-app a los interesados de cada incidencia
     notifications: defineTable({
@@ -650,6 +660,13 @@ const schema = defineSchema(
       returnNote: v.optional(v.string()),
       holdSinceAt: v.optional(v.number()),
       holdNote: v.optional(v.string()),
+      // De qué estado salió la suspensión: al reanudar se vuelve ahí, porque
+      // suspender es un paréntesis y no un paso atrás (`lib/requestFlow`). Sin
+      // esto, una petición aprobada —con el material ya descontado— volvía a
+      // «pendiente» y se podía aprobar otra vez, descontándolo dos veces. No lo
+      // traen las peticiones suspendidas antes de que se apuntara: esas vuelven a
+      // «pendiente», que es lo que hacía el taller entonces.
+      heldFrom: v.optional(requestStatusValidator),
       cancelledAt: v.optional(v.number()),
       cancelNote: v.optional(v.string()),
       quoteRequestedAt: v.optional(v.number()),
@@ -681,7 +698,10 @@ const schema = defineSchema(
       .index("by_deletedAt", ["deletedAt"])
       .index("by_purgeAt", ["purgeAt"])
       .index("by_incident", ["incidentId"])
-      .index("by_requester", ["requesterId"]),
+      .index("by_requester", ["requesterId"])
+      // La referencia ordenada como se escribe, que es como se numera la serie:
+      // la más alta ya repartida está al final (`lib/references`).
+      .index("by_reference", ["reference"]),
 
     // Auditoría de decisiones sobre peticiones: cada vía explicable (rechazo,
     // suspensión, devolución, cancelación, presupuesto externo, entrega) deja
@@ -734,7 +754,10 @@ const schema = defineSchema(
       .index("by_request", ["requestId"])
       .index("by_order", ["orderId"])
       .index("by_supplier", ["supplier"])
-      .index("by_createdAt", ["createdAt"]),
+      .index("by_createdAt", ["createdAt"])
+      // La referencia, para repartir el número siguiente sin leer la tabla
+      // entera (`lib/references`).
+      .index("by_reference", ["reference"]),
 
     // Órdenes de compra: lo que el responsable manda de una vez a un proveedor
     // con las peticiones de compra que esperaban por él. Lleva su número y su
@@ -764,7 +787,10 @@ const schema = defineSchema(
     })
       .index("by_status", ["status"])
       .index("by_supplier", ["supplier"])
-      .index("by_orderedAt", ["orderedAt"]),
+      .index("by_orderedAt", ["orderedAt"])
+      // La referencia, para repartir el número siguiente sin leer la tabla
+      // entera (`lib/references`).
+      .index("by_reference", ["reference"]),
 
     // Recepciones: cada entrada de material de un proveedor, con el albarán de
     // entrega adjunto (obligatorio) y lo que ha entrado. Una orden puede tener
@@ -802,6 +828,21 @@ const schema = defineSchema(
       key: v.string(),
       seeded: v.boolean(),
     }).index("by_key", ["key"]),
+
+    // Por dónde va la numeración de cada serie de referencias: la incidencia, la
+    // petición de repuestos, la petición de compra y la orden (`lib/references`).
+    // Es lo que hace que un número gastado no vuelva a repartirse **nunca**, ni
+    // aunque la papelera borre todas las filas de la serie: lo que se cuenta no son
+    // las filas que quedan, son los números que ya se han dado. La tabla nace sin
+    // filas —una serie apunta su contador la primera vez que reparte un número— y
+    // entonces la serie arranca desde la referencia más alta que hubiera en uso.
+    referenceCounters: defineTable({
+      // La serie: una clave de `lib/references`. La clave la valida el reparto,
+      // como el rol de un usuario (`roleValidator`).
+      kind: v.string(),
+      // El último número repartido. No vuelve atrás.
+      last: v.number(),
+    }).index("by_kind", ["kind"]),
 
     // Documentos de una incidencia: el archivo de verdad vive en el
     // almacenamiento del servidor y aquí queda su ficha (nombre visible, nota

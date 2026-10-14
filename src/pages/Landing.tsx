@@ -111,7 +111,7 @@ const incidentSteps = [
   {
     title: "Se notifica",
     description:
-      "Cualquiera abre el formulario público y cuenta la avería; queda como incidencia con su referencia.",
+      "Cualquiera abre el formulario público y cuenta la avería; queda como incidencia con su número para el taller y su código para seguirla desde fuera.",
   },
   {
     title: "Se asigna y diagnostica",

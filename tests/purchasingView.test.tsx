@@ -14,14 +14,23 @@ import {
   vi,
 } from "vitest";
 
-const { CREADAS, RECIBIDAS } = vi.hoisted(() => ({
+const { CREADAS, RECIBIDAS, DATOS } = vi.hoisted(() => ({
   CREADAS: [] as unknown[],
   RECIBIDAS: [] as unknown[],
+  // Lo que el backend de mentira sirve a cada consulta del módulo.
+  DATOS: {
+    purchaseRequests: [] as unknown[],
+    orders: [] as unknown[],
+    receptions: [] as unknown[],
+  },
 }));
 
 vi.mock("@/convex/_generated/api", () => ({
   api: {
     purchasing: {
+      listPurchaseRequests: { nombre: "purchasing.listPurchaseRequests" },
+      listOrders: { nombre: "purchasing.listOrders" },
+      listReceptions: { nombre: "purchasing.listReceptions" },
       requestPurchase: { nombre: "purchasing.requestPurchase" },
       setSupplier: { nombre: "purchasing.setSupplier" },
       setNote: { nombre: "purchasing.setNote" },
@@ -32,13 +41,25 @@ vi.mock("@/convex/_generated/api", () => ({
       cancelOrder: { nombre: "purchasing.cancelOrder" },
       generateUploadUrl: { nombre: "purchasing.generateUploadUrl" },
     },
+    partRequests: { list: { nombre: "partRequests.list" } },
+    spareParts: { list: { nombre: "spareParts.list" } },
   },
 }));
 
 vi.mock("convex/react", async () => {
   const { api } = await import("@/convex/_generated/api");
   return {
-    useQuery: () => undefined,
+    // El módulo carga sus listas: se le sirve lo que la prueba haya puesto.
+    useQuery: (query: unknown) => {
+      if (query === api.purchasing.listPurchaseRequests) {
+        return { requests: DATOS.purchaseRequests, groups: [] };
+      }
+      if (query === api.purchasing.listOrders) return DATOS.orders;
+      if (query === api.purchasing.listReceptions) return DATOS.receptions;
+      if (query === api.partRequests.list) return [];
+      if (query === api.spareParts.list) return [];
+      return undefined;
+    },
     useMutation: (mutation: unknown) => async (args: unknown) => {
       if (mutation === api.purchasing.createOrder) {
         CREADAS.push(args);
@@ -161,19 +182,18 @@ const orden = {
   updatedAt: 1,
 } as never;
 
-function pintar(props: Partial<Parameters<typeof PurchasingView>[0]> = {}) {
+function pintar(
+  props: {
+    purchaseRequests?: unknown[];
+    orders?: unknown[];
+    receptions?: unknown[];
+  } = {},
+) {
+  DATOS.purchaseRequests = props.purchaseRequests ?? [compra()];
+  DATOS.orders = props.orders ?? [];
+  DATOS.receptions = props.receptions ?? [];
   act(() => {
-    root.render(
-      <PurchasingView
-        purchaseRequests={[compra()]}
-        orders={[]}
-        receptions={[]}
-        partRequests={[]}
-        parts={[]}
-        canManage
-        {...props}
-      />,
-    );
+    root.render(<PurchasingView canManage />);
   });
 }
 

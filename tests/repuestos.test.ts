@@ -194,6 +194,87 @@ describe("partRequests.create — peticiones con referencia o descripción", () 
       "ya no existe en el inventario",
     );
   });
+
+  test("no reutiliza una referencia gastada cuando la papelera borra la petición", async () => {
+    const { t, authed } = await authedTest();
+    const createRequest = (name: string) =>
+      authed.mutation(api.partRequests.create, {
+        requesterName: name,
+        priority: "normal",
+        description: `Petición de ${name}`,
+      });
+
+    expect(await createRequest("Sandra Ruiz")).toBe("PET-0001");
+    expect(await createRequest("Marcos Vega")).toBe("PET-0002");
+    expect(await createRequest("Jorge Luna")).toBe("PET-0003");
+
+    // Se retira la primera y la papelera la borra de verdad: en la tabla quedan
+    // dos filas, pero el número 1 ya se gastó —y sigue citado en las órdenes de
+    // compra que salieron de ella—, así que no puede volver a repartirse.
+    const [first] = await t.run((ctx) =>
+      ctx.db
+        .query("partRequests")
+        .withIndex("by_reference", (q) => q.eq("reference", "PET-0001"))
+        .collect(),
+    );
+    expect(first?.reference).toBe("PET-0001");
+    await authed.mutation(api.partRequests.withdraw, {
+      requestId: first._id,
+      reason: "Pedida dos veces",
+    });
+    await authed.mutation(api.partRequests.deleteNow, {
+      requestId: first._id,
+    });
+
+    // La siguiente continúa la numeración en vez de heredar el hueco.
+    expect(await createRequest("Iván Torres")).toBe("PET-0004");
+
+    const references = (
+      await t.run((ctx) => ctx.db.query("partRequests").collect())
+    ).map((row) => row.reference);
+    expect([...references].sort()).toEqual([
+      "PET-0002",
+      "PET-0003",
+      "PET-0004",
+    ]);
+  });
+
+  test("una serie vaciada entera sigue la numeración: la referencia gastada no vuelve", async () => {
+    const { t, authed } = await authedTest();
+    const createRequest = (name: string) =>
+      authed.mutation(api.partRequests.create, {
+        requesterName: name,
+        priority: "normal",
+        description: `Petición de ${name}`,
+      });
+
+    expect(await createRequest("Sandra Ruiz")).toBe("PET-0001");
+    expect(await createRequest("Marcos Vega")).toBe("PET-0002");
+    expect(await createRequest("Jorge Luna")).toBe("PET-0003");
+
+    // La papelera borra las tres: de la serie no queda ni una fila, y lo único que
+    // recuerda que el 1, el 2 y el 3 ya se gastaron es el contador.
+    for (const row of await t.run((ctx) =>
+      ctx.db.query("partRequests").collect(),
+    )) {
+      await authed.mutation(api.partRequests.withdraw, { requestId: row._id });
+      await authed.mutation(api.partRequests.deleteNow, { requestId: row._id });
+    }
+    expect(
+      await t.run((ctx) => ctx.db.query("partRequests").collect()),
+    ).toEqual([]);
+
+    // Los números gastados no se reciclan ni con la tabla vacía.
+    expect(await createRequest("Iván Torres")).toBe("PET-0004");
+
+    const counter = await t.run((ctx) =>
+      ctx.db
+        .query("referenceCounters")
+        .withIndex("by_kind", (q) => q.eq("kind", "partRequest"))
+        .unique(),
+    );
+    expect(counter?.last).toBe(4);
+  });
 });
 
 describe("partRequests.approve / reject — stock y decisiones", () => {
@@ -281,6 +362,102 @@ describe("partRequests.approve / reject — stock y decisiones", () => {
     expect(request.decisionNote).toBe("Pendiente de presupuesto");
     const stock = await t.run((ctx) => ctx.db.get(sparePartId));
     expect(stock?.stock).toBe(10);
+  });
+});
+
+describe("partRequests.onHold / resume — suspender es un paréntesis", () => {
+  /** Una petición nueva con una línea de repuesto, devuelta ya guardada. */
+  async function requestWithStock(t: Test, authed: Authed, quantity: number) {
+    const sparePartId = await seedPart(t, { stock: 10 });
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Sandra Ruiz",
+      priority: "normal",
+      lines: [{ sparePartId, quantity }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    return { sparePartId, requestId: request._id };
+  }
+
+  test("una aprobada que se suspende vuelve a aprobada: el material no se descuenta dos veces", async () => {
+    const { t, authed } = await authedTest();
+    const { sparePartId, requestId } = await requestWithStock(t, authed, 3);
+
+    await authed.mutation(api.partRequests.approve, {
+      requestId,
+      note: "Material apartado",
+    });
+    const stock = async () =>
+      (await t.run((ctx) => ctx.db.get(sparePartId)))?.stock;
+    expect(await stock()).toBe(7);
+
+    await authed.mutation(api.partRequests.onHold, {
+      requestId,
+      note: "El técnico está fuera",
+    });
+    expect((await authed.query(api.partRequests.list, {}))[0].status).toBe(
+      "onHold",
+    );
+
+    await authed.mutation(api.partRequests.resume, { requestId });
+
+    // Vuelve a «aprobada» —el material sigue apartado— y no a «pendiente».
+    const [request] = await authed.query(api.partRequests.list, {});
+    expect(request.status).toBe("approved");
+    expect(await stock()).toBe(7);
+
+    // Y aprobarla otra vez ya no es un paso: antes sí lo era, y descontaba el
+    // material por segunda vez (de 7 a 4).
+    await expectConvexError(
+      authed.mutation(api.partRequests.approve, { requestId }),
+      "ya fue resuelta y no puede aprobarse",
+    );
+    expect(await stock()).toBe(7);
+  });
+
+  test("una petición que espera presupuesto no lo olvida al reanudarse", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId } = await requestWithStock(t, authed, 1);
+
+    await authed.mutation(api.partRequests.requestQuote, {
+      requestId,
+      note: "Pedido precio al proveedor",
+    });
+    await authed.mutation(api.partRequests.onHold, { requestId });
+    await authed.mutation(api.partRequests.resume, { requestId });
+
+    const [request] = await authed.query(api.partRequests.list, {});
+    expect(request.status).toBe("pendingSupplierQuote");
+    expect(request.quoteRequestedAt).toBeDefined();
+  });
+
+  test("no se suspende una petición ya entregada: primero se devuelve", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId } = await requestWithStock(t, authed, 1);
+
+    await authed.mutation(api.partRequests.approve, { requestId });
+    await authed.mutation(api.partRequests.markIssued, { requestId });
+
+    await expectConvexError(
+      authed.mutation(api.partRequests.onHold, { requestId }),
+      "Solo se pueden poner en espera",
+    );
+    const [request] = await authed.query(api.partRequests.list, {});
+    expect(request.status).toBe("issued");
+  });
+
+  test("una petición suspendida antes de que se apuntara de dónde salía vuelve a pendiente", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId } = await requestWithStock(t, authed, 1);
+
+    // Como quedaron las que se suspendieron con la versión anterior: en espera y
+    // sin memoria del estado del que salieron.
+    await t.run((ctx) =>
+      ctx.db.patch(requestId, { status: "onHold", holdSinceAt: Date.now() }),
+    );
+
+    await authed.mutation(api.partRequests.resume, { requestId });
+    const [request] = await authed.query(api.partRequests.list, {});
+    expect(request.status).toBe("pending");
   });
 });
 

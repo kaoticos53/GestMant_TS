@@ -1,7 +1,9 @@
 import { ConvexError } from "convex/values";
 import { matchesQuery } from "./browse";
+import { isIncidentInProgress } from "./incidentFlow";
 import { richDocBlocks, richDocToPlainText } from "./richDoc";
 import { diffRichDoc, type RichDocChanges } from "./richDocDiff";
+import { REFERENCE_PREFIX, normalizeReference } from "./references";
 import { COORDINATION_ROLES, type RoleKey } from "./roles";
 
 /** Categorías del catálogo de repuestos. */
@@ -242,22 +244,36 @@ export const INCIDENT_STATUS_META: Record<
 };
 
 /**
- * La referencia de una incidencia. Es el número que se le da a quien la
- * notifica —«Incidencia INC-0004 registrada»— y con el que se sigue el caso
- * después, desde dentro del taller y desde una sesión de invitado.
+ * La referencia de una incidencia: el número con el que el taller la cita entre
+ * sí —«la INC-0004»—, tanto en la cola y en el archivo como de viva voz. No sale
+ * del taller: quien notificó sigue su caso por el código que se le dio
+ * (`lib/publicCode`).
+ *
+ * El prefijo y la escritura son los de todas las series del taller
+ * (`lib/references`); aquí solo queda dicho cuál de ellas es la incidencia, para
+ * que quien la busca —en la cola o en el archivo— no tenga que saberlo.
  */
-export const INCIDENT_REFERENCE_PREFIX = "INC";
+export const INCIDENT_REFERENCE_PREFIX = REFERENCE_PREFIX.incident;
+
+/** Lo que alguien teclea → la referencia de la incidencia («inc-4» → «INC-0004»). */
+export function normalizeIncidentReference(input: string): string | null {
+  return normalizeReference("incident", input);
+}
 
 /**
- * Lo que alguien teclea → la referencia canónica: «inc-4», «INC-4» o «4» dan
- * «INC-0004». Devuelve `null` si no hay ningún número que sacar: entonces no hay
- * nada que buscar, y quien pregunta lo dice en vez de buscar a ciegas.
+ * ¿Lo escrito tiene forma de referencia —«INC-0004», «inc 4», «incidencia 12» o el
+ * número suelto— y no de otra cosa?
+ *
+ * `normalizeIncidentReference` es más listo que esto a propósito: saca el número
+ * de donde sea, porque en la cola del taller interesa encontrar la incidencia
+ * aunque la referencia venga dentro de una frase. Aquí no: lo que se busca es
+ * reconocer el caso de quien teclea una referencia creyendo que es otra cosa, y
+ * para eso el número tiene que estar solo —el prefijo, con guion o espacio, y
+ * nada más—. Un código a medias, como «A7K2», no cuela: lleva letras y números
+ * mezclados, que es justo lo que una referencia no hace.
  */
-export function normalizeIncidentReference(input: string): string | null {
-  const digits = /(\d+)/.exec(String(input ?? ""));
-  return digits === null
-    ? null
-    : `${INCIDENT_REFERENCE_PREFIX}-${digits[1].padStart(4, "0")}`;
+export function looksLikeIncidentReference(input: string): boolean {
+  return /^\s*(?:inc(?:idencia)?)?[\s-]*\d{1,9}\s*$/i.test(input);
 }
 
 /**
@@ -665,7 +681,8 @@ export function inProgressSince(incident: {
   status: IncidentStatus;
   history: { status: IncidentStatus; at: number }[];
 }): number | null {
-  if (incident.status !== "assigned" && incident.status !== "workshop") {
+  // En curso: la máquina de la incidencia (`lib/incidentFlow`) lo dice una vez.
+  if (!isIncidentInProgress(incident.status)) {
     return null;
   }
   const assigned = incident.history.find(

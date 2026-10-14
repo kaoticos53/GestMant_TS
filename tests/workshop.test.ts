@@ -21,6 +21,7 @@ import {
   noteRestoreUndoIndex,
   noteVersionChanges,
   noteVersions,
+  looksLikeIncidentReference,
   normalizeIncidentReference,
   retiredNotes,
   requestMatchesEquipment,
@@ -521,6 +522,35 @@ describe("normalizeIncidentReference — el número con el que se sigue una inci
     // Un correo con la referencia dentro: se queda con el número de delante, que
     // es el que se copia y se pega.
     expect(normalizeIncidentReference("INC-0004 (2026)")).toBe("INC-0004");
+  });
+});
+
+describe("looksLikeIncidentReference — ¿lo escrito es una referencia o un código?", () => {
+  test("la referencia escrita como se escribe de verdad", () => {
+    for (const typed of [
+      "INC-0004",
+      "inc-4",
+      "inc 4",
+      "incidencia 12",
+      " 4 ",
+      "12345",
+    ]) {
+      expect(looksLikeIncidentReference(typed), `«${typed}»`).toBe(true);
+    }
+  });
+
+  test("un código a medias no es una referencia: lleva letras y números mezclados", () => {
+    for (const typed of [
+      "A7K2",
+      "A7K2-QX9M",
+      "",
+      "   ",
+      "la de la cámara",
+      "el 4 de la sala",
+      "INC-0004 (2026)",
+    ]) {
+      expect(looksLikeIncidentReference(typed), `«${typed}»`).toBe(false);
+    }
   });
 });
 

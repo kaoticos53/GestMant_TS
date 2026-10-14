@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { looksLikeEmail } from "@/lib/incidentMail";
+import { formatPublicCode } from "@/lib/publicCode";
 import { richDocToPlainText, richDocToStore } from "@/lib/richDoc";
 import { MAX_FILE_SIZE_LABEL, MAX_REPORT_IMAGES } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
@@ -49,7 +50,12 @@ export default function ReportIncident() {
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reference, setReference] = useState<string | null>(null);
+  // El código con el que se sigue el caso: lo único que se lleva quien notifica
+  // (la referencia interna se queda en el taller).
+  const [code, setCode] = useState<string | null>(null);
+  // Y el correo al que se le ha mandado: se le dice que va en camino, para que
+  // no dependa de haber copiado el código de esta pantalla.
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -102,7 +108,8 @@ export default function ReportIncident() {
         description: richDocToStore(description) ?? "",
         reportedAt: timestamp,
       });
-      setReference(created);
+      setCode(created.code);
+      setSentTo(reporterEmail || null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -111,7 +118,8 @@ export default function ReportIncident() {
   };
 
   const reset = () => {
-    setReference(null);
+    setCode(null);
+    setSentTo(null);
     setName("");
     setEmail("");
     setRole("");
@@ -148,14 +156,14 @@ export default function ReportIncident() {
       </header>
 
       <main className="mx-auto flex w-full max-w-2xl flex-col px-4 pb-16 pt-10 sm:px-6">
-        {reference ? (
+        {code ? (
           <Card className="shadow-md">
             <CardHeader className="text-center">
               <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700">
                 <Check className="size-6" />
               </span>
               <CardTitle className="text-xl">
-                Incidencia {reference} registrada
+                Incidencia {formatPublicCode(code)} registrada
               </CardTitle>
               <CardDescription>
                 Gracias, {name.split(" ")[0]}. El equipo coordinador del taller
@@ -163,23 +171,29 @@ export default function ReportIncident() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {/* La referencia es lo único que hace falta para seguir el caso:
-                  se enseña para copiarla, no escondida en un rincón. */}
+              {/* El código es lo único que hace falta para seguir el caso: se
+                  enseña para copiarlo, no escondido en un rincón. */}
               <div className="rounded-lg border border-border/70 bg-muted/50 p-3 text-center">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Tu referencia
+                  Tu código
                 </p>
                 <p className="mt-1 select-all font-mono text-lg font-semibold tracking-tight">
-                  {reference}
+                  {formatPublicCode(code)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Guárdala: con ella se sigue el caso. Entrando como invitado
+                  Guárdalo: con él se sigue el caso. Entrando como invitado
                   puedes ver en qué punto va, sin cuenta del taller.
                 </p>
               </div>
+              {sentTo && (
+                <p className="text-center text-xs text-muted-foreground">
+                  También va en camino a {sentTo}: allí tienes el código y el
+                  enlace para seguir el caso cuando quieras.
+                </p>
+              )}
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button asChild className="gap-2">
-                  <Link to="/dashboard">
+                  <Link to={`/dashboard?codigo=${encodeURIComponent(code)}`}>
                     Seguir esta incidencia
                     <ArrowRight className="size-4" />
                   </Link>
@@ -348,9 +362,9 @@ export default function ReportIncident() {
                   )}
                 </Button>
                 <p className="text-center text-xs text-muted-foreground">
-                  Recibirás el número de referencia para dar seguimiento al
-                  caso. Con tu correo, además, te avisamos de cada cambio de
-                  estado.
+                  Recibirás un código para seguir el caso desde fuera del
+                  taller. Si dejas tu correo, te lo enviamos ahí y te avisamos
+                  de cada cambio de estado.
                 </p>
               </form>
             </CardContent>

@@ -100,10 +100,16 @@ describe("reporte público de incidencias", () => {
     const { t, coordinator } = await setup();
 
     // Sin identidad: el formulario público no requiere registro
-    const reference = await t.mutation(api.incidents.report, reportArgs);
+    const { reference, code } = await t.mutation(
+      api.incidents.report,
+      reportArgs,
+    );
     expect(reference).toBe("INC-0001");
 
     const incident = await firstIncident(coordinator);
+    // Y salen dos identificadores del mismo caso: la referencia con la que el
+    // taller lo cita y el código con el que lo sigue quien avisó.
+    expect(incident.publicCode).toBe(code);
     expect(incident.status).toBe("reported");
     expect(incident.reporterName).toBe("Laura Peña");
     expect(incident.history).toHaveLength(1);
@@ -140,7 +146,9 @@ describe("reporte público de incidencias", () => {
       );
     }
 
-    expect(await t.mutation(api.incidents.report, reportArgs)).toBe("INC-0121");
+    expect((await t.mutation(api.incidents.report, reportArgs)).reference).toBe(
+      "INC-0121",
+    );
 
     // Y ninguna referencia queda repetida.
     const incidents = await t.run((ctx) =>
@@ -189,7 +197,9 @@ describe("reporte público de incidencias", () => {
   test("el freno de 30 segundos corta a quien repite, no a otra persona", async () => {
     const { t } = await setup();
 
-    expect(await t.mutation(api.incidents.report, reportArgs)).toBe("INC-0001");
+    expect((await t.mutation(api.incidents.report, reportArgs)).reference).toBe(
+      "INC-0001",
+    );
     // El mismo nombre —aunque cambie de mayúsculas— no vuelve a colar dentro de
     // la ventana: el formulario público es una puerta abierta y sin el freno una
     // misma persona podría inundar la cola.
@@ -203,10 +213,12 @@ describe("reporte público de incidencias", () => {
     // Otra persona sí notifica en el mismo momento: el freno es de quien
     // escribe, no de la cola entera.
     expect(
-      await t.mutation(api.incidents.report, {
-        ...reportArgs,
-        reporterName: "Marta Ruiz",
-      }),
+      (
+        await t.mutation(api.incidents.report, {
+          ...reportArgs,
+          reporterName: "Marta Ruiz",
+        })
+      ).reference,
     ).toBe("INC-0002");
   });
 
@@ -218,20 +230,49 @@ describe("reporte público de incidencias", () => {
   });
 });
 
-describe("consulta de una incidencia por su referencia", () => {
+describe("consulta de una incidencia: la referencia del taller y el código de fuera", () => {
   /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
   async function reported() {
     const contexto = await setup();
-    const reference = await contexto.t.mutation(
+    const { reference, code } = await contexto.t.mutation(
       api.incidents.report,
       reportArgs,
     );
     const [incident] = await contexto.coordinator.query(api.incidents.list, {});
-    return { ...contexto, reference, incident, incidentId: incident._id };
+    return {
+      ...contexto,
+      reference,
+      code,
+      incident,
+      incidentId: incident._id,
+    };
   }
 
+  test("cada incidencia sale con un código propio, del alfabeto y sin relación con el número", async () => {
+    const { t, coordinator, code, incident } = await reported();
+
+    // Ocho caracteres del alfabeto sin letras que se confundan, y guardado en la
+    // ficha: es lo que se le enseña a quien notificó y con lo que se consulta.
+    expect(code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
+    expect(incident.publicCode).toBe(code);
+
+    // Dos avisos seguidos no comparten código: si se repitieran, uno de los dos
+    // seguiría el caso del otro.
+    const otro = await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      reporterName: "Marta Ruiz",
+    });
+    expect(otro.code).not.toBe(code);
+    expect(otro.reference).toBe("INC-0002");
+
+    // El taller ve el mismo código en la ficha, que es lo que se dicta cuando
+    // alguien llama preguntando por su caso.
+    const [latest] = await coordinator.query(api.incidents.list, {});
+    expect(latest.publicCode).toBe(otro.code);
+  });
+
   test("se encuentra tecleando la referencia como sea: copiada, en minúsculas o el número suelto", async () => {
-    const { coordinator } = await reported();
+    const { coordinator, code } = await reported();
 
     // Las formas que alguien escribe de verdad: la que le dieron, sin el prefijo
     // o con el prefijo en minúsculas.
@@ -239,7 +280,7 @@ describe("consulta de una incidencia por su referencia", () => {
       const tracking = await coordinator.query(api.incidents.byReference, {
         reference: typed,
       });
-      expect(tracking?.reference, `«${typed}»`).toBe("INC-0001");
+      expect(tracking?.code, `«${typed}»`).toBe(code);
       expect(tracking?.status, `«${typed}»`).toBe("reported");
       // La descripción viaja tal cual (el editor la guarda como documento),
       // pero se lee igual: es lo que contó quien notificó la avería.
@@ -273,16 +314,17 @@ describe("consulta de una incidencia por su referencia", () => {
     expect(tracking).not.toBeNull();
 
     // Lo que sale es una lista de campos explícita, no «todo menos esto»: una
-    // columna nueva del esquema no se cuela sola en el seguimiento.
+    // columna nueva del esquema no se cuela sola en el seguimiento. Y sale el
+    // código, no la referencia: fuera del taller el caso se llama por el código.
     expect(Object.keys(tracking!).sort()).toEqual([
       "assigneeName",
       "closedAt",
+      "code",
       "description",
       "equipmentKind",
       "history",
       "location",
       "model",
-      "reference",
       "reportedAt",
       "serialNumber",
       "status",
@@ -340,15 +382,34 @@ describe("consulta de una incidencia por su referencia", () => {
     }
   });
 
+  test("la referencia interna no es un código: por ahí no se consulta desde fuera", async () => {
+    const { coordinator, reference } = await reported();
+
+    // Lo que sí vale para el taller…
+    expect(
+      await coordinator.query(api.incidents.byReference, { reference }),
+    ).not.toBeNull();
+    // …no vale para la puerta de fuera: es un correlativo y quien tuviera una
+    // sesión de invitado podría ir probando «1», «2», «3»…
+    expect(
+      await coordinator.query(api.incidents.byCode, { code: reference }),
+    ).toBeNull();
+  });
+
   test("una referencia repetida en datos viejos contesta en vez de reventar", async () => {
     const { t, coordinator } = await setup();
     // Lo que dejó una generación anterior y una muestra cargada encima: dos
-    // incidencias con el mismo número. La consulta tiene que resolverse con una
-    // —la más antigua—, no tumbar la pantalla de quien tecleó su referencia.
-    for (const reporterName of ["Laura Peña", "Marcos Vega"]) {
+    // incidencias con el mismo número, cada una con su código. La consulta tiene
+    // que resolverse con una —la más antigua—, no tumbar la pantalla de quien
+    // tecleó su referencia.
+    for (const [reporterName, publicCode] of [
+      ["Laura Peña", "AAAA2222"],
+      ["Marcos Vega", "BBBB3333"],
+    ] as const) {
       await t.run((ctx) =>
         ctx.db.insert("incidents", {
           reference: "INC-0007",
+          publicCode,
           reporterName,
           description: "Duplicada a propósito.",
           reportedAt: Date.now(),
@@ -363,15 +424,28 @@ describe("consulta de una incidencia por su referencia", () => {
     const tracking = await coordinator.query(api.incidents.byReference, {
       reference: "7",
     });
-    expect(tracking?.reference).toBe("INC-0007");
+    // La primera que se insertó, con su código: es la que contesta.
+    expect(tracking?.code).toBe("AAAA2222");
     expect(tracking?.status).toBe("reported");
+    // Y el código sí distingue las dos: quien lo tenga consulta la suya sin
+    // depender de un número repetido.
+    const porCodigo = await coordinator.query(api.incidents.byCode, {
+      code: "BBBB-3333",
+    });
+    expect(porCodigo?.code).toBe("BBBB3333");
   });
 
-  test("sin sesión no se consulta, ni con una referencia buena", async () => {
-    const { t, reference } = await reported();
+  test("sin sesión no se consulta: ni con la referencia buena ni con un código", async () => {
+    const { t, reference, code } = await reported();
+    // La puerta de fuera pide haber entrado alguna vez…
+    await expectConvexError(
+      t.query(api.incidents.byCode, { code }),
+      "Debes iniciar sesión para consultar una incidencia por su código.",
+    );
+    // …y la del taller, ser del taller.
     await expectConvexError(
       t.query(api.incidents.byReference, { reference }),
-      "Debes iniciar sesión para consultar una incidencia por su referencia.",
+      "Solo el taller puede consultar una incidencia por su referencia.",
     );
   });
 });
@@ -3165,30 +3239,40 @@ describe("papelera de incidencias", () => {
   /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
   async function reported() {
     const contexto = await setup();
-    const reference = await contexto.t.mutation(
+    const { reference, code } = await contexto.t.mutation(
       api.incidents.report,
       reportArgs,
     );
     const [incident] = await contexto.coordinator.query(api.incidents.list, {});
-    return { ...contexto, reference, incident, incidentId: incident._id };
+    return {
+      ...contexto,
+      reference,
+      code,
+      incident,
+      incidentId: incident._id,
+    };
   }
 
   test("retirar la saca de la cola y del seguimiento, y la deja en la papelera con su plazo", async () => {
-    const { coordinator, reference, incidentId } = await reported();
+    const { coordinator, reference, code, incidentId } = await reported();
 
     await coordinator.mutation(api.incidents.withdraw, {
       incidentId,
       reason: "Duplicada de la INC-0001",
     });
 
-    // Fuera de las dos caras de la cola y del seguimiento por su referencia:
-    // una retirada no se sigue, y si se recupera vuelve a contestar.
+    // Fuera de las dos caras de la cola y del seguimiento, por su referencia y
+    // por su código: una retirada no se sigue, y si se recupera vuelve a
+    // contestar por los dos.
     expect(
       await coordinator.query(api.incidents.list, { includeArchived: true }),
     ).toEqual([]);
     expect(
       await coordinator.query(api.incidents.byReference, { reference }),
     ).toBeNull();
+    // Y por el código tampoco: el aviso por correo se lo cuenta, pero su código
+    // deja de contestar hasta que se recupere.
+    expect(await coordinator.query(api.incidents.byCode, { code })).toBeNull();
 
     const papelera = await coordinator.query(api.incidents.trash, {});
     expect(papelera.items).toHaveLength(1);
@@ -3205,7 +3289,7 @@ describe("papelera de incidencias", () => {
   });
 
   test("recuperarla la devuelve tal y como estaba, con su traza", async () => {
-    const { t, coordinator, reference, incidentId } = await reported();
+    const { t, coordinator, reference, code, incidentId } = await reported();
     await coordinator.mutation(api.incidents.withdraw, { incidentId });
 
     await coordinator.mutation(api.incidents.restore, { incidentId });
@@ -3215,6 +3299,10 @@ describe("papelera de incidencias", () => {
     expect(
       await coordinator.query(api.incidents.byReference, { reference }),
     ).not.toBeNull();
+    // Y quien la notificó vuelve a poder seguirla con su código.
+    expect(
+      (await coordinator.query(api.incidents.byCode, { code }))?.code,
+    ).toBe(code);
     expect((await coordinator.query(api.incidents.trash, {})).items).toEqual(
       [],
     );

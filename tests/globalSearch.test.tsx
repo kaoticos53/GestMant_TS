@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-// El buscador global del taller no habla con el backend: recibe las listas ya
-// cargadas y filtra en memoria. Aquí se comprueba lo que es suyo —que una
-// incidencia se encuentre por su referencia y que elegirla devuelva la ficha—,
-// montado a mano con React y jsdom, como el resto de pruebas de componente.
+// Se sustituyen los hooks de Convex *antes* de que el buscador los importe: lo
+// que se comprueba es el buscador —que una incidencia se encuentre por su
+// referencia y que elegirla devuelva la ficha—, no la conversación con el
+// servidor. Las listas las carga él (vive en la cabecera y no se las puede
+// pedir a la pestaña que haya abierta), así que aquí se le sirven puestas.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -12,7 +13,35 @@ import {
   describe,
   expect,
   test,
+  vi,
 } from "vitest";
+
+const { LISTAS } = vi.hoisted(() => ({
+  LISTAS: { incidents: [] as unknown[], requests: [] as unknown[] },
+}));
+
+vi.mock("@/convex/_generated/api", () => ({
+  api: {
+    incidents: { list: { nombre: "incidents.list" } },
+    partRequests: { list: { nombre: "partRequests.list" } },
+    spareParts: { list: { nombre: "spareParts.list" } },
+    equipment: { list: { nombre: "equipment.list" } },
+  },
+}));
+
+vi.mock("convex/react", async () => {
+  const { api } = await import("@/convex/_generated/api");
+  return {
+    useQuery: (query: unknown) => {
+      if (query === api.incidents.list) return LISTAS.incidents;
+      if (query === api.partRequests.list) return LISTAS.requests;
+      if (query === api.spareParts.list || query === api.equipment.list) {
+        return [];
+      }
+      return undefined;
+    },
+  };
+});
 
 import { GlobalSearch, type SearchHit } from "@/pages/dashboard/GlobalSearch";
 
@@ -42,14 +71,11 @@ const texto = () => container.textContent ?? "";
 const elegidas: SearchHit[][] = [];
 
 function pintar(props: Partial<Parameters<typeof GlobalSearch>[0]> = {}): void {
+  LISTAS.incidents = [incidencia];
+  LISTAS.requests = [peticion];
   act(() => {
     root.render(
-      <GlobalSearch
-        incidents={[incidencia]}
-        requests={[peticion]}
-        onSelect={(hit) => elegidas.push([hit])}
-        {...props}
-      />,
+      <GlobalSearch onSelect={(hit) => elegidas.push([hit])} {...props} />,
     );
   });
 }

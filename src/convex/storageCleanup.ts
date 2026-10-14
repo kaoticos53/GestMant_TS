@@ -28,12 +28,15 @@ import { moveToTrash, purgeExpiredRows } from "./trash";
  * almacén del taller y a los que no llega ninguna ficha. Esta pasada —una vez al
  * día, de madrugada— los borra.
  *
- * Solo se borra lo que nadie menciona. Se lee *todo* lo que guarda la base —cada
- * tabla del esquema y, dentro de cada documento, todas sus cadenas— y se busca
- * ahí el id del archivo y la dirección con la que se enlaza. Da igual dónde
- * esté: una nota, una versión antigua de una nota, la descripción de una
+ * Solo se borra lo que nadie menciona. Las cadenas de la base se recorren una
+ * sola vez —cada tabla del esquema y, dentro de cada documento, todas sus
+ * cadenas— y de esa vuelta sale apuntado lo que cita un archivo: su id, en el
+ * campo que lo guarda o dentro de la dirección con la que se enlaza. Da igual
+ * dónde esté: una nota, una versión antigua de una nota, la descripción de una
  * incidencia, el documento de un expediente, el adjunto de una petición o el
- * texto de un mensaje. Mientras algo lo mencione, el archivo se queda.
+ * texto de un mensaje. Mientras algo lo mencione, el archivo se queda. Y como ya
+ * quedó apuntado, decidir cada archivo es una pregunta a un conjunto y no otra
+ * vuelta por la base.
  *
  * La regla vale igual para una foto que para el archivo de un documento: si
  * nadie lo menciona, no es de nadie.
@@ -51,9 +54,15 @@ import { moveToTrash, purgeExpiredRows } from "./trash";
  * puede responder con certeza es «¿lo menciona algo de lo que hay guardado?». Si
  * un campo se quedara fuera de la lectura, esta pasada borraría un archivo en
  * uso; por eso se leen todas las tablas y no una lista de campos escogidos a
- * mano, que es la que se quedaría vieja. Y como todo va en una sola transacción,
- * si la lectura fallara —la base no cupiera en lo que Convex deja leer de una
- * vez— la pasada no borraría nada.
+ * mano, que es la que se quedaría vieja. Y lo que se busca escrito son los ids
+ * que el almacén tiene delante, no una forma supuesta —un largo mínimo, un
+ * prefijo—: buscar un id que no existe no puede marcar nada, y buscar solo los
+ * que existen alcanza a todas las maneras en que un archivo llega a estar citado.
+ * De esa vuelta por la base lo único que se lleva en memoria es lo que aparece
+ * citado —los ids y las direcciones que se escriben—, así que la pasada crece con
+ * lo que la base guarda y no con lo que guarda por cada archivo que hay en el
+ * almacén. Y como todo va en una sola transacción, si la lectura fallara —la base
+ * no cupiera en lo que Convex deja leer de una vez— la pasada no borraría nada.
  *
  * Los archivos del formulario público no son cosa de esta limpieza: mientras
  * tengan su vale en `reportUploads`, lo que se lee aquí los menciona y se dejan
@@ -90,79 +99,120 @@ export const ORPHAN_FILE_RETENTION_MS = 24 * H;
  */
 const SWEEP_LIMIT = 100;
 
-/**
- * Tablas del sistema o de configuración plana que no almacenan referencias a archivos.
- * Omitirlas ahorra lecturas de base de datos y memoria en cada pasada.
- */
-const NON_STORAGE_TABLES = new Set<string>([
-  "authSessions",
-  "authAccounts",
-  "authRefreshTokens",
-  "authVerificationCodes",
-  "authRateLimits",
-  "authVerifiers",
-  "storageSettings",
-  "alertSettings",
-  "auditAlertSettings",
-  "reportSettings",
-  "archiveSettings",
-  "appSettings",
-  "storageCleanupRuns",
-  "reportUploadPurges",
-]);
+/** Lo que se busca escrito dentro de un texto, y con qué ventanas se busca. */
+type CitationIndex = {
+  /** Las formas que se buscan: el id de un archivo y la dirección con la que se
+   * sirve. Es el conjunto al que se le pregunta si una ventana es una de ellas. */
+  needles: Set<string>;
+  /** Una ventana por cada largo distinto que tengan esas formas. */
+  windows: RegExp[];
+};
 
-/** Todas las cadenas que hay dentro de un documento (listas y objetos incluidos). */
-function collectStrings(value: unknown, out: string[]): void {
+/**
+ * Lo que se busca escrito dentro de un texto: las formas que el taller tiene
+ * delante —el id de cada archivo del almacén y la dirección con la que se sirve—,
+ * sin suponer nada de cómo son. Ni un largo mínimo ni un prefijo: los largos y los
+ * caracteres salen de las propias formas que se buscan.
+ *
+ * Se buscan con ventanas: un tramo del texto del largo exacto de una forma, en
+ * cualquier sitio donde quepa, y a preguntar si es una de ellas. Cabe donde haya
+ * un tramo de caracteres como los suyos, que es donde de verdad puede estar
+ * escrita. Una forma que no esté en el almacén no puede marcar nada, y las que
+ * están cubren todas las maneras en que un archivo llega a estar citado —el valor
+ * de un campo, dentro de una dirección, suelto en una nota—.
+ */
+function citationIndex(forms: Iterable<string>): CitationIndex {
+  const needles = new Set(forms);
+  const alphabet = [...new Set([...needles].flatMap((form) => [...form]))];
+  const windows = [...new Set([...needles].map((form) => form.length))].map(
+    // La búsqueda va en un grupo de ancho cero a propósito: así se prueba en cada
+    // posición del texto, y una forma escrita dentro de otra —el id de un archivo
+    // dentro de la dirección de otro— no se pierde por caer en el hueco que ya se
+    // había comido otra.
+    (length) =>
+      new RegExp(`(?=([${escapeForClass(alphabet)}]{${length}}))`, "g"),
+  );
+  return { needles, windows };
+}
+
+/**
+ * Esos caracteres, tal y como se escriben dentro de una clase de patrón: los que
+ * no son letras, números o guión bajo se escapan —el guión incluido, que dentro de
+ * una clase es un intervalo—.
+ */
+function escapeForClass(characters: string[]): string {
+  return characters
+    .map((character) => character.replace(/[^A-Za-z0-9_]/g, (c) => `\\${c}`))
+    .join("");
+}
+
+/**
+ * Lo que cita una cadena —y lo que hay dentro, si es una lista o un objeto—,
+ * apuntado en dos conjuntos: las formas que aparecen escritas —el id de un
+ * archivo, la dirección con la que se sirve— y el sello de cada dirección del
+ * almacén que algo menciona.
+ *
+ * El sello se apunta aparte porque una dirección escrita puede llevar añadidos
+ * suyos —un dominio viejo, un parámetro de más— y lo que hay que saber entonces
+ * es el sello, no la forma exacta con la que se escribió.
+ */
+function collectCitations(
+  value: unknown,
+  index: CitationIndex,
+  cited: Set<string>,
+  mentioned: Set<string>,
+): void {
   if (typeof value === "string") {
-    // Solo retenemos cadenas que puedan contener una referencia a storage (URL o ID)
-    if (value.includes(STORAGE_PATH) || value.length >= 16) {
-      out.push(value);
+    for (const window of index.windows) {
+      for (const match of value.matchAll(window)) {
+        if (match[1] !== undefined && index.needles.has(match[1])) {
+          cited.add(match[1]);
+        }
+      }
+    }
+    // Lo que no lleva una dirección del almacén no puede ser un archivo suyo.
+    if (value.includes(STORAGE_PATH)) {
+      for (const match of value.matchAll(ADDRESS_IN_TEXT_RE)) {
+        const token = addressToken(match[0]);
+        if (token !== null) mentioned.add(token);
+      }
     }
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) collectStrings(item, out);
+    for (const item of value) collectCitations(item, index, cited, mentioned);
     return;
   }
   if (value !== null && typeof value === "object") {
-    for (const item of Object.values(value)) collectStrings(item, out);
+    for (const item of Object.values(value)) {
+      collectCitations(item, index, cited, mentioned);
+    }
   }
 }
 
 /**
- * Lo que guarda la base, en texto plano: cada tabla del esquema que puede citar
- * un archivo y, dentro de cada documento, sus cadenas relevantes.
- */
-async function storedText(ctx: MutationCtx): Promise<string[]> {
-  const texts: string[] = [];
-  for (const name of Object.keys(schema.tables)) {
-    if (NON_STORAGE_TABLES.has(name)) continue;
-    const documents = await ctx.db.query(name as TableNames).collect();
-    for (const document of documents) collectStrings(document, texts);
-  }
-  return texts;
-}
-
-/**
- * ¿Menciona algo de lo guardado a este archivo? Vale su id —lo que guarda un
- * documento del expediente, el adjunto de una petición o su propio vale— y la
- * dirección con la que se enlaza dentro de un texto. La dirección suele llevar
- * el id dentro, pero no se da por hecho: se comprueba también la dirección tal
- * cual, que es lo que de verdad está escrito en una nota o en una versión
- * antigua de una nota.
+ * Lo que la base cita, leído en una sola pasada por sus cadenas: cada cadena se
+ * mira una vez y se apunta lo que trae —el id de un archivo, la dirección con la
+ * que se enlaza—, sin quedarse con la base entera para preguntárselo después a
+ * cada archivo.
  *
- * La dirección la lee quien barre —una vez por archivo—, porque es también lo
- * que decide si el archivo se puede leer: aquí entra ya leída, y por eso no hay
- * nada que resolver. Se llama solo con la dirección delante: un archivo sin ella
- * no se comprueba, porque de un archivo que no se lee no se decide nada.
+ * Se recorren todas las tablas del esquema, sin lista de excepciones: cualquier
+ * campo puede citar un archivo, y una tabla que se dejara fuera de la lectura
+ * sería un archivo en uso borrado por error.
  */
-function isCitedIn(
-  storageId: Id<"_storage">,
-  address: string,
-  texts: string[],
-): boolean {
-  if (texts.some((text) => text.includes(storageId))) return true;
-  return texts.some((text) => text.includes(address));
+async function citations(
+  ctx: MutationCtx,
+  index: CitationIndex,
+): Promise<{ cited: Set<string>; mentioned: Set<string> }> {
+  const cited = new Set<string>();
+  const mentioned = new Set<string>();
+  for (const name of Object.keys(schema.tables)) {
+    const documents = await ctx.db.query(name as TableNames).collect();
+    for (const document of documents) {
+      collectCitations(document, index, cited, mentioned);
+    }
+  }
+  return { cited, mentioned };
 }
 
 /** El tramo de la dirección del almacén con el que se identifica un archivo. */
@@ -185,30 +235,6 @@ function addressToken(address: string | null): string | null {
 }
 
 /**
- * Las direcciones del almacén escritas en lo que se guarda —una nota, una versión
- * antigua de una nota, la descripción de una incidencia, el documento de un
- * expediente, el texto de un mensaje— que el almacén ya no puede servir: archivos
- * que algo cita y que no se pueden leer.
- *
- * Se cuentan una sola vez: la misma foto citada en tres sitios sigue siendo un
- * archivo. Y se comparan por su sello contra las que el almacén sí sirve, que es
- * la única lista de la que fiarse: lo que el almacén no da es un archivo perdido,
- * no una dirección de otro sitio que se parezca.
- */
-function citedButUnreadable(texts: string[], served: Set<string>): number {
-  const missing = new Set<string>();
-  for (const text of texts) {
-    // Lo que no lleva una dirección del almacén no puede ser un archivo suyo.
-    if (!text.includes(STORAGE_PATH)) continue;
-    for (const match of text.matchAll(ADDRESS_IN_TEXT_RE)) {
-      const token = addressToken(match[0]);
-      if (token !== null && !served.has(token)) missing.add(token);
-    }
-  }
-  return missing.size;
-}
-
-/**
  * Retira del almacén los archivos que ya no cita ninguna nota ni ninguna versión
  * —ni ningún otro sitio de los que guarda la base—. Devuelve cuántos borró, que
  * es lo que miran las pruebas.
@@ -223,25 +249,33 @@ async function sweepOrphanRows(
   cutoff: number,
   runBy: string,
 ): Promise<{ files: number; bytes: number; unreadable: number }> {
-  const texts = await storedText(ctx);
   const files = await ctx.db.system.query("_storage").collect();
 
   // Lo que el almacén puede leer de verdad: la dirección de cada archivo y el
   // sello con el que la identifica. Un archivo del que no sale dirección no se
   // puede leer, y de lo que no se lee no se decide nada.
-  const addresses = new Map<Id<"_storage">, string | null>();
+  const addresses = new Map<Id<"_storage">, string>();
   const served = new Set<string>();
   let unreadable = 0;
   for (const file of files) {
     const address = await ctx.storage.getUrl(file._id);
-    addresses.set(file._id, address);
     if (address === null) {
       unreadable += 1;
       continue;
     }
+    addresses.set(file._id, address);
     const token = addressToken(address);
     if (token !== null) served.add(token);
   }
+
+  // Lo que la base cita, en una sola vuelta por sus cadenas. Se busca escrito lo
+  // que el taller tiene delante —el id de cada archivo del almacén y la dirección
+  // con la que se sirve—, que es lo único que puede estar citando a un archivo: no
+  // hay forma de citar que se quede fuera por no haberla supuesto.
+  const { cited, mentioned } = await citations(
+    ctx,
+    citationIndex([...files.map((file) => file._id), ...addresses.values()]),
+  );
   // Y las direcciones que algo cita y el almacén ya no sirve: archivos que se han
   // perdido y que una ficha sigue enseñando. Aquí no hay nada que retirar —del
   // archivo no queda nada en el almacén—, pero tampoco se pueden callar.
@@ -249,7 +283,14 @@ async function sweepOrphanRows(
   // Una dirección se reconoce por su forma —la misma que lee el resto de la
   // aplicación para volver de una dirección a su vale (`reportUploads`)—, así que
   // no hace falta que el almacén tenga algún archivo para empezar a buscarlas.
-  unreadable += citedButUnreadable(texts, served);
+  //
+  // Se cuentan una sola vez: la misma foto citada en tres sitios sigue siendo un
+  // archivo. Y se comparan por su sello contra las que el almacén sí sirve, que es
+  // la única lista de la que fiarse: lo que el almacén no da es un archivo
+  // perdido, no una dirección de otro sitio que se parezca.
+  for (const token of mentioned) {
+    if (!served.has(token)) unreadable += 1;
+  }
 
   let removed = 0;
   let bytes = 0;
@@ -259,10 +300,16 @@ async function sweepOrphanRows(
     // otra noche.
     if (file._creationTime > cutoff) continue;
     const address = addresses.get(file._id) ?? null;
-    const cited = address !== null && isCitedIn(file._id, address, texts);
+    // Cada archivo se decide por conjunto, con las dos formas con las que algo
+    // puede estar citándolo: su id —lo que guarda un documento del expediente, el
+    // adjunto de una petición o su propio vale— y la dirección tal cual —lo que
+    // de verdad está escrito en una nota o en una versión antigua de una nota—.
+    // La dirección suele llevar el id dentro, pero no se da por hecho.
+    const fileCited =
+      cited.has(file._id) || (address !== null && cited.has(address));
     // Solo se retira lo que se lee y no lo menciona nadie: lo citado se queda, y
     // lo que no se puede leer no se toca —ya está contado arriba—.
-    if (fileReading({ address, cited }) !== "orphan") continue;
+    if (fileReading({ address, cited: fileCited }) !== "orphan") continue;
     await moveToTrash(ctx, {
       storageId: file._id,
       size: file.size,

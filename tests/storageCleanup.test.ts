@@ -299,6 +299,53 @@ describe("limpieza de los archivos que ya no cita nadie", () => {
     expect(await stillStored(t, storageId)).toBe(true);
   });
 
+  test("un id pegado a más texto también protege su archivo", async () => {
+    const { t, coordinator } = await setup();
+    const storageId = await file(t);
+    const incident = await reportedIncident(
+      t,
+      "<p>La mesa de mezclas no responde en el canal 12.</p>",
+    );
+
+    // Nadie guarda el id en un campo ni lo pone dentro de una dirección: está
+    // dentro de un texto más largo, que es como acaba un id cuando alguien lo
+    // pega en una nota. Se busca la forma escrita, no un valor que sea igual.
+    await coordinator.mutation(api.incidents.addNote, {
+      incidentId: incident._id,
+      note: `<p>El documento de la ficha (doc-${storageId}.pdf) está en la carpeta.</p>`,
+    });
+
+    expect(await sweepEverything(t)).toBe(0);
+    expect(await stillStored(t, storageId)).toBe(true);
+  });
+
+  test("una dirección que no se deja reducir a su sello sigue protegiendo", async () => {
+    const { t, coordinator } = await setup();
+    // Un archivo cuyo contenido hace que su dirección no empiece por una letra
+    // detrás del camino del almacén: de ella no se puede sacar un sello.
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob([new Uint8Array([0xff, 0x11, 0x22, 0x33])], {
+          type: "image/png",
+        }),
+      ),
+    );
+    const url = await urlOf(t, storageId);
+    const incident = await reportedIncident(
+      t,
+      "<p>La cámara no enciende desde esta mañana.</p>",
+    );
+    await coordinator.mutation(api.incidents.addNote, {
+      incidentId: incident._id,
+      note: `<p>Comprobado en plató.</p><img src="${url}">`,
+    });
+
+    // La dirección escrita es lo único que cita la foto: la limpieza la mira tal
+    // cual, sin dar por hecho que su sello se pueda sacar.
+    expect(await sweepEverything(t)).toBe(0);
+    expect(await stillStored(t, storageId)).toBe(true);
+  });
+
   test("lo que no menciona nadie va a la papelera y lo citado se queda", async () => {
     const { t, coordinator } = await setup();
     const incident = await reportedIncident(

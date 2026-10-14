@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/sheet";
 import { AttachmentGroup } from "@/components/AttachmentGroup";
 import { AttachmentImage } from "@/components/AttachmentImage";
+import { BlockedSteps } from "@/components/BlockedSteps";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
 import { RichText } from "@/components/RichText";
@@ -57,6 +58,14 @@ import {
   exceedsFileLimit,
   uploadToStorage,
 } from "@/lib/upload";
+import { isPurchaseRequestAwaitingDelivery } from "@/lib/purchaseFlow";
+import {
+  REQUEST_STEP_LABELS,
+  blockedRequestSteps,
+  canEditRequest,
+  canRequestStep,
+  isRequestInMotion,
+} from "@/lib/requestFlow";
 import { cn } from "@/lib/utils";
 import {
   PART_CATEGORIES,
@@ -92,6 +101,7 @@ import {
   SearchX,
   ShoppingCart,
   Trash2,
+  Undo2,
   Upload,
   User,
   Wrench,
@@ -290,9 +300,6 @@ function attachmentCounts(request: RequestDoc) {
 }
 
 export function RequestsView({
-  requests,
-  parts,
-  equipment: equipmentProp,
   equipmentFilter = "all",
   onEquipmentFilterChange = () => {},
   canManage = false,
@@ -300,9 +307,6 @@ export function RequestsView({
   initialDetailId = null,
   initialFilter = "all",
 }: {
-  requests: RequestDoc[];
-  parts: PartDoc[];
-  equipment: EquipmentDoc[];
   /** Modelo del inventario por el que se filtra la cola ("all" = sin filtro). */
   equipmentFilter?: string;
   onEquipmentFilterChange?: (value: string) => void;
@@ -315,9 +319,13 @@ export function RequestsView({
   /** Estado con el que se abre la cola (lo eligen las tarjetas del resumen). */
   initialFilter?: RequestFilterId;
 }) {
+  // La cola de peticiones y lo que hace falta para trabajarla los carga el
+  // módulo: el catálogo para resolver las líneas y los equipos para el filtro
+  // por modelo (el backend no contesta a quien no puede verlos).
+  const requests = useQuery(api.partRequests.list, {}) ?? [];
+  const parts = useQuery(api.spareParts.list) ?? [];
+  const equipment = useQuery(api.equipment.list, {}) ?? [];
   const resume = useMutation(api.partRequests.resume);
-  // Tolerancia a módulos desactualizados en caliente (el prop puede faltar)
-  const equipment = equipmentProp ?? [];
 
   const [filter, setFilter] = useState<RequestFilterId>(initialFilter);
   const [detailId, setDetailId] = useState<Id<"partRequests"> | null>(
@@ -690,6 +698,9 @@ export function RequestsView({
           }
           onIssue={() => setDecision({ request: detailRequest, mode: "issue" })}
           onHold={() => setDecision({ request: detailRequest, mode: "hold" })}
+          onReturn={() =>
+            setDecision({ request: detailRequest, mode: "return" })
+          }
           onCancel={() =>
             setDecision({ request: detailRequest, mode: "cancel" })
           }
@@ -824,7 +835,7 @@ function RequestCard({
         </ul>
       )}
 
-      {noReference && request.status === "pending" && (
+      {noReference && canEditRequest(request.status) && (
         <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-800">
           <Wrench className="mt-0.5 size-3.5 shrink-0" />
           Petición sin repuesto: investiga el proveedor y su nº de parte antes
@@ -879,40 +890,42 @@ function RequestCard({
           <Button type="button" variant="ghost" size="sm" onClick={onOpen}>
             Ver detalle
           </Button>
-          {canManage && request.status === "pending" && (
-            <>
+          {canManage && canRequestStep(request.status, "reject") && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReject}
+            >
+              Rechazar
+            </Button>
+          )}
+          {/* Aprobar y asociar el repuesto van juntos, y desde donde deja la
+              máquina: pendiente o con el material ya recibido. */}
+          {canManage &&
+            canRequestStep(request.status, "approve") &&
+            (noReference ? (
               <Button
                 type="button"
-                variant="outline"
                 size="sm"
-                onClick={onReject}
+                className="gap-1.5"
+                onClick={onAssociate}
               >
-                Rechazar
+                <Wrench className="size-3.5" />
+                Asociar repuesto
               </Button>
-              {noReference ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={onAssociate}
-                >
-                  <Wrench className="size-3.5" />
-                  Asociar repuesto
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={onApprove}
-                >
-                  <Check className="size-3.5" />
-                  Aprobar
-                </Button>
-              )}
-            </>
-          )}
-          {canManage && request.status === "approved" && (
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                onClick={onApprove}
+              >
+                <Check className="size-3.5" />
+                Aprobar
+              </Button>
+            ))}
+          {canManage && canRequestStep(request.status, "issue") && (
             <Button
               type="button"
               size="sm"
@@ -923,8 +936,9 @@ function RequestCard({
               Marcar entregada
             </Button>
           )}
-          {/* El archivo es solo para lo ya decidido. */}
-          {canManage && request.status !== "pending" && (
+          {/* El archivo es solo para lo ya terminado: lo que sigue en movimiento
+              —pendiente o en espera— no se archiva, ni a mano ni por la noche. */}
+          {canManage && !isRequestInMotion(request.status) && (
             <Button
               type="button"
               variant="outline"
@@ -951,10 +965,16 @@ function RequestCard({
 
 /**
  * Las decisiones que llevan motivo: aprobar, rechazar, entregar, poner en
- * espera y cancelar. Todas se escriben igual —el motivo, con el editor— y solo
- * cambian de rótulo y de lo que pasa después.
+ * espera, devolver el material y cancelar. Todas se escriben igual —el motivo,
+ * con el editor— y solo cambian de rótulo y de lo que pasa después.
  */
-type DecisionMode = "approve" | "reject" | "issue" | "hold" | "cancel";
+type DecisionMode =
+  | "approve"
+  | "reject"
+  | "issue"
+  | "hold"
+  | "return"
+  | "cancel";
 
 /** Lo que cambia de una decisión a otra: su rótulo, su aviso y su botón. */
 const DECISION_META: Record<
@@ -1004,6 +1024,15 @@ const DECISION_META: Record<
       "La petición sale del trabajo del día a día hasta que se resuelva: el material sigue apartado y se reanuda desde la ficha.",
     success: (request) => `${request.reference} en espera`,
   },
+  return: {
+    title: "Devolver material",
+    label: "Motivo de la devolución (opcional)",
+    placeholder: "p. ej. el repuesto no vale para ese modelo",
+    confirm: "Devolver material",
+    description:
+      "El material vuelve del técnico al taller, sin entrar otra vez en el almacén: es el paso que deja la petición devuelta y la que permite reintegrar el stock o volver a decidir sobre ella.",
+    success: (request) => `${request.reference} devuelta`,
+  },
   cancel: {
     title: "Cancelar petición",
     label: "Motivo de la cancelación (opcional)",
@@ -1021,24 +1050,9 @@ const DECISION_ICON: Record<DecisionMode, typeof Check> = {
   reject: X,
   issue: PackageCheck,
   hold: CirclePause,
+  return: Undo2,
   cancel: Ban,
 };
-
-/**
- * Desde qué estados se puede poner en espera y cancelar: los mismos que deja el
- * servidor. Una petición entregada no se cancela —primero se devuelve— ni se
- * pone en espera, y una ya decidida con material apartado tampoco se cancela.
- */
-const HOLDABLE: RequestStatusId[] = [
-  "pending",
-  "approved",
-  "pendingSupplierQuote",
-];
-const CANCELLABLE: RequestStatusId[] = [
-  "pending",
-  "onHold",
-  "pendingSupplierQuote",
-];
 
 function DecisionDialog({
   request,
@@ -1058,6 +1072,7 @@ function DecisionDialog({
   const reject = useMutation(api.partRequests.reject);
   const markIssued = useMutation(api.partRequests.markIssued);
   const onHold = useMutation(api.partRequests.onHold);
+  const returnMaterial = useMutation(api.partRequests.returnMaterial);
   const cancel = useMutation(api.partRequests.cancel);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1082,9 +1097,10 @@ function DecisionDialog({
     canPurchase ? { requestId: request._id } : ("skip" as const),
   );
   const compras = comprasQuery?.requests ?? [];
-  const compradas = compras.filter(
-    (row) => row.status !== "cancelled" && row.receivedAt === undefined,
-  ).length;
+  // «¿Sigue en camino?» lo dice la máquina de la compra (`lib/purchaseFlow`):
+  // cuenta igual una ya en una orden y una sin tratar, y no cuenta lo retirado
+  // ni lo que ya entró en el almacén.
+  const compradas = compras.filter(isPurchaseRequestAwaitingDelivery).length;
 
   const handlePurchase = async () => {
     setBusy(true);
@@ -1124,6 +1140,7 @@ function DecisionDialog({
       else if (mode === "reject") await reject(payload);
       else if (mode === "issue") await markIssued(payload);
       else if (mode === "hold") await onHold(payload);
+      else if (mode === "return") await returnMaterial(payload);
       else await cancel(payload);
       toast.success(meta.success(request));
       onClose();
@@ -1306,6 +1323,7 @@ function RequestDetailSheet({
   onReject,
   onIssue,
   onHold,
+  onReturn,
   onCancel,
   onResume,
   resuming,
@@ -1319,6 +1337,7 @@ function RequestDetailSheet({
   onReject: () => void;
   onIssue: () => void;
   onHold: () => void;
+  onReturn: () => void;
   onCancel: () => void;
   onResume: () => void;
   resuming: boolean;
@@ -1334,6 +1353,9 @@ function RequestDetailSheet({
   const partById = new Map(parts.map((part) => [part._id, part]));
   const noReference = request.lines.length === 0;
   const images = request.attachments.filter((a) => a.kind === "image");
+  // Lo que la máquina deja hacer desde aquí, y lo que no: los pasos que no se
+  // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/requestFlow`).
+  const blocked = canManage ? blockedRequestSteps(request.status) : [];
   const documents = request.attachments.filter((a) => a.kind === "document");
 
   /** Al archivo: sale de la cola del día a día y queda consultable allí. */
@@ -1514,7 +1536,7 @@ function RequestDetailSheet({
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Repuestos solicitados
               </p>
-              {canManage && request.status === "pending" && !noReference && (
+              {canManage && canEditRequest(request.status) && !noReference && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -1538,7 +1560,7 @@ function RequestDetailSheet({
                   descripción, y asocia el repuesto del catálogo o crea uno
                   nuevo.
                 </p>
-                {canManage && request.status === "pending" && (
+                {canManage && canEditRequest(request.status) && (
                   <Button
                     type="button"
                     size="sm"
@@ -1607,37 +1629,48 @@ function RequestDetailSheet({
         </div>
 
         <SheetFooter className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
+          {blocked.length > 0 && (
+            <BlockedSteps
+              groups={blocked.map((group) => ({
+                label: group.actions
+                  .map((action) => REQUEST_STEP_LABELS[action])
+                  .join(", "),
+                reason: group.reason,
+              }))}
+            />
+          )}
           <div className="flex w-full flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
             </Button>
-            {canManage && request.status === "pending" && (
-              <>
-                <Button type="button" variant="outline" onClick={onReject}>
-                  Rechazar
-                </Button>
-                {noReference ? (
-                  <Button type="button" className="gap-2" onClick={onAssociate}>
-                    <Wrench className="size-4" />
-                    Asociar repuesto
-                  </Button>
-                ) : (
-                  <Button type="button" className="gap-2" onClick={onApprove}>
-                    <Check className="size-4" />
-                    Aprobar
-                  </Button>
-                )}
-              </>
+            {canManage && canRequestStep(request.status, "reject") && (
+              <Button type="button" variant="outline" onClick={onReject}>
+                Rechazar
+              </Button>
             )}
-            {canManage && request.status === "approved" && (
+            {canManage &&
+              canRequestStep(request.status, "approve") &&
+              (noReference ? (
+                <Button type="button" className="gap-2" onClick={onAssociate}>
+                  <Wrench className="size-4" />
+                  Asociar repuesto
+                </Button>
+              ) : (
+                <Button type="button" className="gap-2" onClick={onApprove}>
+                  <Check className="size-4" />
+                  Aprobar
+                </Button>
+              ))}
+            {canManage && canRequestStep(request.status, "issue") && (
               <Button type="button" className="gap-2" onClick={onIssue}>
                 <PackageCheck className="size-4" />
                 Marcar entregada
               </Button>
             )}
             {/* Espera y cancelación: la petición ya está decidida o a medias,
-                así que se deciden desde la ficha, con su motivo. */}
-            {canManage && HOLDABLE.includes(request.status) && (
+                así que se deciden desde la ficha, con su motivo. Desde dónde se
+                puede cada una lo dice la máquina (`lib/requestFlow`). */}
+            {canManage && canRequestStep(request.status, "hold") && (
               <Button
                 type="button"
                 variant="outline"
@@ -1648,7 +1681,7 @@ function RequestDetailSheet({
                 En espera
               </Button>
             )}
-            {canManage && request.status === "onHold" && (
+            {canManage && canRequestStep(request.status, "resume") && (
               <Button
                 type="button"
                 variant="outline"
@@ -1660,7 +1693,20 @@ function RequestDetailSheet({
                 {resuming ? "Reanudando..." : "Reanudar"}
               </Button>
             )}
-            {canManage && CANCELLABLE.includes(request.status) && (
+            {/* Lo entregado se devuelve: es el paso que falta para poder
+                cancelarla, así que el motivo de arriba manda aquí. */}
+            {canManage && canRequestStep(request.status, "returnMaterial") && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={onReturn}
+              >
+                <Undo2 className="size-4" />
+                Devolver material
+              </Button>
+            )}
+            {canManage && canRequestStep(request.status, "cancel") && (
               <Button
                 type="button"
                 variant="outline"
@@ -1671,7 +1717,7 @@ function RequestDetailSheet({
                 Cancelar petición
               </Button>
             )}
-            {canManage && request.status !== "pending" && (
+            {canManage && !isRequestInMotion(request.status) && (
               <Button
                 type="button"
                 variant="outline"
@@ -1718,9 +1764,7 @@ function RequestDetailSheet({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>
-                ¿Retirar {request.reference}?
-              </AlertDialogTitle>
+              <AlertDialogTitle>¿Retirar {request.reference}?</AlertDialogTitle>
               <AlertDialogDescription>
                 Sale de la cola y del archivo: es para la petición pedida por
                 error o el duplicado de otra. No se borra ahora: queda en la

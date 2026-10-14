@@ -299,55 +299,44 @@ function TrashButtons({
  * taller viven juntos y este módulo se queda con el día a día.
  */
 export function ArchiveView({
-  incidents = [],
-  requests = [],
-  activeIncidents = [],
-  activeRequests = [],
   canArchiveIncidents = false,
   canArchiveRequests = false,
-  trashedIncidents: trashedIncidentsProp,
-  trashedRequests: trashedRequestsProp,
-  trashRetentionDays: trashRetentionDaysProp,
   onOpenSettings,
 }: {
-  /** Incidencias ya archivadas. */
-  incidents?: IncidentDoc[];
-  /** Incidencias retiradas: esperan en la papelera antes de borrarse de verdad. */
-  trashedIncidents?: WithdrawnIncidentItem[];
-  /** Lo mismo con las peticiones: retiradas desde su ficha, esperan el plazo. */
-  trashedRequests?: WithdrawnRequestItem[];
-  /** El plazo vigente de la papelera, en días (lo ajusta el taller). */
-  trashRetentionDays?: number;
-  /** Peticiones ya archivadas. */
-  requests?: RequestDoc[];
-  /** Cola viva de incidencias (para saber cuántas se archivarían). */
-  activeIncidents?: IncidentDoc[];
-  /** Cola viva de peticiones (para saber cuántas se archivarían). */
-  activeRequests?: RequestDoc[];
   canArchiveIncidents?: boolean;
   canArchiveRequests?: boolean;
   /** Abre «Ajustes del taller», donde se configura el archivado automático. */
   onOpenSettings?: () => void;
 }) {
+  // El archivo carga lo suyo: las dos colas enteras —lo archivado y lo que sigue
+  // vivo, que es con lo que se cuenta lo que archiva cada corte— y las dos
+  // papeleras, que solo se piden a quien puede deshacer (el backend no contesta
+  // la papelera a nadie más).
+  const allIncidents =
+    useQuery(api.incidents.list, { includeArchived: true }) ?? [];
+  const allRequests =
+    useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
+  const incidents = allIncidents.filter((row) => row.archivedAt !== undefined);
+  const requests = allRequests.filter((row) => row.archivedAt !== undefined);
+  const activeIncidents = allIncidents.filter(
+    (row) => row.archivedAt === undefined,
+  );
+  const activeRequests = allRequests.filter(
+    (row) => row.archivedAt === undefined,
+  );
+
   const queryIncidentTrash = useQuery(
     api.incidents.trash,
-    canArchiveIncidents && trashedIncidentsProp === undefined
-      ? {}
-      : ("skip" as const),
+    canArchiveIncidents ? {} : ("skip" as const),
   );
   const queryRequestTrash = useQuery(
     api.partRequests.trash,
-    canArchiveRequests && trashedRequestsProp === undefined
-      ? {}
-      : ("skip" as const),
+    canArchiveRequests ? {} : ("skip" as const),
   );
 
-  const trashedIncidents =
-    trashedIncidentsProp ?? queryIncidentTrash?.items ?? [];
-  const trashedRequests =
-    trashedRequestsProp ?? queryRequestTrash?.items ?? [];
+  const trashedIncidents = queryIncidentTrash?.items ?? [];
+  const trashedRequests = queryRequestTrash?.items ?? [];
   const trashRetentionDays =
-    trashRetentionDaysProp ??
     queryIncidentTrash?.retentionDays ??
     queryRequestTrash?.retentionDays ??
     DEFAULT_TRASH_RETENTION_DAYS;

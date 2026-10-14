@@ -4,11 +4,11 @@ import {
   DEFAULT_AFTER_MONTHS,
   MAX_AFTER_MONTHS,
   MIN_AFTER_MONTHS,
-  isClosedIncident,
-  isRequestInMotion,
   requestArchiveDate,
 } from "../lib/archive";
 import { monthsAgo } from "../lib/browse";
+import { isClosedIncident } from "../lib/incidentFlow";
+import { isRequestInMotion } from "../lib/requestFlow";
 import {
   MutationCtx,
   QueryCtx,

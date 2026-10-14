@@ -14,14 +14,22 @@ import {
   vi,
 } from "vitest";
 
-const { CORRECCIONES } = vi.hoisted(() => ({
+const { CORRECCIONES, COLA } = vi.hoisted(() => ({
   CORRECCIONES: [] as Record<string, unknown>[],
+  // La cola que sirve el backend de mentira: la vista la carga por su cuenta.
+  COLA: { incidents: [] as unknown[] },
 }));
 
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
-    useQuery: () => undefined,
+    // La cola la carga la propia vista (el armazón no le pasa datos): se le
+    // sirve lo que la prueba haya puesto, siempre el mismo array para no
+    // provocar renders en bucle.
+    useQuery: (query: unknown) => {
+      const nombre = getFunctionName(query as never);
+      return nombre === "incidents:list" ? COLA.incidents : undefined;
+    },
     useMutation: (mutation: unknown) => async (args: unknown) => {
       // Lo que se anota es el guardado que se está probando. Se nombra la
       // función en vez de compararla: cada acceso a `api` devuelve un objeto
@@ -141,11 +149,13 @@ async function abrirFicha(
   incidents: Doc<"incidents">[],
   currentUserId: Id<"users"> | null = TECNICO,
 ) {
+  // La cola que va a leer la vista es la que se le sirve al backend de mentira.
+  COLA.incidents = incidents;
   await act(async () => {
     // La cola trae sus enlaces al formulario público: sin router no se pinta
     root.render(
       <MemoryRouter>
-        <IncidentsView incidents={incidents} currentUserId={currentUserId} />
+        <IncidentsView currentUserId={currentUserId} />
       </MemoryRouter>,
     );
   });

@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
+import { matchesQuery } from "@/lib/browse";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import { useTableSort } from "@/hooks/use-table-sort";
@@ -57,7 +58,7 @@ import {
   getErrorMessage,
   stockState,
 } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   CircleAlert,
   FileDown,
@@ -68,6 +69,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -75,16 +77,19 @@ import { toast } from "sonner";
 type PartDoc = Doc<"spareParts">;
 type EquipmentDoc = Doc<"equipment">;
 
+/**
+ * Cuántos equipos enseña a la vez la búsqueda de compatibles. El taller puede
+ * tener miles —por eso no se pinta un botón por equipo—: se enseña lo primero
+ * que coincide y quien busca afina si el suyo no está entre los primeros.
+ */
+const COMPATIBLE_RESULTS = 6;
+
 export function InventoryView({
-  parts,
-  equipment: equipmentProp,
   canManage = false,
   currentUserId = null,
   initialSearch = "",
   initialLowStockOnly = false,
 }: {
-  parts: PartDoc[];
-  equipment: EquipmentDoc[];
   /** Solo responsable de repuestos/admin escriben en el catálogo (fail-closed). */
   canManage?: boolean;
   /** Quién mira: su orden de la tabla se recuerda aparte del de los demás. */
@@ -95,10 +100,13 @@ export function InventoryView({
    * (lo elige la tarjeta «Repuestos con stock bajo» del resumen). */
   initialLowStockOnly?: boolean;
 }) {
+  // El catálogo lo carga el módulo, y con él los equipos: son los que dan la
+  // compatibilidad de cada repuesto y el filtro por modelo. El backend no
+  // contesta a quien no puede verlos, así que esto degrada a vacío.
+  const parts = useQuery(api.spareParts.list) ?? [];
+  const equipment = useQuery(api.equipment.list, {}) ?? [];
   const adjustStock = useMutation(api.spareParts.adjustStock);
   const removePart = useMutation(api.spareParts.remove);
-  // Tolerancia a módulos desactualizados en caliente (el prop puede faltar)
-  const equipment = equipmentProp ?? [];
 
   const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState<string>("all");
@@ -671,6 +679,10 @@ function PartFormDialog({
   const [compatibleIds, setCompatibleIds] = useState<string[]>(
     part?.compatibleWith ?? [],
   );
+  // Los compatibles se buscan y se añaden de uno en uno: con miles de equipos no
+  // se puede pintar un botón por equipo, así que lo que se ve son los que ya se
+  // han añadido y la búsqueda ofrece solo los primeros que coinciden.
+  const [equipmentQuery, setEquipmentQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -679,12 +691,35 @@ function PartFormDialog({
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
-  const toggleCompatible = (id: string) => {
+  /** Los equipos ya añadidos, en el orden en que se añadieron. */
+  const compatibles = compatibleIds
+    .map((id) => equipment.find((item) => item._id === id))
+    .filter((item): item is EquipmentDoc => item !== undefined);
+
+  /** Lo que coincide con la búsqueda y todavía no está añadido. */
+  const buscando = equipmentQuery.trim() !== "";
+  const encontrados = buscando
+    ? equipment.filter(
+        (item) =>
+          !compatibleIds.includes(item._id) &&
+          matchesQuery(
+            [equipmentLabel(item), item.code, item.model],
+            equipmentQuery,
+          ),
+      )
+    : [];
+  const coincidencias = encontrados.slice(0, COMPATIBLE_RESULTS);
+
+  /** Añade un equipo: pasa de la búsqueda a la lista de compatibles. */
+  const addCompatible = (id: string) => {
     setCompatibleIds((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
+      current.includes(id) ? current : [...current, id],
     );
+  };
+
+  /** Quita un equipo: vuelve a ofrecerse en la búsqueda. */
+  const removeCompatible = (id: string) => {
+    setCompatibleIds((current) => current.filter((item) => item !== id));
   };
 
   const handleSubmit = async () => {
@@ -711,10 +746,8 @@ function PartFormDialog({
 
     setBusy(true);
     try {
-      const compatibleWith = compatibleIds
-        .map((id) => equipment.find((item) => item._id === id))
-        .filter((item): item is EquipmentDoc => item !== undefined)
-        .map((item) => item._id);
+      // Lo que se ve añadido es lo que se guarda.
+      const compatibleWith = compatibles.map((item) => item._id);
       // El editor entrega ya el documento en bloques; al editar, vaciarlo deja
       // la ficha sin descripción, como hasta ahora.
       const descriptionToSend = richDocToStore(description);
@@ -906,33 +939,83 @@ function PartFormDialog({
             />
           </div>
           <div className="grid gap-2 sm:col-span-2">
-            <Label>Compatible con (equipos del taller)</Label>
+            <Label htmlFor="part-compatible-search">
+              Compatible con (equipos del taller)
+            </Label>
             {equipment.length === 0 ? (
               <p className="text-xs leading-5 text-muted-foreground">
                 Todavía no hay equipos en el inventario: da de alta los equipos
                 en la pestaña «Equipos» para poder filtrar por ellos.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {equipment.map((item) => {
-                  const selected = compatibleIds.includes(item._id);
-                  return (
-                    <button
-                      key={item._id}
-                      type="button"
-                      onClick={() => toggleCompatible(item._id)}
-                      disabled={busy}
-                      className={cn(
-                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                        selected
-                          ? "border-signal bg-signal/10 text-signal"
-                          : "border-border/70 bg-card text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {equipmentLabel(item)}
-                    </button>
-                  );
-                })}
+              <div className="grid gap-2">
+                <Input
+                  id="part-compatible-search"
+                  value={equipmentQuery}
+                  onChange={(event) => setEquipmentQuery(event.target.value)}
+                  placeholder="Buscar equipo por nombre, modelo o código"
+                  autoComplete="off"
+                  disabled={busy}
+                />
+                {coincidencias.length > 0 && (
+                  <ul
+                    aria-label="Equipos que coinciden"
+                    className="rounded-lg border border-border/70 bg-card"
+                  >
+                    {coincidencias.map((item) => (
+                      <li key={item._id}>
+                        <button
+                          type="button"
+                          onClick={() => addCompatible(item._id)}
+                          disabled={busy}
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/60"
+                        >
+                          <span className="truncate text-foreground">
+                            {equipmentLabel(item)}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                            <span className="font-mono">{item.code}</span>
+                            <Plus className="size-3.5" />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {encontrados.length > coincidencias.length && (
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Coinciden {encontrados.length} equipos: afina la búsqueda
+                    para llegar a los que no salen aquí.
+                  </p>
+                )}
+                {buscando && encontrados.length === 0 && (
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Ningún equipo coincide con «{equipmentQuery.trim()}».
+                  </p>
+                )}
+                {compatibles.length === 0 ? (
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Ningún equipo compatible todavía: búscalo arriba y añádelo.
+                    Lo que añadas es lo que verás aquí, y lo que se guarde.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {compatibles.map((item) => (
+                      <button
+                        key={item._id}
+                        type="button"
+                        onClick={() => removeCompatible(item._id)}
+                        disabled={busy}
+                        title="Quitar de compatibles"
+                        aria-label={`Quitar ${equipmentLabel(item)}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-signal bg-signal/10 px-3 py-1 text-xs font-medium text-signal transition-colors hover:border-destructive/40 hover:text-destructive"
+                      >
+                        {equipmentLabel(item)}
+                        <X className="size-3.5" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

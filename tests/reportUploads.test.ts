@@ -214,7 +214,7 @@ describe("imágenes de la incidencia notificada sin cuenta", () => {
     const t = harness();
     const { url } = await upload(t, PNG_HEAD);
 
-    const reference = await t.mutation(api.incidents.report, {
+    const { reference } = await t.mutation(api.incidents.report, {
       ...reportBase,
       description: `<p>La cámara no enciende desde esta mañana.</p><img src="${url}">`,
     });

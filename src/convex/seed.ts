@@ -10,7 +10,9 @@ import {
 } from "../lib/workshop";
 import { SAMPLE_PHOTOS, samplePhotoBytes } from "../lib/samplePhotos";
 import { SAMPLE_MANUALS, sampleManualPdf } from "../lib/sampleManuals";
+import { PUBLIC_CODE_LENGTH, publicCodeFrom } from "../lib/publicCode";
 import { richDocToStore } from "../lib/richDoc";
+import { formatReference, nextSequence } from "../lib/references";
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
 import {
@@ -1374,20 +1376,6 @@ function ageInDays(index: number): number {
 /** Corte entre «trabajo de la cola» y «histórico» (días). */
 const RECENT_LIMIT_DAYS = 50;
 
-/** Siguiente número libre de un prefijo de referencia (PET-0004 → 5). */
-function nextSequence(references: readonly string[], prefix: string): number {
-  let max = 0;
-  for (const reference of references) {
-    const match = /^([A-Z]+)-(\d+)$/.exec(reference);
-    if (match && match[1] === prefix) max = Math.max(max, Number(match[2]));
-  }
-  return max + 1;
-}
-
-function formatReference(prefix: string, sequence: number): string {
-  return `${prefix}-${String(sequence).padStart(4, "0")}`;
-}
-
 /* ------------------------------------------------------------------ */
 /* Muestra curada: la historia del taller                              */
 /* ------------------------------------------------------------------ */
@@ -1547,6 +1535,8 @@ const SEED_MAINTENANCE: SeedMaintenance[] = [
 /** Incidencias de ejemplo: pendientes, en taller y autoasignadas. */
 interface SeedIncident {
   reference: string;
+  /** El código con el que la seguiría quien notificó (aquí, escrito a mano). */
+  publicCode: string;
   reporterName: string;
   reporterRole: string;
   location: string;
@@ -1564,6 +1554,7 @@ interface SeedIncident {
 const SEED_INCIDENTS: SeedIncident[] = [
   {
     reference: "INC-0001",
+    publicCode: "M4KQ7X2P",
     reporterName: "Laura Peña",
     reporterRole: "Realización",
     location: "Sala de realización",
@@ -1578,6 +1569,7 @@ const SEED_INCIDENTS: SeedIncident[] = [
   },
   {
     reference: "INC-0002",
+    publicCode: "R9TW5H8N",
     reporterName: "Marcos Vega",
     reporterRole: "Sala de realización",
     location: "Rack central",
@@ -1593,6 +1585,7 @@ const SEED_INCIDENTS: SeedIncident[] = [
   },
   {
     reference: "INC-0003",
+    publicCode: "B6YP3JQZ",
     reporterName: "Sandra Ruiz",
     reporterRole: "Cámara",
     location: "Plató 1",
@@ -1652,6 +1645,7 @@ interface GeneratedDocument {
 
 interface GeneratedIncident {
   reference: string;
+  publicCode: string;
   reporterName: string;
   reporterRole?: string;
   location?: string;
@@ -1686,6 +1680,24 @@ interface GeneratedIncident {
 }
 
 /**
+ * Un código de seguimiento de la muestra, del azar reproducible de la carga.
+ *
+ * Va con su propio generador —no con el del resto de la ficha— para que añadir
+ * códigos no mueva ni un dato de la muestra que ya había. No pretende ser secreto
+ * —está a la vista en el código y cualquiera puede recalcularlo— sino que la
+ * muestra tenga la misma forma que los datos de verdad: un caso de ejemplo,
+ * abierto en la consulta de fuera, sin tocar los que se hayan notificado de
+ * verdad.
+ */
+function samplePublicCode(rnd: () => number): string {
+  const bytes = new Uint8Array(PUBLIC_CODE_LENGTH);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Math.floor(rnd() * 256);
+  }
+  return publicCodeFrom(bytes);
+}
+
+/**
  * Reparte la muestra en el tiempo: los estados abiertos solo aparecen en lo
  * reciente y todo lo terminado hace más de un año nace ya archivado (como si la
  * pasada nocturna hubiera corrido). Se deja a propósito uno de cada nueve sin
@@ -1714,6 +1726,11 @@ function buildIncidents(opts: {
   // Qué notas de la muestra se corrigieron, con un generador propio: añadir
   // correcciones no desplaza ni un sorteo de las notas que ya había.
   const versionRnd = random(opts.seed + 303);
+  // Los códigos de seguimiento, con otro generador propio por la misma razón: la
+  // muestra enseña casos que se pueden seguir desde fuera, y repartirlos no puede
+  // cambiar ni una fecha de lo que ya había. Los de verdad llevan el azar del
+  // servidor (`convex/publicCodes`); estos son reproducibles para poder probarlos.
+  const codeRnd = random(opts.seed + 404);
   const cutoff = monthsAgo(DEFAULT_AFTER_MONTHS, now);
   const items: GeneratedIncident[] = [];
 
@@ -1884,7 +1901,8 @@ function buildIncidents(opts: {
     }
 
     items.push({
-      reference: formatReference("INC", sequence),
+      reference: formatReference("incident", sequence),
+      publicCode: samplePublicCode(codeRnd),
       reporterName: reporter.name,
       reporterRole: reporter.role ?? undefined,
       ...(freeText ? {} : { location: target?.location }),
@@ -2012,7 +2030,7 @@ function buildRequests(opts: {
         : undefined;
 
     items.push({
-      reference: formatReference("PET", sequence),
+      reference: formatReference("partRequest", sequence),
       requesterName: requester.name,
       requesterTeam: requester.team,
       ...(target ? { equipment: `${target.name} ${target.model}` } : {}),
@@ -2450,8 +2468,8 @@ async function insertWorkload(
 
   const generatedIncidents = buildIncidents({
     startSequence: nextSequence(
+      "incident",
       incidentDocs.map((item) => item.reference),
-      "INC",
     ),
     count: opts.incidents,
     now,
@@ -2538,8 +2556,8 @@ async function insertWorkload(
 
   const generatedRequests = buildRequests({
     startSequence: nextSequence(
+      "partRequest",
       requestDocs.map((item) => item.reference),
-      "PET",
     ),
     count: opts.requests,
     now,

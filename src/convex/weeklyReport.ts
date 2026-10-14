@@ -5,11 +5,15 @@ import {
   DEFAULT_WEEKLY_REPORT_WEEKDAY,
   MAX_WEEKDAY,
   MIN_WEEKDAY,
-  renderWeeklyReport,
-  utcWeekday,
-  weeklyDigest,
+  WEEKLY_REPORT_HISTORY_LIMIT,
+  composeWeeklyReport,
+  countsInWeeklyReport,
+  weeklyDeliveryBlocker,
   weeklyRecipients,
-  weeklyReportKey,
+  weeklyReportWeekday,
+  weeklyScheduleDecision,
+  type WeeklyReport,
+  type WeeklyReportSource,
 } from "../lib/weeklyReport";
 import { DEFAULT_WORK_WITHOUT_TRACE_DAYS } from "../lib/workshop";
 import { internal } from "./_generated/api";
@@ -35,10 +39,14 @@ import {
 
 /**
  * Resumen semanal del taller por correo: lo que se trabajó, lo que quedó sin
- * constancia y lo que se archivó. La semana se compone en `../lib/weeklyReport`
- * (probado sin servidor); aquí vive lo que sí necesita la base de datos
- * —ajustes, destinatarios, histórico— y el envío por la pasarela de
- * integraciones de la plataforma.
+ * constancia y lo que se archivó.
+ *
+ * Este módulo es el **adaptador**: carga los documentos, se los pasa a
+ * `../lib/weeklyReport` —donde está la composición, probada sin servidor— y
+ * entrega el sobre, que aquí significa guardarlo y mandarlo por la pasarela de
+ * integraciones de la plataforma. Qué entra en la semana, quién lo recibe, qué
+ * dice el correo y si la pasada del cron toca hoy no se decide aquí: eso vive en
+ * el módulo puro, y aquí solo se pregunta.
  *
  * El correo se guarda siempre en `weeklyReports`, se haya entregado o no: así el
  * panel puede enseñar qué salió cada semana y, cuando la pasarela falla (o el
@@ -48,9 +56,6 @@ import {
 
 /** Una sola fila de ajustes: se lee y se escribe siempre en el mismo sitio. */
 const SETTINGS_KEY = "default";
-
-/** Cuántas semanas atrás enseña el histórico del panel. */
-const HISTORY_LIMIT = 6;
 
 /** Quién decide (y firma) los ajustes del resumen. */
 async function requireReportManager(ctx: QueryCtx | MutationCtx) {
@@ -78,62 +83,37 @@ async function currentMarginDays(ctx: QueryCtx | MutationCtx): Promise<number> {
 }
 
 /**
- * Todo lo que hace falta para componer el resumen: las colas completas (las
+ * Todo lo que el resumen necesita, cargado de la base: las colas completas (las
  * archivadas incluidas, que son justo la tercera sección), quién lo recibe y el
  * margen vigente. Los destinatarios se resuelven en el servidor: el navegador
- * nunca ve la lista completa de correos del taller.
+ * nunca ve la lista completa de correos del taller. Lo retirado se queda fuera
+ * —es lo que dice el módulo puro—, y aquí solo se le aplica.
  */
-async function buildReport(ctx: QueryCtx | MutationCtx) {
+async function loadReportSource(
+  ctx: QueryCtx | MutationCtx,
+): Promise<WeeklyReportSource> {
   const incidents = await ctx.db.query("incidents").collect();
-  // Lo retirado no cuenta: se retiró porque era duplicado o equivocado, así que
-  // no es trabajo del taller ni caso abierto. Su rastro se lo queda la papelera.
-  const live = incidents.filter((incident) => incident.deletedAt === undefined);
-  // Y lo retirado de peticiones tampoco: se retiró porque se pidió por error o
-  // era duplicada, así que no es trabajo del taller ni caso abierto.
-  const requests = (await ctx.db.query("partRequests").collect()).filter(
-    (request) => request.deletedAt === undefined,
-  );
+  const requests = await ctx.db.query("partRequests").collect();
   const users = await ctx.db.query("users").collect();
   const settings = await readSettings(ctx);
   const roleKeys = settings?.roleKeys ?? [...DEFAULT_WEEKLY_REPORT_ROLES];
   return {
-    incidents: live,
-    requests,
-    roleKeys,
+    incidents: incidents.filter(countsInWeeklyReport),
+    requests: requests.filter(countsInWeeklyReport),
     recipients: weeklyRecipients(users, roleKeys),
     marginDays: await currentMarginDays(ctx),
   };
 }
 
-/** El correo compuesto a partir de la base de datos (lo comparten vista y envío). */
-async function composeReport(ctx: QueryCtx | MutationCtx, now: number) {
-  const context = await buildReport(ctx);
-  const digest = weeklyDigest({
-    incidents: context.incidents,
-    requests: context.requests,
+/** El resumen compuesto a partir de la base de datos (lo comparten vista y envío). */
+async function composeReport(
+  ctx: QueryCtx | MutationCtx,
+  now: number,
+): Promise<WeeklyReport> {
+  return composeWeeklyReport(await loadReportSource(ctx), {
     now,
-    marginDays: context.marginDays,
-  });
-  const email = renderWeeklyReport(digest, {
     appUrl: process.env.SITE_URL,
-    recipients: context.recipients,
   });
-  return {
-    key: weeklyReportKey(now),
-    from: digest.window.from,
-    to: digest.window.to,
-    windowLabel: digest.window.label,
-    marginDays: digest.marginDays,
-    subject: email.subject,
-    text: email.text,
-    html: email.html,
-    recipients: context.recipients,
-    counts: {
-      touched: digest.worked.incidentsTouched,
-      withoutTrace: digest.withoutTrace.length,
-      archived: digest.archived.total,
-    },
-  };
 }
 
 /** Ajustes vigentes; sin fila guardada se devuelven los de partida. */
@@ -172,12 +152,9 @@ export const setSettings = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireReportManager(ctx);
-    const weekday = Math.round(args.weekday);
-    if (
-      !Number.isFinite(weekday) ||
-      weekday < MIN_WEEKDAY ||
-      weekday > MAX_WEEKDAY
-    ) {
+    // Qué días valen lo dice la composición; el aviso, quien lo pide.
+    const weekday = weeklyReportWeekday(args.weekday);
+    if (weekday === null) {
       throw new ConvexError(
         `El día del resumen debe estar entre el lunes (${MIN_WEEKDAY}) y el domingo (${MAX_WEEKDAY}).`,
       );
@@ -217,7 +194,7 @@ export const history = query({
     const rows = await ctx.db.query("weeklyReports").collect();
     return rows
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, HISTORY_LIMIT)
+      .slice(0, WEEKLY_REPORT_HISTORY_LIMIT)
       .map((row) => ({
         key: row.key,
         from: row.from,
@@ -251,7 +228,7 @@ export const preview = query({
       recipients: report.recipients,
       subject: report.subject,
       text: report.text,
-      counts: report.counts,
+      counts: report.summary,
     };
   },
 });
@@ -407,19 +384,18 @@ async function sendReport(ctx: ActionCtx): Promise<{
   error?: string;
 }> {
   const report = await ctx.runQuery(internal.weeklyReport.sendContext, {});
+  // Sin destinatarios no hay a quién: la composición dice el motivo, y la
+  // pasarela ni se llama.
+  const blocker = weeklyDeliveryBlocker(report.recipients);
   const delivery =
-    report.recipients.length === 0
-      ? {
-          ok: false,
-          error:
-            "Ningún rol de la lista tiene personas en activo con correo: añade destinatarios antes de enviar el resumen.",
-        }
-      : await deliver({
+    blocker === null
+      ? await deliver({
           to: report.recipients,
           subject: report.subject,
           text: report.text,
           html: report.html,
-        });
+        })
+      : { ok: false, error: blocker };
 
   await ctx.runMutation(internal.weeklyReport.record, {
     key: report.key,
@@ -429,7 +405,7 @@ async function sendReport(ctx: ActionCtx): Promise<{
     text: report.text,
     status: delivery.ok ? "sent" : "failed",
     recipients: report.recipients,
-    summary: report.counts,
+    summary: report.summary,
     error: delivery.ok ? undefined : delivery.error,
   });
 
@@ -472,12 +448,13 @@ export const runScheduled = internalAction({
   args: {},
   handler: async (ctx) => {
     const schedule = await ctx.runQuery(internal.weeklyReport.schedule, {});
-    if (!schedule.enabled) return { sent: false, reason: "El resumen está apagado." };
-    const today = utcWeekday(Date.now());
-    if (today !== schedule.weekday) {
-      return { sent: false, reason: "Hoy no es el día configurado." };
-    }
+    // ¿Toca hoy? Lo decide la composición; aquí solo se obedece.
+    const decision = weeklyScheduleDecision(schedule, Date.now());
+    if (!decision.send) return { sent: false, reason: decision.reason };
     const result = await sendReport(ctx);
-    return { sent: result.status === "sent", reason: result.error ?? "Enviado." };
+    return {
+      sent: result.status === "sent",
+      reason: result.error ?? decision.reason,
+    };
   },
 });

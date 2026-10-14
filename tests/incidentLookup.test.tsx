@@ -23,7 +23,7 @@ const estado = vi.hoisted(() => ({
 }));
 
 vi.mock("@/convex/_generated/api", () => ({
-  api: { incidents: { byReference: { nombre: "incidents.byReference" } } },
+  api: { incidents: { byCode: { nombre: "incidents.byCode" } } },
 }));
 
 vi.mock("convex/react", () => ({
@@ -41,6 +41,9 @@ import { IncidentLookup } from "@/pages/dashboard/IncidentLookup";
 let container: HTMLDivElement;
 let root: Root;
 
+/** El código de la incidencia que se sigue en estas pruebas. */
+const CODIGO = "A7K2QX9M";
+
 beforeAll(() => {
   // Sin esto React avisa en cada `act`: jsdom no es un navegador y hay que
   // decirle que las actualizaciones son las de una prueba.
@@ -49,13 +52,16 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
+const montar = (initialCode?: string | null) =>
+  act(() => root.render(<IncidentLookup initialCode={initialCode} />));
+
 beforeEach(() => {
   estado.consultas.length = 0;
   estado.respuesta = undefined;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root.render(<IncidentLookup />));
+  montar();
 });
 
 afterEach(() => {
@@ -63,7 +69,7 @@ afterEach(() => {
   container.remove();
 });
 
-/** Reportar algo guardado en el editor: el texto tal y como se lee. */
+/** Escribe en el campo como si se tecleara, para que React lo note. */
 function escribir(texto: string) {
   const campo = container.querySelector("input") as HTMLInputElement;
   act(() => {
@@ -76,7 +82,7 @@ function escribir(texto: string) {
   });
 }
 
-/** Escribe la referencia y pulsa «Consultar», como quien tiene el papel delante. */
+/** Escribe el código y pulsa «Consultar», como quien tiene el correo delante. */
 function consultar(texto: string) {
   escribir(texto);
   act(() => {
@@ -90,7 +96,7 @@ const texto = () => container.textContent ?? "";
 
 /** El seguimiento que devuelve el backend para una incidencia en curso. */
 const seguimiento = {
-  reference: "INC-0004",
+  code: CODIGO,
   status: "assigned" as const,
   equipmentKind: "Cámara de estudio",
   model: "HDC-3500",
@@ -107,22 +113,23 @@ const seguimiento = {
   ],
 };
 
-describe("IncidentLookup — seguir una incidencia por su referencia", () => {
-  test("la referencia se teclee como se teclee, se consulta en su forma canónica", () => {
-    for (const typed of ["INC-0004", "inc-4", "4", " la 4 "]) {
+describe("IncidentLookup — seguir una incidencia por su código", () => {
+  test("el código se teclee como se teclee, se consulta en su forma canónica", () => {
+    // Lo que se escribe de verdad: el código del correo, en minúsculas, sin los
+    // guiones o con un espacio de más.
+    for (const typed of [CODIGO, "a7k2qx9m", "A7K2-QX9M", " a7k2 qx9m "]) {
       estado.consultas.length = 0;
       consultar(typed);
-      expect(estado.consultas, `«${typed}»`).toEqual([
-        '{"reference":"INC-0004"}',
-      ]);
+      expect(estado.consultas, `«${typed}»`).toEqual([`{"code":"${CODIGO}"}`]);
     }
   });
 
   test("el seguimiento llega a la pantalla con su paso a paso", () => {
     estado.respuesta = seguimiento;
-    consultar("4");
+    consultar(CODIGO);
 
-    expect(texto()).toContain("INC-0004");
+    // El código se enseña como se dicta, en dos grupos.
+    expect(texto()).toContain("A7K2-QX9M");
     expect(texto()).toContain("Asignada");
     expect(texto()).toContain("Cámara de estudio · HDC-3500");
     expect(texto()).toContain("Plató 1");
@@ -131,34 +138,87 @@ describe("IncidentLookup — seguir una incidencia por su referencia", () => {
     expect(texto()).toContain("La cámara se apaga sola en directo");
     // El paso a paso: lo que ha pasado y cuándo, sin quién lo dio.
     expect(texto()).toContain("Nueva");
-    expect(texto()).toContain("INC-0004");
   });
 
-  test("algo sin número no se pregunta: se dice lo que falta", () => {
-    consultar("la de la cámara");
+  test("llegar con el código en la dirección consulta sin teclear nada", () => {
+    estado.respuesta = seguimiento;
+    // Se monta de nuevo con el código que traería la dirección, como al pulsar el
+    // enlace del correo.
+    act(() => root.unmount());
+    container.remove();
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    montar(CODIGO);
+
+    // El enlace del correo trae el código puesto: se consulta solo al abrir, y el
+    // campo lo enseña para que se vea cuál se está siguiendo.
+    expect(estado.consultas).toEqual([`{"code":"${CODIGO}"}`]);
+    expect((container.querySelector("input") as HTMLInputElement).value).toBe(
+      CODIGO,
+    );
+    expect(texto()).toContain("A7K2-QX9M");
+  });
+
+  test("algo que no es un código no se pregunta: se dice lo que falta", () => {
+    for (const typed of ["la de la cámara", "A7K2"]) {
+      estado.consultas.length = 0;
+      consultar(typed);
+
+      expect(estado.consultas, `«${typed}»`).toEqual([]);
+      expect(texto()).toContain("Escribe el código de la incidencia");
+    }
+  });
+
+  test("una letra que se confunde se señala: no es lo mismo que no haberla escrito", () => {
+    // Con una O tecleada de más, «no encontramos nada» manda a buscar donde no es;
+    // lo que hay que decir es que esa letra no cabe en un código.
+    consultar("A7K2QX9O");
 
     expect(estado.consultas).toEqual([]);
-    expect(texto()).toContain("Escribe el número de la incidencia");
+    expect(texto()).toContain("Un código no lleva la «O»");
+    expect(texto()).not.toContain("No encontramos ninguna incidencia");
+
+    // Y si son varias, se dicen todas: al dictarlo, el cero y la O van juntos.
+    consultar("O0I12KQ3");
+    expect(estado.consultas).toEqual([]);
+    expect(texto()).toContain("Un código no lleva «O», «0», «I» o «1»");
   });
 
-  test("si no hay ninguna con esa referencia, se dice cuál se buscó", () => {
+  test("una referencia interna se reconoce, y se dice de dónde sale el código", () => {
+    // Quien teclea «INC-0004» viene de un aviso viejo: la referencia ya no es la
+    // puerta de fuera, así que hay que decirle qué tiene en la mano y cómo se
+    // consigue lo que le sirve —el código—, no que le sobran letras.
+    for (const typed of ["INC-0004", "inc 4", "incidencia 12", "4"]) {
+      estado.consultas.length = 0;
+      consultar(typed);
+
+      expect(estado.consultas, `«${typed}»`).toEqual([]);
+      expect(texto()).toContain("Eso parece la referencia del taller");
+      expect(texto()).not.toContain("Un código no lleva");
+    }
+  });
+
+  test("si no hay ninguna con ese código, se dice cuál se buscó", () => {
     estado.respuesta = null;
-    consultar("7");
+    consultar("zzzzzzzz");
 
     expect(texto()).toContain("No encontramos ninguna incidencia");
-    expect(texto()).toContain("INC-0007");
+    // Con la forma en que se lee y se dicta, para poder compararla con la del
+    // correo de un vistazo.
+    expect(texto()).toContain("ZZZZ-ZZZZ");
   });
 
   test("seguir escribiendo no cambia lo que se está leyendo", () => {
     estado.respuesta = seguimiento;
-    consultar("INC-0004");
+    consultar(CODIGO);
     expect(texto()).toContain("Cámara de estudio · HDC-3500");
 
     // Lo tecleado después no es una consulta nueva: el resultado sigue siendo el
-    // de la referencia que se pidió.
-    escribir("INC-0004 y algo más");
+    // del código que se pidió.
+    escribir(`${CODIGO} y algo más`);
 
-    expect(estado.consultas).toEqual(['{"reference":"INC-0004"}']);
+    expect(estado.consultas).toEqual([`{"code":"${CODIGO}"}`]);
     expect(texto()).toContain("Cámara de estudio · HDC-3500");
     expect(texto()).not.toContain("No encontramos ninguna incidencia");
   });

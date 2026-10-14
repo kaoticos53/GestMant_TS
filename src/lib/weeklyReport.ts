@@ -66,6 +66,22 @@ export function weekdayLabel(weekday: number): string {
   return WEEKDAY_OPTIONS.find((item) => item.value === weekday)?.label ?? `Día ${weekday}`;
 }
 
+/**
+ * El día del resumen tal y como se guarda: el número redondeado, o `null` si no
+ * es un día de la semana. El aviso de por qué no vale lo escribe quien lo pide,
+ * que es quien sabe decirlo en su contexto.
+ */
+export function weeklyReportWeekday(value: number): number | null {
+  const day = Math.round(value);
+  if (!Number.isFinite(day) || day < MIN_WEEKDAY || day > MAX_WEEKDAY) {
+    return null;
+  }
+  return day;
+}
+
+/** Cuántas semanas enseña el histórico del panel, de la más nueva a la más vieja. */
+export const WEEKLY_REPORT_HISTORY_LIMIT = 6;
+
 /** Cuántas líneas de detalle lleva cada sección antes de resumir el resto. */
 export const MAX_DETAIL_LINES = 8;
 
@@ -199,6 +215,16 @@ export interface WeeklyDigest {
     byHand: number;
     items: WeeklyArchivedLine[];
   };
+}
+
+/**
+ * ¿Entra esta ficha en el resumen? Lo retirado no: se retiró por duplicado o por
+ * equivocado, así que no es trabajo del taller ni caso abierto —su rastro se lo
+ * queda la papelera— y el resumen de la semana no habla de ello. Vale igual para
+ * incidencias y para peticiones.
+ */
+export function countsInWeeklyReport(row: { deletedAt?: number }): boolean {
+  return row.deletedAt === undefined;
 }
 
 /** ¿La marca cae dentro de la semana que se resume? */
@@ -439,6 +465,20 @@ export function weeklyRecipients(
   return recipients;
 }
 
+/**
+ * ¿Por qué no se puede mandar el resumen? Sin destinatarios no hay a quién, y eso
+ * es un fallo de configuración, no de la pasarela: se dice tal cual para que
+ * quede escrito en el histórico en vez de parecer un fallo técnico. `null`
+ * cuando sí se puede mandar.
+ */
+export function weeklyDeliveryBlocker(
+  recipients: readonly string[],
+): string | null {
+  return recipients.length === 0
+    ? "Ningún rol de la lista tiene personas en activo con correo: añade destinatarios antes de enviar el resumen."
+    : null;
+}
+
 /* ------------------------------------------------------------------ */
 /* El correo                                                           */
 /* ------------------------------------------------------------------ */
@@ -626,4 +666,103 @@ export function renderWeeklyReport(
   ].join("\n");
 
   return { subject, text, html };
+}
+
+/* ------------------------------------------------------------------ */
+/* El resumen, compuesto                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Lo que hace falta para componer el resumen, ya cargado de la base: los
+ * documentos de la semana (las colas completas, que el archivo es una de las
+ * tres secciones), quién lo recibe y el margen vigente del aviso de trabajo sin
+ * constancia. Quien compone no toca la base de datos: se lo dan hecho.
+ */
+export interface WeeklyReportSource {
+  incidents: readonly WeeklyIncident[];
+  requests: readonly WeeklyRequest[];
+  recipients: readonly string[];
+  marginDays?: number;
+}
+
+/**
+ * El resumen de una semana: lo que se manda, lo que el panel enseña antes de
+ * mandarlo y lo que queda guardado.
+ *
+ * Es el mismo objeto en los tres sitios a propósito —lo que se enseña es
+ * exactamente lo que se manda, y lo que se guarda es lo que salió—, y se compone
+ * aquí, puro, para poder probarlo sin servidor. El backend solo carga los
+ * documentos y entrega el sobre.
+ */
+export interface WeeklyReport {
+  /** Una fila por semana: reenviar el mismo día actualiza esa misma. */
+  key: string;
+  from: number;
+  to: number;
+  /** «01 oct 2026 – 08 oct 2026», para el asunto y la cabecera. */
+  windowLabel: string;
+  marginDays: number;
+  subject: string;
+  text: string;
+  html: string;
+  recipients: string[];
+  /** Los tres números de la cabecera: trabajo, sin constancia y archivo. */
+  summary: {
+    touched: number;
+    withoutTrace: number;
+    archived: number;
+  };
+}
+
+/**
+ * Compone el resumen de la semana que termina en `now`: el trabajo hecho, lo que
+ * sigue sin constancia, lo archivado y el correo, todo en una pieza.
+ */
+export function composeWeeklyReport(
+  source: WeeklyReportSource,
+  options: { now?: number; appUrl?: string | null } = {},
+): WeeklyReport {
+  const now = options.now ?? Date.now();
+  const digest = weeklyDigest({
+    incidents: source.incidents,
+    requests: source.requests,
+    now,
+    marginDays: source.marginDays,
+  });
+  const email = renderWeeklyReport(digest, { appUrl: options.appUrl });
+  return {
+    key: weeklyReportKey(now),
+    from: digest.window.from,
+    to: digest.window.to,
+    windowLabel: digest.window.label,
+    marginDays: digest.marginDays,
+    subject: email.subject,
+    text: email.text,
+    html: email.html,
+    recipients: [...source.recipients],
+    summary: {
+      touched: digest.worked.incidentsTouched,
+      withoutTrace: digest.withoutTrace.length,
+      archived: digest.archived.total,
+    },
+  };
+}
+
+/**
+ * La decisión de la pasada diaria del cron: si hoy toca enviar y, si no, por qué
+ * no. Separar «está apagado» de «hoy no es el día» importa: son dos motivos
+ * distintos que acaban sin correo, y la pasada los cuenta por separado. Cuando
+ * sí toca, `reason` es lo que se anota si todo sale bien.
+ */
+export function weeklyScheduleDecision(
+  schedule: { enabled: boolean; weekday: number },
+  now: number = Date.now(),
+): { send: boolean; reason: string } {
+  if (!schedule.enabled) {
+    return { send: false, reason: "El resumen está apagado." };
+  }
+  if (utcWeekday(now) !== schedule.weekday) {
+    return { send: false, reason: "Hoy no es el día configurado." };
+  }
+  return { send: true, reason: "Enviado." };
 }

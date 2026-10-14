@@ -11,9 +11,20 @@ import {
   query,
 } from "./_generated/server";
 import { hasCapability, memberOrNull } from "./permissions";
+import { freeReference } from "./references";
+import {
+  canEditRequest,
+  isRequestInMotion,
+  nextRequestStatus,
+  type RequestAction,
+} from "../lib/requestFlow";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 import { trashPurgeAt } from "../lib/trash";
-import { priorityValidator, requestStatusValidator } from "./schema";
+import {
+  REQUEST_STATUSES,
+  priorityValidator,
+  requestStatusValidator,
+} from "./schema";
 import { trashRetentionDays } from "./trash";
 
 /** Toda la gestión de peticiones requiere sesión iniciada. */
@@ -142,12 +153,27 @@ function buildPart(payload: PartPayload) {
 async function assertPending(ctx: QueryCtx, requestId: Id<"partRequests">) {
   const request = await ctx.db.get(requestId);
   if (!request) throw new ConvexError("La petición ya no existe.");
-  if (request.status !== "pending") {
+  if (!canEditRequest(request.status)) {
     throw new ConvexError(
       `La petición ${request.reference} ya fue resuelta y no puede modificarse.`,
     );
   }
   return request;
+}
+
+/* La máquina de la petición («¿desde aquí se puede dar este paso?») vive en
+ * `lib/requestFlow`, compartida con los botones de la ficha y con la recepción
+ * de compras. Aquí solo quedan los avisos, que son de quien lo intenta. */
+
+/** El paso, o el aviso de por qué no se puede dar desde donde está. */
+function requireRequestStep(
+  request: Doc<"partRequests">,
+  action: RequestAction,
+  blocked: (status: Doc<"partRequests">["status"]) => string,
+): Doc<"partRequests">["status"] {
+  const next = nextRequestStatus(request.status, action, request.heldFrom);
+  if (next === null) throw new ConvexError(blocked(request.status));
+  return next;
 }
 
 /** URL de subida para fotos y documentos de una petición. */
@@ -279,8 +305,13 @@ export const create = mutation({
       });
     }
 
-    const existing = await ctx.db.query("partRequests").collect();
-    const reference = `PET-${String(existing.length + 1).padStart(4, "0")}`;
+    // La referencia se reparte con la regla de todas las series
+    // (`lib/references`): el número más alto ya usado, más uno. Nunca cuántas
+    // filas hay: la papelera borra de verdad lo retirado, y contando filas la
+    // siguiente petición heredaría una referencia ya gastada —la que quedó libre
+    // al borrar— que además sigue citada en las órdenes de compra que salieron de
+    // ella.
+    const reference = await freeReference(ctx, "partRequest");
 
     let equipmentText = args.equipment?.trim() ?? "";
     if (args.equipmentId) {
@@ -303,7 +334,7 @@ export const create = mutation({
       ...(equipmentText ? { equipment: equipmentText } : {}),
       ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
       priority: args.priority,
-      status: "pending",
+      status: REQUEST_STATUSES.PENDING,
       lines,
       ...(description ? { description } : {}),
       ...(attachments.length > 0 ? { attachments } : {}),
@@ -413,22 +444,23 @@ export const onHold = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status === "onHold") {
-      throw new ConvexError(
-        `La petición ${request.reference} ya está en espera.`,
-      );
-    }
-    if (request.status === "cancelled") {
-      throw new ConvexError(
-        `La petición ${request.reference} ya estaba cancelada.`,
-      );
-    }
+    const held = requireRequestStep(request, "hold", (status) =>
+      status === REQUEST_STATUSES.ON_HOLD
+        ? `La petición ${request.reference} ya está en espera.`
+        : status === REQUEST_STATUSES.CANCELLED
+          ? `La petición ${request.reference} ya estaba cancelada.`
+          : `Solo se pueden poner en espera las peticiones pendientes, aprobadas o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
+    );
 
     const now = Date.now();
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "onHold",
+      status: held,
       holdSinceAt: now,
+      // De dónde sale la suspensión: al reanudar se vuelve ahí. Es lo que evita
+      // que una petición aprobada —con el material ya descontado— vuelva a
+      // pendiente y se apruebe otra vez, descontando el material dos veces.
+      heldFrom: request.status,
       ...(reason ? { holdNote: reason } : {}),
     });
 
@@ -438,7 +470,7 @@ export const onHold = mutation({
         by: await actorName(ctx, decisionActor),
         decision: {
           reason:
-            request.status === "pendingSupplierQuote"
+            request.status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
               ? "pendingExternalQuote"
               : "other",
           note: reasonOneLine(reason),
@@ -456,16 +488,15 @@ export const resume = mutation({
     await requireDecisionCapability(ctx, "reanudar peticiones");
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status !== "onHold") {
-      throw new ConvexError(
-        `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
-      );
-    }
+    const resumed = requireRequestStep(request, "resume", () =>
+      `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
+    );
 
     await ctx.db.patch(args.requestId, {
-      status: "pending",
+      status: resumed,
       holdSinceAt: undefined,
       holdNote: undefined,
+      heldFrom: undefined,
     });
   },
 });
@@ -483,17 +514,15 @@ export const returnMaterial = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status !== "issued") {
-      throw new ConvexError(
-        `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${request.status}).`,
-      );
-    }
+    const returned = requireRequestStep(request, "returnMaterial", (status) =>
+      `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
+    );
 
     const now = Date.now();
     const name = await actorName(ctx, decisionActor);
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "returned",
+      status: returned,
       returnedAt: now,
       ...(reason ? { returnNote: reason } : {}),
     });
@@ -523,27 +552,22 @@ export const cancel = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status === "cancelled") {
-      throw new ConvexError(
-        `La petición ${request.reference} ya estaba cancelada.`,
-      );
-    }
-    if (request.status === "issued") {
-      throw new ConvexError(
-        `Antes de cancelar la petición ${request.reference}, devuélvela desde «Devolver material».`,
-      );
-    }
-    if (request.status === "approved" || request.status === "returned") {
-      throw new ConvexError(
-        `La petición ${request.reference} tiene material comprometido: para cancelarla primero gestiona la devolución o reintegro de stock.`,
-      );
-    }
+    const cancelled = requireRequestStep(request, "cancel", (status) =>
+      status === REQUEST_STATUSES.CANCELLED
+        ? `La petición ${request.reference} ya estaba cancelada.`
+        : status === REQUEST_STATUSES.ISSUED
+          ? `Antes de cancelar la petición ${request.reference}, devuélvela desde «Devolver material».`
+          : status === REQUEST_STATUSES.APPROVED ||
+              status === REQUEST_STATUSES.RETURNED
+            ? `La petición ${request.reference} tiene material comprometido: para cancelarla primero gestiona la devolución o reintegro de stock.`
+            : `Solo se pueden cancelar las peticiones pendientes, en espera o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
+    );
 
     const now = Date.now();
     const name = await actorName(ctx, decisionActor);
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "cancelled",
+      status: cancelled,
       cancelledAt: now,
       ...(reason ? { cancelNote: reason } : {}),
     });
@@ -571,20 +595,15 @@ export const requestQuote = mutation({
     await requireDecisionCapability(ctx, "pedir presupuesto externo");
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status === "pendingSupplierQuote") {
-      throw new ConvexError(
-        `La petición ${request.reference} ya está en modo presupuesto pendiente.`,
-      );
-    }
-    if (request.status !== "pending" && request.status !== "onHold") {
-      throw new ConvexError(
-        `Solo se puede pedir presupuesto externo desde pendiente o en espera (la ${request.reference} está en ${request.status}).`,
-      );
-    }
+    const quoted = requireRequestStep(request, "requestQuote", (status) =>
+      status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
+        ? `La petición ${request.reference} ya está en modo presupuesto pendiente.`
+        : `Solo se puede pedir presupuesto externo desde pendiente o en espera (la ${request.reference} está en ${status}).`,
+    );
 
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "pendingSupplierQuote",
+      status: quoted,
       quoteRequestedAt: Date.now(),
       ...(reason ? { decisionNote: reason } : {}),
     });
@@ -606,14 +625,9 @@ export const approve = mutation({
     if (!request) throw new ConvexError("La petición ya no existe.");
     // Pendiente o con el material ya recibido: lo comprado entra en el almacén
     // y se aprueba desde ahí, que es cuando hay existencias que apartar.
-    if (
-      request.status !== "pending" &&
-      request.status !== "materialReceived"
-    ) {
-      throw new ConvexError(
-        `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
-      );
-    }
+    const approved = requireRequestStep(request, "approve", () =>
+      `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
+    );
     if (request.lines.length === 0) {
       throw new ConvexError(
         `La petición ${request.reference} no tiene ningún repuesto asociado. Asocia el repuesto (o crea uno nuevo con el proveedor y su nº de parte) antes de aprobar.`,
@@ -647,7 +661,7 @@ export const approve = mutation({
 
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "approved",
+      status: approved,
       decidedBy: await actorName(ctx, userId),
       decidedAt: now,
       ...(reason ? { decisionNote: reason } : {}),
@@ -668,15 +682,13 @@ export const reject = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status !== "pending") {
-      throw new ConvexError(
-        `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
-      );
-    }
+    const rejected = requireRequestStep(request, "reject", () =>
+      `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
+    );
 
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "rejected",
+      status: rejected,
       decidedBy: await actorName(ctx, userId),
       decidedAt: Date.now(),
       ...(reason ? { decisionNote: reason } : {}),
@@ -696,7 +708,7 @@ export const archive = mutation({
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
     if (request.archivedAt !== undefined) return;
-    if (request.status === "pending" || request.status === "onHold") {
+    if (isRequestInMotion(request.status)) {
       throw new ConvexError(
         `La petición ${request.reference} sigue en movimiento: resuélvela, aprobárala o cancelala antes de archivarla.`,
       );
@@ -750,14 +762,12 @@ export const markIssued = mutation({
     await requireDecisionCapability(ctx, "marcar peticiones como entregadas");
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.status !== "approved") {
-      throw new ConvexError(
-        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${request.status}).`,
-      );
-    }
+    const issued = requireRequestStep(request, "issue", (status) =>
+      `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
+    );
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
-      status: "issued",
+      status: issued,
       issuedAt: Date.now(),
       ...(reason ? { issueNote: reason } : {}),
     });

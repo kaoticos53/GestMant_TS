@@ -39,8 +39,6 @@ import {
   DEFAULT_WORK_WITHOUT_TRACE_ROLES,
   alertReachesRole,
   getErrorMessage,
-  stockState,
-  workWithoutTraceDays,
 } from "@/lib/workshop";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
@@ -65,6 +63,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Users,
+  Workflow,
 } from "lucide-react";
 import {
   Suspense,
@@ -75,7 +74,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { GlobalSearch, type SearchHit } from "./dashboard/GlobalSearch";
 import { IncidentLookup } from "./dashboard/IncidentLookup";
@@ -105,6 +104,11 @@ const InventoryView = lazy(() =>
 );
 const ManualsView = lazy(() =>
   import("./dashboard/ManualsView").then((m) => ({ default: m.ManualsView })),
+);
+const MachinesView = lazy(() =>
+  import("./dashboard/MachinesView").then((m) => ({
+    default: m.MachinesView,
+  })),
 );
 const PermissionsView = lazy(() =>
   import("./dashboard/PermissionsView").then((m) => ({
@@ -151,6 +155,7 @@ type NavId =
   | "inventory"
   | "equipment"
   | "manuals"
+  | "machines"
   | "archive"
   | "audit"
   | "users"
@@ -334,20 +339,22 @@ export default function Dashboard() {
   // lateral y los permisos.
   const isGuest = user?.isAnonymous === true;
   const navigate = useNavigate();
-  const parts = useQuery(api.spareParts.list);
-  // Lo archivado viaja en la misma consulta (una sola suscripción): el día a
-  // día se queda con lo activo y el módulo de archivo con el resto. Así las
-  // fichas de equipo siguen resolviendo el enlace a una petición archivada.
-  const requests = useQuery(api.partRequests.list, { includeArchived: true });
-  const equipment = useQuery(api.equipment.list, {});
-  const manuals = useQuery(api.manuals.list);
-  const maintenance = useQuery(api.maintenance.list);
-  const incidents = useQuery(api.incidents.list, { includeArchived: true });
+  // El código que trae la dirección: es lo que pone el enlace del correo
+  // (`?codigo=A7K2QX9M`) para que a quien notificó no le toque teclearlo.
+  const [searchParams] = useSearchParams();
   const permissions = useQuery(api.permissions.myPermissions);
   // Ajustes del aviso de trabajo sin constancia: margen y a quién le llega.
   // Los lee cualquiera con sesión (el panel decide con ellos si enseña el
   // aviso); cambiarlos es cosa de quien coordina las incidencias.
   const alertSettings = useQuery(api.alerts.settings);
+  // El margen con el que se cuenta el trabajo sin constancia: mientras cargan
+  // los ajustes vale el de partida.
+  const alertDays = alertSettings?.days ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
+  // El armazón no carga los módulos: pide contado lo que enseña —las píldoras
+  // del menú, las tarjetas del resumen y el aviso de trabajo sin constancia— y
+  // cada módulo carga lo suyo al abrirse. El backend no cuenta lo que ese rol no
+  // puede ver, así que esto es el mismo número que salía de aquellas listas.
+  const summary = useQuery(api.dashboard.summary, { marginDays: alertDays });
   const seedDemoData = useMutation(api.seed.seedDemoData);
   const seedMoreDemoData = useMutation(api.seed.seedMoreDemoData);
   // Las fotos abandonadas del formulario y los PDF de los manuales son lo único
@@ -448,16 +455,10 @@ export default function Dashboard() {
   // El resumen semanal es de los mandos del taller: los mismos que coordinan
   // las incidencias o deciden las peticiones (igual que el archivo).
   const canConfigureReport = can("manageIncidents") || can("decideRequests");
-  // Compras: lo que el almacén no cubre. Se pregunta solo si se puede ver (el
-  // backend no contesta a quien no tiene la capacidad), y lo que llega son las
-  // tres listas del módulo: lo que espera por proveedor, las órdenes y las
-  // recepciones con su albarán.
+  // Compras: lo que el almacén no cubre. El módulo carga sus tres listas al
+  // abrirse —lo que espera por proveedor, las órdenes y las recepciones con su
+  // albarán—; aquí solo queda la capacidad, que decide si el módulo se enseña.
   const canSeePurchasing = can("viewPurchasing") || can("managePurchasing");
-  const purchasingArgs = canSeePurchasing ? {} : ("skip" as const);
-  const purchaseRequests = useQuery(
-    api.purchasing.listPurchaseRequests,
-    purchasingArgs,
-  );
   const needsRole =
     user !== undefined && user !== null && user.role === undefined;
 
@@ -525,6 +526,21 @@ export default function Dashboard() {
           { id: "manuals", label: "Manuales", icon: BookOpen, badge: 0 },
         ] as NavItem[])
       : []),
+    // Máquinas del taller: cómo avanza cada caso, leído de las tablas del
+    // código (`lib/machineSheet`), que es lo que responde «¿y esto qué puede
+    // hacer ahora?» sin abrir un fichero. No pide capacidad: no son datos, es el
+    // vocabulario con el que el panel explica sus propios botones. A una sesión
+    // de invitado no se le enseña porque no trabaja ningún caso.
+    ...(!isGuest
+      ? ([
+          {
+            id: "machines",
+            label: "Máquinas del taller",
+            icon: Workflow,
+            badge: 0,
+          },
+        ] as NavItem[])
+      : []),
     // Archivo: el histórico de lo que ya no está en el día a día. Lo ve quien
     // puede ver alguna de las dos colas que guarda.
     ...(can("viewIncidents") || can("viewRequests")
@@ -578,31 +594,9 @@ export default function Dashboard() {
       : []),
   ];
 
-  const loading =
-    parts === undefined ||
-    requests === undefined ||
-    equipment === undefined ||
-    maintenance === undefined ||
-    incidents === undefined;
-  const allParts = parts ?? [];
-  const allRequests = requests ?? [];
-  const allEquipment = equipment ?? [];
-  const allManuals = manuals ?? [];
-  const allMaintenance = maintenance ?? [];
-  const allIncidents = incidents ?? [];
-  // Cola viva (lo que se trabaja hoy) frente a lo archivado.
-  const activeRequests = allRequests.filter(
-    (request) => request.archivedAt === undefined,
-  );
-  const archivedRequests = allRequests.filter(
-    (request) => request.archivedAt !== undefined,
-  );
-  const activeIncidents = allIncidents.filter(
-    (incident) => incident.archivedAt === undefined,
-  );
-  const archivedIncidents = allIncidents.filter(
-    (incident) => incident.archivedAt !== undefined,
-  );
+  // Mientras el contador no ha llegado no se enseña una cifra que todavía no es:
+  // se enseña el esqueleto, como antes mientras cargaban las listas.
+  const loading = summary === undefined;
 
   // Si el rol cambia y el módulo activo deja de estar permitido, se muestra
   // la cola (valor derivado, sin efectos que re-rendericen en cascada).
@@ -613,42 +607,33 @@ export default function Dashboard() {
     : (navItems[0]?.id ?? "profile");
   const activeTab: NavId = activeAllowed ? tab : fallbackTab;
 
-  const pendingRequests = activeRequests.filter((r) => r.status === "pending");
-  const urgentPending = pendingRequests.filter((r) => r.priority === "urgent");
-  const withoutReference = pendingRequests.filter(
-    (r) => r.lines.length === 0,
-  ).length;
-  const issuedRequests = activeRequests.filter((r) => r.status === "issued");
-  // Misma regla que el catálogo (`stockState`): lo que cuenta esta tarjeta es
-  // exactamente lo que enseña el filtro «solo stock bajo» del módulo.
-  const lowStockParts = allParts.filter(
-    (p) => stockState(p.stock, p.minStock) !== "ok",
-  );
+  // Lo que cuentan las tarjetas del resumen, ya contado por el backend. El stock
+  // bajo sale de la misma regla que el filtro «solo stock bajo» del catálogo
+  // (`stockState`, la que aplica el contador), para que la tarjeta y el módulo
+  // digan lo mismo.
+  const pendingRequests = summary?.requests.pending ?? 0;
+  const urgentPending = summary?.requests.urgent ?? 0;
+  const withoutReference = summary?.requests.withoutReference ?? 0;
+  const issuedRequests = summary?.requests.issued ?? 0;
+  const lowStockParts = summary?.parts.lowStock ?? 0;
+  const totalParts = summary?.parts.total ?? 0;
   const isEmpty =
-    !loading && allParts.length === 0 && activeRequests.length === 0;
+    !loading && totalParts === 0 && (summary?.requests.active ?? 0) === 0;
   // El aviso de «todavía no hay datos» solo sale si no se ha pedido empezar sin
   // muestra: en cuanto se elige el taller vacío, mandan los módulos.
   const showEmptyNotice = isEmpty && !startedEmpty;
 
-  // Margen y audiencia del aviso: lo último que dejó configurado quien
-  // coordina (mientras cargan los ajustes valen los valores de partida).
-  const alertDays = alertSettings?.days ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
+  // La audiencia del aviso: lo último que dejó configurado quien coordina
+  // (mientras cargan los ajustes valen los de partida).
   const alertRoleKeys =
     alertSettings?.roleKeys ?? DEFAULT_WORK_WITHOUT_TRACE_ROLES;
   const seesAlert = alertReachesRole(role, alertRoleKeys);
 
-  // Trabajo en curso sin constancia: incidencias en manos de un técnico desde
-  // hace días y sin ninguna nota suya. Es el aviso que busca el coordinador
-  // para detectar lo que avanza sin dejar rastro (la regla vive en `workshop`,
-  // compartida con sus pruebas). Se ordena por lo más parado primero.
-  const staleWork = activeIncidents
-    .flatMap((incident) => {
-      // El reloj lo pone la propia regla (hoy por defecto); aquí solo se le
-      // adelanta el margen que dejó configurado quien coordina.
-      const days = workWithoutTraceDays(incident, undefined, alertDays);
-      return days === null ? [] : [{ incident, days }];
-    })
-    .sort((a, b) => b.days - a.days);
+  // Trabajo en curso sin constancia: lo cuenta el backend con la misma regla
+  // (`workWithoutTraceDays`, compartida con sus pruebas) y llega ya ordenado de
+  // lo más parado a lo menos. El margen viaja como argumento del contador, así
+  // que lo que cuenta y lo que escribe el aviso son el mismo número.
+  const staleWork = summary?.staleWork ?? [];
 
   // Cerrar el aviso no es silenciarlo: se recuerda lo avisado, así que vuelve
   // en cuanto aparezca trabajo parado que aún no se había visto (o cambie el
@@ -678,19 +663,19 @@ export default function Dashboard() {
     });
   };
 
-  // Contadores de las píldoras del menú (usan los valores ya calculados).
+  // Contadores de las píldoras del menú: los cuenta el armazón, sin cargar los
+  // módulos.
   const navBadges: Record<NavId, number> = {
-    incidents: activeIncidents.filter((item) => item.status === "reported")
-      .length,
-    requests: pendingRequests.length,
+    incidents: summary?.incidents.reported ?? 0,
+    requests: pendingRequests,
     // La píldora de compras cuenta lo que espera a que alguien monte la orden,
     // que es el trabajo pendiente del responsable.
-    purchasing: (purchaseRequests?.requests ?? []).filter(
-      (row) => row.status === "pending",
-    ).length,
+    purchasing: summary?.purchasing.pending ?? 0,
     inventory: 0,
-    equipment: allEquipment.length,
-    manuals: allManuals.length,
+    equipment: summary?.equipment ?? 0,
+    manuals: summary?.manuals ?? 0,
+    // Las máquinas no son una cola: no hay nada que contar.
+    machines: 0,
     archive: 0,
     audit: 0,
     users: 0,
@@ -843,14 +828,12 @@ export default function Dashboard() {
       ? [
           {
             label: "Peticiones pendientes",
-            value: pendingRequests.length,
+            value: pendingRequests,
             hint:
-              pendingRequests.length === 0
+              pendingRequests === 0
                 ? "Cola revisada, nada que aprobar"
                 : [
-                    urgentPending.length > 0
-                      ? `${urgentPending.length} urgentes`
-                      : null,
+                    urgentPending > 0 ? `${urgentPending} urgentes` : null,
                     withoutReference > 0
                       ? `${withoutReference} sin repuesto`
                       : null,
@@ -867,9 +850,9 @@ export default function Dashboard() {
       ? [
           {
             label: "Repuestos con stock bajo",
-            value: lowStockParts.length,
+            value: lowStockParts,
             hint:
-              lowStockParts.length === 0
+              lowStockParts === 0
                 ? "Todo por encima del mínimo"
                 : "Por debajo del mínimo",
             icon: CircleAlert,
@@ -878,7 +861,7 @@ export default function Dashboard() {
           },
           {
             label: "Repuestos en catálogo",
-            value: allParts.length,
+            value: totalParts,
             hint: "Repuestos gestionados",
             icon: Boxes,
             iconClassName: "bg-muted text-muted-foreground",
@@ -890,7 +873,7 @@ export default function Dashboard() {
       ? [
           {
             label: "Peticiones entregadas",
-            value: issuedRequests.length,
+            value: issuedRequests,
             hint: "Material ya en manos del técnico",
             icon: PackageCheck,
             iconClassName: "bg-emerald-600/10 text-emerald-700",
@@ -907,6 +890,7 @@ export default function Dashboard() {
     activeTab === "permissions" ||
     activeTab === "settings" ||
     activeTab === "archive" ||
+    activeTab === "machines" ||
     activeTab === "audit" ||
     stats.length === 0;
 
@@ -1076,14 +1060,10 @@ export default function Dashboard() {
 
         {/* Búsqueda global. El invitado no la tiene: sus listas llegan vacías,
             así que buscar ahí no encontraría ni la incidencia que sí puede
-            seguir; su puerta es la consulta por referencia. */}
+            seguir; su puerta es la consulta por código. */}
         {!isGuest && (
           <div className="border-b border-border/70 p-3">
             <GlobalSearch
-              incidents={activeIncidents}
-              requests={activeRequests}
-              parts={allParts}
-              equipment={allEquipment}
               canSearchCatalog={can("viewInventory")}
               onSelect={handleSearchSelect}
             />
@@ -1298,10 +1278,6 @@ export default function Dashboard() {
           {!isGuest && (
             <div className="border-t border-border/70 px-3 py-2">
               <GlobalSearch
-                incidents={allIncidents}
-                requests={allRequests}
-                parts={allParts}
-                equipment={allEquipment}
                 canSearchCatalog={can("viewInventory")}
                 onSelect={handleSearchSelect}
               />
@@ -1326,11 +1302,13 @@ export default function Dashboard() {
                           ? "Archivo del taller"
                           : activeTab === "manuals"
                             ? "Manuales del taller"
-                            : "Incidencias, peticiones y stock del taller"}
+                            : activeTab === "machines"
+                              ? "Las máquinas del taller"
+                              : "Incidencias, peticiones y stock del taller"}
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
                 {isGuest
-                  ? "Has entrado como invitado: puedes seguir una incidencia con la referencia que te dieron al notificarla. El resto del taller es para quien entra con su cuenta."
+                  ? "Has entrado como invitado: puedes seguir una incidencia con el código que te dieron al notificarla. El resto del taller es para quien entra con su cuenta."
                   : activeTab === "profile"
                     ? "Tu ficha en el taller: datos de contacto, incidencias asignadas, peticiones y avisos."
                     : activeTab === "permissions"
@@ -1341,7 +1319,9 @@ export default function Dashboard() {
                           ? "El archivo del taller: incidencias cerradas y peticiones ya decididas que ya no están en el día a día. Búscalas aquí o recupera las que vuelvan a hacer falta."
                           : activeTab === "manuals"
                             ? "La documentación de los equipos: los manuales en PDF y las notas del taller, clasificados por tipo, marca y modelo. Descárgalos o consulta los de un equipo desde su ficha."
-                            : "Revisa las peticiones de plató, realización y audio, aprueba el material y mantén el catálogo del almacén AV siempre al día."}
+                            : activeTab === "machines"
+                              ? "Cómo avanza cada caso —la incidencia, la petición de repuestos y la compra— con los estados y los pasos que dice el código: de dónde a dónde se puede ir y por qué no desde otro sitio."
+                              : "Revisa las peticiones de plató, realización y audio, aprueba el material y mantén el catálogo del almacén AV siempre al día."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1483,12 +1463,15 @@ export default function Dashboard() {
                   Sigue tu incidencia
                 </h2>
                 <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Estás en una sesión de invitado: escribe la referencia que te
+                  Estás en una sesión de invitado: escribe el código que te
                   dieron al notificarla y verás en qué punto va. Es lo único que
                   un invitado puede consultar; la cola del taller, las
                   peticiones y el almacén son para quien entra con su cuenta.
                 </p>
-                <IncidentLookup className="mx-auto mt-5 max-w-md" />
+                <IncidentLookup
+                  className="mx-auto mt-5 max-w-md"
+                  initialCode={searchParams.get("codigo")}
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -1551,8 +1534,6 @@ export default function Dashboard() {
                 {activeTab === "profile" ? (
                   <ProfileView
                     user={user}
-                    incidents={activeIncidents}
-                    requests={activeRequests}
                     onOpenIncidents={() => goToTab("incidents")}
                     onOpenRequests={() => goToTab("requests")}
                   />
@@ -1564,9 +1545,6 @@ export default function Dashboard() {
                 ) : activeTab === "incidents" ? (
                   <IncidentsView
                     key={`incidents-${incidentsViewKey}`}
-                    incidents={activeIncidents}
-                    equipment={allEquipment}
-                    requests={allRequests}
                     currentUserId={user?._id ?? null}
                     currentUserName={displayName}
                     canAssign={can("manageIncidents")}
@@ -1575,9 +1553,6 @@ export default function Dashboard() {
                 ) : activeTab === "requests" ? (
                   <RequestsView
                     key={`requests-${requestsViewKey}`}
-                    requests={activeRequests}
-                    parts={allParts}
-                    equipment={allEquipment}
                     equipmentFilter={requestsEquipmentFilter}
                     onEquipmentFilterChange={setRequestsEquipmentFilter}
                     canManage={can("decideRequests")}
@@ -1586,17 +1561,10 @@ export default function Dashboard() {
                     initialFilter={requestsInitialFilter}
                   />
                 ) : activeTab === "purchasing" && canSeePurchasing ? (
-                  <PurchasingView
-                    purchaseRequests={purchaseRequests?.requests ?? []}
-                    partRequests={allRequests}
-                    parts={allParts}
-                    canManage={can("managePurchasing")}
-                  />
+                  <PurchasingView canManage={can("managePurchasing")} />
                 ) : activeTab === "inventory" && can("viewInventory") ? (
                   <InventoryView
                     key={`inventory-${inventoryViewKey}`}
-                    parts={allParts}
-                    equipment={allEquipment}
                     canManage={can("manageInventory")}
                     currentUserId={user?._id ?? null}
                     initialSearch={inventoryInitialSearch}
@@ -1604,19 +1572,14 @@ export default function Dashboard() {
                   />
                 ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
                   <ManualsView
-                    manuals={allManuals}
-                    equipment={allEquipment}
                     canManage={can("manageManuals")}
                     currentUserId={user?._id ?? null}
                   />
+                ) : activeTab === "machines" && !isGuest ? (
+                  <MachinesView />
                 ) : activeTab === "equipment" && can("viewEquipment") ? (
                   <EquipmentView
                     key={`equipment-${equipmentViewKey}`}
-                    equipment={allEquipment}
-                    parts={allParts}
-                    requests={allRequests}
-                    maintenance={allMaintenance}
-                    manuals={allManuals}
                     canManage={can("manageEquipment")}
                     canWriteManuals={can("viewManuals") && !isGuest}
                     canManageManuals={can("manageManuals")}
@@ -1631,10 +1594,6 @@ export default function Dashboard() {
                   />
                 ) : activeTab === "archive" ? (
                   <ArchiveView
-                    incidents={archivedIncidents}
-                    requests={archivedRequests}
-                    activeIncidents={activeIncidents}
-                    activeRequests={activeRequests}
                     canArchiveIncidents={can("manageIncidents")}
                     canArchiveRequests={can("decideRequests")}
                     onOpenSettings={
@@ -1645,8 +1604,6 @@ export default function Dashboard() {
                   />
                 ) : activeTab === "settings" ? (
                   <WorkshopSettingsView
-                    incidents={activeIncidents}
-                    requests={activeRequests}
                     canManageArchive={
                       can("manageIncidents") || can("decideRequests")
                     }

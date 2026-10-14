@@ -21,6 +21,18 @@ permisos—, la lista cerrada de términos está en
 **[GLOSARIO.md](./GLOSARIO.md)**: qué palabra se usa para cada cosa y cuáles no
 se usan.
 
+Y el ciclo de vida de las tres cosas que se mueven en el taller —la incidencia, la
+petición de repuestos y la compra—, dibujado con quién puede dar cada paso, está
+en **[MAQUINAS.md](./MAQUINAS.md)**: lo escriben las tablas de `src/lib/*Flow.ts`
+y [maquinas.test.ts](./tests/maquinas.test.ts) avisa si el dibujo se queda atrás. La
+app pinta esas mismas tablas —generadas del código— en la pantalla **«Máquinas del
+taller»**, para no tener que abrir ningún fichero para saber dónde está un caso.
+
+Y las dos fronteras que el código cruza a diario —los módulos puros de `src/lib`,
+que se prueban solos y no arrastran Convex, y los callbacks de `src/convex`, que
+escriben lo que la máquina dijo en vez de redecidir sus reglas— las vigila
+[arquitectura.test.ts](./tests/arquitectura.test.ts).
+
 Y si lo que quieres es dejar el taller corriendo dentro de casa —en un **NAS
 Synology**, con Container Manager, el backend en contenedores y un certificado de
 Let's Encrypt—, la guía paso a paso está en **[SYNOLOGY.md](./SYNOLOGY.md)**, con

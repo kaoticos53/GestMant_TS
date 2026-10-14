@@ -625,6 +625,143 @@ describe("permisos y avisos de las compras", () => {
 /* Las cuentas de la pantalla (sin navegador)                          */
 /* ------------------------------------------------------------------ */
 
+describe("los pasos que no son legales: la misma máquina en la pantalla y en el servidor", () => {
+  /**
+   * Una compra pedida y metida en su orden, que es el punto de partida de casi
+   * todo lo que sigue. Devuelve las piezas para poder recepcionar o anular.
+   */
+  async function conOrden(cantidad = 2) {
+    const mundo = await taller();
+    const part = await seedPart(mundo.t, { supplier: "Electro" });
+    const request = await pedir(mundo, [
+      { sparePartId: part, quantity: cantidad },
+    ]);
+    const authed = mundo.como(mundo.responsable);
+    await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: request._id,
+    });
+    const { requests } = await authed.query(
+      api.purchasing.listPurchaseRequests,
+      {},
+    );
+    const compra = requests[0];
+    const { orderId } = await authed.mutation(api.purchasing.createOrder, {
+      purchaseRequestIds: [compra._id],
+    });
+    return { mundo, authed, part, request, compra, orderId };
+  }
+
+  test("lo que ya está en una orden no cambia de proveedor ni se retira", async () => {
+    const { mundo, authed, compra } = await conOrden();
+
+    // Dejó de estar sin tratar al entrar en la orden: el proveedor es la clave de
+    // la orden y la compra ya está en marcha.
+    await expectConvexError(
+      authed.mutation(api.purchasing.setSupplier, {
+        id: compra._id,
+        supplier: "Ferretería Norte",
+      }),
+      "ya está en una orden",
+    );
+    await expectConvexError(
+      authed.mutation(api.purchasing.cancelPurchaseRequest, {
+        id: compra._id,
+        note: "Ya no hace falta",
+      }),
+      "ya no está sin tratar",
+    );
+    // La nota sí: mientras no esté cerrada, la ficha la deja anotar.
+    await authed.mutation(api.purchasing.setNote, {
+      id: compra._id,
+      notes: "Preguntar el plazo",
+    });
+    expect((await mundo.t.run((ctx) => ctx.db.get(compra._id)))?.notes).toBe(
+      "Preguntar el plazo",
+    );
+  });
+
+  test("de una orden completada no se recepciona, no se anula y no se anotan sus artículos", async () => {
+    const { mundo, authed, compra, orderId } = await conOrden();
+    await authed.mutation(api.purchasing.receive, {
+      orderId,
+      items: [{ purchaseRequestId: compra._id, quantity: 2 }],
+      deliveryNote: await albaran(mundo.t, "albaran-entero.pdf"),
+    });
+
+    await expectConvexError(
+      authed.mutation(api.purchasing.receive, {
+        orderId,
+        items: [{ purchaseRequestId: compra._id, quantity: 1 }],
+        deliveryNote: await albaran(mundo.t),
+      }),
+      "ya está completada",
+    );
+    await expectConvexError(
+      authed.mutation(api.purchasing.cancelOrder, {
+        orderId,
+        note: "Me he equivocado",
+      }),
+      "ya está completada",
+    );
+    await expectConvexError(
+      authed.mutation(api.purchasing.setLineNote, {
+        orderId,
+        purchaseRequestId: compra._id,
+        note: "Otra cosa",
+      }),
+      "está cerrada",
+    );
+    // Y la petición de compra se cerró sola al llegar su material.
+    expect((await mundo.t.run((ctx) => ctx.db.get(compra._id)))?.status).toBe(
+      "received",
+    );
+  });
+
+  test("de una orden anulada no se recepciona nada, y anularla otra vez no es un error", async () => {
+    const { mundo, authed, compra, orderId } = await conOrden();
+    await authed.mutation(api.purchasing.cancelOrder, {
+      orderId,
+      note: "El proveedor ya no sirve",
+    });
+
+    await expectConvexError(
+      authed.mutation(api.purchasing.receive, {
+        orderId,
+        items: [{ purchaseRequestId: compra._id, quantity: 1 }],
+        deliveryNote: await albaran(mundo.t),
+      }),
+      "está anulada",
+    );
+    // Volver a anularla devuelve cero: no es un error, ya está anulada.
+    const otra = await authed.mutation(api.purchasing.cancelOrder, {
+      orderId,
+      note: "Otra vez",
+    });
+    expect(otra.returned).toBe(0);
+    // Y la compra volvió a la cola, sin orden: es lo que espera a que se monte
+    // otra (o se retire).
+    const vuelta = await mundo.t.run((ctx) => ctx.db.get(compra._id));
+    expect(vuelta?.status).toBe("pending");
+    expect(vuelta?.orderId).toBeUndefined();
+  });
+
+  test("de una petición de repuesto ya resuelta no se compra nada", async () => {
+    const mundo = await taller();
+    const part = await seedPart(mundo.t, { stock: 5 });
+    const request = await pedir(mundo, [{ sparePartId: part, quantity: 2 }]);
+    const authed = mundo.como(mundo.responsable);
+
+    // Con material en el almacén, la petición se aprueba: ya no espera nada.
+    await authed.mutation(api.partRequests.approve, { requestId: request._id });
+    await expectConvexError(
+      authed.mutation(api.purchasing.requestPurchase, {
+        requestId: request._id,
+      }),
+      "ya está resuelta",
+    );
+  });
+});
+
 describe("las cuentas del módulo de compras", () => {
   const compra = (
     overrides: Partial<{

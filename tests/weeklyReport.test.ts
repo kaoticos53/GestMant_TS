@@ -4,16 +4,23 @@ import {
   DEFAULT_WEEKLY_REPORT_ROLES,
   MAX_DETAIL_LINES,
   WEEK_MS,
+  composeWeeklyReport,
+  countsInWeeklyReport,
   renderWeeklyReport,
   utcWeekday,
+  weeklyDeliveryBlocker,
   weeklyDigest,
   weeklyRecipients,
   weeklyReportKey,
+  weeklyReportWeekday,
   weeklyReportWindow,
+  weeklyScheduleDecision,
   weekdayLabel,
   type WeeklyIncident,
+  type WeeklyReportSource,
   type WeeklyRequest,
 } from "../src/lib/weeklyReport";
+import { DEFAULT_WORK_WITHOUT_TRACE_DAYS } from "../src/lib/workshop";
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Jueves 8 de octubre de 2026, 12:00 UTC: el «ahora» de todas las pruebas. */
@@ -461,5 +468,154 @@ describe("renderWeeklyReport — el correo", () => {
     const correo = renderWeeklyReport(muchas);
     expect(correo.text).toContain("y 2 más cerradas.");
     expect(correo.text).toContain("10 con resolución");
+  });
+});
+
+describe("countsInWeeklyReport — lo retirado no entra en el resumen", () => {
+  test("la ficha viva sí y la retirada no", () => {
+    // Un aviso duplicado que se retiró no es trabajo del taller ni caso abierto:
+    // el resumen de la semana no habla de él.
+    expect(countsInWeeklyReport({})).toBe(true);
+    expect(countsInWeeklyReport({ deletedAt: undefined })).toBe(true);
+    expect(countsInWeeklyReport({ deletedAt: AHORA })).toBe(false);
+  });
+});
+
+describe("weeklyReportWeekday — qué días valen", () => {
+  test("el día redondeado, dentro de la semana", () => {
+    expect(weeklyReportWeekday(1)).toBe(1);
+    expect(weeklyReportWeekday(7)).toBe(7);
+    expect(weeklyReportWeekday(2.4)).toBe(2);
+  });
+
+  test("fuera de la semana no hay día, y el cero tampoco es lunes", () => {
+    for (const value of [0, 8, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(weeklyReportWeekday(value), `«${value}»`).toBeNull();
+    }
+  });
+});
+
+describe("weeklyDeliveryBlocker — cuándo no hay a quién mandarlo", () => {
+  test("con destinatarios se puede mandar", () => {
+    expect(weeklyDeliveryBlocker(["coord@taller.es"])).toBeNull();
+  });
+
+  test("sin nadie en la lista lo dice como fallo de configuración, no de la pasarela", () => {
+    const blocker = weeklyDeliveryBlocker([]);
+    expect(blocker).toContain("Ningún rol de la lista tiene personas en activo");
+    expect(blocker).toContain("añade destinatarios");
+  });
+});
+
+describe("weeklyScheduleDecision — la pasada del cron", () => {
+  test("apagado no manda, y lo dice", () => {
+    expect(
+      weeklyScheduleDecision({ enabled: false, weekday: utcWeekday(AHORA) }, AHORA),
+    ).toEqual({ send: false, reason: "El resumen está apagado." });
+  });
+
+  test("otro día tampoco, y no es lo mismo que estar apagado", () => {
+    const otroDia = utcWeekday(AHORA) === 1 ? 2 : 1;
+    expect(
+      weeklyScheduleDecision({ enabled: true, weekday: otroDia }, AHORA),
+    ).toEqual({ send: false, reason: "Hoy no es el día configurado." });
+  });
+
+  test("el día que toca sí, y deja dicho lo que se anota si todo sale bien", () => {
+    expect(
+      weeklyScheduleDecision({ enabled: true, weekday: utcWeekday(AHORA) }, AHORA),
+    ).toEqual({ send: true, reason: "Enviado." });
+  });
+});
+
+describe("composeWeeklyReport — el resumen entero, de una pieza", () => {
+  const APP = "http://localhost:5173/";
+  const source: WeeklyReportSource = {
+    incidents: [
+      incident({ reference: "INC-0100", reportedAt: AHORA - DAY }),
+      incident({
+        reference: "INC-0101",
+        status: "assigned",
+        assigneeName: "Iván Torres",
+        history: [
+          { status: "reported", at: AHORA - 9 * DAY, by: "Laura Peña" },
+          { status: "assigned", at: AHORA - 8 * DAY, by: "Elena Vidal" },
+        ],
+      }),
+      incident({
+        reference: "INC-0102",
+        status: "resolved",
+        archivedAt: AHORA - DAY / 2,
+        archivedBy: AUTO_ARCHIVE_BY,
+        history: [
+          { status: "reported", at: AHORA - 6 * DAY, by: "Laura Peña" },
+          { status: "resolved", at: AHORA - DAY, by: "Iván Torres" },
+        ],
+      }),
+    ],
+    requests: [],
+    recipients: ["coord@taller.es"],
+    marginDays: 3,
+  };
+
+  test("lleva la semana, el asunto y los destinatarios que le pasan", () => {
+    const report = composeWeeklyReport(source, { now: AHORA, appUrl: APP });
+
+    expect(report.key).toBe("week-2026-10-01");
+    expect(report.from).toBe(AHORA - WEEK_MS);
+    expect(report.to).toBe(AHORA);
+    expect(report.windowLabel).toBe("01 oct 2026 – 08 oct 2026");
+    expect(report.marginDays).toBe(3);
+    expect(report.recipients).toEqual(["coord@taller.es"]);
+    expect(report.subject).toBe(
+      "Resumen semanal del taller · 01 oct 2026 – 08 oct 2026",
+    );
+  });
+
+  test("los tres números de la cabecera son los que cuenta el propio correo", () => {
+    const report = composeWeeklyReport(source, { now: AHORA, appUrl: APP });
+
+    expect(report.summary).toEqual({
+      touched: 3,
+      withoutTrace: 1,
+      archived: 1,
+    });
+    // Lo que el panel enseña en la cabecera sale del mismo cuerpo que se manda.
+    expect(report.text).toContain(
+      `Incidencias con movimiento: ${report.summary.touched}`,
+    );
+    expect(report.text).toContain("1 ficha al archivo");
+    expect(report.text).toContain("INC-0101 · Asignada · Iván Torres · 8 días en curso");
+    expect(report.text).toContain(`Panel del taller: ${APP.replace(/\/+$/, "")}`);
+  });
+
+  test("sin margen dicho usa el de partida del aviso de trabajo sin constancia", () => {
+    const report = composeWeeklyReport(
+      { incidents: [], requests: [], recipients: [] },
+      { now: AHORA },
+    );
+
+    expect(report.marginDays).toBe(DEFAULT_WORK_WITHOUT_TRACE_DAYS);
+    expect(report.summary).toEqual({ touched: 0, withoutTrace: 0, archived: 0 });
+    expect(report.text).toContain("Semana sin movimientos registrados");
+  });
+
+  test("el texto es el correo de esa misma semana, no otro parecido", () => {
+    const report = composeWeeklyReport(source, { now: AHORA, appUrl: APP });
+    const email = renderWeeklyReport(
+      weeklyDigest({
+        incidents: source.incidents,
+        requests: source.requests,
+        now: AHORA,
+        marginDays: 3,
+      }),
+      { appUrl: APP },
+    );
+
+    // El panel enseña la vista previa de lo que se manda: si estos dos se
+    // separan, lo que se aprueba en pantalla no es lo que sale por correo.
+    expect(report.subject).toBe(email.subject);
+    expect(report.text).toBe(email.text);
+    expect(report.html).toBe(email.html);
   });
 });

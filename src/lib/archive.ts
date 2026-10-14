@@ -6,6 +6,9 @@
  * verdad se vayan separando.
  */
 
+import { isClosedIncident } from "./incidentFlow";
+import { isRequestInMotion } from "./requestFlow";
+
 /** Antigüedad con la que nace el archivado automático (meses). */
 export const DEFAULT_AFTER_MONTHS = 12;
 
@@ -40,25 +43,10 @@ export function afterMonthsLabel(months: number): string {
 /* Qué se archiva y qué no                                             */
 /* ------------------------------------------------------------------ */
 
-/** Cómo se llama una incidencia cerrada en el esquema del expediente. */
-const CLOSED_INCIDENT_STATUSES = ["resolved", "unresolved"];
-
-/** Estados de una petición que aún se mueve; ninguna se archiva. */
-const MOVING_REQUEST_STATUSES = ["pending", "onHold"];
-
-/** ¿Está cerrada? El archivo es solo para lo ya terminado. */
-export function isClosedIncident(status: string): boolean {
-  return CLOSED_INCIDENT_STATUSES.includes(status);
-}
-
-/**
- * ¿Sigue en movimiento? Una petición pendiente o en espera no se archiva ni a
- * mano ni por la pasada de la noche: «en espera» es una decisión a medias, no
- * un trabajo terminado.
- */
-export function isRequestInMotion(status: string): boolean {
-  return MOVING_REQUEST_STATUSES.includes(status);
-}
+/* Las dos preguntas que decide este módulo —si una incidencia está cerrada y si
+ * una petición sigue en movimiento— son de la máquina de cada flujo, no del
+ * archivo: aquí solo se dan por sabidas. Vivían aquí, y una de ellas tenía además
+ * una copia dentro de `convex/incidents.ts`; ahora hay una sola de cada. */
 
 /** Lo mínimo que necesita la regla de archivo de una petición. */
 export interface ArchivableRequest {

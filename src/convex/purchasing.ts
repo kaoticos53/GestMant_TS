@@ -1,9 +1,27 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
+import { QueryCtx, mutation, query } from "./_generated/server";
 import { hasAnyCapability, hasCapability } from "./permissions";
 import { notifyUsers } from "./notify";
+import { freeReference } from "./references";
+import {
+  canAdvancePurchaseOrder,
+  isPurchaseOrderClosed,
+  isPurchaseRequestAwaitingDelivery,
+  isPurchaseRequestClosed,
+  isPurchaseRequestUntreated,
+  nextPurchaseRequestStatus,
+  purchaseOrderStatusAfterReceiving,
+  purchaseRequestReceivedStatus,
+} from "../lib/purchaseFlow";
+import { canBuyForRequest, nextRequestStatus } from "../lib/requestFlow";
+import {
+  PURCHASE_ORDER_STATUSES,
+  PURCHASE_REQUEST_STATUSES,
+  purchaseOrderStatusValidator,
+  purchaseRequestStatusValidator,
+} from "./schema";
 
 /**
  * Compras: lo que el almacén no puede cubrir.
@@ -82,25 +100,6 @@ async function actorName(ctx: QueryCtx, userId: Id<"users">) {
   return user?.name || user?.email || "Responsable de repuestos";
 }
 
-/**
- * El número que sigue para una serie («PC-0001», «OC-0002»). Se mira el más alto
- * ya usado y no cuántos hay: borrar una petición no reutiliza su número, que es
- * lo que se espera de un documento que se lee por su número.
- */
-async function nextReference(
-  ctx: MutationCtx,
-  table: "purchaseRequests" | "purchaseOrders",
-  prefix: string,
-): Promise<string> {
-  const rows = await ctx.db.query(table).collect();
-  let max = 0;
-  for (const row of rows) {
-    const match = /^[A-Z]+-(\d+)$/.exec(row.reference);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
-}
-
 /** El proveedor con el que se agrupa: si el repuesto no dice ninguno, se pide. */
 const NO_SUPPLIER = "Sin proveedor";
 
@@ -165,14 +164,10 @@ async function missingLines(
  */
 export const listPurchaseRequests = query({
   args: {
-    status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("ordered"),
-        v.literal("received"),
-        v.literal("cancelled"),
-      ),
-    ),
+    // Los estados que se pueden filtrar son los de la tabla: se declaran una vez
+    // en `schema.ts` y aquí se reutilizan, para que no haya dos listas que
+    // puedan separarse (`tests/arquitectura.test.ts`).
+    status: v.optional(purchaseRequestStatusValidator),
     supplier: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -202,7 +197,9 @@ export const listPurchaseRequests = query({
       requests: number;
     }[] = [];
     for (const row of requests) {
-      if (row.status !== "pending") continue;
+      // «Sin tratar»: lo que espera a que alguien monte la orden, que es de donde
+      // se puede pedir (`lib/purchaseFlow`).
+      if (!isPurchaseRequestUntreated(row.status)) continue;
       const last = groups[groups.length - 1];
       if (last && last.supplier === row.supplier) {
         last.items.push(row);
@@ -225,14 +222,9 @@ export const listPurchaseRequests = query({
 /** Las órdenes de compra, de la más reciente a la más antigua. */
 export const listOrders = query({
   args: {
-    status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("partial"),
-        v.literal("completed"),
-        v.literal("cancelled"),
-      ),
-    ),
+    // Igual que en las peticiones de compra: la tabla de estados de la orden es
+    // la de `schema.ts`, no una copia local.
+    status: v.optional(purchaseOrderStatusValidator),
   },
   handler: async (ctx, args) => {
     await requireReading(ctx);
@@ -349,13 +341,9 @@ export const requestPurchase = mutation({
         `La petición ${request.reference} está archivada: recupérala antes de comprar nada para ella.`,
       );
     }
-    if (
-      request.status === "approved" ||
-      request.status === "issued" ||
-      request.status === "rejected" ||
-      request.status === "cancelled" ||
-      request.status === "returned"
-    ) {
+    // Para qué peticiones se puede comprar lo dice la máquina de la petición
+    // (`lib/requestFlow`): las que aún esperan decisión.
+    if (!canBuyForRequest(request.status)) {
       throw new ConvexError(
         `La petición ${request.reference} ya está resuelta (${request.status}): no hay nada que comprar para ella.`,
       );
@@ -382,17 +370,18 @@ export const requestPurchase = mutation({
     let repeated = 0;
     const now = Date.now();
     for (const line of missing) {
+      // Lo que ya está en camino no se aparta otra vez: cuántas van se cuenta
+      // aparte, para poder decirlo.
       const already = previous.find(
         (row) =>
           row.sparePartId === line.sparePartId &&
-          row.status !== "cancelled" &&
-          row.receivedAt === undefined,
+          isPurchaseRequestAwaitingDelivery(row),
       );
       if (already) {
         repeated += 1;
         continue;
       }
-      const reference = await nextReference(ctx, "purchaseRequests", "PC");
+      const reference = await freeReference(ctx, "purchaseRequest");
       await ctx.db.insert("purchaseRequests", {
         reference,
         requestId: request._id,
@@ -405,7 +394,7 @@ export const requestPurchase = mutation({
         unit: line.unit,
         quantity: line.quantity,
         supplier: supplier || line.supplier,
-        status: "pending",
+        status: PURCHASE_REQUEST_STATUSES.PENDING,
         reason: line.reason,
         ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
         requestedAt: now,
@@ -432,7 +421,7 @@ export const setSupplier = mutation({
     await requirePurchasing(ctx, "cambiar el proveedor de una compra");
     const row = await ctx.db.get(args.id);
     if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    if (row.status !== "pending") {
+    if (!isPurchaseRequestUntreated(row.status)) {
       throw new ConvexError(
         `La petición de compra ${row.reference} ya está en una orden: su proveedor no se cambia desde aquí.`,
       );
@@ -452,7 +441,7 @@ export const setNote = mutation({
     await requirePurchasing(ctx, "anotar una petición de compra");
     const row = await ctx.db.get(args.id);
     if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    if (row.status === "received" || row.status === "cancelled") {
+    if (isPurchaseRequestClosed(row.status)) {
       throw new ConvexError(
         `La petición de compra ${row.reference} ya está cerrada: su nota no se toca.`,
       );
@@ -474,7 +463,8 @@ export const cancelPurchaseRequest = mutation({
     await requirePurchasing(ctx, "retirar una petición de compra");
     const row = await ctx.db.get(args.id);
     if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    if (row.status !== "pending") {
+    const cancelled = nextPurchaseRequestStatus(row.status, "cancel");
+    if (cancelled === null) {
       throw new ConvexError(
         `La petición de compra ${row.reference} ya no está sin tratar: quítala desde su orden, o déjala como está.`,
       );
@@ -485,7 +475,7 @@ export const cancelPurchaseRequest = mutation({
       );
     }
     await ctx.db.patch(args.id, {
-      status: "cancelled",
+      status: cancelled,
       cancelledAt: Date.now(),
       cancelNote: args.note.trim(),
     });
@@ -526,7 +516,7 @@ export const createOrder = mutation({
           "Una de las peticiones de compra ya no existe: vuelve a mirar el grupo.",
         );
       }
-      if (row.status !== "pending") {
+      if (nextPurchaseRequestStatus(row.status, "order") === null) {
         throw new ConvexError(
           `La petición de compra ${row.reference} ya está en una orden o cerrada.`,
         );
@@ -543,12 +533,12 @@ export const createOrder = mutation({
     const supplier = suppliers[0];
 
     const now = Date.now();
-    const reference = await nextReference(ctx, "purchaseOrders", "OC");
+    const reference = await freeReference(ctx, "purchaseOrder");
     const by = await actorName(ctx, userId);
     const orderId = await ctx.db.insert("purchaseOrders", {
       reference,
       supplier,
-      status: "pending",
+      status: PURCHASE_ORDER_STATUSES.PENDING,
       orderedAt: now,
       orderedBy: by,
       requestRefs: [
@@ -583,7 +573,9 @@ export const createOrder = mutation({
 
     for (const row of rows) {
       await ctx.db.patch(row._id, {
-        status: "ordered",
+        // Lo que acaba de comprobarse arriba: desde «sin tratar» se entra en una
+        // orden (`lib/purchaseFlow`).
+        status: nextPurchaseRequestStatus(row.status, "order") ?? row.status,
         orderId,
         orderedAt: now,
       });
@@ -604,7 +596,7 @@ export const setLineNote = mutation({
     await requirePurchasing(ctx, "anotar un artículo de una orden");
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new ConvexError("La orden ya no existe.");
-    if (order.status === "completed" || order.status === "cancelled") {
+    if (isPurchaseOrderClosed(order.status)) {
       throw new ConvexError(
         `La orden ${order.reference} está cerrada: sus artículos ya no se tocan.`,
       );
@@ -655,14 +647,11 @@ export const receive = mutation({
     const userId = await requirePurchasing(ctx, "recepcionar material");
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new ConvexError("La orden ya no existe.");
-    if (order.status === "completed") {
+    if (!canAdvancePurchaseOrder(order.status, "receive")) {
       throw new ConvexError(
-        `La orden ${order.reference} ya está completada: no queda nada por recibir.`,
-      );
-    }
-    if (order.status === "cancelled") {
-      throw new ConvexError(
-        `La orden ${order.reference} está anulada: no se recepciona nada de ella.`,
+        order.status === PURCHASE_ORDER_STATUSES.CANCELLED
+          ? `La orden ${order.reference} está anulada: no se recepciona nada de ella.`
+          : `La orden ${order.reference} ya está completada: no queda nada por recibir.`,
       );
     }
 
@@ -758,13 +747,16 @@ export const receive = mutation({
       receivedAt: now,
     });
 
-    const complete = lines.every(
-      (line) => line.receivedQuantity >= line.quantity,
-    );
+    // Completada o parcial según lo que haya llegado de cada artículo: es la
+    // regla de la orden (`lib/purchaseFlow`), la misma que consultan los botones
+    // de la ficha para ofrecer «Recepcionar».
+    const status = purchaseOrderStatusAfterReceiving(lines);
     await ctx.db.patch(order._id, {
       lines,
-      status: complete ? "completed" : "partial",
-      ...(complete ? { completedAt: now } : {}),
+      status,
+      ...(status === PURCHASE_ORDER_STATUSES.COMPLETED
+        ? { completedAt: now }
+        : {}),
       updatedAt: now,
     });
 
@@ -774,8 +766,13 @@ export const receive = mutation({
       const recibido = line.receivedQuantity >= line.quantity;
       const row = await ctx.db.get(line.purchaseRequestId);
       if (!row) continue;
-      if (recibido && row.status !== "received") {
-        await ctx.db.patch(row._id, { status: "received", receivedAt: now });
+      // Ha llegado todo lo que pedía: se cierra sola (la regla, en
+      // `lib/purchaseFlow`; una ya cerrada no se vuelve a cerrar).
+      const settled = recibido
+        ? purchaseRequestReceivedStatus(row.status)
+        : null;
+      if (settled !== null) {
+        await ctx.db.patch(row._id, { status: settled, receivedAt: now });
         if (!closed.includes(row.requestId)) closed.push(row.requestId);
       }
     }
@@ -789,22 +786,21 @@ export const receive = mutation({
         .query("purchaseRequests")
         .withIndex("by_request", (q) => q.eq("requestId", requestId))
         .collect();
-      const waiting = delPedido.some(
-        (row) => row.status === "pending" || row.status === "ordered",
-      );
+      // Mientras quede algo sin tratar o en camino, no: la petición sigue
+      // esperando material (`lib/purchaseFlow`).
+      const waiting = delPedido.some(isPurchaseRequestAwaitingDelivery);
       if (waiting) continue;
       const request = await ctx.db.get(requestId);
       if (!request) continue;
-      if (request.status === "materialReceived") continue;
-      if (
-        request.status !== "pending" &&
-        request.status !== "onHold" &&
-        request.status !== "pendingSupplierQuote"
-      ) {
-        continue;
-      }
+      // Desde qué estados se pasa a «material recibido» lo dice la máquina de la
+      // petición (`lib/requestFlow`), la misma que consultan el resto de pasos y
+      // los botones de la ficha. Aquí, además, lo que no encaja se salta sin
+      // ruido: esto es una pasada sobre lo que acaba de entrar, no una decisión de
+      // nadie.
+      const received = nextRequestStatus(request.status, "receiveMaterial");
+      if (received === null) continue;
       await ctx.db.patch(requestId, {
-        status: "materialReceived",
+        status: received,
         decisionNote: `Material recibido de ${order.supplier} (orden ${order.reference}).`,
       });
       materialReceived.push(request.reference);
@@ -827,7 +823,7 @@ export const receive = mutation({
     }
 
     return {
-      status: complete ? ("completed" as const) : ("partial" as const),
+      status,
       received,
       materialReceived,
     };
@@ -846,8 +842,11 @@ export const cancelOrder = mutation({
     await requirePurchasing(ctx, "anular órdenes de compra");
     const order = await ctx.db.get(args.orderId);
     if (!order) throw new ConvexError("La orden ya no existe.");
-    if (order.status === "cancelled") return { returned: 0 };
-    if (order.status === "completed") {
+    // Una anulada se queda como está —anular dos veces no es un error—, y de una
+    // completada no se anula nada: lo dice la máquina de la orden.
+    if (!canAdvancePurchaseOrder(order.status, "cancel")) {
+      if (order.status === PURCHASE_ORDER_STATUSES.CANCELLED)
+        return { returned: 0 };
       throw new ConvexError(
         `La orden ${order.reference} ya está completada: no hay nada que anular.`,
       );
@@ -860,9 +859,13 @@ export const cancelOrder = mutation({
     let returned = 0;
     for (const line of order.lines) {
       const row = await ctx.db.get(line.purchaseRequestId);
-      if (!row || row.status !== "ordered") continue;
+      if (!row) continue;
+      // La vuelta a la cola: solo las que estaban dentro de la orden —lo que ya
+      // había llegado no se devuelve solo—.
+      const pending = nextPurchaseRequestStatus(row.status, "unorder");
+      if (pending === null) continue;
       await ctx.db.patch(row._id, {
-        status: "pending",
+        status: pending,
         orderId: undefined,
         orderedAt: undefined,
       });
@@ -870,7 +873,7 @@ export const cancelOrder = mutation({
     }
 
     await ctx.db.patch(order._id, {
-      status: "cancelled",
+      status: PURCHASE_ORDER_STATUSES.CANCELLED,
       cancelledAt: Date.now(),
       cancelNote: note,
       updatedAt: Date.now(),
