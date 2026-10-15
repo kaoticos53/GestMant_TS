@@ -14,15 +14,97 @@ import { compressImageFile } from "./imageCompress";
 /** Qué se puede adjuntar: fotos y documentos de oficina. */
 export const FILE_ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx";
 
-/** Tamaño máximo por archivo, en bytes. */
+/** Tamaño máximo por archivo estándar (imágenes, adjuntos), en bytes: 10 MB. */
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 /** El mismo límite en corto, para el texto que lo explica («10 MB»). */
 export const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE / (1024 * 1024))} MB`;
 
-/** ¿Se pasa del límite? Se comprueba antes de subir nada. */
+/** Tamaño máximo permitido para manuales y documentación técnica en PDF: 25 MB. */
+export const MAX_MANUAL_FILE_SIZE = 25 * 1024 * 1024;
+
+/** El límite de manuales en texto corto («25 MB»). */
+export const MAX_MANUAL_FILE_SIZE_LABEL = `${Math.round(MAX_MANUAL_FILE_SIZE / (1024 * 1024))} MB`;
+
+/** ¿Se pasa del límite estándar? Se comprueba antes de subir nada. */
 export function exceedsFileLimit(file: { size: number }): boolean {
   return file.size > MAX_FILE_SIZE;
+}
+
+/** ¿Se pasa del límite permitido para manuales técnicos? */
+export function exceedsManualLimit(file: { size: number }): boolean {
+  return file.size > MAX_MANUAL_FILE_SIZE;
+}
+
+/**
+ * Extensiones de archivos ejecutables, scripts o vectores polimórficos que están
+ * estrictamente prohibidas en cualquier subida para mitigar Remote Code Execution (RCE)
+ * o Cross-Site Scripting (XSS) almacenado.
+ */
+export const DANGEROUS_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "exe",
+  "bat",
+  "cmd",
+  "sh",
+  "bash",
+  "ps1",
+  "vbs",
+  "js",
+  "mjs",
+  "cjs",
+  "ts",
+  "py",
+  "php",
+  "phtml",
+  "php3",
+  "php4",
+  "php5",
+  "pl",
+  "cgi",
+  "jar",
+  "apk",
+  "msi",
+  "com",
+  "scr",
+  "hta",
+  "ws",
+  "wsf",
+  "svg",
+  "html",
+  "htm",
+  "xhtml",
+]);
+
+/**
+ * Detecta si un nombre de archivo incluye extensiones peligrosas o patrones de
+ * doble extensión maliciosa (p. ej., `manual.php.pdf`, `informe.exe`).
+ */
+export function hasDangerousExtension(fileName: string): boolean {
+  const clean = fileName.trim().toLowerCase();
+  const parts = clean.split(".");
+  if (parts.length <= 1) return false;
+  // Revisar todas las partes intermedias y la extensión final
+  for (let i = 1; i < parts.length; i++) {
+    const ext = parts[i]?.trim();
+    if (ext && DANGEROUS_FILE_EXTENSIONS.has(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Comprueba si la cabecera binaria corresponde a un documento PDF válido.
+ * Según el estándar ISO 32000-1, los primeros 4 bytes deben ser `%PDF` (0x25, 0x50, 0x44, 0x46).
+ */
+export function looksLikePdf(head: Uint8Array): boolean {
+  if (head.length < 4) return false;
+  return (
+    head[0] === 0x25 && // '%'
+    head[1] === 0x50 && // 'P'
+    head[2] === 0x44 && // 'D'
+    head[3] === 0x46 // 'F'
+  );
 }
 
 /**

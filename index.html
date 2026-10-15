@@ -6,6 +6,11 @@
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.convex.cloud wss://*.convex.cloud http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*;" />
   <meta name="description" content="Pulso Taller — incidencias, peticiones de repuestos, stock, compras, manuales y mantenimiento del taller audiovisual de una cadena de televisión, en una sola pantalla." />
   <title>Pulso Taller · Gestión del taller audiovisual</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />

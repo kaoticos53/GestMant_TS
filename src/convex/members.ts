@@ -4,7 +4,7 @@ import {
   invalidateSessions,
 } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { ADMIN_EMAIL, DEFAULT_ROLE } from "../lib/roles";
+import { DEFAULT_ROLE } from "../lib/roles";
 import { clampSidebarWidth } from "../lib/sidebar";
 import { dismissalOf } from "../lib/workAlert";
 import { Id } from "./_generated/dataModel";
@@ -19,6 +19,7 @@ import {
   query,
 } from "./_generated/server";
 import { ROLES, roleValidator } from "./schema";
+import { logSecurityEvent } from "./audit";
 
 async function requireUser(ctx: QueryCtx) {
   const userId = await getAuthUserId(ctx);
@@ -102,10 +103,17 @@ export const ensureRole = mutation({
       .withIndex("by_role", (q) => q.eq("role", ROLES.ADMIN))
       .first();
 
+    const userEmail = user.email?.trim().toLowerCase();
+    const matchesConfiguredAdmin = Boolean(
+      initialAdmin && userEmail === initialAdmin,
+    );
+    const isFirstUser = !existingAdmin;
+
+    // Solo el primer usuario de la instalación o quien coincida con INITIAL_ADMIN_EMAIL
+    // configurado de forma segura en el entorno puede recibir el rol de administrador.
+    // Si ya existe un administrador, ningún nuevo registro puede autopromocionarse.
     const role =
-      (initialAdmin && user.email?.trim().toLowerCase() === initialAdmin) ||
-      !existingAdmin ||
-      user.email?.trim().toLowerCase() === ADMIN_EMAIL
+      matchesConfiguredAdmin || isFirstUser
         ? ROLES.ADMIN
         : DEFAULT_ROLE;
     await ctx.db.patch(userId, { role });
@@ -300,6 +308,7 @@ export const setActive = action({
     await ctx.runMutation(internal.members.patchActive, {
       userId: args.userId,
       active: args.active,
+      actorId,
     });
     if (!args.active) {
       await invalidateSessions(ctx, { userId: args.userId });
@@ -346,9 +355,24 @@ export const getTargetUser = internalQuery({
 
 /** Cambia el estado activo/baja en la ficha del usuario. */
 export const patchActive = internalMutation({
-  args: { userId: v.id("users"), active: v.boolean() },
+  args: {
+    userId: v.id("users"),
+    active: v.boolean(),
+    actorId: v.optional(v.id("users")),
+  },
   handler: async (ctx, args) => {
+    const target = await ctx.db.get(args.userId);
     await ctx.db.patch(args.userId, { active: args.active });
+    await logSecurityEvent(ctx, {
+      actorId: args.actorId,
+      action: "account_status_change",
+      target: `user:${args.userId}`,
+      metadata: {
+        active: args.active,
+        targetEmail: target?.email,
+        targetName: target?.name,
+      },
+    });
   },
 });
 
@@ -420,6 +444,18 @@ export const setRole = mutation({
     }
     if (target.role === args.role) return;
 
+    const previousRole = target.role;
     await ctx.db.patch(args.userId, { role: args.role });
+    await logSecurityEvent(ctx, {
+      actorId: adminId,
+      action: "role_change",
+      target: `user:${args.userId}`,
+      metadata: {
+        previousRole,
+        newRole: args.role,
+        targetEmail: target.email,
+        targetName: target.name,
+      },
+    });
   },
 });

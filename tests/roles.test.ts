@@ -56,6 +56,22 @@ describe("members.ensureRole — rol inicial", () => {
     expect(await authed.mutation(api.members.ensureRole, {})).toBe("technician");
   });
 
+  test("un usuario con correo admin@taller.es no recibe rol admin si ya existe un administrador", async () => {
+    const { t, authed, userId } = await setup(undefined, "admin@taller.es");
+    // Simulamos que ya existe un administrador previo registrado
+    await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Administrador Real",
+        email: "jefa@taller.es",
+        role: "admin",
+      }),
+    );
+    // El nuevo registro con correo admin@taller.es debe ser degradado a técnico
+    expect(await authed.mutation(api.members.ensureRole, {})).toBe("technician");
+    const user = await t.run((ctx) => ctx.db.get(userId));
+    expect(user?.role).toBe("technician");
+  });
+
   test("no cambia un rol ya asignado", async () => {
     const { authed } = await setup("manager", "responsable@taller.es");
     expect(await authed.mutation(api.members.ensureRole, {})).toBe("manager");

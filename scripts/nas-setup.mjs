@@ -76,6 +76,7 @@ import {
   conClave,
   envoltorioClave,
   haceFaltaClave,
+  ocultarSecretos,
 } from "./nas-clave-lib.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -98,19 +99,20 @@ const ok = (text) => console.log(`   ${c.green("✓")} ${text}`);
 
 /** Corta el proceso con un mensaje claro en vez de con una traza de Node. */
 function abort(text, hint) {
-  console.error(`\n${c.red("✗")} ${text}`);
-  if (hint) console.error(c.dim(hint));
+  console.error(`\n${c.red("✗")} ${ocultarSecretos(text, clave)}`);
+  if (hint) console.error(c.dim(ocultarSecretos(hint, clave)));
   process.exit(1);
 }
 
 /** La primera línea con algo, para enseñar el motivo que da SSH. */
 function firstLine(text) {
-  return (
+  const line = (
     String(text ?? "")
       .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line !== "") ?? ""
+      .map((l) => l.trim())
+      .find((l) => l !== "") ?? ""
   );
+  return ocultarSecretos(line, clave);
 }
 
 const config = resolveConfig(process.argv.slice(2), process.env);
@@ -275,9 +277,10 @@ function newestMtime(directory) {
  * motivo de verdad viene detrás.
  */
 function textoDeSsh(result = {}) {
-  return [result.stderr, result.stdout, result.error?.message]
+  const raw = [result.stderr, result.stdout, result.error?.message]
     .filter(Boolean)
     .join("\n");
+  return ocultarSecretos(raw, clave);
 }
 
 /**
@@ -292,7 +295,7 @@ function motivoDeSsh(result = {}) {
     .split(/\r?\n/)
     .map((one) => one.trim())
     .find((one) => one !== "" && !one.startsWith("**"));
-  return linea ?? result.error?.message ?? "";
+  return ocultarSecretos(linea ?? result.error?.message ?? "", clave);
 }
 
 /**

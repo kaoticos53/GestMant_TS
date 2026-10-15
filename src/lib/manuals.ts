@@ -14,6 +14,8 @@
  * botones que valen) y el backend (para no fiarse de la interfaz).
  */
 
+import { hasDangerousExtension } from "./upload";
+
 /** Tipos con los que se clasifica un manual. El catálogo es cerrado: así la
  * clasificación no se fragmenta con sinónimos y los filtros sirven. */
 export const MANUAL_TYPES = [
@@ -66,17 +68,35 @@ export const MANUAL_ACCEPT = ".pdf,application/pdf";
 export const MANUAL_FILE_FORMAT = "PDF";
 
 /**
- * ¿Es un PDF? Vale el tipo que declara el navegador o la extensión del nombre:
- * hay navegadores que mandan el archivo sin tipo, y un PDF elegido desde el
- * móvil no siempre viene etiquetado.
+ * ¿Es un PDF legítimo según su nombre o MIME declarado?
+ * Rechaza tajantemente extensiones peligrosas/dobles extensiones (ej. `.exe.pdf`, `.php.pdf`)
+ * y tipos MIME incompatibles (ej. imágenes, ejecutables, scripts).
  */
 export function isPdfFile(file: {
   name?: string;
   contentType?: string;
 }): boolean {
-  const type = (file.contentType ?? "").toLowerCase();
-  if (type.includes("pdf")) return true;
-  return (file.name ?? "").toLowerCase().endsWith(".pdf");
+  const name = (file.name ?? "").trim().toLowerCase();
+  const type = (file.contentType ?? "").trim().toLowerCase();
+
+  // Si tiene nombre de archivo, debe terminar en .pdf y no tener extensiones intermedias peligrosas
+  if (name) {
+    if (hasDangerousExtension(name)) return false;
+    if (!name.endsWith(".pdf")) return false;
+  }
+
+  // Si declara tipo MIME, debe ser compatible con PDF (rechazando imágenes, ejecutables o scripts)
+  if (type) {
+    const isMimePdf =
+      type === "application/pdf" ||
+      type === "application/x-pdf" ||
+      type === "application/acrobat" ||
+      type === "applications/vnd.pdf";
+    if (!isMimePdf) return false;
+  }
+
+  // Debe haberse aportado al menos nombre o tipo MIME válido
+  return Boolean(name || type);
 }
 
 /** El título que se propone a partir del nombre del archivo: sin extensión. */

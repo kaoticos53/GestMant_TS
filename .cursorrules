@@ -1,0 +1,9 @@
+# Pulso Taller (GestMant_TS) - Cursor Rules
+# Consulta siempre AGENTS.md y .context/ para las especificaciones completas.
+
+1. NUNCA importes 'convex' o 'react' en 'src/lib/' (Clean Architecture pura).
+2. Valida transiciones de estado usando las funciones de 'src/lib/*Flow.ts'.
+3. Respeta el vocabulario de GLOSARIO.md: Incidencia, Equipo, Repuesto, Petición de repuesto, Parte de trabajo, Técnico.
+4. Antes de entregar código, valida con:
+   - npx tsc --noEmit
+   - npx vitest run tests/arquitectura.test.ts

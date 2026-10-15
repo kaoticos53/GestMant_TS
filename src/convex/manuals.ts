@@ -12,9 +12,21 @@ import {
   sortManuals,
 } from "../lib/manuals";
 import { richDocToStore } from "../lib/richDoc";
-import { MAX_FILE_SIZE, MAX_FILE_SIZE_LABEL } from "../lib/upload";
+import {
+  MAX_MANUAL_FILE_SIZE,
+  MAX_MANUAL_FILE_SIZE_LABEL,
+  hasDangerousExtension,
+  looksLikePdf,
+} from "../lib/upload";
+import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
-import { QueryCtx, mutation, query } from "./_generated/server";
+import {
+  QueryCtx,
+  action,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { hasCapability } from "./permissions";
 
 /**
@@ -63,6 +75,9 @@ async function requireMember(ctx: QueryCtx): Promise<Doc<"users">> {
   if (!user) {
     throw new ConvexError("Debes iniciar sesión para consultar los manuales.");
   }
+  if (user.active === false) {
+    throw new ConvexError("Esta cuenta ha sido dada de baja.");
+  }
   if (user.isAnonymous === true) {
     throw new ConvexError(NO_VIEW_MESSAGE);
   }
@@ -100,8 +115,8 @@ async function storedFile(ctx: QueryCtx, storageId: Id<"_storage">) {
 
 /**
  * Comprueba el archivo de un manual: tiene que estar en el almacén, ser un PDF
- * y caber en el límite de siempre (el mismo que los adjuntos de una petición o
- * los documentos de una incidencia). Devuelve lo que se guarda de él.
+ * legítimo, no contener extensiones ejecutables o polimórficas y caber en el
+ * límite de manuales técnicos (25 MB). Devuelve lo que se guarda de él.
  */
 async function validateFile(
   ctx: QueryCtx,
@@ -109,6 +124,11 @@ async function validateFile(
   fileName: string | undefined,
 ) {
   const file = await storedFile(ctx, storageId);
+  if (fileName && hasDangerousExtension(fileName)) {
+    throw new ConvexError(
+      "El nombre de archivo contiene una extensión no permitida o potencialmente peligrosa.",
+    );
+  }
   if (
     !isPdfFile({ name: fileName, contentType: file.contentType ?? undefined })
   ) {
@@ -116,9 +136,9 @@ async function validateFile(
       `El manual se carga en ${MANUAL_FILE_FORMAT}. Convierte el documento antes de subirlo.`,
     );
   }
-  if (file.size > MAX_FILE_SIZE) {
+  if (file.size > MAX_MANUAL_FILE_SIZE) {
     throw new ConvexError(
-      `El manual puede pesar como mucho ${MAX_FILE_SIZE_LABEL}.`,
+      `El manual puede pesar como mucho ${MAX_MANUAL_FILE_SIZE_LABEL}.`,
     );
   }
   const name = fileName?.trim();
@@ -223,6 +243,60 @@ export const generateUploadUrl = mutation({
   handler: async (ctx) => {
     await requireManager(ctx);
     return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Comprobación interna de identidad y capacidades para las acciones de manuales.
+ * Rechaza usuarios no autenticados, anónimos o inactivos.
+ */
+export const verifyManualActor = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    const user = userId === null ? null : await ctx.db.get(userId);
+    if (!user || user.active === false || user.isAnonymous === true) {
+      return null;
+    }
+    const canManage = await hasCapability(ctx, user, "manageManuals");
+    return canManage ? user : null;
+  },
+});
+
+/**
+ * Inspección profunda de seguridad para manuales subidos al almacén:
+ * Comprueba que el usuario tiene permisos de gestión, que el archivo no excede 25 MB,
+ * y que la cabecera del archivo en el almacén coincide con el número mágico `%PDF-` (`0x25, 0x50, 0x44, 0x46`).
+ * Si el archivo es inválido, corrupto o polimórfico, se purga inmediatamente de `ctx.storage`
+ * para prevenir DoS y almacenamiento de ejecutables.
+ */
+export const verifyManualPdf = action({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const actor = await ctx.runQuery(internal.manuals.verifyManualActor);
+    if (!actor) {
+      throw new ConvexError(NO_MANAGE_MESSAGE);
+    }
+    const file = await ctx.storage.get(args.storageId);
+    if (!file) {
+      throw new ConvexError(
+        "El archivo del manual ya no está en el almacén: vuelve a subirlo.",
+      );
+    }
+    if (file.size > MAX_MANUAL_FILE_SIZE) {
+      await ctx.storage.delete(args.storageId);
+      throw new ConvexError(
+        `El manual puede pesar como mucho ${MAX_MANUAL_FILE_SIZE_LABEL}.`,
+      );
+    }
+    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    if (!looksLikePdf(head)) {
+      await ctx.storage.delete(args.storageId);
+      throw new ConvexError(
+        `El manual se carga en ${MANUAL_FILE_FORMAT}. El archivo no contiene una firma PDF válida (%PDF-).`,
+      );
+    }
+    return { ok: true, size: file.size };
   },
 });
 

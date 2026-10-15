@@ -61,4 +61,53 @@ describe("imágenes de las notas y las descripciones", () => {
       "Debes iniciar sesión",
     );
   });
+
+  test("una cuenta dada de baja no puede pedir subidas ni enlazar imágenes", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Usuario Inactivo",
+        email: "baja@taller.es",
+        role: "technician",
+        active: false,
+      }),
+    );
+    const authed = t.withIdentity({ subject: `${userId}|session1` });
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["foto"], { type: "image/png" })),
+    );
+
+    await expectConvexError(
+      authed.mutation(api.uploads.generateImageUploadUrl, {}),
+      "Esta cuenta ha sido dada de baja",
+    );
+    await expectConvexError(
+      authed.mutation(api.uploads.imageUrl, { storageId }),
+      "Esta cuenta ha sido dada de baja",
+    );
+  });
+
+  test("un invitado anónimo no puede pedir subidas ni enlazar imágenes", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Invitado",
+        isAnonymous: true,
+        role: "guest",
+      }),
+    );
+    const authed = t.withIdentity({ subject: `${userId}|session1` });
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["foto"], { type: "image/png" })),
+    );
+
+    await expectConvexError(
+      authed.mutation(api.uploads.generateImageUploadUrl, {}),
+      "Debes iniciar sesión con una cuenta registrada",
+    );
+    await expectConvexError(
+      authed.mutation(api.uploads.imageUrl, { storageId }),
+      "Debes iniciar sesión con una cuenta registrada",
+    );
+  });
 });

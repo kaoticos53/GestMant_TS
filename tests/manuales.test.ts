@@ -23,7 +23,11 @@ import {
   manualTitleFromFile,
   manualsForEquipment,
 } from "../src/lib/manuals";
-import { MAX_FILE_SIZE } from "../src/lib/upload";
+import {
+  MAX_MANUAL_FILE_SIZE,
+  hasDangerousExtension,
+  looksLikePdf,
+} from "../src/lib/upload";
 
 /** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
 const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
@@ -211,9 +215,30 @@ describe("manuales: la ficha y su clasificación", () => {
     );
   });
 
+  test("rechaza un archivo con doble extensión o extensión peligrosa", async () => {
+    const { t, authed } = await authedTest("manager");
+    const storageId = await storedFile(t);
+    await expectConvexError(
+      authed.mutation(api.manuals.create, {
+        ...archivoArgs,
+        storageId,
+        fileName: "manual.php.pdf",
+      }),
+      "extensión no permitida",
+    );
+    await expectConvexError(
+      authed.mutation(api.manuals.create, {
+        ...archivoArgs,
+        storageId,
+        fileName: "script.exe",
+      }),
+      "extensión no permitida",
+    );
+  });
+
   test("rechaza un manual que pase del límite de tamaño", async () => {
     const { t, authed } = await authedTest("manager");
-    const grande = new Uint8Array(MAX_FILE_SIZE + 1);
+    const grande = new Uint8Array(MAX_MANUAL_FILE_SIZE + 1);
     const storageId = await t.run((ctx) =>
       ctx.storage.store(new Blob([grande], { type: "application/pdf" })),
     );
@@ -224,6 +249,65 @@ describe("manuales: la ficha y su clasificación", () => {
         fileName: "enorme.pdf",
       }),
       "puede pesar como mucho",
+    );
+  });
+
+  test("verifyManualPdf: rechaza archivos que afirman ser application/pdf pero cuyos primeros 4 bytes no corresponden a %PDF-", async () => {
+    const { t, authed } = await authedTest("manager");
+    // Almacenado como application/pdf, pero los bytes son texto simple
+    const falsoPdfId = await storedFile(
+      t,
+      "Falso contenido sin magic bytes",
+      "application/pdf",
+    );
+    await expectConvexError(
+      authed.action(api.manuals.verifyManualPdf, { storageId: falsoPdfId }),
+      "firma PDF válida (%PDF-)",
+    );
+    // El archivo corrupto/falso debe ser purgado del almacén
+    expect(await t.run((ctx) => ctx.storage.getUrl(falsoPdfId))).toBeNull();
+  });
+
+  test("verifyManualPdf: acepta archivos legítimos con firma %PDF-", async () => {
+    const { t, authed } = await authedTest("manager");
+    const legitimoPdfId = await storedFile(
+      t,
+      "%PDF-1.7 Contenido legítimo del manual...",
+      "application/pdf",
+    );
+    const result = await authed.action(api.manuals.verifyManualPdf, {
+      storageId: legitimoPdfId,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.size).toBeGreaterThan(0);
+    // Sigue presente en el almacén
+    expect(await t.run((ctx) => ctx.storage.getUrl(legitimoPdfId))).not.toBeNull();
+  });
+
+  test("verifyManualPdf: rechaza archivos que exceden el límite de tamaño de manuales", async () => {
+    const { t, authed } = await authedTest("manager");
+    // Crear cabecera %PDF- pero con tamaño excesivo
+    const cabecera = new TextEncoder().encode("%PDF-1.7\n");
+    const payload = new Uint8Array(MAX_MANUAL_FILE_SIZE + 1);
+    payload.set(cabecera, 0);
+
+    const enormePdfId = await t.run((ctx) =>
+      ctx.storage.store(new Blob([payload], { type: "application/pdf" })),
+    );
+    await expectConvexError(
+      authed.action(api.manuals.verifyManualPdf, { storageId: enormePdfId }),
+      "puede pesar como mucho",
+    );
+    // Debe haber sido eliminado de storage
+    expect(await t.run((ctx) => ctx.storage.getUrl(enormePdfId))).toBeNull();
+  });
+
+  test("verifyManualPdf: rechaza a técnicos e invitados sin permisos de gestión", async () => {
+    const { t, authed: tecnico } = await authedTest("technician");
+    const storageId = await storedFile(t);
+    await expectConvexError(
+      tecnico.action(api.manuals.verifyManualPdf, { storageId }),
+      "es cosa de quien gestiona el módulo",
     );
   });
 
@@ -863,13 +947,42 @@ describe("manuales: filtros y clasificación de la lista", () => {
     ).toEqual({ linked: null, brand: "Sony", model: "" });
   });
 
-  test("el PDF se reconoce por el tipo o por la extensión", () => {
+  test("el PDF se reconoce por el tipo o por la extensión y rechaza extensiones peligrosas", () => {
     expect(isPdfFile({ name: "manual.pdf" })).toBe(true);
     expect(isPdfFile({ name: "MANUAL.PDF" })).toBe(true);
     expect(isPdfFile({ contentType: "application/pdf" })).toBe(true);
     expect(isPdfFile({ name: "foto.png", contentType: "image/png" })).toBe(
       false,
     );
+    // Extensiones maliciosas y dobles extensiones
+    expect(isPdfFile({ name: "script.exe.pdf", contentType: "application/pdf" })).toBe(false);
+    expect(isPdfFile({ name: "shell.php.pdf", contentType: "application/pdf" })).toBe(false);
+    expect(isPdfFile({ name: "virus.bat", contentType: "application/pdf" })).toBe(false);
+    expect(isPdfFile({ name: "doc.pdf", contentType: "image/png" })).toBe(false);
+  });
+
+  test("hasDangerousExtension detecta scripts y ejecutables", () => {
+    expect(hasDangerousExtension("normal.pdf")).toBe(false);
+    expect(hasDangerousExtension("documento.docx")).toBe(false);
+    expect(hasDangerousExtension("script.exe")).toBe(true);
+    expect(hasDangerousExtension("script.php")).toBe(true);
+    expect(hasDangerousExtension("payload.php.pdf")).toBe(true);
+    expect(hasDangerousExtension("autoexec.bat")).toBe(true);
+    expect(hasDangerousExtension("test.sh")).toBe(true);
+  });
+
+  test("looksLikePdf valida la cabecera mágica binaria %PDF-", () => {
+    const validPdfHead = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
+    expect(looksLikePdf(validPdfHead)).toBe(true);
+
+    const pngHead = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    expect(looksLikePdf(pngHead)).toBe(false);
+
+    const textHead = new TextEncoder().encode("Esto no es un pdf");
+    expect(looksLikePdf(textHead)).toBe(false);
+
+    const shortHead = new Uint8Array([0x25, 0x50]);
+    expect(looksLikePdf(shortHead)).toBe(false);
   });
 
   test("el título propuesto sale del nombre del archivo", () => {

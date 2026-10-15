@@ -1,11 +1,8 @@
-import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { MessagesCenter } from "@/components/MessagesCenter";
-import { NotificationBell } from "@/components/NotificationBell";
+import { readStartedEmpty, writeStartedEmpty } from "@/lib/emptyWorkshop";
 import { DEFAULT_GRANTS, type Capability } from "@/lib/permissions";
 import {
   DEFAULT_ROLE,
@@ -14,26 +11,14 @@ import {
   isSystemRole,
   roleBadgeClassName,
 } from "@/lib/roles";
-import {
-  SIDEBAR_WIDTH_DEFAULT,
-  SIDEBAR_WIDTH_MAX,
-  SIDEBAR_WIDTH_MIN,
-  SIDEBAR_WIDTH_STEP,
-  clampSidebarWidth,
-  readSidebarCollapsed,
-  readSidebarWidth,
-  safeLocalStorage,
-  writeSidebarCollapsed,
-  writeSidebarWidth,
-} from "@/lib/sidebar";
+import { safeLocalStorage } from "@/lib/sidebar";
+import { cn } from "@/lib/utils";
 import {
   dismissalOf,
   isDismissed,
   readDismissal,
   writeDismissal,
 } from "@/lib/workAlert";
-import { readStartedEmpty, writeStartedEmpty } from "@/lib/emptyWorkshop";
-import { cn } from "@/lib/utils";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   DEFAULT_WORK_WITHOUT_TRACE_ROLES,
@@ -45,7 +30,6 @@ import {
   Archive,
   BookOpen,
   Boxes,
-  ChevronRight,
   CircleAlert,
   ClipboardList,
   Cpu,
@@ -54,282 +38,32 @@ import {
   LogOut,
   Mail,
   PackageCheck,
-  ShoppingCart,
-  PanelLeftClose,
-  PanelLeftOpen,
   ShieldCheck,
-  Search,
+  ShoppingCart,
   Siren,
   SlidersHorizontal,
   Sparkles,
   Users,
   Workflow,
 } from "lucide-react";
-import {
-  Suspense,
-  lazy,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { GlobalSearch, type SearchHit } from "./dashboard/GlobalSearch";
-import { IncidentLookup } from "./dashboard/IncidentLookup";
-import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
+import type { SearchHit } from "./dashboard/GlobalSearch";
 import type { RequestFilterId } from "./dashboard/RequestsView";
-import { FULL_VERSION, DETAILED_VERSION } from "@/version";
+import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
+import { DashboardContent } from "./dashboard/components/DashboardContent";
+import { DashboardHeader } from "./dashboard/components/DashboardHeader";
+import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
+import { DashboardStats } from "./dashboard/components/DashboardStats";
+import { useSidebarPanel } from "./dashboard/hooks/useSidebarPanel";
+import type { NavId, NavItem } from "./dashboard/types";
 
-const ArchiveView = lazy(() =>
-  import("./dashboard/ArchiveView").then((m) => ({ default: m.ArchiveView })),
-);
 const WeeklyReportDialog = lazy(() =>
   import("./dashboard/WeeklyReportDialog").then((m) => ({
     default: m.WeeklyReportDialog,
   })),
 );
-const AuditView = lazy(() =>
-  import("./dashboard/AuditView").then((m) => ({ default: m.AuditView })),
-);
-const EquipmentView = lazy(() =>
-  import("./dashboard/EquipmentView").then((m) => ({ default: m.EquipmentView })),
-);
-const IncidentsView = lazy(() =>
-  import("./dashboard/IncidentsView").then((m) => ({ default: m.IncidentsView })),
-);
-const InventoryView = lazy(() =>
-  import("./dashboard/InventoryView").then((m) => ({ default: m.InventoryView })),
-);
-const ManualsView = lazy(() =>
-  import("./dashboard/ManualsView").then((m) => ({ default: m.ManualsView })),
-);
-const MachinesView = lazy(() =>
-  import("./dashboard/MachinesView").then((m) => ({
-    default: m.MachinesView,
-  })),
-);
-const PermissionsView = lazy(() =>
-  import("./dashboard/PermissionsView").then((m) => ({
-    default: m.PermissionsView,
-  })),
-);
-const ProfileView = lazy(() =>
-  import("./dashboard/ProfileView").then((m) => ({ default: m.ProfileView })),
-);
-const PurchasingView = lazy(() =>
-  import("./dashboard/PurchasingView").then((m) => ({
-    default: m.PurchasingView,
-  })),
-);
-const RequestsView = lazy(() =>
-  import("./dashboard/RequestsView").then((m) => ({ default: m.RequestsView })),
-);
-const UsersView = lazy(() =>
-  import("./dashboard/UsersView").then((m) => ({ default: m.UsersView })),
-);
-const WorkshopSettingsView = lazy(() =>
-  import("./dashboard/WorkshopSettingsView").then((m) => ({
-    default: m.WorkshopSettingsView,
-  })),
-);
-
-function ViewSkeleton() {
-  return (
-    <div className="grid gap-4 animate-pulse">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-44 rounded-lg" />
-        <Skeleton className="h-8 w-28 rounded-lg" />
-      </div>
-      <Skeleton className="h-64 rounded-xl border border-border/70 bg-card/50" />
-      <Skeleton className="h-36 rounded-xl border border-border/70 bg-card/50" />
-    </div>
-  );
-}
-
-type NavId =
-  | "incidents"
-  | "requests"
-  | "purchasing"
-  | "inventory"
-  | "equipment"
-  | "manuals"
-  | "machines"
-  | "archive"
-  | "audit"
-  | "users"
-  | "permissions"
-  | "settings"
-  | "profile";
-
-interface NavItem {
-  id: NavId;
-  label: string;
-  icon: typeof ClipboardList;
-  /** Contador a mostrar en la píldora del menú (0 = sin píldora). */
-  badge: number;
-}
-
-/** Preferencia del menú guardada en el perfil (viene del documento `users`). */
-interface SidebarLayoutProfile {
-  _id: string;
-  sidebarWidth?: number;
-  sidebarCollapsed?: boolean;
-}
-
-/**
- * Menú lateral en escritorio: ancho ajustable (se arrastra desde su borde o se
- * afina con las flechas del teclado) y plegable del todo.
- *
- * El perfil del usuario es la fuente de verdad: al entrar se adopta lo que allí
- * haya y cada cambio se guarda en él, así que la preferencia viaja con la
- * persona y no con el navegador. `localStorage` se mantiene como copia local
- * para pintar el ancho bueno en el primer render (antes de que llegue el
- * perfil) y para no perder el ajuste si la escritura falla.
- *
- * Devuelve el ancho a aplicar al `<aside>`, si está plegado, la referencia para
- * medir dónde empieza y las props del asa. Arg: el usuario firmado (o `null`
- * mientras no se sabe quién es).
- */
-function useSidebarPanel(profile: SidebarLayoutProfile | null | undefined) {
-  const [width, setWidth] = useState(() =>
-    clampSidebarWidth(
-      readSidebarWidth(safeLocalStorage()) ?? SIDEBAR_WIDTH_DEFAULT,
-      window.innerWidth,
-    ),
-  );
-  const [collapsed, setCollapsed] = useState(() =>
-    readSidebarCollapsed(safeLocalStorage()),
-  );
-  const [resizing, setResizing] = useState(false);
-  const asideRef = useRef<HTMLElement | null>(null);
-  // El arrastre se sigue en un ref: los eventos de puntero no deben depender de
-  // que React haya vuelto a renderizar entre dos movimientos.
-  const dragging = useRef(false);
-  const saveLayout = useMutation(api.members.saveSidebarLayout);
-
-  // El perfil llega después del primer render, así que se adopta una sola vez
-  // por usuario (patrón de React para ajustar estado al aparecer una prop). Así
-  // el arranque es instantáneo con la copia local, sin parpadeo.
-  const [layoutOwner, setLayoutOwner] = useState<string | null>(null);
-  if (profile && layoutOwner !== profile._id) {
-    setLayoutOwner(profile._id);
-    // Un perfil sin preferencia (cuenta nueva) conserva la copia local: es la
-    // que el usuario acaba de elegir en este navegador, y se sube al perfil.
-    if (profile.sidebarWidth !== undefined) {
-      setWidth(clampSidebarWidth(profile.sidebarWidth, window.innerWidth));
-    }
-    if (profile.sidebarCollapsed !== undefined) {
-      setCollapsed(profile.sidebarCollapsed);
-    }
-  }
-
-  // La copia local se escribe al soltar, no en cada píxel del arrastre.
-  useEffect(() => {
-    if (resizing) return;
-    writeSidebarWidth(safeLocalStorage(), width);
-  }, [width, resizing]);
-
-  useEffect(() => {
-    writeSidebarCollapsed(safeLocalStorage(), collapsed);
-  }, [collapsed]);
-
-  useEffect(() => {
-    // Durante el arrastre solo se pinta: al soltar (o al pulsar una flecha) es
-    // cuando se manda una única escritura al perfil, no una por píxel.
-    if (resizing || layoutOwner === null) return;
-    saveLayout({ width, collapsed }).catch((error: unknown) => {
-      console.warn("No se pudo guardar el menú en el perfil:", error);
-    });
-  }, [resizing, layoutOwner, width, collapsed, saveLayout]);
-
-  // Si la ventana se estrecha, el panel se reajusta para no comerse el contenido.
-  useEffect(() => {
-    const handleWindowResize = () =>
-      setWidth((current) => clampSidebarWidth(current, window.innerWidth));
-    window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, []);
-
-  // Mientras se arrastra, el cursor y la selección de texto no deben cambiar.
-  useEffect(() => {
-    if (!resizing) return;
-    const { cursor, userSelect } = document.body.style;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      document.body.style.cursor = cursor;
-      document.body.style.userSelect = userSelect;
-    };
-  }, [resizing]);
-
-  /** El asa viaja con el puntero, así que el ancho es la distancia al borde del menú. */
-  const setFromPointer = (clientX: number) => {
-    const left = asideRef.current?.getBoundingClientRect().left ?? 0;
-    setWidth(clampSidebarWidth(clientX - left, window.innerWidth));
-  };
-
-  const stopDragging = () => {
-    dragging.current = false;
-    setResizing(false);
-  };
-
-  const resizeHandleProps = {
-    onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      dragging.current = true;
-      setResizing(true);
-    },
-    onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!dragging.current) return;
-      setFromPointer(event.clientX);
-    },
-    onPointerUp: () => {
-      if (!dragging.current) return;
-      stopDragging();
-    },
-    onPointerCancel: () => {
-      if (!dragging.current) return;
-      stopDragging();
-    },
-    onDoubleClick: () => setWidth(resetSidebarWidth()),
-    onKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "ArrowLeft") {
-        setWidth((current) =>
-          clampSidebarWidth(current - SIDEBAR_WIDTH_STEP, window.innerWidth),
-        );
-      } else if (event.key === "ArrowRight") {
-        setWidth((current) =>
-          clampSidebarWidth(current + SIDEBAR_WIDTH_STEP, window.innerWidth),
-        );
-      } else if (event.key === "Home") {
-        setWidth(resetSidebarWidth());
-      } else {
-        return;
-      }
-      event.preventDefault();
-    },
-  };
-
-  const toggleCollapsed = () => setCollapsed((current) => !current);
-
-  return {
-    width,
-    resizing,
-    collapsed,
-    toggleCollapsed,
-    asideRef,
-    resizeHandleProps,
-  };
-}
-
-/** Ancho de siempre, ya ajustado a la ventana actual. */
-function resetSidebarWidth(): number {
-  return clampSidebarWidth(SIDEBAR_WIDTH_DEFAULT, window.innerWidth);
-}
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -403,6 +137,7 @@ export default function Dashboard() {
   useEffect(() => {
     writeDismissal(safeLocalStorage(), alertDismissal);
   }, [alertDismissal]);
+
   // El menú lateral: un invitado no tiene perfil donde guardar la preferencia,
   // así que se le pasa `null` y se queda solo con la copia local, sin la
   // escritura que le fallaría en cada ajuste.
@@ -502,8 +237,6 @@ export default function Dashboard() {
           },
         ] as NavItem[])
       : []),
-    // Compras: el trabajo del responsable cuando el almacén no tiene lo que se
-    // pide. Va después de las peticiones porque es su continuación natural.
     ...(canSeePurchasing
       ? ([
           { id: "purchasing", label: "Compras", icon: ShoppingCart, badge: 0 },
@@ -519,18 +252,11 @@ export default function Dashboard() {
           { id: "equipment", label: "Equipos", icon: Cpu, badge: 0 },
         ] as NavItem[])
       : []),
-    // Manuales: la documentación del taller. La ve quien tenga la capacidad,
-    // pero nunca una sesión de invitado, que no es del taller.
     ...(can("viewManuals") && !isGuest
       ? ([
           { id: "manuals", label: "Manuales", icon: BookOpen, badge: 0 },
         ] as NavItem[])
       : []),
-    // Máquinas del taller: cómo avanza cada caso, leído de las tablas del
-    // código (`lib/machineSheet`), que es lo que responde «¿y esto qué puede
-    // hacer ahora?» sin abrir un fichero. No pide capacidad: no son datos, es el
-    // vocabulario con el que el panel explica sus propios botones. A una sesión
-    // de invitado no se le enseña porque no trabaja ningún caso.
     ...(!isGuest
       ? ([
           {
@@ -541,16 +267,11 @@ export default function Dashboard() {
           },
         ] as NavItem[])
       : []),
-    // Archivo: el histórico de lo que ya no está en el día a día. Lo ve quien
-    // puede ver alguna de las dos colas que guarda.
     ...(can("viewIncidents") || can("viewRequests")
       ? ([
           { id: "archive", label: "Archivo", icon: Archive, badge: 0 },
         ] as NavItem[])
       : []),
-    // Auditoría de documentos: el rastro del expediente de todas las
-    // incidencias. Es una lectura de administración (capacidad bloqueada), así
-    // que solo aparece para el administrador.
     ...(adminOk && can("viewAudit")
       ? ([
           {
@@ -576,10 +297,6 @@ export default function Dashboard() {
           },
         ] as NavItem[])
       : []),
-    // Ajustes del taller: los ajustes de fondo —el archivado automático, el
-    // aviso de trabajo sin constancia y los avisos del expediente—, juntos en
-    // una pantalla. Lo ve quien puede configurar al menos uno de los tres; los
-    // avisos del expediente son de quien audita (el administrador).
     ...(can("manageIncidents") ||
     can("decideRequests") ||
     (adminOk && can("viewAudit"))
@@ -607,10 +324,6 @@ export default function Dashboard() {
     : (navItems[0]?.id ?? "profile");
   const activeTab: NavId = activeAllowed ? tab : fallbackTab;
 
-  // Lo que cuentan las tarjetas del resumen, ya contado por el backend. El stock
-  // bajo sale de la misma regla que el filtro «solo stock bajo» del catálogo
-  // (`stockState`, la que aplica el contador), para que la tarjeta y el módulo
-  // digan lo mismo.
   const pendingRequests = summary?.requests.pending ?? 0;
   const urgentPending = summary?.requests.urgent ?? 0;
   const withoutReference = summary?.requests.withoutReference ?? 0;
@@ -619,25 +332,12 @@ export default function Dashboard() {
   const totalParts = summary?.parts.total ?? 0;
   const isEmpty =
     !loading && totalParts === 0 && (summary?.requests.active ?? 0) === 0;
-  // El aviso de «todavía no hay datos» solo sale si no se ha pedido empezar sin
-  // muestra: en cuanto se elige el taller vacío, mandan los módulos.
   const showEmptyNotice = isEmpty && !startedEmpty;
 
-  // La audiencia del aviso: lo último que dejó configurado quien coordina
-  // (mientras cargan los ajustes valen los de partida).
   const alertRoleKeys =
     alertSettings?.roleKeys ?? DEFAULT_WORK_WITHOUT_TRACE_ROLES;
   const seesAlert = alertReachesRole(role, alertRoleKeys);
-
-  // Trabajo en curso sin constancia: lo cuenta el backend con la misma regla
-  // (`workWithoutTraceDays`, compartida con sus pruebas) y llega ya ordenado de
-  // lo más parado a lo menos. El margen viaja como argumento del contador, así
-  // que lo que cuenta y lo que escribe el aviso son el mismo número.
   const staleWork = summary?.staleWork ?? [];
-
-  // Cerrar el aviso no es silenciarlo: se recuerda lo avisado, así que vuelve
-  // en cuanto aparezca trabajo parado que aún no se había visto (o cambie el
-  // margen, que es otra regla). Ver `lib/workAlert`.
   const alertReferences = staleWork.map(({ incident }) => incident.reference);
   const alertDismissed = isDismissed(
     alertDismissal,
@@ -648,9 +348,6 @@ export default function Dashboard() {
   const dismissAlert = () => {
     const dismissal = dismissalOf(alertReferences, alertDays);
     setAlertDismissal(dismissal);
-    // Al perfil va el cierre: así no reaparece en el siguiente dispositivo
-    // desde el que se entre con esta cuenta (la copia local la escribe el
-    // efecto de arriba, que sigue al perfil).
     saveWorkAlertDismissal({ dismissal }).catch((error: unknown) => {
       console.warn("No se pudo guardar el aviso cerrado en el perfil:", error);
     });
@@ -663,18 +360,13 @@ export default function Dashboard() {
     });
   };
 
-  // Contadores de las píldoras del menú: los cuenta el armazón, sin cargar los
-  // módulos.
   const navBadges: Record<NavId, number> = {
     incidents: summary?.incidents.reported ?? 0,
     requests: pendingRequests,
-    // La píldora de compras cuenta lo que espera a que alguien monte la orden,
-    // que es el trabajo pendiente del responsable.
     purchasing: summary?.purchasing.pending ?? 0,
     inventory: 0,
     equipment: summary?.equipment ?? 0,
     manuals: summary?.manuals ?? 0,
-    // Las máquinas no son una cola: no hay nada que contar.
     machines: 0,
     archive: 0,
     audit: 0,
@@ -695,15 +387,11 @@ export default function Dashboard() {
     navigate("/");
   };
 
-  /** Cambiar de cuenta desde una sesión de invitado: hay que cerrarla primero,
-   * porque `/auth` devuelve al panel a quien ya tiene sesión. */
   const handleSwitchAccount = async () => {
     await signOut();
     navigate("/auth");
   };
 
-  /** Empieza sin muestra: se oculta el aviso y quedan los módulos a la vista,
-   * cada uno con su alta (repuesto, equipo, petición...). */
   const handleStartEmpty = () => {
     setStartedEmpty(true);
     writeStartedEmpty(safeLocalStorage(), true);
@@ -712,13 +400,8 @@ export default function Dashboard() {
   const handleSeed = async () => {
     setIsSeeding(true);
     try {
-      // Primero las fotos —que es lo que no cabe en la mutación— y después la
-      // muestra: así, cuando el taller quede marcado como sembrado, el almacén ya
-      // enseña lo que enseña un taller de verdad.
       const photos = await seedDemoUploads();
       await seedDemoData();
-      // Los manuales van al final: la mitad se asignan a equipos que la muestra
-      // acaba de crear. La acción no duplica lo que ya está.
       const manuals = await seedDemoManuals();
       const telling = [
         photos.uploaded > 0
@@ -731,7 +414,6 @@ export default function Dashboard() {
           ? `Datos de ejemplo cargados · ${telling.join(" · ")}`
           : "Datos de ejemplo cargados",
       );
-      // Cargar la muestra deshace la elección de empezar vacío.
       setStartedEmpty(false);
       writeStartedEmpty(safeLocalStorage(), false);
     } catch (error) {
@@ -741,17 +423,11 @@ export default function Dashboard() {
     }
   };
 
-  /** Añade otra tanda de ejemplo: más cola que recorrer y archivo que probar. */
   const handleSeedMore = async () => {
     setIsSeedingMore(true);
     try {
-      // Las fotos del formulario también aquí: quien ya tenía muestra de antes se
-      // las encuentra al pedir más, que es la única puerta que le queda abierta
-      // cuando el taller no está vacío. Sin duplicar nada, ya están apuntadas.
       await seedDemoUploads();
       const result = await seedMoreDemoData({});
-      // Los manuales también aquí: quien ya tenía muestra de antes se los
-      // encuentra al pedir más (la acción no duplica los que ya estén).
       const manuals = await seedDemoManuals();
       const added =
         result.incidents +
@@ -772,9 +448,6 @@ export default function Dashboard() {
     }
   };
 
-  /** Abre la cola de peticiones filtrada por estado (tarjetas del resumen).
-   * Se limpian los prefiltros de la búsqueda global para que el resultado no
-   * quede escondido por un filtro anterior. */
   const openRequests = (filter: RequestFilterId) => {
     setRequestsInitialFilter(filter);
     setRequestsEquipmentFilter("all");
@@ -783,18 +456,12 @@ export default function Dashboard() {
     setTab("requests");
   };
 
-  /** Abre la ficha de una incidencia concreta (aviso del panel). */
   const openIncident = (id: Id<"incidents">) => {
     setInitialIncidentId(id);
     setIncidentsViewKey((key) => key + 1);
     setTab("incidents");
   };
 
-  /**
-   * Lo que hace la campana al elegir un aviso: si el aviso apunta a una ficha
-   * (`incidentId`), abrirla —es lo que pide «verla»—; si no, a la cola de
-   * incidencias, que es donde vive lo que cuentan los avisos del taller.
-   */
   const openNotification = (notification: {
     incidentId?: Id<"incidents"> | null;
   }) => {
@@ -805,7 +472,6 @@ export default function Dashboard() {
     }
   };
 
-  /** Abre el catálogo, opcionalmente mostrando solo lo que está bajo mínimo. */
   const openInventory = (lowStockOnly: boolean) => {
     setInventoryLowStockOnly(lowStockOnly);
     setInventoryInitialSearch("");
@@ -813,17 +479,7 @@ export default function Dashboard() {
     setTab("inventory");
   };
 
-  // Resumen: cada tarjeta pertenece a un módulo, así que solo se muestran las
-  // de los módulos que el rol puede ver (las de otros son información de más).
-  // Pulsar una tarjeta lleva a su módulo con el filtro relacionado ya puesto.
-  const stats: {
-    label: string;
-    value: number;
-    hint: string;
-    icon: typeof ClipboardList;
-    iconClassName: string;
-    go: () => void;
-  }[] = [
+  const stats = [
     ...(can("viewRequests")
       ? [
           {
@@ -883,8 +539,6 @@ export default function Dashboard() {
       : []),
   ];
 
-  // El resumen (y el aviso de trabajo sin constancia) solo tiene sentido en las
-  // pantallas de trabajo: en perfil, permisos, ajustes y archivo no pinta nada.
   const summaryHidden =
     activeTab === "profile" ||
     activeTab === "permissions" ||
@@ -894,50 +548,26 @@ export default function Dashboard() {
     activeTab === "audit" ||
     stats.length === 0;
 
-  const navButtonClass = (active: boolean) =>
-    cn(
-      "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
-      active
-        ? "border-signal/30 bg-signal/10 text-signal"
-        : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
-    );
-
-  const navPillClass = (active: boolean) =>
-    cn(
-      "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-      active
-        ? "bg-signal text-primary-foreground"
-        : "bg-muted text-muted-foreground",
-    );
-
-  /** Cambia de módulo limpiando los prefiltros de la búsqueda global. */
   const goToTab = (id: NavId) => {
     setTab(id);
     if (initialRequestId) {
-      // Cierra el detalle abierto desde la búsqueda global.
       setInitialRequestId(null);
       setRequestsViewKey((key) => key + 1);
     }
     if (initialIncidentId) {
-      // Cierra la ficha abierta desde el aviso del panel.
       setInitialIncidentId(null);
       setIncidentsViewKey((key) => key + 1);
     }
     setInventoryInitialSearch("");
     setEquipmentInitialSearch("");
-    // Los filtros de las tarjetas del resumen no se arrastran al menú.
     setRequestsInitialFilter("all");
     setInventoryLowStockOnly(false);
   };
 
-  /** Abre el resultado de la búsqueda global en su módulo (si el rol tiene
-   * permiso para verlo: el catálogo solo si concede ver repuestos/equipos). */
   const handleSearchSelect = (hit: SearchHit) => {
     if (hit.kind === "incident") {
       if (!can("viewIncidents")) return;
       setInitialIncidentId(hit.id);
-      // Vuelve a montar la vista: abrir la ficha de una incidencia ya abierta
-      // tiene que funcionar igual que la primera vez.
       setIncidentsViewKey((key) => key + 1);
       setTab("incidents");
       return;
@@ -964,25 +594,6 @@ export default function Dashboard() {
     }
   };
 
-  const renderNavButton = (item: NavItem) => {
-    const active = activeTab === item.id;
-    const badge = navBadges[item.id];
-    return (
-      <button
-        key={item.id}
-        type="button"
-        onClick={() => goToTab(item.id)}
-        aria-current={active ? "page" : undefined}
-        className={navButtonClass(active)}
-      >
-        <item.icon className="size-4 shrink-0" />
-        <span className="flex-1 truncate">{item.label}</span>
-        {badge > 0 && <span className={navPillClass(active)}>{badge}</span>}
-      </button>
-    );
-  };
-
-  // Etiqueta del rol: la de la base de datos (los personalizados) o la de código.
   const roleLabel = permissions?.label ?? fallbackRoleMeta(role).label;
   const roleBadge = needsRole ? (
     <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -1025,265 +636,46 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background lg:flex-row">
-      {/* Menú lateral (escritorio): el ancho lo elige quien lo usa y se puede
-          plegar del todo. Cuando está plegado desaparece de la vista (su
-          contenido no recibe foco), pero queda montado para animar el plegado. */}
-      <aside
-        id="menu-lateral"
-        ref={sidebarRef}
-        inert={sidebarCollapsed}
-        style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
-        className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden bg-card/60 lg:flex",
-          !sidebarResizing && "transition-[width] duration-200 ease-out",
-        )}
-      >
-        <div className="flex h-16 items-center justify-between gap-2.5 border-b border-border/70 px-5">
-          <img
-            src={logo}
-            alt="Pulso Taller"
-            className="size-8 rounded-lg ring-1 ring-border"
-          />
-          <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold tracking-tight">
-              Pulso Taller
-            </span>
-            <span className="truncate text-xs text-muted-foreground">
-              Equipo audiovisual
-            </span>
-          </span>
-          <div className="flex items-center gap-1.5">
-            <NotificationBell onOpen={openNotification} />
-            <MessagesCenter canSend={can("sendMessages")} />
-          </div>
-        </div>
+      <DashboardSidebar
+        sidebarRef={sidebarRef}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarWidth={sidebarWidth}
+        sidebarResizing={sidebarResizing}
+        resizeHandleProps={resizeHandleProps}
+        toggleSidebar={toggleSidebar}
+        isGuest={isGuest}
+        canSearchCatalog={can("viewInventory")}
+        canSendMessages={can("sendMessages")}
+        onSearchSelect={handleSearchSelect}
+        onOpenNotification={openNotification}
+        navItems={navItems}
+        navBadges={navBadges}
+        activeTab={activeTab}
+        onSelectTab={goToTab}
+        displayName={displayName}
+        initial={initial}
+        userEmail={user?.email}
+        roleBadge={roleBadge}
+        onSignOut={handleSignOut}
+      />
 
-        {/* Búsqueda global. El invitado no la tiene: sus listas llegan vacías,
-            así que buscar ahí no encontraría ni la incidencia que sí puede
-            seguir; su puerta es la consulta por código. */}
-        {!isGuest && (
-          <div className="border-b border-border/70 p-3">
-            <GlobalSearch
-              canSearchCatalog={can("viewInventory")}
-              onSelect={handleSearchSelect}
-            />
-          </div>
-        )}
-
-        <nav
-          aria-label="Módulos"
-          className="flex flex-1 flex-col gap-1 overflow-y-auto p-3"
-        >
-          {/* Sin módulos que ofrecer —el caso del invitado— no se deja el
-              epígrafe solo, que parecería una sección a medio hacer. */}
-          {navItems.length > 0 && (
-            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Módulos
-            </p>
-          )}
-          {navItems.map(renderNavButton)}
-        </nav>
-
-        <div className="border-t border-border/70 p-3">
-          <button
-            type="button"
-            onClick={() => goToTab("profile")}
-            aria-label="Ver mi perfil"
-            aria-current={activeTab === "profile" ? "page" : undefined}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors",
-              activeTab === "profile"
-                ? "bg-signal/10 ring-1 ring-signal/30"
-                : "bg-muted/50 hover:bg-muted",
-            )}
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-sm font-semibold text-signal">
-              {initial}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col leading-tight">
-              <span className="truncate text-sm font-medium">
-                {displayName}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {user?.email ??
-                  (user?.isAnonymous ? "Sesión de invitado" : "Sin correo")}
-              </span>
-            </span>
-            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-          </button>
-
-          {/* Plegar el menú del todo: queda la barra con «Mostrar menú». */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={toggleSidebar}
-            aria-expanded={!sidebarCollapsed}
-            aria-controls="menu-lateral"
-            title="Plegar el menú lateral"
-            className="mt-2.5 w-full justify-start gap-2 border-border/70 text-muted-foreground hover:text-foreground"
-          >
-            <PanelLeftClose className="size-4" />
-            Plegar menú
-          </Button>
-
-          <div className="mt-2.5 flex items-center justify-between gap-2 px-1">
-            {roleBadge}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground"
-              onClick={handleSignOut}
-            >
-              <LogOut className="size-4" />
-              Salir
-            </Button>
-          </div>
-
-          <div
-            className="mt-2 text-center text-[11px] text-muted-foreground/60 select-none"
-            title={DETAILED_VERSION}
-          >
-            {FULL_VERSION}
-          </div>
-        </div>
-      </aside>
-
-      {/* Borde del menú: se arrastra (o se usan las flechas) para cambiar su ancho. */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Redimensionar el menú lateral"
-        aria-valuenow={sidebarWidth}
-        aria-valuemin={SIDEBAR_WIDTH_MIN}
-        aria-valuemax={SIDEBAR_WIDTH_MAX}
-        tabIndex={0}
-        title="Arrastra para cambiar el ancho · doble clic para restablecer"
-        {...resizeHandleProps}
-        className="group sticky top-0 hidden h-screen w-1.5 shrink-0 cursor-col-resize touch-none select-none focus-visible:outline-none lg:block"
-      >
-        {/* La línea del borde queda justo donde estaba la del menú. */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            "absolute inset-y-0 left-0 w-px -translate-x-1/2 bg-border/70 transition-colors",
-            "group-hover:bg-signal/50 group-focus-visible:w-0.5 group-focus-visible:bg-signal",
-            sidebarResizing && "w-0.5 bg-signal",
-          )}
-        />
-      </div>
-
-      {/* Contenido */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Menú plegado (escritorio): desde aquí se vuelve a desplegar. */}
-        {sidebarCollapsed && (
-          <div className="sticky top-0 z-30 hidden items-center justify-between gap-3 border-b border-border/70 bg-background/85 px-4 py-2 backdrop-blur-md sm:px-6 lg:flex">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={toggleSidebar}
-              aria-expanded={!sidebarCollapsed}
-              aria-controls="menu-lateral"
-              aria-label="Mostrar el menú lateral"
-              title="Mostrar el menú"
-              className="gap-2 text-muted-foreground"
-            >
-              <PanelLeftOpen className="size-4" />
-              Mostrar menú
-            </Button>
-            {/* Lo que vivía en el menú: avisos, mensajes y el rol en uso. */}
-            <div className="flex shrink-0 items-center gap-2">
-              {roleBadge}
-              <NotificationBell onOpen={openNotification} />
-              <MessagesCenter canSend={can("sendMessages")} />
-            </div>
-          </div>
-        )}
-        {/* Cabecera móvil */}
-        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-md lg:hidden">
-          <div className="flex h-16 items-center justify-between gap-3 px-4">
-            <a href="/" className="flex min-w-0 items-center gap-3">
-              <img
-                src={logo}
-                alt="Pulso Taller"
-                className="size-8 rounded-lg ring-1 ring-border"
-              />
-              <span className="truncate text-sm font-semibold tracking-tight">
-                Pulso Taller
-              </span>
-            </a>
-            <div className="flex shrink-0 items-center gap-2">
-              <NotificationBell onOpen={openNotification} />
-              <MessagesCenter canSend={can("sendMessages")} />
-              <span className="hidden sm:block">{roleBadge}</span>
-              <button
-                type="button"
-                onClick={() => goToTab("profile")}
-                aria-label="Ver mi perfil"
-                aria-current={activeTab === "profile" ? "page" : undefined}
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-xs font-semibold text-signal transition-shadow",
-                  activeTab === "profile" && "ring-2 ring-signal/50",
-                )}
-              >
-                {initial}
-              </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-2 text-muted-foreground"
-                onClick={handleSignOut}
-              >
-                <LogOut className="size-4" />
-                Salir
-              </Button>
-            </div>
-          </div>
-
-          {/* Módulos en barra horizontal (móvil) */}
-          <nav
-            aria-label="Módulos"
-            className="flex gap-1 overflow-x-auto border-t border-border/70 px-3 py-2"
-          >
-            {navItems.map((item) => {
-              const active = activeTab === item.id;
-              const badge = navBadges[item.id];
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => goToTab(item.id)}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                    active
-                      ? "border-signal/30 bg-signal/10 text-signal"
-                      : "border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="size-4" />
-                  {item.label}
-                  {badge > 0 && (
-                    <span className={navPillClass(true)}>{badge}</span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Búsqueda global (móvil); el invitado tampoco la tiene (ver arriba). */}
-          {!isGuest && (
-            <div className="border-t border-border/70 px-3 py-2">
-              <GlobalSearch
-                canSearchCatalog={can("viewInventory")}
-                onSelect={handleSearchSelect}
-              />
-            </div>
-          )}
-        </header>
+        <DashboardHeader
+          sidebarCollapsed={sidebarCollapsed}
+          toggleSidebar={toggleSidebar}
+          roleBadge={roleBadge}
+          onOpenNotification={openNotification}
+          canSendMessages={can("sendMessages")}
+          isGuest={isGuest}
+          canSearchCatalog={can("viewInventory")}
+          onSearchSelect={handleSearchSelect}
+          activeTab={activeTab}
+          goToTab={goToTab}
+          initial={initial}
+          onSignOut={handleSignOut}
+          navItems={navItems}
+          navBadges={navBadges}
+        />
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-8 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1325,8 +717,6 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Resumen semanal: el mismo sitio donde se ajusta, se ve lo que
-                  saldría y se manda en el momento. */}
               {canConfigureReport && (
                 <Button
                   type="button"
@@ -1340,9 +730,6 @@ export default function Dashboard() {
                   Resumen semanal
                 </Button>
               )}
-              {/* Atajo a los ajustes de fondo del taller: el archivado
-                  automático, el aviso de trabajo sin constancia y los avisos
-                  del expediente, que viven juntos en su propia pantalla. */}
               {(can("manageIncidents") ||
                 can("decideRequests") ||
                 (adminOk && can("viewAudit"))) && (
@@ -1358,10 +745,6 @@ export default function Dashboard() {
                   Ajustes del taller
                 </Button>
               )}
-              {/* Datos de ejemplo: se puede pedir otra tanda para probar los
-                  listados largos y el archivo sin esperar a tener volumen. */}
-              {/* Con el aviso cerrado, quien lo cerró necesita una puerta de
-                  vuelta: sin esto solo reaparecería con trabajo parado nuevo. */}
               {seesAlert && staleWork.length > 0 && alertDismissed && (
                 <Button
                   type="button"
@@ -1392,12 +775,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Aviso para quien esté en la lista de destinatarios: lo que lleva
-              días en curso sin dejar constancia. El reparto (qué roles lo ven),
-              el margen y el propio aviso viven en `WorkAlertNotice`, que no
-              pinta nada si el rol no está en la audiencia. Se puede cerrar: lo
-              cerrado se recuerda y el aviso vuelve solo si aparece trabajo
-              parado que aún no se había avisado. */}
           {!summaryHidden && (
             <WorkAlertNotice
               role={role}
@@ -1412,217 +789,49 @@ export default function Dashboard() {
             />
           )}
 
-          <section
-            aria-label="Resumen"
-            className={cn(
-              "mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
-              summaryHidden && "hidden",
-            )}
-          >
-            {loading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-28 rounded-xl" />
-                ))
-              : stats.map((stat) => (
-                  <button
-                    key={stat.label}
-                    type="button"
-                    onClick={stat.go}
-                    aria-label={`Ver ${stat.label.toLowerCase()}`}
-                    title={`Ir a ${stat.label.toLowerCase()}`}
-                    className="group flex cursor-pointer flex-col rounded-xl border border-border/70 bg-card p-4 text-left shadow-sm transition-colors hover:border-signal/40 hover:bg-signal/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className="flex w-full items-start justify-between gap-2">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {stat.label}
-                      </span>
-                      <span
-                        className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${stat.iconClassName}`}
-                      >
-                        <stat.icon className="size-4" />
-                      </span>
-                    </span>
-                    <span className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">
-                      {stat.value}
-                    </span>
-                    <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                      {stat.hint}
-                      <ChevronRight className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </span>
-                  </button>
-                ))}
-          </section>
+          <DashboardStats
+            loading={loading}
+            hidden={summaryHidden}
+            stats={stats}
+          />
 
           <section className="mt-8">
-            {isGuest ? (
-              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
-                <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-signal/10 text-signal">
-                  <Search className="size-5" />
-                </span>
-                <h2 className="mt-4 text-lg font-semibold tracking-tight">
-                  Sigue tu incidencia
-                </h2>
-                <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Estás en una sesión de invitado: escribe el código que te
-                  dieron al notificarla y verás en qué punto va. Es lo único que
-                  un invitado puede consultar; la cola del taller, las
-                  peticiones y el almacén son para quien entra con su cuenta.
-                </p>
-                <IncidentLookup
-                  className="mx-auto mt-5 max-w-md"
-                  initialCode={searchParams.get("codigo")}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-5 gap-2"
-                  onClick={() => void handleSwitchAccount()}
-                >
-                  <LogOut className="size-4" />
-                  Entrar con mi cuenta
-                </Button>
-              </div>
-            ) : showEmptyNotice &&
-              activeTab !== "profile" &&
-              activeTab !== "permissions" &&
-              activeTab !== "settings" &&
-              activeTab !== "archive" &&
-              activeTab !== "audit" ? (
-              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
-                <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-signal/10 text-signal">
-                  <Sparkles className="size-5" />
-                </span>
-                <h2 className="mt-4 text-lg font-semibold tracking-tight">
-                  El taller todavía no tiene datos
-                </h2>
-                <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Puedes cargar la muestra de ejemplo para recorrer el flujo
-                  completo, o empezar con el taller vacío y dar de alta tus
-                  propios repuestos, equipos e incidencias.
-                </p>
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                  {can("manageInventory") && (
-                    <Button
-                      type="button"
-                      className="gap-2"
-                      onClick={handleSeed}
-                      disabled={isSeeding}
-                    >
-                      <Sparkles className="size-4" />
-                      {isSeeding
-                        ? "Cargando datos..."
-                        : "Cargar datos de ejemplo"}
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleStartEmpty}
-                  >
-                    Empezar con el taller vacío
-                  </Button>
-                </div>
-                {!can("manageInventory") && (
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Los datos de ejemplo los carga quien puede modificar el
-                    catálogo de repuestos.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <Suspense fallback={<ViewSkeleton />}>
-                {activeTab === "profile" ? (
-                  <ProfileView
-                    user={user}
-                    onOpenIncidents={() => goToTab("incidents")}
-                    onOpenRequests={() => goToTab("requests")}
-                  />
-                ) : loading && activeTab !== "permissions" ? (
-                  <div className="grid gap-4">
-                    <Skeleton className="h-40 rounded-xl" />
-                    <Skeleton className="h-40 rounded-xl" />
-                  </div>
-                ) : activeTab === "incidents" ? (
-                  <IncidentsView
-                    key={`incidents-${incidentsViewKey}`}
-                    currentUserId={user?._id ?? null}
-                    currentUserName={displayName}
-                    canAssign={can("manageIncidents")}
-                    initialDetailId={initialIncidentId}
-                  />
-                ) : activeTab === "requests" ? (
-                  <RequestsView
-                    key={`requests-${requestsViewKey}`}
-                    equipmentFilter={requestsEquipmentFilter}
-                    onEquipmentFilterChange={setRequestsEquipmentFilter}
-                    canManage={can("decideRequests")}
-                    canPurchase={can("managePurchasing") && can("viewPurchasing")}
-                    initialDetailId={initialRequestId}
-                    initialFilter={requestsInitialFilter}
-                  />
-                ) : activeTab === "purchasing" && canSeePurchasing ? (
-                  <PurchasingView canManage={can("managePurchasing")} />
-                ) : activeTab === "inventory" && can("viewInventory") ? (
-                  <InventoryView
-                    key={`inventory-${inventoryViewKey}`}
-                    canManage={can("manageInventory")}
-                    currentUserId={user?._id ?? null}
-                    initialSearch={inventoryInitialSearch}
-                    initialLowStockOnly={inventoryLowStockOnly}
-                  />
-                ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
-                  <ManualsView
-                    canManage={can("manageManuals")}
-                    currentUserId={user?._id ?? null}
-                  />
-                ) : activeTab === "machines" && !isGuest ? (
-                  <MachinesView />
-                ) : activeTab === "equipment" && can("viewEquipment") ? (
-                  <EquipmentView
-                    key={`equipment-${equipmentViewKey}`}
-                    canManage={can("manageEquipment")}
-                    canWriteManuals={can("viewManuals") && !isGuest}
-                    canManageManuals={can("manageManuals")}
-                    currentUserId={user?._id ?? null}
-                    initialSearch={equipmentInitialSearch}
-                    onViewRequests={(equipmentId) => {
-                      setRequestsEquipmentFilter(equipmentId);
-                      setInitialRequestId(null);
-                      setRequestsViewKey((key) => key + 1);
-                      setTab("requests");
-                    }}
-                  />
-                ) : activeTab === "archive" ? (
-                  <ArchiveView
-                    canArchiveIncidents={can("manageIncidents")}
-                    canArchiveRequests={can("decideRequests")}
-                    onOpenSettings={
-                      can("manageIncidents") || can("decideRequests")
-                        ? () => goToTab("settings")
-                        : undefined
-                    }
-                  />
-                ) : activeTab === "settings" ? (
-                  <WorkshopSettingsView
-                    canManageArchive={
-                      can("manageIncidents") || can("decideRequests")
-                    }
-                    canManageAlert={can("manageIncidents")}
-                    canManageAudit={adminOk && can("viewAudit")}
-                    canPurgeUploads={
-                      can("manageIncidents") || can("decideRequests")
-                    }
-                    canManageData={can("manageInventory")}
-                  />
-                ) : activeTab === "audit" && adminOk ? (
-                  <AuditView onOpenIncident={(id) => openIncident(id)} />
-                ) : activeTab === "users" && adminOk ? (
-                  <UsersView />
-                ) : activeTab === "permissions" && adminOk ? (
-                  <PermissionsView />
-                ) : null}
-              </Suspense>
-            )}
+            <DashboardContent
+              isGuest={isGuest}
+              showEmptyNotice={showEmptyNotice}
+              loading={loading}
+              activeTab={activeTab}
+              user={user}
+              displayName={displayName}
+              adminOk={adminOk}
+              can={can}
+              canSeePurchasing={canSeePurchasing}
+              initialIncidentId={initialIncidentId}
+              incidentsViewKey={incidentsViewKey}
+              requestsEquipmentFilter={requestsEquipmentFilter}
+              onEquipmentFilterChange={setRequestsEquipmentFilter}
+              initialRequestId={initialRequestId}
+              requestsInitialFilter={requestsInitialFilter}
+              requestsViewKey={requestsViewKey}
+              inventoryInitialSearch={inventoryInitialSearch}
+              inventoryLowStockOnly={inventoryLowStockOnly}
+              inventoryViewKey={inventoryViewKey}
+              equipmentInitialSearch={equipmentInitialSearch}
+              equipmentViewKey={equipmentViewKey}
+              searchParamsCode={searchParams.get("codigo")}
+              isSeeding={isSeeding}
+              onSeed={() => void handleSeed()}
+              onStartEmpty={handleStartEmpty}
+              onSwitchAccount={() => void handleSwitchAccount()}
+              onOpenIncident={openIncident}
+              goToTab={goToTab}
+              onEquipmentViewRequests={(equipmentId) => {
+                setRequestsEquipmentFilter(equipmentId);
+                setInitialRequestId(null);
+                setRequestsViewKey((key) => key + 1);
+                setTab("requests");
+              }}
+            />
           </section>
         </main>
 

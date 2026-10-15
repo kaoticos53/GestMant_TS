@@ -1,12 +1,10 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { archiveDecidedRequestsBefore } from "./archive";
 import { notifyUsers } from "./notify";
 import { ConvexError, v } from "convex/values";
-import { Doc, Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
-  MutationCtx,
-  QueryCtx,
-  internalMutation,
+  type MutationCtx,
+  type QueryCtx,
   mutation,
   query,
 } from "./_generated/server";
@@ -18,137 +16,24 @@ import {
   nextRequestStatus,
   type RequestAction,
 } from "../lib/requestFlow";
-import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
-import { trashPurgeAt } from "../lib/trash";
+import { richDocToStore } from "../lib/richDoc";
 import {
   REQUEST_STATUSES,
   priorityValidator,
   requestStatusValidator,
 } from "./schema";
-import { trashRetentionDays } from "./trash";
 
-/** Toda la gestión de peticiones requiere sesión iniciada. */
-async function requireUser(ctx: QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    throw new ConvexError(
-      "Debes iniciar sesión para gestionar las peticiones.",
-    );
-  }
-  const user = await ctx.db.get(userId);
-  if (!user || user.active === false || user.isAnonymous === true) {
-    throw new ConvexError(
-      user?.active === false
-        ? "Esta cuenta ha sido dada de baja o no está activa."
-        : "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
-    );
-  }
-  return userId;
-}
-
-/** Decisiones sobre peticiones: capacidad «decideRequests» (admin siempre). */
-async function requireDecisionCapability(ctx: QueryCtx, action: string) {
-  const userId = await requireUser(ctx);
-  const user = await ctx.db.get(userId);
-  if (!user || !(await hasCapability(ctx, user, "decideRequests"))) {
-    throw new ConvexError(
-      `No tienes permisos para ${action}. Revisa la configuración de tu rol con el administrador.`,
-    );
-  }
-  return userId;
-}
-
-/** Nombre visible de quien firma una decisión. */
-async function actorName(ctx: QueryCtx, userId: Id<"users">) {
-  const user = await ctx.db.get(userId);
-  return user?.name || user?.email || "Responsable de repuestos";
-}
-
-/**
- * El motivo de una decisión, tal y como se guarda: el documento que escribe el
- * editor —con sus negritas, sus listas y sus fotos— o, si no dice nada, nada.
- */
-function decisionReason(note: string | undefined): string | undefined {
-  return richDocToStore(note);
-}
-
-/**
- * El mismo motivo, en una línea: es lo que queda en la traza de decisiones, que
- * se lee de un vistazo y no admite el formato de la ficha.
- */
-function reasonOneLine(reason: string | undefined): string {
-  return richDocToPlainText(reason);
-}
-
-const attachmentArgs = v.array(
-  v.object({
-    storageId: v.id("_storage"),
-    name: v.string(),
-    kind: v.union(v.literal("image"), v.literal("document")),
-  }),
-);
-
-const partPayloadArgs = {
-  code: v.string(),
-  name: v.string(),
-  description: v.optional(v.string()),
-  category: v.string(),
-  unit: v.string(),
-  stock: v.number(),
-  minStock: v.number(),
-  location: v.optional(v.string()),
-  supplier: v.optional(v.string()),
-  partNumber: v.optional(v.string()),
-  unitPrice: v.optional(v.number()),
-  purchaseUrl: v.optional(v.string()),
-};
-
-type PartPayload = {
-  code: string;
-  name: string;
-  description?: string;
-  category: string;
-  unit: string;
-  stock: number;
-  minStock: number;
-  location?: string;
-  supplier?: string;
-  partNumber?: string;
-  unitPrice?: number;
-  purchaseUrl?: string;
-};
-
-/** Construye el documento de repuesto a partir de los datos del formulario. */
-function buildPart(payload: PartPayload) {
-  const code = payload.code.trim().toUpperCase();
-  const name = payload.name.trim();
-  if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
-  if (!name) throw new ConvexError("El nombre del repuesto es obligatorio.");
-  return {
-    code,
-    name,
-    ...(richDocToStore(payload.description)
-      ? { description: richDocToStore(payload.description) }
-      : {}),
-    category: payload.category,
-    unit: payload.unit.trim() || "ud",
-    stock: Math.max(0, Math.floor(payload.stock)),
-    minStock: Math.max(0, Math.floor(payload.minStock)),
-    ...(payload.location?.trim()
-      ? { location: payload.location.trim().toUpperCase() }
-      : {}),
-    ...(payload.supplier?.trim() ? { supplier: payload.supplier.trim() } : {}),
-    ...(payload.partNumber?.trim()
-      ? { partNumber: payload.partNumber.trim() }
-      : {}),
-    ...(typeof payload.unitPrice === "number" && payload.unitPrice >= 0
-      ? { unitPrice: payload.unitPrice }
-      : {}),
-    ...(payload.purchaseUrl?.trim()
-      ? { purchaseUrl: payload.purchaseUrl.trim() }
-      : {}),
-  };
-}
+import {
+  type PartPayload,
+  actorName,
+  attachmentArgs,
+  buildPart,
+  decisionReason,
+  partPayloadArgs,
+  reasonOneLine,
+  requireDecisionCapability,
+  requireUser,
+} from "./partRequests/helpers";
 
 async function assertPending(ctx: QueryCtx, requestId: Id<"partRequests">) {
   const request = await ctx.db.get(requestId);
@@ -775,189 +660,15 @@ export const markIssued = mutation({
 });
 
 /* ------------------------------------------------------------------ */
-/* Papelera: lo retirado espera antes de borrarse de verdad            */
+/* Re-exportaciones de sub-módulos CQS (papelera)                     */
 /* ------------------------------------------------------------------ */
 
-/** Tandas de la pasada nocturna, como en la papelera de incidencias. */
-const PURGE_LIMIT = 100;
+export {
+  withdraw,
+  restore,
+  deleteNow,
+  purgeExpired,
+  trash,
+  type WithdrawnRequestItem,
+} from "./partRequests/trash";
 
-/**
- * Borra de verdad una petición retirada: su fila y los archivos que adjuntaba.
- * Es lo irreversible, así que solo lo llaman el borrado a mano y la pasada de la
- * papelera, nunca la retirada.
- *
- * Lo que sí se queda son las peticiones de compra que se pidieron por ella: son
- * la constancia de lo que se compró, y guardan copiada la referencia de la
- * petición, así que siguen leyéndose —y recibiéndose— sin la petición de la que
- * salieron.
- */
-async function purgeRequest(
-  ctx: MutationCtx,
-  request: Doc<"partRequests">,
-): Promise<void> {
-  for (const attachment of request.attachments ?? []) {
-    await ctx.storage.delete(attachment.storageId);
-  }
-  await ctx.db.delete(request._id);
-}
-
-/**
- * Retira una petición: se pidió por error o es el duplicado de otra. No se borra
- * —eso sería irreversible— sino que sale de la cola y espera en la papelera con
- * el mismo plazo que lo retirado del almacén y de las incidencias (`lib/trash`).
- *
- * Vale para cualquier estado: lo que se retira es la petición entera, con sus
- * decisiones, no un paso de su flujo. Retirar dos veces la misma petición no es
- * un error.
- */
-export const withdraw = mutation({
-  args: { requestId: v.id("partRequests"), reason: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(ctx, "retirar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt !== undefined) return;
-
-    const now = Date.now();
-    const reason = args.reason?.trim();
-    await ctx.db.patch(args.requestId, {
-      deletedAt: now,
-      deletedBy: await actorName(ctx, userId),
-      ...(reason ? { deletedReason: reason } : {}),
-      // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
-      // el plazo con el que entró, igual que en la papelera del almacén.
-      purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
-    });
-  },
-});
-
-/**
- * Recupera una petición de la papelera: vuelve a la cola —o al archivo, si de
- * ahí salió— tal y como estaba, con sus repuestos asociados, sus decisiones y
- * sus adjuntos.
- */
-export const restore = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "recuperar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt === undefined) return;
-
-    await ctx.db.patch(args.requestId, {
-      deletedAt: undefined,
-      deletedBy: undefined,
-      deletedReason: undefined,
-      purgeAt: undefined,
-    });
-  },
-});
-
-/**
- * Borra ya una petición retirada, sin esperar el plazo: lo que alguien retiró y
- * ahora confirma que no quiere. Es la única forma de borrar de verdad, así que
- * pide que la petición esté retirada: lo que no ha pasado por la papelera no se
- * borra de un tirón.
- */
-export const deleteNow = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "borrar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt === undefined) {
-      throw new ConvexError(
-        "Retira la petición antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
-      );
-    }
-    await purgeRequest(ctx, request);
-  },
-});
-
-/**
- * La pasada de la papelera de peticiones: borra de verdad lo que cumplió su
- * plazo sin que nadie lo recuperara. Va por tandas, como la del almacén y la de
- * incidencias, y no toca nada más: lo que está dentro de plazo espera a su
- * noche.
- */
-export const purgeExpired = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const rows = await ctx.db
-      .query("partRequests")
-      .withIndex("by_purgeAt", (q) => q.lt("purgeAt", Date.now()))
-      .take(PURGE_LIMIT);
-
-    let purged = 0;
-    for (const request of rows) {
-      // El índice solo guarda lo retirado; aun así, un `purgeAt` suelto —un dato
-      // viejo— no borra una petición que está en la cola.
-      if (request.deletedAt === undefined) continue;
-      await purgeRequest(ctx, request);
-      purged += 1;
-    }
-    return purged;
-  },
-});
-
-/** Una petición en la papelera, tal y como la enseña el módulo Archivo. */
-export interface WithdrawnRequestItem {
-  id: Id<"partRequests">;
-  reference: string;
-  status: Doc<"partRequests">["status"];
-  requesterName: string;
-  requesterTeam: string | null;
-  equipment: string | null;
-  /** Lo que pide —repuestos o descripción—, en texto plano: una línea de lista. */
-  summary: string;
-  deletedAt: number;
-  deletedBy: string | null;
-  deletedReason: string | null;
-  purgeAt: number;
-  /** Salió del archivo: recuperarla la devuelve allí, no a la cola. */
-  archived: boolean;
-}
-
-/**
- * La papelera de peticiones, para el módulo Archivo: lo retirado —lo que antes
- * se borra, delante— y el plazo vigente. La ve quien decide peticiones: es la
- * pantalla desde la que se deshace, y lo retirado no es del día a día de nadie.
- */
-export const trash = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireDecisionCapability(ctx, "ver la papelera de peticiones");
-
-    const rows = await ctx.db
-      .query("partRequests")
-      .withIndex("by_deletedAt")
-      .collect();
-    const items: WithdrawnRequestItem[] = rows
-      .filter((row) => row.deletedAt !== undefined)
-      .map((row) => ({
-        id: row._id,
-        reference: row.reference,
-        status: row.status,
-        requesterName: row.requesterName,
-        requesterTeam: row.requesterTeam ?? null,
-        equipment: row.equipment ?? null,
-        summary:
-          row.lines.map((line) => `${line.code} ${line.name}`).join(" · ") ||
-          richDocToPlainText(row.description),
-        deletedAt: row.deletedAt!,
-        deletedBy: row.deletedBy ?? null,
-        deletedReason: row.deletedReason ?? null,
-        // Sin fecha de borrado —dato viejo— se cuenta desde que se retiró.
-        purgeAt: row.purgeAt ?? row.deletedAt!,
-        archived: row.archivedAt !== undefined,
-      }))
-      // Lo que antes se va, delante: es lo que pide una decisión.
-      .sort((a, b) => a.purgeAt - b.purgeAt);
-
-    return {
-      items,
-      nextPurgeAt: items[0]?.purgeAt ?? null,
-      retentionDays: await trashRetentionDays(ctx),
-    };
-  },
-});

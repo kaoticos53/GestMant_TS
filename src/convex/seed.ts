@@ -25,7 +25,7 @@ import {
 import { AUTO_ARCHIVE_BY } from "./archive";
 import { hasCapability, roleCan } from "./permissions";
 import { DEFAULT_ROLE } from "../lib/roles";
-import { DOCUMENT_ACTIONS } from "./schema";
+import { DOCUMENT_ACTIONS, ROLES } from "./schema";
 
 /**
  * Datos de ejemplo del taller. Se cargan de una vez con `seedDemoData` (una
@@ -2077,8 +2077,16 @@ const SEED_SESSION_MESSAGE =
 
 async function requireSeeder(ctx: MutationCtx) {
   const userId = await getAuthUserId(ctx);
-  const user = userId ? await ctx.db.get(userId) : null;
-  if (!user || !(await hasCapability(ctx, user, "manageInventory"))) {
+  if (!userId) throw new ConvexError(SEED_SESSION_MESSAGE);
+  const user = await ctx.db.get(userId);
+  if (!user || user.active === false || user.isAnonymous === true) {
+    throw new ConvexError(
+      user?.active === false
+        ? "Esta cuenta ha sido dada de baja o no está activa."
+        : SEED_SESSION_MESSAGE,
+    );
+  }
+  if (!(await hasCapability(ctx, user, "manageInventory"))) {
     throw new ConvexError(SEED_PERMISSION_MESSAGE);
   }
 
@@ -2690,7 +2698,12 @@ export const sampleUploadsContext = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
-    if (!user || !(await hasCapability(ctx, user, "manageInventory"))) {
+    if (
+      !user ||
+      user.active === false ||
+      user.isAnonymous === true ||
+      !(await hasCapability(ctx, user, "manageInventory"))
+    ) {
       return { allowed: false, missing: [] as string[] };
     }
 

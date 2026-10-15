@@ -2,8 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import type { Id, TableNames } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { action, internalMutation } from "./_generated/server";
-import { hasCapability } from "./permissions";
+import { action, internalMutation, internalQuery } from "./_generated/server";
+import { ROLES } from "./schema";
 
 /**
  * Vaciar el taller: dejar la base como recién instalada.
@@ -71,19 +71,39 @@ const NO_PERMISSION_MESSAGE =
 const NO_SESSION_MESSAGE = "Debes iniciar sesión para vaciar el taller.";
 
 /**
+ * Comprueba antes de iniciar el vaciado si el usuario tiene sesión válida, activa
+ * y rol de administrador del taller.
+ */
+export const checkResetPermission = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args): Promise<{ allowed: boolean; reason?: "session" | "permission" }> => {
+    const user = await ctx.db.get(args.userId);
+    if (!user || user.active === false || user.isAnonymous === true) {
+      return { allowed: false, reason: "session" };
+    }
+    if (user.role !== ROLES.ADMIN) {
+      return { allowed: false, reason: "permission" };
+    }
+    return { allowed: true };
+  },
+});
+
+/**
  * Borra una tanda de cada tabla del taller. Devuelve cuántas filas se ha
  * llevado, que es como la acción sabe si queda algo: cuando una pasada no borra
  * nada, el taller está vacío.
  *
  * Comprueba el permiso en cada llamada: es interna, pero el `userId` viaja desde
- * la acción y no se fía de él para decidir —hay que poder gestionar el
- * inventario, el mismo permiso con el que se carga la muestra—.
+ * la acción y no se fía de él para decidir —exige rol de administrador—.
  */
 export const clearBatch = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args): Promise<number> => {
     const user = await ctx.db.get(args.userId);
-    if (!user || !(await hasCapability(ctx, user, "manageInventory"))) {
+    if (!user || user.active === false || user.isAnonymous === true) {
+      throw new ConvexError(NO_SESSION_MESSAGE);
+    }
+    if (user.role !== ROLES.ADMIN) {
       throw new ConvexError(NO_PERMISSION_MESSAGE);
     }
 
@@ -107,11 +127,38 @@ const MAX_PASSES = 500;
  * Vacía el taller: repite la tanda hasta que no queda nada y devuelve cuántas
  * filas se llevó. Se pide desde Ajustes del taller, con confirmación por delante.
  */
+import { logSecurityEvent } from "./audit";
+
+export const logResetAudit = internalMutation({
+  args: {
+    userId: v.id("users"),
+    deleted: v.number(),
+    passes: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await logSecurityEvent(ctx, {
+      actorId: args.userId,
+      action: "workshop_reset",
+      target: "system:workshop",
+      metadata: { deleted: args.deleted, passes: args.passes, at: Date.now() },
+    });
+  },
+});
+
 export const resetWorkshop = action({
   args: {},
   handler: async (ctx): Promise<{ deleted: number; passes: number }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new ConvexError(NO_SESSION_MESSAGE);
+
+    const check = await ctx.runQuery(internal.workshopReset.checkResetPermission, {
+      userId,
+    });
+    if (!check.allowed) {
+      throw new ConvexError(
+        check.reason === "session" ? NO_SESSION_MESSAGE : NO_PERMISSION_MESSAGE,
+      );
+    }
 
     let deleted = 0;
     let passes = 0;
@@ -123,6 +170,13 @@ export const resetWorkshop = action({
       deleted += batch;
       if (batch === 0) break;
     }
+
+    await ctx.runMutation(internal.workshopReset.logResetAudit, {
+      userId,
+      deleted,
+      passes,
+    });
+
     return { deleted, passes };
   },
 });

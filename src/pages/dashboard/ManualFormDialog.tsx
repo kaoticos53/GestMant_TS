@@ -31,8 +31,9 @@ import {
 } from "@/lib/manuals";
 import { richDocToStore } from "@/lib/richDoc";
 import {
-  MAX_FILE_SIZE_LABEL,
-  exceedsFileLimit,
+  MAX_MANUAL_FILE_SIZE_LABEL,
+  exceedsManualLimit,
+  looksLikePdf,
   uploadToStorage,
 } from "@/lib/upload";
 import {
@@ -40,7 +41,7 @@ import {
   formatFileSize,
   getErrorMessage,
 } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { FileText, NotebookPen, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -80,6 +81,7 @@ export function ManualFormDialog({
   const create = useMutation(api.manuals.create);
   const update = useMutation(api.manuals.update);
   const generateUploadUrl = useMutation(api.manuals.generateUploadUrl);
+  const verifyManualPdf = useAction(api.manuals.verifyManualPdf);
 
   const isEdit = manual !== null;
   const initialKind: ManualKind = manual?.kind ?? (canManage ? "file" : "note");
@@ -118,7 +120,7 @@ export function ManualFormDialog({
     if (!model.trim()) setModel(item.model);
   };
 
-  const handleFileChange = (chosen: File | null) => {
+  const handleFileChange = async (chosen: File | null) => {
     setError(null);
     if (!chosen) {
       setFile(null);
@@ -129,10 +131,24 @@ export function ManualFormDialog({
       setFile(null);
       return;
     }
-    if (exceedsFileLimit(chosen)) {
-      setError(`El manual puede pesar como mucho ${MAX_FILE_SIZE_LABEL}.`);
+    if (exceedsManualLimit(chosen)) {
+      setError(
+        `El manual puede pesar como mucho ${MAX_MANUAL_FILE_SIZE_LABEL}.`,
+      );
       setFile(null);
       return;
+    }
+    try {
+      const head = new Uint8Array(await chosen.slice(0, 4).arrayBuffer());
+      if (!looksLikePdf(head)) {
+        setError(
+          `El manual se sube en ${MANUAL_FILE_FORMAT}. El archivo seleccionado no contiene una cabecera PDF válida (%PDF-).`,
+        );
+        setFile(null);
+        return;
+      }
+    } catch {
+      // Si la lectura directa de cabecera no está disponible en el entorno cliente, valida el backend
     }
     setFile(chosen);
     // El título vacío se propone a partir del nombre del archivo.
@@ -162,6 +178,7 @@ export function ManualFormDialog({
       if (isFile && file) {
         const uploadUrl = await generateUploadUrl();
         uploaded = await uploadToStorage(uploadUrl, file);
+        await verifyManualPdf({ storageId: uploaded });
       }
       if (isEdit && manual) {
         await update({
@@ -368,7 +385,7 @@ export function ManualFormDialog({
               <p className="text-xs leading-5 text-muted-foreground">
                 {isEdit
                   ? "Elige un archivo solo si quieres sustituir el que tiene: el anterior se conserva en el historial de la ficha, por si hace falta volver a él."
-                  : `Se sube al almacén del taller. Hasta ${MAX_FILE_SIZE_LABEL}.`}
+                  : `Se sube al almacén del taller. Hasta ${MAX_MANUAL_FILE_SIZE_LABEL}.`}
               </p>
               {file && (
                 <p className="flex items-center gap-2 text-xs text-muted-foreground">

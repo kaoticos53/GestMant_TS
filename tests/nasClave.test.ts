@@ -35,6 +35,7 @@ import {
   envoltorioClave,
   esSshDeMsys,
   haceFaltaClave,
+  ocultarSecretos,
   ordenPrepararAyudante,
   ordenQuitarAyudante,
 } from "../scripts/nas-clave-lib.mjs";
@@ -162,7 +163,7 @@ describe("lo que se le da a ssh para que no pregunte", () => {
     });
   });
 
-  test("el ayudante se deja listo y se recoge", () => {
+  test.skipIf(!shListo)("el ayudante se deja listo y se recoge", () => {
     // El archivo vive en el mundo del `sh` —el `/tmp` de MSYS—, así que se mira con
     // él: desde Node, esa ruta no existe (sería `«disco»:\tmp`).
     const preparado = spawnSync("sh", ["-c", ordenPrepararAyudante()], {
@@ -340,5 +341,28 @@ describe.skipIf(!shListo)("la clave llegando por la entrada estándar", () => {
     const palabras = scriptWords(GUION);
     expect(palabras[0]).toBe("printf");
     expect(palabras.join(" ")).not.toContain(`${VAR_CLAVE}=`);
+  });
+});
+
+describe("ocultar secretos en trazas y salidas", () => {
+  test("reemplaza la clave exacta introducida por el usuario", () => {
+    const errorConClave = "Error: Authentication failed for password MiClaveSuperSecreta123!";
+    const saneado = ocultarSecretos(errorConClave, "MiClaveSuperSecreta123!");
+    expect(saneado).not.toContain("MiClaveSuperSecreta123!");
+    expect(saneado).toContain("********");
+  });
+
+  test("enmascara patrones comunes de credenciales y tokens", () => {
+    const traza = "SSH error: connect host with token=abc123xyz and password: mySecretPassword";
+    const saneado = ocultarSecretos(traza);
+    expect(saneado).not.toContain("abc123xyz");
+    expect(saneado).not.toContain("mySecretPassword");
+    expect(saneado).toContain("token=********");
+    expect(saneado).toContain("password: ********");
+  });
+
+  test("maneja valores vacíos y nulos sin lanzar errores", () => {
+    expect(ocultarSecretos("")).toBe("");
+    expect(ocultarSecretos(null as unknown as string)).toBe("");
   });
 });

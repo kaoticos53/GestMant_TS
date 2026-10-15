@@ -268,54 +268,22 @@ export class PdfPage {
   }
 }
 
+
 /**
- * El documento: sus páginas y, al final, el archivo. Las imágenes se numeran
- * aquí, porque el número con el que se dibujan (`/Im0`) es el mismo con el que
- * se declaran en los recursos del archivo.
+ * Generador binario de PDF: ensambla los objetos del documento, la tabla de
+ * referencias cruzadas (`xref`) y el trailer de cierre según el estándar PDF 1.4.
  */
-export class PdfDocument {
-  private readonly created: PdfPage[] = [];
-  private readonly images: PdfImage[] = [];
-  readonly size: PdfPageSize;
+export class PdfByteWriter {
+  constructor(
+    private readonly pages: readonly PdfPage[],
+    private readonly images: readonly PdfImage[],
+    private readonly size: PdfPageSize,
+  ) {}
 
-  constructor(size: PdfPageSize = A4) {
-    this.size = size;
-  }
-
-  addPage(): PdfPage {
-    const page = new PdfPage(this.size.width, this.size.height);
-    this.created.push(page);
-    return page;
-  }
-
-  get pageCount(): number {
-    return this.created.length;
-  }
-
-  /**
-   * Las páginas ya creadas. Hace falta para lo que solo se puede escribir
-   * cuando se sabe cuántas hay: el pie de hoja («Página 3 de 7»).
-   */
-  get pages(): readonly PdfPage[] {
-    return this.created;
-  }
-
-  /** Registra un JPEG y devuelve el número con el que se dibuja. */
-  addImage(image: PdfImage): number {
-    this.images.push(image);
-    return this.images.length - 1;
-  }
-
-  /**
-   * El archivo, byte a byte: cabecera, objetos, tabla de referencias y cierre.
-   * Todo va sin comprimir —las imágenes ya vienen comprimidas de origen y el
-   * texto del parte es corto—: un archivo que se lee con cualquier lector y que
-   * se puede mirar por dentro si algo no cuadra.
-   */
-  toBytes(): Uint8Array {
-    const pageCount = this.created.length;
-    const pageIds = this.created.map((_, index) => 3 + index);
-    const contentIds = this.created.map((_, index) => 3 + pageCount + index);
+  write(): Uint8Array {
+    const pageCount = this.pages.length;
+    const pageIds = this.pages.map((_, index) => 3 + index);
+    const contentIds = this.pages.map((_, index) => 3 + pageCount + index);
     const fontIds = new Map<PdfFont, number>(
       FONTS.map((font, index) => [font, 3 + 2 * pageCount + index]),
     );
@@ -333,7 +301,7 @@ export class PdfDocument {
       ),
     ];
 
-    this.created.forEach((page, index) => {
+    this.pages.forEach((page, index) => {
       const fonts = FONTS.map(
         (font) => `/${FONT_REFERENCES[font]} ${fontIds.get(font)} 0 R`,
       ).join(" ");
@@ -408,5 +376,51 @@ export class PdfDocument {
     );
 
     return concatBytes(parts);
+  }
+}
+
+/**
+ * El documento: sus páginas y recursos de dibujo. Delega la serialización
+ * binaria al `PdfByteWriter`.
+ */
+export class PdfDocument {
+  private readonly created: PdfPage[] = [];
+  private readonly images: PdfImage[] = [];
+  readonly size: PdfPageSize;
+
+  constructor(size: PdfPageSize = A4) {
+    this.size = size;
+  }
+
+  addPage(): PdfPage {
+    const page = new PdfPage(this.size.width, this.size.height);
+    this.created.push(page);
+    return page;
+  }
+
+  get pageCount(): number {
+    return this.created.length;
+  }
+
+  /**
+   * Las páginas ya creadas. Hace falta para lo que solo se puede escribir
+   * cuando se sabe cuántas hay: el pie de hoja («Página 3 de 7»).
+   */
+  get pages(): readonly PdfPage[] {
+    return this.created;
+  }
+
+  /** Registra un JPEG y devuelve el número con el que se dibuja. */
+  addImage(image: PdfImage): number {
+    this.images.push(image);
+    return this.images.length - 1;
+  }
+
+  /**
+   * El archivo, byte a byte: cabecera, objetos, tabla de referencias y cierre.
+   * Delega en `PdfByteWriter`.
+   */
+  toBytes(): Uint8Array {
+    return new PdfByteWriter(this.created, this.images, this.size).write();
   }
 }

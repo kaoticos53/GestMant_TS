@@ -33,7 +33,7 @@ const WORKSHOP_TABLES: TableNames[] = [
 ];
 
 /** Test con sesión iniciada y el rol indicado. */
-async function authedTest(role: "manager" | "technician") {
+async function authedTest(role: "admin" | "manager" | "technician") {
   const t = convexTest(schema, modules);
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
@@ -58,7 +58,7 @@ async function countWorkshopRows(t: Awaited<ReturnType<typeof authedTest>>) {
 
 describe("vaciar el taller", () => {
   test("deja la base sin datos y permite volver a sembrar la muestra", async () => {
-    const authed = await authedTest("manager");
+    const authed = await authedTest("admin");
     expect(await authed.mutation(api.seed.seedDemoData, {})).toBe(true);
 
     // Con la muestra cargada hay trabajo en todas las mesas grandes.
@@ -84,7 +84,7 @@ describe("vaciar el taller", () => {
   });
 
   test("no se lleva las cuentas ni los ajustes de fondo", async () => {
-    const authed = await authedTest("manager");
+    const authed = await authedTest("admin");
     await authed.mutation(api.seed.seedDemoData, {});
     await authed.mutation(api.archive.setSettings, {
       enabled: true,
@@ -96,11 +96,23 @@ describe("vaciar el taller", () => {
     // La persona que vacía el taller sigue con su sesión y su rol.
     const users = await authed.run((ctx) => ctx.db.query("users").collect());
     expect(users).toHaveLength(1);
-    expect(users[0]?.role).toBe("manager");
+    expect(users[0]?.role).toBe("admin");
 
     // Y el archivado automático conserva lo que se ajustó.
     const archive = await authed.query(api.archive.settings, {});
     expect(archive?.afterMonths).toBe(9);
+  });
+
+  test("un responsable de repuestos (manager) no puede vaciar el taller", async () => {
+    const manager = await authedTest("manager");
+    const error = await manager.action(api.workshopReset.resetWorkshop, {}).then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(error).toBeInstanceOf(ConvexError);
+    const message =
+      error instanceof ConvexError ? String(error.data) : String(error);
+    expect(message).toContain("No tienes permisos para vaciar el taller.");
   });
 
   test("un técnico no puede vaciar el taller", async () => {
@@ -113,5 +125,46 @@ describe("vaciar el taller", () => {
     const message =
       error instanceof ConvexError ? String(error.data) : String(error);
     expect(message).toContain("No tienes permisos para vaciar el taller.");
+  });
+
+  test("una cuenta dada de baja no puede vaciar el taller", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Responsable Inactivo",
+        email: "inactivo@taller.es",
+        role: "manager",
+        active: false,
+      }),
+    );
+    const authed = t.withIdentity({ subject: `${userId}|session1` });
+    const error = await authed.action(api.workshopReset.resetWorkshop, {}).then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(error).toBeInstanceOf(ConvexError);
+    const message =
+      error instanceof ConvexError ? String(error.data) : String(error);
+    expect(message).toContain("Debes iniciar sesión para vaciar el taller.");
+  });
+
+  test("un invitado anónimo no puede vaciar el taller", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Invitado",
+        isAnonymous: true,
+        role: "guest",
+      }),
+    );
+    const authed = t.withIdentity({ subject: `${userId}|session1` });
+    const error = await authed.action(api.workshopReset.resetWorkshop, {}).then(
+      () => null,
+      (err: unknown) => err,
+    );
+    expect(error).toBeInstanceOf(ConvexError);
+    const message =
+      error instanceof ConvexError ? String(error.data) : String(error);
+    expect(message).toContain("Debes iniciar sesión para vaciar el taller.");
   });
 });

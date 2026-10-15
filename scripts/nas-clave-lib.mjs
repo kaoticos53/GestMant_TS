@@ -177,3 +177,20 @@ export function haceFaltaClave(texto = "") {
 export function esSshDeMsys(version = "") {
   return !/_for_windows/i.test(String(version));
 }
+
+/**
+ * Oculta contraseñas y secretos para que nunca salgan en trazas de error o salidas de consola.
+ */
+export function ocultarSecretos(texto = "", clave = null) {
+  if (!texto) return "";
+  let resultado = String(texto);
+  if (clave && typeof clave === "string" && clave.length > 0) {
+    resultado = resultado.replaceAll(clave, "********");
+  }
+  // Enmascara patrones comunes de credenciales o tokens (clave=..., password: ..., etc.)
+  resultado = resultado.replace(
+    /(password|secret|token|clave|secret_key|jwt|authorization)([:=\s]+)([^\s,;]+)/gi,
+    "$1$2********",
+  );
+  return resultado;
+}

@@ -1061,6 +1061,20 @@ const schema = defineSchema(
       updatedAt: v.number(),
       updatedBy: v.optional(v.string()),
     }).index("by_key", ["key"]),
+
+    // Registro inmutable de auditoría de seguridad: registra cambios de roles,
+    // activación/baja de cuentas, vaciado de taller e intentos de acceso no autorizados.
+    securityAuditLog: defineTable({
+      actorId: v.optional(v.id("users")),
+      actorEmail: v.optional(v.string()),
+      action: v.string(), // "role_change" | "account_status_change" | "unauthorized_access" | "workshop_reset"
+      target: v.string(), // e.g. "user:..." | "workshop"
+      metadata: v.optional(v.string()), // Detalles del evento en JSON
+      at: v.number(),
+    })
+      .index("by_at", ["at"])
+      .index("by_action", ["action"])
+      .index("by_actor", ["actorId"]),
   },
 );
 
