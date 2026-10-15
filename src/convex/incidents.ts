@@ -35,7 +35,7 @@ import {
   isModerator,
   requireActor,
   requireEquipmentEditor,
-} from "./incidents/helpers";
+} from "./_incidents/helpers";
 
 /**
  * Reporta una incidencia. Es la única función pública del módulo: el
@@ -802,7 +802,7 @@ export {
   restoreNoteVersion,
   removeNote,
   restoreNote,
-} from "./incidents/notes";
+} from "./_incidents/notes";
 
 export {
   generateUploadUrl,
@@ -812,7 +812,7 @@ export {
   documentTrail,
   documentTrails,
   documentAudit,
-} from "./incidents/documents";
+} from "./_incidents/documents";
 
 export {
   archive,
@@ -824,6 +824,6 @@ export {
   purgeExpired,
   trash,
   type WithdrawnIncidentItem,
-} from "./incidents/trash";
+} from "./_incidents/trash";
 
 export const statusValidator = incidentStatusValidator;

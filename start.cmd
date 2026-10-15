@@ -17,13 +17,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call npm start
+if "%~1"=="" (
+  call npm start
+) else (
+  call npm run local -- %*
+)
 set "code=%ERRORLEVEL%"
 
 if not "%code%"=="0" (
   echo.
   echo El arranque no ha terminado bien. Para arreglar el entorno sin tocar los datos:
   echo     npm run local -- --repair
+  echo O desde PowerShell:
+  echo     .\start.ps1 -Repair
 )
 
 echo.

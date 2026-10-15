@@ -33,7 +33,7 @@ import {
   reasonOneLine,
   requireDecisionCapability,
   requireUser,
-} from "./partRequests/helpers";
+} from "./_partRequests/helpers";
 
 async function assertPending(ctx: QueryCtx, requestId: Id<"partRequests">) {
   const request = await ctx.db.get(requestId);
@@ -670,5 +670,5 @@ export {
   purgeExpired,
   trash,
   type WithdrawnRequestItem,
-} from "./partRequests/trash";
+} from "./_partRequests/trash";
 

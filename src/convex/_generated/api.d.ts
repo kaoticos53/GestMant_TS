@@ -8,8 +8,17 @@
  * @module
  */
 
+import type * as _incidents_documents from "../_incidents/documents.js";
+import type * as _incidents_helpers from "../_incidents/helpers.js";
+import type * as _incidents_notes from "../_incidents/notes.js";
+import type * as _incidents_trash from "../_incidents/trash.js";
+import type * as _partRequests_helpers from "../_partRequests/helpers.js";
+import type * as _partRequests_trash from "../_partRequests/trash.js";
+import type * as _purchasing_helpers from "../_purchasing/helpers.js";
+import type * as _purchasing_queries from "../_purchasing/queries.js";
 import type * as alerts from "../alerts.js";
 import type * as archive from "../archive.js";
+import type * as audit from "../audit.js";
 import type * as auditAlerts from "../auditAlerts.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
@@ -21,10 +30,6 @@ import type * as http from "../http.js";
 import type * as incidentIntake from "../incidentIntake.js";
 import type * as incidentMail from "../incidentMail.js";
 import type * as incidents from "../incidents.js";
-import type * as incidents_documents from "../incidents/documents.js";
-import type * as incidents_helpers from "../incidents/helpers.js";
-import type * as incidents_notes from "../incidents/notes.js";
-import type * as incidents_trash from "../incidents/trash.js";
 import type * as maintenance from "../maintenance.js";
 import type * as manuals from "../manuals.js";
 import type * as members from "../members.js";
@@ -32,13 +37,9 @@ import type * as messages from "../messages.js";
 import type * as notifications from "../notifications.js";
 import type * as notify from "../notify.js";
 import type * as partRequests from "../partRequests.js";
-import type * as partRequests_helpers from "../partRequests/helpers.js";
-import type * as partRequests_trash from "../partRequests/trash.js";
 import type * as permissions from "../permissions.js";
 import type * as publicCodes from "../publicCodes.js";
 import type * as purchasing from "../purchasing.js";
-import type * as purchasing_helpers from "../purchasing/helpers.js";
-import type * as purchasing_queries from "../purchasing/queries.js";
 import type * as references from "../references.js";
 import type * as reportUploads from "../reportUploads.js";
 import type * as seed from "../seed.js";
@@ -57,8 +58,17 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_incidents/documents": typeof _incidents_documents;
+  "_incidents/helpers": typeof _incidents_helpers;
+  "_incidents/notes": typeof _incidents_notes;
+  "_incidents/trash": typeof _incidents_trash;
+  "_partRequests/helpers": typeof _partRequests_helpers;
+  "_partRequests/trash": typeof _partRequests_trash;
+  "_purchasing/helpers": typeof _purchasing_helpers;
+  "_purchasing/queries": typeof _purchasing_queries;
   alerts: typeof alerts;
   archive: typeof archive;
+  audit: typeof audit;
   auditAlerts: typeof auditAlerts;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
@@ -70,10 +80,6 @@ declare const fullApi: ApiFromModules<{
   incidentIntake: typeof incidentIntake;
   incidentMail: typeof incidentMail;
   incidents: typeof incidents;
-  "incidents/documents": typeof incidents_documents;
-  "incidents/helpers": typeof incidents_helpers;
-  "incidents/notes": typeof incidents_notes;
-  "incidents/trash": typeof incidents_trash;
   maintenance: typeof maintenance;
   manuals: typeof manuals;
   members: typeof members;
@@ -81,13 +87,9 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   notify: typeof notify;
   partRequests: typeof partRequests;
-  "partRequests/helpers": typeof partRequests_helpers;
-  "partRequests/trash": typeof partRequests_trash;
   permissions: typeof permissions;
   publicCodes: typeof publicCodes;
   purchasing: typeof purchasing;
-  "purchasing/helpers": typeof purchasing_helpers;
-  "purchasing/queries": typeof purchasing_queries;
   references: typeof references;
   reportUploads: typeof reportUploads;
   seed: typeof seed;

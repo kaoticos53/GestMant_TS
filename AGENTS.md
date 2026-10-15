@@ -27,6 +27,12 @@ El código de este sistema gestiona operaciones reales de mantenimiento industri
    No introduzcas paquetes npm (ej. `moment`, `lodash`, `date-fns`, `axios`) cuando el proyecto ya provee utilidades nativas (`Intl`, utilidades en `src/lib/`, hooks y clientes Convex).
 5. **NO omitir tipado estricto:**  
    El uso de `any` está prohibido. Si un tipo de Convex aún no se ha regenerado, ejecuta `npm run convex:codegen` o deriva el tipo usando `Doc<"tableName">` o `Id<"tableName">` importados de `src/convex/_generated/dataModel`.
+6. **NO omitir comprobaciones de identidad en mutaciones de Convex ni hardcodear privilegios:**  
+   Toda mutación pública en `src/convex/` (salvo puertas expresas de intake público con rate limiting) DEBE verificar identidad y permisos (`requireUser`, `requireAdmin`, etc.). Queda prohibido hardcodear correos literales para conceder rol `admin` (usar `INITIAL_ADMIN_EMAIL`). *(Existe un test automático en `tests/seguridad.test.ts`)*.
+7. **NO usar `eval()`, `new Function()` ni `dangerouslySetInnerHTML` no autorizado:**  
+   Queda terminantemente prohibida la ejecución dinámica de código o inyección arbitraria de HTML. `dangerouslySetInnerHTML` solo está autorizado en componentes de estilo aislados (`src/components/ui/chart.tsx`).
+8. **NO alterar la inmutabilidad de `securityAuditLog`:**  
+   La tabla `securityAuditLog` almacena la trazabilidad de seguridad y NUNCA debe incluirse en vaciados de taller (`RESET_TABLES` en `workshopReset.ts`) ni purgas masivas.
 
 ---
 
@@ -39,6 +45,7 @@ Ejecuta siempre los comandos desde la raíz del proyecto (`d:\Users\ricardo\Docu
 | **Verificación de Tipos** | `npx tsc --noEmit` |
 | **Suite de Tests Completa** | `npx vitest run` |
 | **Test de Arquitectura** | `npx vitest run tests/arquitectura.test.ts` |
+| **Test de Seguridad (AppSec)** | `npx vitest run tests/seguridad.test.ts` |
 | **Ejecutar Test Individual** | `npx vitest run src/pages/dashboard/equipment/equipment.test.ts` |
 | **Linting** | `npm run lint` |
 | **Formateo de Código** | `npm run format` |
@@ -64,7 +71,7 @@ Antes de modificar código, cada agente debe seguir rigurosamente este ciclo de 
 
 ### Paso 2: Propuesta Técnica
 - Explica qué patrones aplicarás (ej. desacoplar un Dialog en subcomponentes, extraer un hook personalizado, agregar un caso a la máquina de estados en `src/lib/`).
-- Confirma que no se vulneran las invariantes de `tests/arquitectura.test.ts`.
+- Confirma que no se vulneran las invariantes de `tests/arquitectura.test.ts` ni de `tests/seguridad.test.ts`.
 
 ### Paso 3: Implementación Quirúrgica
 - Realiza cambios mínimos y atómicos.
@@ -74,6 +81,7 @@ Antes de modificar código, cada agente debe seguir rigurosamente este ciclo de 
 - Ejecuta `npx tsc --noEmit` para verificar que TypeScript no tiene errores.
 - Ejecuta el test específico del módulo: `npx vitest run <ruta-del-test>`.
 - Ejecuta el test de arquitectura: `npx vitest run tests/arquitectura.test.ts`.
+- Ejecuta el test de seguridad: `npx vitest run tests/seguridad.test.ts`.
 
 ### Paso 5: Handover y Cierre
 - Limpia `.context/active-task.md`.

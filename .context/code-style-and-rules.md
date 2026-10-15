@@ -90,3 +90,24 @@ src/pages/dashboard/<feature>/
 ### ❌ Anti-Patrón 4: Mezclar Dependencias de Framework en el Núcleo
 - **Error:** Importar hooks de React (`useState`, `useEffect`) o utilidades de Convex dentro de `src/lib/`.
 - **Consecuencia:** Rompe la portabilidad del dominio y hace fallar `tests/arquitectura.test.ts`.
+
+### ❌ Anti-Patrón 5: Mutación de Backend sin Verificación de Identidad
+- **Error:** Crear una `mutation({...})` en `src/convex/` sin comprobar `getAuthUserId`, `requireUser` o rol.
+- **Consecuencia:** Expone operaciones críticas a clientes anónimos o no autorizados. Hace fallar `tests/seguridad.test.ts`.
+
+### ❌ Anti-Patrón 6: Hardcodear Correos de Administración en Código
+- **Error:** Comparar literales `user.email === "admin@..."` para saltarse el control RBAC.
+- **Consecuencia:** Vulnerabilidad crítica de elevación de privilegios. La configuración debe obtenerse de `process.env.INITIAL_ADMIN_EMAIL`.
+
+---
+
+## 5. Reglas de Seguridad y Guardrails de AppSec (`tests/seguridad.test.ts`)
+
+1. **Mutaciones Públicas Protegidas:**  
+   Toda función exportada como `mutation` en `src/convex/` debe comenzar invocando un helper de autenticación (`requireUser`, `requireAdmin`, `requireManager`, `requireActor`, `requireCoordinator`, etc.). Las únicas excepciones son las puertas de reporte anónimo expresas (`incidents.report` con validación de intake y `reportUploads.generateUploadUrl` con rate limit por hora).
+2. **Prohibición de Inyecciones y Ejecución Dinámica:**  
+   Queda terminantemente prohibido el uso de `eval()` y `new Function()`. El uso de `dangerouslySetInnerHTML` está restringido exclusivamente a componentes autorizados (como `src/components/ui/chart.tsx`).
+3. **Validación de Archivos en Profundidad:**  
+   No confiar en el `Content-Type` ni en la extensión enviada por el navegador. Validar magic bytes (e.g. `%PDF-` en manuales con `looksLikePdf`) y rechazar extensiones peligrosas o tamaños superiores a `MAX_MANUAL_FILE_SIZE`.
+4. **Trazabilidad Inmutable:**  
+   Las operaciones administrativas críticas (cambio de roles, activaciones/bajas, vaciado de base de datos) deben registrarse con `logSecurityEvent`. La tabla `securityAuditLog` jamás se incluye en `RESET_TABLES`.

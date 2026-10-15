@@ -6,19 +6,16 @@
 ---
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** SEC-FASE-4: Trazabilidad, Auditoría y Prevención de Fugas de Información
-- **Objetivo:** Extender la auditoría con `securityAuditLog` y el helper `logSecurityEvent`, registrar cambios de rol en `members.setRole`, activación/bajas en `members.setActive`, vaciado de taller en `workshopReset`, proteger credenciales en scripts NAS y agregar tests automatizados en `tests/audit.test.ts`.
-- **Módulo(s) Afectado(s):** `src/convex/schema.ts`, `src/convex/audit.ts`, `src/convex/members.ts`, `src/convex/workshopReset.ts`, `scripts/nas-backup.mjs`, `scripts/nas-setup.mjs`, `tests/audit.test.ts`.
+- **ID / Nombre de la Tarea:** SEC-FASE-5: Gobernanza y Guardrails Automatizados en CI/CD y Reglas de Agente
+- **Objetivo:** Implementar la suite de análisis estático y guardrails en `tests/seguridad.test.ts`, actualizar `AGENTS.md` y `.context/code-style-and-rules.md` con las invariantes de seguridad de AppSec, y verificar que no haya regresiones.
+- **Módulo(s) Afectado(s):** `tests/seguridad.test.ts`, `AGENTS.md`, `.context/code-style-and-rules.md`.
 
 ---
 
 ## 2. Archivos a Modificar / Crear
-- [x] `src/convex/schema.ts`: Definir la tabla inmutable `securityAuditLog`.
-- [x] `src/convex/audit.ts`: Crear el módulo backend con `logSecurityEvent` y la query protegida `securityAuditLogs`.
-- [x] `src/convex/members.ts`: Registrar eventos de auditoría en `setRole` y en cambios de activación/baja.
-- [x] `src/convex/workshopReset.ts`: Registrar evento de auditoría en `resetWorkshop`.
-- [x] `scripts/nas-backup.mjs` y `scripts/nas-setup.mjs`: Añadir sanitización para prevenir fugas de contraseñas/secretos en salida de error.
-- [x] `tests/audit.test.ts`: Agregar pruebas que verifiquen el registro inmutable de auditoría ante cambios de roles.
+- [x] `tests/seguridad.test.ts`: Crear suite de tests estáticos de seguridad (mutaciones autenticadas, no emails admin hardcodeados, no eval/new Function/dangerouslySetInnerHTML no controlado, tabla securityAuditLog inmutable).
+- [x] `AGENTS.md`: Incorporar la sección de Guardrails AppSec y comandos de testeo de seguridad en las tablas de tooling y verificación.
+- [x] `.context/code-style-and-rules.md`: Documentar las reglas de seguridad y prevención de inyecciones / bypass de RBAC.
 
 ---
 
@@ -30,8 +27,9 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Planificar e implementar cambios mínimos.
-- [x] **Paso 2:** Ejecutar comprobación de tipos: `npx tsc --noEmit`.
-- [x] **Paso 3:** Ejecutar test unitario del módulo: `npx vitest run tests/audit.test.ts`.
-- [x] **Paso 4:** Ejecutar test de arquitectura: `npx vitest run tests/arquitectura.test.ts`.
-- [x] **Paso 5:** Completar el resumen de sesión en `.context/session-state-template.md`.
+- [x] **Paso 1:** Planificar e implementar `tests/seguridad.test.ts`.
+- [x] **Paso 2:** Actualizar `AGENTS.md` y `.context/code-style-and-rules.md`.
+- [x] **Paso 3:** Ejecutar comprobación de tipos: `npx tsc --noEmit`.
+- [x] **Paso 4:** Ejecutar test unitario del módulo: `npx vitest run tests/seguridad.test.ts`.
+- [x] **Paso 5:** Ejecutar test de arquitectura: `npx vitest run tests/arquitectura.test.ts`.
+- [x] **Paso 6:** Completar el resumen de sesión y marcar tareas completadas.

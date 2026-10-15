@@ -24,7 +24,7 @@ import {
   missingLines,
   NO_SUPPLIER,
   requirePurchasing,
-} from "./purchasing/helpers";
+} from "./_purchasing/helpers";
 
 /* ------------------------------------------------------------------ */
 /* Re-exportaciones de sub-módulos CQS (queries y subida)             */
@@ -36,7 +36,7 @@ export {
   listReceptions,
   byRequest,
   generateUploadUrl,
-} from "./purchasing/queries";
+} from "./_purchasing/queries";
 
 /**
  * Genera las peticiones de compra de una petición de repuesto: una por cada
