@@ -98,6 +98,10 @@ export function RichTextEditor({
   // cuando el valor que devuelve el padre es justo el que se acaba de emitir.
   const lastEmitted = useRef(richDocToStore(value) ?? "");
 
+  // Referencia mutable a la función de subida para que los callbacks de
+  // ProseMirror (handlePaste y handleDrop) siempre tengan la versión fresca.
+  const insertImageFileRef = useRef<(file: File) => Promise<void>>(undefined);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -121,6 +125,52 @@ export function RichTextEditor({
           compact && "rich-text-compact",
           className,
         ),
+      },
+      handlePaste: (_view, event) => {
+        if (disabled) return false;
+        // 1. Archivos en clipboardData.files (copiar archivo de imagen y pegar)
+        const files = event.clipboardData?.files;
+        if (files && files.length > 0) {
+          const imageFile = Array.from(files).find((f) =>
+            f.type.startsWith("image/"),
+          );
+          if (imageFile) {
+            event.preventDefault();
+            void insertImageFileRef.current?.(imageFile);
+            return true;
+          }
+        }
+        // 2. Items en clipboardData.items (capturas de pantalla con Win+Shift+S / Impr Pant)
+        const items = event.clipboardData?.items;
+        if (items && items.length > 0) {
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.startsWith("image/")) {
+              const file = item.getAsFile();
+              if (file) {
+                event.preventDefault();
+                void insertImageFileRef.current?.(file);
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      },
+      handleDrop: (_view, event, _slice, moved) => {
+        if (disabled || moved) return false;
+        const files = event.dataTransfer?.files;
+        if (files && files.length > 0) {
+          const imageFile = Array.from(files).find((f) =>
+            f.type.startsWith("image/"),
+          );
+          if (imageFile) {
+            event.preventDefault();
+            void insertImageFileRef.current?.(imageFile);
+            return true;
+          }
+        }
+        return false;
       },
     },
     onUpdate: ({ editor: instance }) => {
@@ -175,8 +225,7 @@ export function RichTextEditor({
     return url;
   };
 
-  const insertImage = async (chosen: FileList | null) => {
-    const picked = chosen?.[0];
+  const insertImageFile = async (picked: File) => {
     if (!picked || !editor) return;
     if (!picked.type.startsWith("image/")) {
       toast.error(`${picked.name}: solo se pueden insertar imágenes`);
@@ -198,6 +247,13 @@ export function RichTextEditor({
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  insertImageFileRef.current = insertImageFile;
+
+  const insertImage = async (chosen: FileList | null) => {
+    const picked = chosen?.[0];
+    if (picked) await insertImageFile(picked);
   };
 
   const tool = (

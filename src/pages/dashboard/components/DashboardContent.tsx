@@ -2,8 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { Capability } from "@/lib/permissions";
-import { LogOut, Search, Sparkles } from "lucide-react";
+import { LogOut, Search, Siren, Sparkles } from "lucide-react";
 import { Suspense, lazy } from "react";
+import { Link } from "react-router";
 import { IncidentLookup } from "../IncidentLookup";
 import type { RequestFilterId } from "../RequestsView";
 import type { NavId } from "../types";
@@ -133,27 +134,35 @@ export function DashboardContent({
           <Search className="size-5" />
         </span>
         <h2 className="mt-4 text-lg font-semibold tracking-tight">
-          Sigue tu incidencia
+          Sigue o notifica una incidencia
         </h2>
         <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
           Estás en una sesión de invitado: escribe el código que te dieron al
-          notificarla y verás en qué punto va. Es lo único que un invitado puede
-          consultar; la cola del taller, las peticiones y el almacén son para
-          quien entra con su cuenta.
+          notificarla para comprobar su estado y seguimiento, o notifica una nueva incidencia.
+          La cola de trabajo, las peticiones y el inventario están reservados para
+          usuarios con cuenta del taller.
         </p>
         <IncidentLookup
           className="mx-auto mt-5 max-w-md"
           initialCode={searchParamsCode}
         />
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-5 gap-2"
-          onClick={onSwitchAccount}
-        >
-          <LogOut className="size-4" />
-          Entrar con mi cuenta
-        </Button>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Button asChild className="gap-2">
+            <Link to="/reportar">
+              <Siren className="size-4" />
+              Notificar una incidencia
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={onSwitchAccount}
+          >
+            <LogOut className="size-4" />
+            Entrar con mi cuenta
+          </Button>
+        </div>
       </div>
     );
   }

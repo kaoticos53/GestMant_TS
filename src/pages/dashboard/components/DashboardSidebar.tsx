@@ -6,8 +6,9 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "@/lib/sidebar";
 import { cn } from "@/lib/utils";
 import { DETAILED_VERSION, FULL_VERSION } from "@/version";
-import { ChevronRight, LogOut, PanelLeftClose } from "lucide-react";
+import { ChevronRight, LogOut, PanelLeftClose, Siren } from "lucide-react";
 import type React from "react";
+import { Link } from "react-router";
 import { GlobalSearch, type SearchHit } from "../GlobalSearch";
 import type { NavId, NavItem } from "../types";
 
@@ -129,6 +130,15 @@ export function DashboardSidebar({
             <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Módulos
             </p>
+          )}
+          {isGuest && (
+            <Link
+              to="/reportar"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-signal transition-colors hover:bg-signal/10"
+            >
+              <Siren className="size-4 shrink-0" />
+              <span className="flex-1 truncate">Notificar incidencia</span>
+            </Link>
           )}
           {navItems.map((item) => {
             const active = activeTab === item.id;

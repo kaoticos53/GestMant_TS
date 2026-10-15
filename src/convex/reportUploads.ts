@@ -244,7 +244,7 @@ export const claimImage = internalMutation({
     // que uno que se selló antes es de otro sitio —el documento de un expediente,
     // por ejemplo—. Con el sello del vale basta, y no con su `createdAt`: los dos
     // valen lo mismo, pero la hora del reloj solo llega al milisegundo.
-    const mine = file._creationTime > row._creationTime;
+    const mine = file._creationTime >= row._creationTime;
     // Solo lo nuestro se retira; lo ajeno se deja donde está.
     const discard = async () => {
       if (mine) await ctx.storage.delete(args.storageId);
@@ -307,6 +307,17 @@ function documentImageSources(value: string | undefined): string[] {
   return sources;
 }
 
+/** La ruta de almacenamiento (/api/storage/...) de una dirección, sin host ni query params. */
+function storagePathFromUrl(src: string): string | null {
+  try {
+    const parsed = new URL(src);
+    return parsed.pathname;
+  } catch {
+    const match = /(\/api\/storage\/[^?#]+)/.exec(src);
+    return match ? match[1] : null;
+  }
+}
+
 /**
  * ¿Esta dirección es la de un archivo que el formulario público acreditó? Lo
  * normal es leer el id en la propia dirección y resolverlo por su índice; si el
@@ -327,6 +338,8 @@ async function isClaimedReportImage(
     if (row?.claimedAt !== undefined) return true;
   }
 
+  const srcPath = storagePathFromUrl(src);
+
   const rows = await ctx.db
     .query("reportUploads")
     .withIndex("by_createdAt", (q) =>
@@ -335,7 +348,10 @@ async function isClaimedReportImage(
     .collect();
   for (const row of rows) {
     if (!row.storageId || row.claimedAt === undefined) continue;
-    if ((await ctx.storage.getUrl(row.storageId)) === src) return true;
+    const rowUrl = await ctx.storage.getUrl(row.storageId);
+    if (rowUrl === null) continue;
+    if (rowUrl === src) return true;
+    if (srcPath && storagePathFromUrl(rowUrl) === srcPath) return true;
   }
   return false;
 }
