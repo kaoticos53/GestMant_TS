@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ export function CorrectEquipmentDialog({
   onClose: () => void;
 }) {
   const updateEquipment = useMutation(api.incidents.updateEquipment);
+  const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
   const [model, setModel] = useState(incident.model ?? "");
   const [serialNumber, setSerialNumber] = useState(incident.serialNumber ?? "");
   const [busy, setBusy] = useState(false);
@@ -77,11 +78,17 @@ export function CorrectEquipmentDialog({
             <Label htmlFor="equipment-model">Modelo</Label>
             <Input
               id="equipment-model"
+              list="correct-equipment-models-datalist"
               value={model}
               onChange={(event) => setModel(event.target.value)}
               placeholder="p. ej. HDC-3500"
               disabled={busy}
             />
+            <datalist id="correct-equipment-models-datalist">
+              {inventoryModels.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
             <p
               className={cn(
                 "text-xs text-muted-foreground",

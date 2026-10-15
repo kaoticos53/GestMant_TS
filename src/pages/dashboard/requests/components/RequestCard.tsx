@@ -3,35 +3,31 @@ import {
   Check,
   Clock,
   ExternalLink,
-  Layers,
+  FileText,
+  ImageIcon,
   PackageCheck,
-  PackagePlus,
   Paperclip,
   Wrench,
-  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RichText } from "@/components/RichText";
 import {
-  canAdvanceRequest,
   canEditRequest,
   canRequestStep,
-  isClosedRequest,
   isRequestInMotion,
 } from "@/lib/requestFlow";
 import { cn } from "@/lib/utils";
 import {
   PRIORITY_META,
   STATUS_META,
-  formatDateTime,
   formatRelativeTime,
   type Priority,
 } from "@/lib/workshop";
 
 import type { RequestDoc } from "../types";
-import { attachmentCounts, decisionLine, stepReason } from "../helpers";
+import { attachmentCounts, decisionLine } from "../helpers";
 
 export function RequestCard({
   request,

@@ -14,7 +14,7 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { richDocToStore } from "@/lib/richDoc";
 import { getErrorMessage } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { dateToInput, inputToDate } from "../helpers";
 import type { EquipmentFormDialogProps } from "../types";
@@ -25,6 +25,7 @@ export function EquipmentFormDialog({
 }: EquipmentFormDialogProps) {
   const create = useMutation(api.equipment.create);
   const update = useMutation(api.equipment.update);
+  const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
 
   const isEdit = item !== null;
   const [code, setCode] = useState(item?.code ?? "");
@@ -175,12 +176,18 @@ export function EquipmentFormDialog({
             <Label htmlFor="eq-model">Modelo *</Label>
             <Input
               id="eq-model"
+              list="eq-models-datalist"
               value={model}
               onChange={(event) => setModel(event.target.value)}
               placeholder="HDC-3500"
               className="font-mono"
               disabled={busy}
             />
+            <datalist id="eq-models-datalist">
+              {inventoryModels.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="eq-location">Ubicación</Label>

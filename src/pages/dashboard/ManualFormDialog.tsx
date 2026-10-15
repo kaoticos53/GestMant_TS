@@ -43,7 +43,7 @@ import {
 } from "@/lib/workshop";
 import { useAction, useMutation } from "convex/react";
 import { FileText, NotebookPen, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ManualDoc } from "./ManualsView";
 
@@ -99,6 +99,15 @@ export function ManualFormDialog({
   const [error, setError] = useState<string | null>(null);
 
   const isFile = kind === "file";
+  const uniqueModels = useMemo(() => {
+    const set = new Set<string>();
+    for (const eq of equipment) {
+      const trimmed = eq.model?.trim();
+      if (trimmed) set.add(trimmed);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [equipment]);
+
   // La clasificación efectiva: con equipo, la marca y el modelo son los suyos
   // —lo mismo que enseña el formulario, para no guardar algo distinto de lo que
   // se ve—; sin él, lo que se haya escrito.
@@ -352,11 +361,17 @@ export function ManualFormDialog({
               <Label htmlFor="manual-model">Modelo</Label>
               <Input
                 id="manual-model"
+                list="manual-models-datalist"
                 value={linked ? classification.model : model}
                 onChange={(event) => setModel(event.target.value)}
                 placeholder="HDC-3500"
                 disabled={busy || Boolean(linked)}
               />
+              <datalist id="manual-models-datalist">
+                {uniqueModels.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
             </div>
           </div>
 

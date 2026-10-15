@@ -6,19 +6,15 @@ import {
   Ban,
   Check,
   CirclePause,
-  Download,
-  ExternalLink,
   FileText,
-  Layers,
   PackageCheck,
-  PackagePlus,
   Paperclip,
-  Play,
+  Plus,
   RotateCcw,
   Trash2,
   Undo2,
+  User,
   Wrench,
-  X,
 } from "lucide-react";
 
 import {
@@ -43,6 +39,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { AttachmentGroup } from "@/components/AttachmentGroup";
+import { AttachmentImage } from "@/components/AttachmentImage";
 import { BlockedSteps } from "@/components/BlockedSteps";
 import { RichText } from "@/components/RichText";
 import { api } from "@/convex/_generated/api";
@@ -51,10 +49,8 @@ import {
   blockedRequestSteps,
   canEditRequest,
   canRequestStep,
-  isClosedRequest,
   isRequestInMotion,
 } from "@/lib/requestFlow";
-import { downloadFile } from "@/lib/export";
 import { cn } from "@/lib/utils";
 import {
   PRIORITY_META,

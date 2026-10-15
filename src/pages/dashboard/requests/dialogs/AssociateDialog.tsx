@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
-import { Check, PackagePlus, Plus, SearchX } from "lucide-react";
+import { Check } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,17 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import { richDocToStore } from "@/lib/richDoc";
 import { cn } from "@/lib/utils";
 import {
   PART_CATEGORIES,
-  PART_UNITS,
-  equipmentLabel,
-  formatCurrency,
   getErrorMessage,
-  type PartCategory,
-  type PartUnit,
 } from "@/lib/workshop";
 
 import type { EquipmentDoc, PartDoc, RequestDoc } from "../types";

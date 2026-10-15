@@ -87,7 +87,6 @@ export function RequestsView({
   const {
     filter,
     setFilter,
-    detailId,
     setDetailId,
     search,
     setSearch,

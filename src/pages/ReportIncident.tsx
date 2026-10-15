@@ -16,7 +16,7 @@ import { richDocToPlainText, richDocToStore } from "@/lib/richDoc";
 import { MAX_FILE_SIZE_LABEL, MAX_REPORT_IMAGES } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
 import logo from "@/assets/logo.svg";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { ArrowRight, Check, Home, Loader2, Siren } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -38,6 +38,7 @@ const TODAY_INPUT = toDateInputValue(Date.now());
 
 export default function ReportIncident() {
   const report = useMutation(api.incidents.report);
+  const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -301,6 +302,7 @@ export default function ReportIncident() {
                     <Label htmlFor="inc-model">Modelo *</Label>
                     <Input
                       id="inc-model"
+                      list="incident-models-datalist"
                       value={model}
                       onChange={(event) => setModel(event.target.value)}
                       placeholder="p. ej. HDC-3500"
@@ -308,6 +310,11 @@ export default function ReportIncident() {
                       disabled={busy}
                       required
                     />
+                    <datalist id="incident-models-datalist">
+                      {inventoryModels.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
                   </div>
                   <div className="grid gap-2 sm:col-span-2">
                     <Label htmlFor="inc-serial">Número de serie</Label>

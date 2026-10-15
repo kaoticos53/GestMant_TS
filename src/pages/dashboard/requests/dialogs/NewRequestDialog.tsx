@@ -2,16 +2,14 @@ import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import {
-  PackagePlus,
-  Paperclip,
+  ArrowRight,
+  FileText,
+  Loader2,
   Plus,
-  SearchX,
-  Trash2,
   Upload,
   X,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,7 +31,7 @@ import {
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { richDocToStore } from "@/lib/richDoc";
+import { richDocIsEmpty, richDocToStore } from "@/lib/richDoc";
 import {
   FILE_ACCEPT,
   MAX_FILE_SIZE_LABEL,
@@ -43,9 +41,7 @@ import {
 } from "@/lib/upload";
 import { cn } from "@/lib/utils";
 import {
-  PRIORITY_META,
   equipmentLabel,
-  formatCurrency,
   getErrorMessage,
   type Priority,
 } from "@/lib/workshop";

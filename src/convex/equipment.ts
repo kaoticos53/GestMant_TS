@@ -72,6 +72,25 @@ export const list = query({
   },
 });
 
+/**
+ * Modelos únicos del inventario. Lista alfabética de los nombres comerciales
+ * de los equipos dados de alta en el taller, utilizada para autocompletar
+ * el campo de modelo tanto en el panel como en el formulario público
+ * de notificación de incidencias.
+ */
+export const uniqueModels = query({
+  args: {},
+  handler: async (ctx) => {
+    const equipment = await ctx.db.query("equipment").collect();
+    const set = new Set<string>();
+    for (const eq of equipment) {
+      const trimmed = eq.model?.trim();
+      if (trimmed) set.add(trimmed);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  },
+});
+
 const equipmentArgs = {
   code: v.optional(v.string()),
   brand: v.optional(v.string()),

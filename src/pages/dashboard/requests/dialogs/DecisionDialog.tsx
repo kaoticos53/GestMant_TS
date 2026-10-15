@@ -16,7 +16,8 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { isPurchaseRequestAwaitingDelivery } from "@/lib/purchaseFlow";
-import { richDocToStore } from "@/lib/richDoc";
+import { richDocIsEmpty } from "@/lib/richDoc";
+import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/workshop";
 
 import {

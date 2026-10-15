@@ -4,7 +4,7 @@ import { groupByDate, matchesQuery, sortByDate } from "@/lib/browse";
 import { requestMatchesEquipment } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
-import type { QueueSortId } from "../QueueToolbar";
+import type { QueueSortId } from "../../QueueToolbar";
 import type {
   EquipmentDoc,
   RequestDoc,
