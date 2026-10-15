@@ -121,7 +121,7 @@ export function RequestCard({
       {request.description && (
         <RichText
           value={request.description}
-          className="mt-3 line-clamp-2 text-sm leading-6 text-foreground/80"
+          className="mt-3 line-clamp-2 text-sm leading-6 text-foreground/80 [&_img]:max-h-36 [&_img]:w-auto [&_img]:rounded-md [&_img]:object-contain"
         />
       )}
 

@@ -83,7 +83,7 @@ export function ListArea({
       // la tabla lleva su `sticky top-0` y se queda a la vista al recorrer las
       // filas; en las colas de fichas, lo que va dentro no se desplaza por su
       // cuenta y el cambio no se nota.
-      className="max-h-[calc(100dvh_-_18rem)] min-h-[12rem] overflow-auto [&>div]:overflow-visible"
+      className="max-h-[calc(100dvh_-_18rem)] min-h-[12rem] overflow-auto [scrollbar-gutter:stable] [&>div]:overflow-visible"
     >
       {children}
     </div>

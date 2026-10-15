@@ -523,18 +523,37 @@ de esta guía vale igual: hay que instalar Docker y Caddy dentro, igual que en
 la VM, e instalar Debian desde la plantilla LXC de Proxmox es desde
 **local → CT Templates**.
 
-## Qué no funciona aquí
+## Qué no funciona aquí (y cómo gestionar el correo)
 
 Es lo mismo que no funciona en el entorno local ni en el Synology, por la misma
-razón: son piezas que dependen del proyecto original en la nube.
+razón: son piezas que dependen del proyecto original en la nube (la pasarela de Freebuff que usa `VLY_INTEGRATION_KEY`).
 
 - **Entrar con código por email (OTP)**: manda los códigos por la pasarela de
   integraciones y necesita `VLY_INTEGRATION_KEY`. Usa contraseña o el acceso
   como invitado.
+- **Aviso por email a quien notifica una incidencia**: `incidentMail.ts` intenta
+  enviar el código de seguimiento si el informador dejó su correo. Al no haber pasarela,
+  la ficha de la incidencia muestra el aviso informativo:
+  `"No se pudo enviar: El deployment no tiene VLY_INTEGRATION_KEY: el aviso a quien notificó no se puede enviar todavía."`
+  Esto no interrumpe el flujo: la incidencia se crea, recibe su referencia y su código, y se gestiona normalmente.
 - **El correo del resumen semanal**: se envía por esa misma pasarela, así que
   queda apuntado en los registros y no sale. El resumen se sigue pudiendo
-  descargar a mano desde el panel del taller.
+  descargar a mano en PDF desde el panel del taller.
 - **La barra flotante de Freebuff** y el envío de errores a su panel.
+
+### Opciones para resolver el envío de correos en tu servidor
+
+1. **Modo 100 % autónomo (por defecto, sin configurar nada):**
+   - Quien notifica una incidencia recibe su código de seguimiento (ej. `A7K2-QX9M`) directamente en pantalla al enviarla y puede consultarla en cualquier momento.
+   - El personal del taller entra con usuario y contraseña.
+   - Los informes y partes de trabajo se descargan directamente en PDF en un clic.
+
+2. **Opción con API de correo transaccional (Resend, Brevo, SendGrid - Recomendada):**
+   - Es la forma más sencilla para evitar bloqueos del puerto SMTP saliente (puerto 25).
+   - Se obtiene una clave gratuita (ej. Resend o Brevo) y se adapta la acción de Convex (`incidentMail.ts`) para enviar vía `fetch()` usando una variable en el `.env` (ej. `RESEND_API_KEY`).
+
+3. **Opción con servidor SMTP propio o corporativo:**
+   - Si dispones de un servidor Postfix local o una cuenta corporativa (Office 365, Gmail Workspace), se puede configurar `nodemailer` en el backend para enviar por SMTP (`localhost:587` o tu host de correo).
 
 Todo lo demás —incidencias, peticiones, almacén, manuales, archivado automático
 y limpiezas de madrugada (tareas del propio backend)— funciona igual.

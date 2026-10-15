@@ -191,12 +191,14 @@ export function useRowsThatFit({
       watching.current = null;
       if (!element) return;
       if (typeof ResizeObserver !== "undefined") {
-        width.current = element.clientWidth;
+        width.current = element.offsetWidth || element.clientWidth;
         watching.current = new ResizeObserver(() => {
-          // Solo el ancho: el alto lo cambia el número de filas que se pintan,
-          // y eso no puede cambiar la medida.
-          if (element.clientWidth === width.current) return;
-          width.current = element.clientWidth;
+          // Solo el ancho exterior (offsetWidth / bounding box): el ancho interior
+          // (clientWidth) encoge al aparecer la barra de desplazamiento vertical, lo
+          // que provocaría un bucle infinito de oscilación si una fila altera el scroll.
+          const currentWidth = element.offsetWidth || element.clientWidth;
+          if (currentWidth === width.current) return;
+          width.current = currentWidth;
           measure();
         });
         watching.current.observe(element);

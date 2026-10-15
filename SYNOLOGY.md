@@ -700,18 +700,37 @@ navegador solo funcionan en `https://` o en `localhost`), y `api.tudominio.com` 
 se usa para nada —el WebSocket va directo al 3210—, así que ese puerto tiene que
 quedar abierto en la red.
 
-## Qué no funciona aquí
+## Qué no funciona aquí (y cómo gestionar el correo)
 
 Es lo mismo que no funciona en el entorno local, por la misma razón: son piezas
-que dependen del proyecto original en la nube.
+que dependen del proyecto original en la nube (la pasarela de Freebuff que usa `VLY_INTEGRATION_KEY`).
 
 - **Entrar con código por email (OTP)**: `emailOtp.ts` manda los códigos por la
-  pasarela de integraciones de freebuff y necesita `VLY_INTEGRATION_KEY`. Usa
-  contraseña o el acceso como invitado.
+  pasarela y necesita `VLY_INTEGRATION_KEY`. Usa contraseña o el acceso como invitado.
+- **Aviso por email a quien notifica una incidencia**: `incidentMail.ts` intenta
+  enviar el código de seguimiento si el informador dejó su correo. Al no haber pasarela,
+  la ficha de la incidencia muestra el aviso informativo:
+  `"No se pudo enviar: El deployment no tiene VLY_INTEGRATION_KEY: el aviso a quien notificó no se puede enviar todavía."`
+  Esto no interrumpe el flujo: la incidencia se crea, recibe su referencia y su código, y se gestiona normalmente.
 - **El correo del resumen semanal**: se envía por esa misma pasarela, así que
   queda apuntado en los registros y no sale. El resumen se sigue pudiendo
-  descargar a mano desde el panel del taller.
+  descargar a mano en PDF desde el panel del taller.
 - **La barra flotante de Freebuff** y el envío de errores a su panel.
+
+### Opciones para resolver el envío de correos en tu Synology
+
+1. **Modo 100 % autónomo (por defecto, sin configurar nada):**
+   - No necesitas hacer nada ni contratar servicios externos.
+   - Quien notifica una incidencia recibe su código de seguimiento (ej. `A7K2-QX9M`) directamente en la pantalla al enviarla y puede consultarla con él en cualquier momento.
+   - El personal del taller entra con usuario y contraseña.
+   - Los informes y partes de trabajo se descargan directamente en PDF en un clic.
+
+2. **Opción con API de correo transaccional (Resend, Brevo, SendGrid - Recomendada):**
+   - Es la forma más fiable en un NAS doméstico o de oficina para evitar que los proveedores de internet bloqueen el puerto SMTP saliente (puerto 25).
+   - Se obtiene una clave gratuita (ej. 3.000 emails/mes gratis en Resend o 300/día en Brevo) y se adapta la acción de Convex (`incidentMail.ts`) para enviar vía llamada `fetch()` a la API del proveedor usando una variable en el `.env` (ej. `RESEND_API_KEY`).
+
+3. **Opción con servidor SMTP propio o Synology MailPlus:**
+   - Si tienes instalado el paquete **Synology Mail Server / MailPlus** en DSM o una cuenta de correo corporativa (Office 365, Gmail de empresa), se puede configurar `nodemailer` en el backend para enviar a través del host SMTP local (`localhost:587` o la IP de tu servidor de correo).
 
 Todo lo demás —incidencias, peticiones, almacén, manuales, archivado automático y
 limpiezas de madrugada (que son tareas del propio backend)— funciona igual.

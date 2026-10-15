@@ -282,6 +282,8 @@ export function IncidentsView({
                               className={cn(
                                 "mt-1 text-sm leading-6 text-muted-foreground",
                                 compact ? "line-clamp-1" : "line-clamp-2",
+                                "[&_img]:max-h-36 [&_img]:w-auto [&_img]:rounded-md [&_img]:object-contain",
+                                compact && "[&_img]:hidden",
                               )}
                             />
                             <div
