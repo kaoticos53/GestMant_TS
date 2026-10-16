@@ -656,6 +656,7 @@ export const close = mutation({
 export const updateEquipment = mutation({
   args: {
     incidentId: v.id("incidents"),
+    equipmentId: v.optional(v.id("equipment")),
     model: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
   },
@@ -664,20 +665,37 @@ export const updateEquipment = mutation({
     const incident = await getIncident(ctx, args.incidentId);
     await requireEquipmentEditor(ctx, actor, incident);
 
+    let equipmentId = args.equipmentId ?? incident.equipmentId;
+    let linkedEq = null;
+    if (args.equipmentId) {
+      linkedEq = await ctx.db.get(args.equipmentId);
+      if (!linkedEq) throw new ConvexError("El equipo seleccionado no existe en el inventario.");
+    }
+
     const model =
-      args.model === undefined ? incident.model : args.model.trim() || undefined;
+      args.model !== undefined
+        ? args.model.trim() || undefined
+        : linkedEq
+          ? linkedEq.model.trim()
+          : incident.model;
     if (model === undefined) {
       throw new ConvexError(
         "Escribe el modelo del equipo: es lo que identifica la máquina en su historial.",
       );
     }
     const serialNumber =
-      args.serialNumber === undefined
-        ? incident.serialNumber
-        : args.serialNumber.trim() || undefined;
-    if (model === incident.model && serialNumber === incident.serialNumber) {
+      args.serialNumber !== undefined
+        ? args.serialNumber.trim() || undefined
+        : linkedEq
+          ? linkedEq.serialNumber?.trim() || undefined
+          : incident.serialNumber;
+
+    const sameEquipment = equipmentId === incident.equipmentId;
+    const sameModel = model === incident.model;
+    const sameSerial = serialNumber === incident.serialNumber;
+    if (sameEquipment && sameModel && sameSerial) {
       throw new ConvexError(
-        "Esos son los datos que ya tiene la incidencia: cambia el modelo o el nº de serie.",
+        "Esos son los datos que ya tiene la incidencia: no hay cambios que guardar.",
       );
     }
 
@@ -686,6 +704,9 @@ export const updateEquipment = mutation({
     // El rastro dice qué cambió, no solo que cambió: es lo que permite leer la
     // ficha de un vistazo y saber de dónde salió el dato que hay ahora.
     const changes = [
+      ...(args.equipmentId && args.equipmentId !== incident.equipmentId
+        ? [`vinculado a ${linkedEq?.code ?? linkedEq?.model ?? "inventario"}`]
+        : []),
       ...(model !== incident.model ? [`modelo ${model}`] : []),
       ...(serialNumber !== incident.serialNumber
         ? [serialNumber ? `nº de serie ${serialNumber}` : "sin nº de serie"]
@@ -693,8 +714,7 @@ export const updateEquipment = mutation({
     ];
 
     await ctx.db.patch(args.incidentId, {
-      // Vaciar es una corrección, no un descuido: si el dato que había era
-      // erróneo, se quita (y `undefined` es como se quita un campo aquí).
+      ...(equipmentId ? { equipmentId } : {}),
       model,
       serialNumber,
       updatedAt: now,
@@ -704,7 +724,7 @@ export const updateEquipment = mutation({
           incident.status,
           now,
           name,
-          `Datos del equipo corregidos · ${changes.join(" · ")}`,
+          `Datos del equipo actualizados · ${changes.join(" · ")}`,
         ),
       ],
     });

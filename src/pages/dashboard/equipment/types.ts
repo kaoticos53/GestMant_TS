@@ -16,6 +16,13 @@ export interface EquipmentViewProps {
 
 export interface EquipmentFormDialogProps {
   item: EquipmentDoc | null;
+  initialValues?: {
+    model?: string;
+    serialNumber?: string;
+    location?: string;
+    modelId?: Id<"equipmentModels">;
+  };
+  onSuccess?: (createdId: Id<"equipment">) => void;
   onClose: () => void;
 }
 

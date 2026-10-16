@@ -154,14 +154,14 @@ interface Classification {
   type: string;
   brand?: string;
   model?: string;
+  modelId?: Id<"equipmentModels">;
   equipmentId?: Id<"equipment">;
 }
 
 /**
  * Valida la clasificación. El tipo tiene que ser uno del catálogo —es lo que
- * hace que los filtros sirvan— y, si el manual se asigna a un equipo, este
- * tiene que existir y la marca y el modelo se heredan de él cuando no se
- * indican: la ficha del equipo ya los sabe, no hay que volver a escribirlos.
+ * hace que los filtros sirvan— y, si el manual se asigna a un equipo o a un modelo,
+ * la marca y el modelo se heredan de él cuando no se indican.
  */
 async function validateClassification(
   ctx: QueryCtx,
@@ -169,6 +169,7 @@ async function validateClassification(
     type: string;
     brand?: string;
     model?: string;
+    modelId?: Id<"equipmentModels"> | null;
     equipmentId?: Id<"equipment"> | null;
   },
 ): Promise<Classification> {
@@ -180,7 +181,9 @@ async function validateClassification(
   }
   let brand = args.brand?.trim() || undefined;
   let model = args.model?.trim() || undefined;
+  let modelId = args.modelId ?? undefined;
   const equipmentId = args.equipmentId ?? undefined;
+
   if (equipmentId) {
     const equipment = await ctx.db.get(equipmentId);
     if (!equipment) {
@@ -190,11 +193,32 @@ async function validateClassification(
     }
     brand = brand ?? (equipment.brand?.trim() || undefined);
     model = model ?? (equipment.model.trim() || undefined);
+    modelId = modelId ?? equipment.modelId;
   }
+
+  if (modelId) {
+    const eqModel = await ctx.db.get(modelId);
+    if (eqModel) {
+      brand = brand ?? (eqModel.brand?.trim() || undefined);
+      model = model ?? (eqModel.model.trim() || undefined);
+    }
+  } else if (model) {
+    // Si no vino modelId pero tenemos model, buscar si existe en equipmentModels
+    const foundModel = await ctx.db
+      .query("equipmentModels")
+      .withIndex("by_model", (q) => q.eq("model", model!))
+      .first();
+    if (foundModel) {
+      modelId = foundModel._id;
+      brand = brand ?? (foundModel.brand?.trim() || undefined);
+    }
+  }
+
   return {
     type,
     ...(brand ? { brand } : {}),
     ...(model ? { model } : {}),
+    ...(modelId ? { modelId } : {}),
     ...(equipmentId ? { equipmentId } : {}),
   };
 }
@@ -312,6 +336,7 @@ export const create = mutation({
     type: v.string(),
     brand: v.optional(v.string()),
     model: v.optional(v.string()),
+    modelId: v.optional(v.id("equipmentModels")),
     equipmentId: v.optional(v.id("equipment")),
     storageId: v.optional(v.id("_storage")),
     fileName: v.optional(v.string()),
@@ -385,6 +410,7 @@ export const update = mutation({
     type: v.optional(v.string()),
     brand: v.optional(v.string()),
     model: v.optional(v.string()),
+    modelId: v.optional(v.union(v.id("equipmentModels"), v.null())),
     /** Un equipo del inventario, o `null` para desvincularlo del que tuviera. */
     equipmentId: v.optional(v.union(v.id("equipment"), v.null())),
     /** Archivo nuevo (PDF) que sustituye al del manual. */
@@ -415,12 +441,15 @@ export const update = mutation({
       args.type !== undefined ||
       args.brand !== undefined ||
       args.model !== undefined ||
+      args.modelId !== undefined ||
       args.equipmentId !== undefined
     ) {
       const classification = await validateClassification(ctx, {
         type: args.type ?? manual.type,
         brand: args.brand ?? manual.brand,
         model: args.model ?? manual.model,
+        modelId:
+          args.modelId === undefined ? manual.modelId : args.modelId,
         equipmentId:
           args.equipmentId === undefined
             ? manual.equipmentId
@@ -432,6 +461,7 @@ export const update = mutation({
       patch.type = classification.type;
       patch.brand = classification.brand;
       patch.model = classification.model;
+      patch.modelId = classification.modelId;
       patch.equipmentId = classification.equipmentId;
       reclassified = true;
     }
@@ -555,3 +585,42 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+/**
+ * Manuales y notas técnicas asociados a un modelo concreto (por modelId o por nombre de modelo).
+ * Permite que cualquier equipo de ese modelo muestre inmediatamente su documentación técnica.
+ */
+export const byModel = query({
+  args: {
+    modelId: v.optional(v.id("equipmentModels")),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    const me = userId === null ? null : await ctx.db.get(userId);
+    if (!me || me.isAnonymous === true) return [];
+    if (!(await hasCapability(ctx, me, "viewManuals"))) return [];
+
+    let rows: Doc<"manuals">[] = [];
+    if (args.modelId) {
+      rows = await ctx.db
+        .query("manuals")
+        .withIndex("by_modelId", (q) => q.eq("modelId", args.modelId))
+        .collect();
+    } else if (args.model?.trim()) {
+      const target = args.model.trim().toLowerCase();
+      const all = await ctx.db.query("manuals").collect();
+      rows = all.filter(
+        (m) => m.model && m.model.trim().toLowerCase() === target,
+      );
+    }
+
+    return await Promise.all(
+      sortManuals(rows).map(async (manual) => ({
+        ...manual,
+        url: manual.storageId ? await ctx.storage.getUrl(manual.storageId) : null,
+      })),
+    );
+  },
+});
+

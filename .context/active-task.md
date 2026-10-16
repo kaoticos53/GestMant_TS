@@ -32,3 +32,4 @@
 - [ ] **Paso 4:** Tests específicos del módulo (`npx vitest run <ruta-test>`).
 - [ ] **Paso 5:** Tests de arquitectura y seguridad (`tests/arquitectura.test.ts`, `tests/seguridad.test.ts`).
 - [ ] **Paso 6:** Handover registrado y limpieza de este archivo.
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,20 +21,25 @@ import type { EquipmentFormDialogProps } from "../types";
 
 export function EquipmentFormDialog({
   item,
+  initialValues,
+  onSuccess,
   onClose,
 }: EquipmentFormDialogProps) {
   const create = useMutation(api.equipment.create);
   const update = useMutation(api.equipment.update);
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
 
   const isEdit = item !== null;
   const [code, setCode] = useState(item?.code ?? "");
   const [brand, setBrand] = useState(item?.brand ?? "");
   const [name, setName] = useState(item?.name ?? "");
-  const [model, setModel] = useState(item?.model ?? "");
-  const [location, setLocation] = useState(item?.location ?? "");
+  const [model, setModel] = useState(item?.model ?? initialValues?.model ?? "");
+  const [location, setLocation] = useState(item?.location ?? initialValues?.location ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
-  const [serialNumber, setSerialNumber] = useState(item?.serialNumber ?? "");
+  const [serialNumber, setSerialNumber] = useState(
+    item?.serialNumber ?? initialValues?.serialNumber ?? "",
+  );
   const [supplier, setSupplier] = useState(item?.supplier ?? "");
   const [purchaseDate, setPurchaseDate] = useState(
     dateToInput(item?.purchaseDate),
@@ -52,6 +57,57 @@ export function EquipmentFormDialog({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Combinar modelos únicos de inventario y catálogo para sugerencias
+  const allSuggestedModels = useMemo(() => {
+    const set = new Set<string>();
+    for (const cm of catalogModels) {
+      if (cm.model?.trim()) set.add(cm.model.trim());
+    }
+    for (const m of inventoryModels) {
+      if (m?.trim()) set.add(m.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [catalogModels, inventoryModels]);
+
+  // Modelo del catálogo coincidente con el texto actual
+  const matchedCatalogModel = useMemo(() => {
+    const trimmed = model.trim().toLowerCase();
+    if (!trimmed) return null;
+    return (
+      catalogModels.find((cm) => cm.model.trim().toLowerCase() === trimmed) ??
+      null
+    );
+  }, [model, catalogModels]);
+
+  // Aplicar datos de plantilla del modelo
+  const applyModelTemplate = (templateModel: typeof matchedCatalogModel) => {
+    if (!templateModel) return;
+    if (templateModel.brand && !brand.trim()) setBrand(templateModel.brand);
+    if (templateModel.name && !name.trim()) setName(templateModel.name);
+    if (templateModel.defaultSupplier && !supplier.trim())
+      setSupplier(templateModel.defaultSupplier);
+    if (
+      templateModel.defaultMaintenanceIntervalDays !== undefined &&
+      !intervalDays.trim()
+    ) {
+      setIntervalDays(String(templateModel.defaultMaintenanceIntervalDays));
+    }
+    if (templateModel.description && !description.trim()) {
+      setDescription(templateModel.description);
+    }
+  };
+
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel);
+    const trimmed = newModel.trim().toLowerCase();
+    const found = catalogModels.find(
+      (cm) => cm.model.trim().toLowerCase() === trimmed,
+    );
+    if (found) {
+      applyModelTemplate(found);
+    }
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -97,6 +153,7 @@ export function EquipmentFormDialog({
     setBusy(true);
     try {
       const payload = {
+        modelId: matchedCatalogModel?._id ?? initialValues?.modelId,
         code: code.trim(),
         brand: brand.trim(),
         name: name.trim(),
@@ -117,8 +174,11 @@ export function EquipmentFormDialog({
         await update({ id: item._id, ...payload });
         toast.success(`${payload.model} actualizado`);
       } else {
-        await create(payload);
+        const createdId = await create(payload);
         toast.success(`${payload.model} añadido al inventario`);
+        if (createdId && onSuccess) {
+          onSuccess(createdId);
+        }
       }
       onClose();
     } catch (err) {
@@ -173,18 +233,25 @@ export function EquipmentFormDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="eq-model">Modelo *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="eq-model">Modelo *</Label>
+              {matchedCatalogModel && (
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  Plantilla vinculada: {matchedCatalogModel.name}
+                </span>
+              )}
+            </div>
             <Input
               id="eq-model"
               list="eq-models-datalist"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => handleModelChange(event.target.value)}
               placeholder="HDC-3500"
               className="font-mono"
               disabled={busy}
             />
             <datalist id="eq-models-datalist">
-              {inventoryModels.map((m) => (
+              {allSuggestedModels.map((m) => (
                 <option key={m} value={m} />
               ))}
             </datalist>

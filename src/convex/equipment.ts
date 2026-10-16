@@ -92,6 +92,7 @@ export const uniqueModels = query({
 });
 
 const equipmentArgs = {
+  modelId: v.optional(v.id("equipmentModels")),
   code: v.optional(v.string()),
   brand: v.optional(v.string()),
   name: v.string(),
@@ -176,13 +177,26 @@ export const create = mutation({
       throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
     }
 
+    // Resolver modelId si no vino explícito
+    let modelId = args.modelId;
+    if (!modelId) {
+      const found = await ctx.db
+        .query("equipmentModels")
+        .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
+        .first();
+      if (found) {
+        modelId = found._id;
+      }
+    }
+
     const now = Date.now();
     // La descripción es la nota del equipo y se escribe con formato: se guarda
     // su documento tal cual (y sin restos cuando se queda vacía). Una nota de
     // antes, escrita en texto plano, se guarda igual que estaba.
     const description = richDocToStore(args.description);
-    await ctx.db.insert("equipment", {
+    const id = await ctx.db.insert("equipment", {
       code,
+      ...(modelId ? { modelId } : {}),
       ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
       name: args.name.trim(),
       model: args.model.trim(),
@@ -207,6 +221,7 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    return id;
   },
 });
 
@@ -232,8 +247,20 @@ export const update = mutation({
       throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
     }
 
+    let modelId = args.modelId ?? item.modelId;
+    if (!modelId) {
+      const found = await ctx.db
+        .query("equipmentModels")
+        .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
+        .first();
+      if (found) {
+        modelId = found._id;
+      }
+    }
+
     await ctx.db.patch(args.id, {
       code,
+      modelId: modelId || undefined,
       brand: args.brand?.trim() || undefined,
       name: args.name.trim(),
       model: args.model.trim(),

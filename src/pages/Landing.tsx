@@ -84,43 +84,43 @@ const systemCapabilities: {
   title: string;
   description: string;
 }[] = [
-  {
-    icon: Siren,
-    title: "Notificación directa de incidencias",
-    description:
-      "Cualquier operador o técnico de plató notifica una incidencia sin pasar por login. El sistema genera un código público para seguimiento inmediato.",
-  },
-  {
-    icon: Boxes,
-    title: "Catálogo y almacén de repuestos",
-    description:
-      "Repuestos con nº de parte, ubicación exacta en el almacén, stock mínimo y compatibilidad directa con los equipos del inventario.",
-  },
-  {
-    icon: Activity,
-    title: "Aprobación con stock en tiempo real",
-    description:
-      "Al aprobar una petición, el material se descuenta automáticamente del catálogo. Cero discrepancias entre lo físico y el sistema.",
-  },
-  {
-    icon: FileClock,
-    title: "Cuaderno técnico y expediente",
-    description:
-      "Registro inmutable con notas formateadas, mediciones y fotografías del cuaderno de intervención hasta el cierre definitivo del caso.",
-  },
-  {
-    icon: ShoppingCart,
-    title: "Compras y recepción de albaranes",
-    description:
-      "Lo que el almacén no cubre se agrupa por proveedor en órdenes de compra. La recepción del albarán actualiza el material a recibido.",
-  },
-  {
-    icon: FileCheck2,
-    title: "Partes de trabajo homologados",
-    description:
-      "Generación de partes de trabajo oficiales en PDF, Markdown y ZIP por incidencia para auditorías técnicas y entrega de turnos.",
-  },
-];
+    {
+      icon: Siren,
+      title: "Notificación directa de incidencias",
+      description:
+        "Cualquier operador o técnico de plató notifica una incidencia sin pasar por login. El sistema genera un código público para seguimiento inmediato.",
+    },
+    {
+      icon: Boxes,
+      title: "Catálogo y almacén de repuestos",
+      description:
+        "Repuestos con nº de parte, ubicación exacta en el almacén, stock mínimo y compatibilidad directa con los equipos del inventario.",
+    },
+    {
+      icon: Activity,
+      title: "Aprobación con stock en tiempo real",
+      description:
+        "Al aprobar una petición, el material se descuenta automáticamente del catálogo. Cero discrepancias entre lo físico y el sistema.",
+    },
+    {
+      icon: FileClock,
+      title: "Cuaderno técnico y expediente",
+      description:
+        "Registro inmutable con notas formateadas, mediciones y fotografías del cuaderno de intervención hasta el cierre definitivo del caso.",
+    },
+    {
+      icon: ShoppingCart,
+      title: "Compras y recepción de albaranes",
+      description:
+        "Lo que el almacén no cubre se agrupa por proveedor en órdenes de compra. La recepción del albarán actualiza el material a recibido.",
+    },
+    {
+      icon: FileCheck2,
+      title: "Partes de trabajo homologados",
+      description:
+        "Generación de partes de trabajo oficiales en PDF, Markdown y ZIP por incidencia para auditorías técnicas y entrega de turnos.",
+    },
+  ];
 
 /** Recorrido de una incidencia en el taller de broadcast. */
 const incidentSteps = [
@@ -202,11 +202,11 @@ export default function Landing() {
               <span className="text-sm font-bold tracking-tight text-foreground flex items-center gap-2">
                 Pulso Taller
                 <span className="hidden font-mono text-[10px] font-normal uppercase tracking-wider text-signal sm:inline-block">
-                  Broadcast Engineering
+                  Broadcast TV
                 </span>
               </span>
               <span className="text-[11px] text-muted-foreground hidden sm:block">
-                Mantenimiento de Televisión y Medios Audiovisuales
+                Mantenimiento de Televisión
               </span>
             </div>
           </a>
@@ -311,8 +311,7 @@ export default function Landing() {
               <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                 La plataforma de operaciones técnicas que centraliza el soporte a
                 estudios, controles centrales y unidades móviles: notificación
-                inmediata de incidencias, control milimétrico de repuestos con
-                stock en tiempo real y homologación de partes de trabajo.
+                inmediata de incidencias.
               </p>
 
               {/* Botonera de Acción Destacada */}
@@ -346,7 +345,7 @@ export default function Landing() {
 
               <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                <span>Acceso directo sin contraseña para personal de plató y colaboradores invitados.</span>
+                <span>Acceso directo sin contraseña para notificar incidencias.</span>
               </div>
 
               {/* SLAs y Garantías Corporativas */}

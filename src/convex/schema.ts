@@ -310,8 +310,24 @@ const schema = defineSchema(
       .index("by_category", ["category"])
       .index("by_name", ["name"]),
 
+    // Catálogo de modelos de equipos (plantillas técnicas del fabricante)
+    equipmentModels: defineTable({
+      brand: v.optional(v.string()), // marca comercial, ej. "Sony"
+      model: v.string(), // nombre/código comercial del modelo, ej. "HDC-3500"
+      name: v.string(), // designación genérica, ej. "Cámara de estudio"
+      category: v.optional(v.string()), // categoría del equipo
+      defaultMaintenanceIntervalDays: v.optional(v.number()), // intervalo preventivo estándar
+      defaultSupplier: v.optional(v.string()), // proveedor habitual
+      description: v.optional(v.string()), // especificaciones generales o notas técnicas
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_model", ["model"])
+      .index("by_brand", ["brand"]),
+
     // Inventario de equipos del taller (para elegir modelo en las peticiones)
     equipment: defineTable({
+      modelId: v.optional(v.id("equipmentModels")), // enlace al catálogo de modelos
       code: v.optional(v.string()), // inventario interno, ej. "EQ-001"
       brand: v.optional(v.string()),
       name: v.string(), // designación, ej. "Cámara de estudio"
@@ -330,7 +346,8 @@ const schema = defineSchema(
       updatedAt: v.number(),
     })
       .index("by_code", ["code"])
-      .index("by_model", ["model"]),
+      .index("by_model", ["model"])
+      .index("by_modelId", ["modelId"]),
 
     // Incidencias/averías notificadas por cualquier usuario del taller
     incidents: defineTable({
@@ -559,6 +576,8 @@ const schema = defineSchema(
       type: v.string(), // clasificación: uno de los tipos del catálogo
       brand: v.optional(v.string()), // marca (se hereda del equipo si lo tiene)
       model: v.optional(v.string()), // modelo (se hereda del equipo si lo tiene)
+      // Modelo del catálogo de modelos al que pertenece el manual (plantilla general).
+      modelId: v.optional(v.id("equipmentModels")),
       // Equipo del inventario al que pertenece el manual, si es de uno concreto
       // del taller. Sin él, el manual es del modelo y sirve para cualquier
       // equipo de esa marca y modelo.
@@ -611,6 +630,7 @@ const schema = defineSchema(
     })
       .index("by_type", ["type"])
       .index("by_equipment", ["equipmentId"])
+      .index("by_modelId", ["modelId"])
       // Marca y modelo siempre se consultan juntos: son la clasificación de
       // taller con la que se busca «los manuales de este modelo».
       .index("by_brand_model", ["brand", "model"])

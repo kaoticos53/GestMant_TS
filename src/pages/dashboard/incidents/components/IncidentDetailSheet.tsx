@@ -133,6 +133,7 @@ import { VerifyDialog } from "../dialogs/VerifyDialog";
 import { CloseDialog } from "../dialogs/CloseDialog";
 import { CorrectEquipmentDialog } from "../dialogs/CorrectEquipmentDialog";
 import { IncidentRequestDialog } from "../dialogs/IncidentRequestDialog";
+import { EquipmentFormDialog } from "../../equipment/dialogs/EquipmentFormDialog";
 import { NoteHistory } from "./NoteHistory";
 
 export function IncidentDetailSheet({
@@ -159,6 +160,7 @@ export function IncidentDetailSheet({
   const updateDocument = useMutation(api.incidents.updateDocument);
   const removeDocument = useMutation(api.incidents.removeDocument);
   const generateUploadUrl = useMutation(api.incidents.generateUploadUrl);
+  const updateEquipment = useMutation(api.incidents.updateEquipment);
   const addNote = useMutation(api.incidents.addNote);
   const updateNote = useMutation(api.incidents.updateNote);
   const removeNote = useMutation(api.incidents.removeNote);
@@ -183,6 +185,7 @@ export function IncidentDetailSheet({
   // Corrección de los datos del equipo: quien notificó los escribió de memoria,
   // y quien tiene la máquina delante es quien los puede poner bien.
   const [equipmentOpen, setEquipmentOpen] = useState(false);
+  const [createEquipmentOpen, setCreateEquipmentOpen] = useState(false);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   // Documento del expediente que se está corrigiendo (null = se adjunta uno
   // nuevo) y documento que se está a punto de quitar.
@@ -727,14 +730,41 @@ export function IncidentDetailSheet({
                     base de datos ni quedarse con la duda. */}
                 <dd>{reporterNoticeText(incident)}</dd>
               </div>
-              <div>
+              <div className="col-span-2">
                 <dt className="text-xs text-muted-foreground">
                   Equipo en inventario
                 </dt>
-                <dd>
-                  {linkedEquipment
-                    ? equipmentLabel(linkedEquipment)
-                    : "Sin vincular"}
+                <dd className="mt-1 flex flex-wrap items-center gap-2">
+                  {linkedEquipment ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground">
+                        {equipmentLabel(linkedEquipment)}
+                      </span>
+                      {linkedEquipment.serialNumber && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                          s/n: {linkedEquipment.serialNumber}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-amber-700 dark:text-amber-400">
+                        Equipo no inventariado
+                      </span>
+                      {canWork && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 gap-1 border-amber-500/30 bg-amber-500/10 px-2 text-xs text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+                          onClick={() => setCreateEquipmentOpen(true)}
+                        >
+                          <Plus className="size-3" />
+                          Dar de alta en inventario
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </dd>
               </div>
             </dl>
@@ -1344,6 +1374,32 @@ export function IncidentDetailSheet({
           <CorrectEquipmentDialog
             incident={incident}
             onClose={() => setEquipmentOpen(false)}
+          />
+        )}
+        {createEquipmentOpen && (
+          <EquipmentFormDialog
+            item={null}
+            initialValues={{
+              model: incident.model,
+              serialNumber: incident.serialNumber,
+              location: incident.location,
+            }}
+            onSuccess={async (createdId) => {
+              try {
+                await updateEquipment({
+                  incidentId: incident._id,
+                  equipmentId: createdId,
+                  model: incident.model,
+                  serialNumber: incident.serialNumber,
+                });
+                toast.success(
+                  `Equipo vinculado a la incidencia ${incident.reference}`,
+                );
+              } catch (err) {
+                toast.error(getErrorMessage(err));
+              }
+            }}
+            onClose={() => setCreateEquipmentOpen(false)}
           />
         )}
 

@@ -26,6 +26,7 @@ import type * as cleanupLog from "../cleanupLog.js";
 import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as equipment from "../equipment.js";
+import type * as equipmentModels from "../equipmentModels.js";
 import type * as http from "../http.js";
 import type * as incidentIntake from "../incidentIntake.js";
 import type * as incidentMail from "../incidentMail.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dashboard: typeof dashboard;
   equipment: typeof equipment;
+  equipmentModels: typeof equipmentModels;
   http: typeof http;
   incidentIntake: typeof incidentIntake;
   incidentMail: typeof incidentMail;

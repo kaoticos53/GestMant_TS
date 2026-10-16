@@ -31,7 +31,7 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { equipmentLabel, getErrorMessage, nextReview } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
-import { BookOpen, Cpu, Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Cpu, Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ManualDeleteDialog } from "./ManualDeleteDialog";
 import { ManualDetailSheet } from "./ManualDetailSheet";
@@ -88,6 +88,11 @@ export function EquipmentView({
   } | null>(null);
   const [formTarget, setFormTarget] = useState<{
     item: EquipmentDoc | null;
+    initialValues?: {
+      model?: string;
+      serialNumber?: string;
+      location?: string;
+    };
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EquipmentDoc | null>(null);
   // El formulario de un manual abierto desde aquí: el que se corrige o el que
@@ -403,6 +408,22 @@ export function EquipmentView({
                                   type="button"
                                   variant="ghost"
                                   size="icon"
+                                  className="size-8 text-muted-foreground hover:text-foreground"
+                                  onClick={() =>
+                                    setFormTarget({
+                                      item: null,
+                                      initialValues: { model: item.model },
+                                    })
+                                  }
+                                  title={`Añadir otra unidad de ${item.model} (usar modelo como plantilla)`}
+                                  aria-label={`Añadir otra unidad de ${item.model}`}
+                                >
+                                  <Copy className="size-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
                                   className="size-8"
                                   onClick={() => setFormTarget({ item })}
                                   aria-label={`Editar ${item.model}`}
@@ -506,8 +527,9 @@ export function EquipmentView({
 
       {formTarget && (
         <EquipmentFormDialog
-          key={formTarget.item?._id ?? "new"}
+          key={formTarget.item?._id ?? formTarget.initialValues?.model ?? "new"}
           item={formTarget.item}
+          initialValues={formTarget.initialValues}
           onClose={() => setFormTarget(null)}
         />
       )}

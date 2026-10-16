@@ -82,6 +82,8 @@ export function ManualFormDialog({
   const update = useMutation(api.manuals.update);
   const generateUploadUrl = useMutation(api.manuals.generateUploadUrl);
   const verifyManualPdf = useAction(api.manuals.verifyManualPdf);
+  const ensureModel = useMutation(api.equipmentModels.ensureModel);
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
 
   const isEdit = manual !== null;
   const initialKind: ManualKind = manual?.kind ?? (canManage ? "file" : "note");
@@ -101,12 +103,29 @@ export function ManualFormDialog({
   const isFile = kind === "file";
   const uniqueModels = useMemo(() => {
     const set = new Set<string>();
+    for (const cm of catalogModels) {
+      const trimmed = cm.model?.trim();
+      if (trimmed) set.add(trimmed);
+    }
     for (const eq of equipment) {
       const trimmed = eq.model?.trim();
       if (trimmed) set.add(trimmed);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
-  }, [equipment]);
+  }, [catalogModels, equipment]);
+
+  // Al escribir o elegir un modelo de la lista, si existe en el catálogo y no hay marca, sugerirla
+  const handleModelChange = (value: string) => {
+    setModel(value);
+    if (!brand.trim()) {
+      const found = catalogModels.find(
+        (m) => m.model.toLowerCase() === value.trim().toLowerCase(),
+      );
+      if (found?.brand) {
+        setBrand(found.brand);
+      }
+    }
+  };
 
   // La clasificación efectiva: con equipo, la marca y el modelo son los suyos
   // —lo mismo que enseña el formulario, para no guardar algo distinto de lo que
@@ -189,6 +208,22 @@ export function ManualFormDialog({
         uploaded = await uploadToStorage(uploadUrl, file);
         await verifyManualPdf({ storageId: uploaded });
       }
+
+      // Si se especificó un modelo y no se asignó a un equipo individual,
+      // asegurar que el modelo exista en el catálogo de modelos
+      let resolvedModelId: Id<"equipmentModels"> | undefined = undefined;
+      if (classification.model?.trim()) {
+        try {
+          resolvedModelId = await ensureModel({
+            model: classification.model.trim(),
+            brand: classification.brand?.trim() || undefined,
+          });
+        } catch {
+          // Si el usuario no tiene permisos de manager de equipos, el backend de manuals
+          // asociará el modelId si el modelo ya existía.
+        }
+      }
+
       if (isEdit && manual) {
         await update({
           id: manual._id,
@@ -196,6 +231,7 @@ export function ManualFormDialog({
           type,
           brand: classification.brand,
           model: classification.model,
+          modelId: resolvedModelId,
           equipmentId: linkedId,
           ...(uploaded
             ? { storageId: uploaded, fileName: file?.name ?? "" }
@@ -216,6 +252,7 @@ export function ManualFormDialog({
           type,
           brand: classification.brand,
           model: classification.model,
+          modelId: resolvedModelId,
           ...(linkedId ? { equipmentId: linkedId } : {}),
           storageId: uploaded,
           fileName: file?.name ?? "",
@@ -229,6 +266,7 @@ export function ManualFormDialog({
           type,
           brand: classification.brand,
           model: classification.model,
+          modelId: resolvedModelId,
           ...(linkedId ? { equipmentId: linkedId } : {}),
           notes,
         });
@@ -363,7 +401,7 @@ export function ManualFormDialog({
                 id="manual-model"
                 list="manual-models-datalist"
                 value={linked ? classification.model : model}
-                onChange={(event) => setModel(event.target.value)}
+                onChange={(event) => handleModelChange(event.target.value)}
                 placeholder="HDC-3500"
                 disabled={busy || Boolean(linked)}
               />
