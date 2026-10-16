@@ -1,8 +1,10 @@
+import { useState } from "react";
 import logo from "@/assets/logo.svg";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
+import { ChangelogDialog } from "@/components/changelog/ChangelogDialog";
 import {
   Activity,
   ArrowRight,
@@ -179,6 +181,7 @@ const requestSteps = [
 ];
 
 export default function Landing() {
+  const [showChangelog, setShowChangelog] = useState(false);
   const { isLoading, isAuthenticated } = useAuth();
   const signedIn = isAuthenticated && !isLoading;
 
@@ -799,19 +802,36 @@ export default function Landing() {
               <Link to="/auth" className="hover:text-foreground transition-colors">
                 Acceso profesional
               </Link>
+              <button
+                type="button"
+                onClick={() => setShowChangelog(true)}
+                className="hover:text-foreground transition-colors cursor-pointer text-left"
+              >
+                Bitácora de cambios
+              </button>
             </div>
           </div>
 
           <div className="mt-8 flex flex-col items-center justify-between border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row">
-            <p title={DETAILED_VERSION}>
+            <button
+              type="button"
+              onClick={() => setShowChangelog(true)}
+              className="text-left hover:text-foreground transition-colors cursor-pointer"
+              title={`${DETAILED_VERSION} · Ver bitácora de cambios entre versiones`}
+            >
               {FULL_VERSION} · Sistema de Gestión de Mantenimiento Broadcast
-            </p>
+            </button>
             <p className="mt-2 sm:mt-0">
               © {new Date().getFullYear()} Pulso Taller. Todos los derechos reservados.
             </p>
           </div>
         </div>
       </footer>
+
+      <ChangelogDialog
+        open={showChangelog}
+        onOpenChange={setShowChangelog}
+      />
     </div>
   );
 }

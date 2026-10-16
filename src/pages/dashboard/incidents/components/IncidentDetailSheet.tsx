@@ -630,7 +630,7 @@ export function IncidentDetailSheet({
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         <SheetHeader>
           <div className="flex flex-wrap items-center gap-2">
             {/* La referencia es el número con el que el taller cita el caso

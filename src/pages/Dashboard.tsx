@@ -677,7 +677,7 @@ export default function Dashboard() {
           navBadges={navBadges}
         />
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-8 sm:px-6">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-16 pt-8 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-signal">{roleLabel}</p>

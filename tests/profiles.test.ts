@@ -3,6 +3,7 @@ import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import schema from "../src/convex/schema";
+import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../src/lib/sidebar";
 
 /** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
 const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
@@ -116,13 +117,17 @@ describe("perfil propio", () => {
       width: 5000,
       collapsed: false,
     });
-    expect((await t.run((ctx) => ctx.db.get(techId)))?.sidebarWidth).toBe(420);
+    expect((await t.run((ctx) => ctx.db.get(techId)))?.sidebarWidth).toBe(
+      SIDEBAR_WIDTH_MAX,
+    );
 
     await tech.mutation(api.members.saveSidebarLayout, {
       width: 10,
       collapsed: false,
     });
-    expect((await t.run((ctx) => ctx.db.get(techId)))?.sidebarWidth).toBe(208);
+    expect((await t.run((ctx) => ctx.db.get(techId)))?.sidebarWidth).toBe(
+      SIDEBAR_WIDTH_MIN,
+    );
   });
 
   test("la preferencia del menú es de cada persona", async () => {

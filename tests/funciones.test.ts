@@ -51,6 +51,7 @@ const shPath = (path: string) =>
 
 /** ¿Hay un `sh` de verdad con sus herramientas? Sin él, la prueba no corre. */
 const shListo =
+  process.platform !== "win32" &&
   spawnSync("sh", ["-c", "command -v printf tr"], { encoding: "utf8" })
     .status === 0;
 

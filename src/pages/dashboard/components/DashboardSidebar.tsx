@@ -6,8 +6,9 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "@/lib/sidebar";
 import { cn } from "@/lib/utils";
 import { DETAILED_VERSION, FULL_VERSION } from "@/version";
-import { ChevronRight, LogOut, PanelLeftClose, Siren } from "lucide-react";
-import type React from "react";
+import { ChevronRight, History, LogOut, PanelLeftClose, Siren } from "lucide-react";
+import React, { useState } from "react";
+import { ChangelogDialog } from "@/components/changelog/ChangelogDialog";
 import { Link } from "react-router";
 import { GlobalSearch, type SearchHit } from "../GlobalSearch";
 import type { NavId, NavItem } from "../types";
@@ -57,6 +58,7 @@ export function DashboardSidebar({
   roleBadge,
   onSignOut,
 }: DashboardSidebarProps) {
+  const [showChangelog, setShowChangelog] = useState(false);
   const navButtonClass = (active: boolean) =>
     cn(
       "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors",
@@ -215,14 +217,22 @@ export function DashboardSidebar({
             </Button>
           </div>
 
-          <div
-            className="mt-2 text-center text-[11px] text-muted-foreground/60 select-none"
-            title={DETAILED_VERSION}
+          <button
+            type="button"
+            onClick={() => setShowChangelog(true)}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer select-none"
+            title={`${DETAILED_VERSION} · Clic para ver la bitácora de cambios`}
           >
-            {FULL_VERSION}
-          </div>
+            <History className="size-3 shrink-0" />
+            <span>{FULL_VERSION}</span>
+          </button>
         </div>
       </aside>
+
+      <ChangelogDialog
+        open={showChangelog}
+        onOpenChange={setShowChangelog}
+      />
 
       {/* Borde del menú: se arrastra (o se usan las flechas) para cambiar su ancho. */}
       <div
@@ -235,15 +245,24 @@ export function DashboardSidebar({
         tabIndex={0}
         title="Arrastra para cambiar el ancho · doble clic para restablecer"
         {...resizeHandleProps}
-        className="group sticky top-0 hidden h-screen w-1.5 shrink-0 cursor-col-resize touch-none select-none focus-visible:outline-none lg:block"
+        className="group sticky top-0 hidden h-screen w-3.5 -mr-1.5 shrink-0 cursor-col-resize touch-none select-none focus-visible:outline-none lg:flex lg:items-center lg:justify-center z-20"
       >
-        {/* La línea del borde queda justo donde estaba la del menú. */}
+        {/* Línea divisoria interactiva */}
         <span
           aria-hidden="true"
           className={cn(
-            "absolute inset-y-0 left-0 w-px -translate-x-1/2 bg-border/70 transition-colors",
-            "group-hover:bg-signal/50 group-focus-visible:w-0.5 group-focus-visible:bg-signal",
-            sidebarResizing && "w-0.5 bg-signal",
+            "absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-all",
+            "group-hover:w-1 group-hover:bg-signal/60 group-focus-visible:w-1 group-focus-visible:bg-signal",
+            sidebarResizing && "w-1 bg-signal",
+          )}
+        />
+        {/* Píldora de agarre táctil centrada */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "relative z-10 h-8 w-1 rounded-full bg-muted-foreground/30 transition-all",
+            "group-hover:h-12 group-hover:w-1.5 group-hover:bg-signal",
+            sidebarResizing && "h-14 w-1.5 bg-signal shadow-sm",
           )}
         />
       </div>

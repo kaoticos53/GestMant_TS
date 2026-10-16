@@ -53,6 +53,7 @@ const shPath = (path: string) =>
 
 /** ¿Hay un `sh` de verdad con sus herramientas? Sin él, la prueba de verdad no corre. */
 const shListo =
+  process.platform !== "win32" &&
   spawnSync("sh", ["-c", "command -v awk head tail tr id df"], {
     encoding: "utf8",
   }).status === 0;

@@ -111,6 +111,15 @@ export const versionInfo: VersionInfo = {
 
   fs.writeFileSync(VERSION_TS_FILE, tsContent, 'utf8');
 
+  // 3. Comprobar presencia en la bitácora de cambios (CHANGELOG.md)
+  const changelogPath = path.join(ROOT_DIR, 'CHANGELOG.md');
+  if (fs.existsSync(changelogPath)) {
+    const changelogContent = fs.readFileSync(changelogPath, 'utf8');
+    if (!changelogContent.includes(`## [${config.version}]`)) {
+      console.warn(`[version] ADVERTENCIA: La versión ${config.version} no está registrada en CHANGELOG.md. Recuerda añadirla a la bitácora.`);
+    }
+  }
+
   if (!quiet) {
     console.log(`[version] ${increment ? 'Compilación registrada' : 'Versión sincronizada'}: ${detailedVersion}`);
   }

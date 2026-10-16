@@ -6,10 +6,10 @@
  */
 
 /** Ancho con el que se abre el panel la primera vez. */
-export const SIDEBAR_WIDTH_DEFAULT = 256;
+export const SIDEBAR_WIDTH_DEFAULT = 296;
 /** Por debajo de esto el menú deja de caber; por encima del máximo, el contenido se ahoga. */
 export const SIDEBAR_WIDTH_MIN = 208;
-export const SIDEBAR_WIDTH_MAX = 420;
+export const SIDEBAR_WIDTH_MAX = 520;
 /** Cuánto cambia cada pulsación de flecha. */
 export const SIDEBAR_WIDTH_STEP = 16;
 /** En ventanas estrechas el panel nunca ocupa más de esta proporción. */

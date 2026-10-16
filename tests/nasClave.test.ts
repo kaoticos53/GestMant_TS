@@ -49,6 +49,7 @@ const shPath = (path: string) =>
 
 /** ¿Hay un `sh` de verdad? Sin él, lo que se ejecuta de verdad no corre. */
 const shListo =
+  process.platform !== "win32" &&
   spawnSync("sh", ["-c", "command -v cat printf"], { encoding: "utf8" })
     .status === 0;
 
