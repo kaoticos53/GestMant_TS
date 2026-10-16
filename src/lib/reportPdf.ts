@@ -46,11 +46,14 @@ export class ReportLayout {
   private readonly cursor: PdfCursor;
   private readonly renderer: ReportBlockRenderer;
 
+  private readonly footer: string | undefined;
+
   constructor(
     measure: PdfMeasureText,
     loadImage: PdfLoadImage | undefined,
-    private readonly footer: string | undefined,
+    footer: string | undefined,
   ) {
+    this.footer = footer;
     this.cursor = new PdfCursor(this.doc);
     this.renderer = new ReportBlockRenderer(
       this.cursor,

@@ -41,7 +41,7 @@ import {
   formatFileSize,
   getErrorMessage,
 } from "@/lib/workshop";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { FileText, NotebookPen, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

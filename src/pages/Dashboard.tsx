@@ -50,7 +50,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import type { SearchHit } from "./dashboard/GlobalSearch";
-import type { RequestFilterId } from "./dashboard/RequestsView";
+import type { RequestFilterId } from "./dashboard/requests/types";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";

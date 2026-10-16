@@ -274,11 +274,13 @@ export class PdfPage {
  * referencias cruzadas (`xref`) y el trailer de cierre según el estándar PDF 1.4.
  */
 export class PdfByteWriter {
-  constructor(
-    private readonly pages: readonly PdfPage[],
-    private readonly images: readonly PdfImage[],
-    private readonly size: PdfPageSize,
-  ) {}
+  private readonly pages: readonly PdfPage[];
+  private readonly images: readonly PdfImage[];
+
+  constructor(pages: readonly PdfPage[], images: readonly PdfImage[]) {
+    this.pages = pages;
+    this.images = images;
+  }
 
   write(): Uint8Array {
     const pageCount = this.pages.length;
@@ -421,6 +423,6 @@ export class PdfDocument {
    * Delega en `PdfByteWriter`.
    */
   toBytes(): Uint8Array {
-    return new PdfByteWriter(this.created, this.images, this.size).write();
+    return new PdfByteWriter(this.created, this.images).write();
   }
 }

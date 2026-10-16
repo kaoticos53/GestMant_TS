@@ -9,7 +9,7 @@ import {
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
-import type { QueueSortId } from "../QueueToolbar";
+import type { QueueSortId } from "../../QueueToolbar";
 import { STATUS_RANK, type IncidentDoc } from "../types";
 
 /** Todo lo que identifica una incidencia para el buscador. */

@@ -134,6 +134,18 @@ export function EquipmentFormDialog({
     return null;
   }, [model, catalogModels, allEquipment]);
 
+  /**
+   * El modelo del catálogo oficial que coincide con lo escrito, si lo hay: es
+   * lo que enlaza el equipo con su ficha de modelo (`modelId`) al guardarlo.
+   */
+  const matchedCatalogModel = useMemo(
+    () =>
+      catalogModels.find(
+        (cm) => cm.model.trim().toLowerCase() === model.trim().toLowerCase(),
+      ) ?? null,
+    [catalogModels, model],
+  );
+
   // Aplicar datos de plantilla del modelo
   const applyModelTemplate = (
     template: MatchedTemplate | null,

@@ -7,10 +7,12 @@ import { CONTENT_WIDTH, MARGIN, PAGE } from "./constants";
  * contenido supera el límite inferior de la página.
  */
 export class PdfCursor {
+  private readonly doc: PdfDocument;
   private _page: PdfPage;
   private _y: number = MARGIN.top;
 
-  constructor(private readonly doc: PdfDocument) {
+  constructor(doc: PdfDocument) {
+    this.doc = doc;
     this._page = this.doc.addPage();
   }
 

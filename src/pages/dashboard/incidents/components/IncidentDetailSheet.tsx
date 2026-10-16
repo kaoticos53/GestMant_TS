@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import {
@@ -8,14 +7,11 @@ import {
   ChevronDown,
   FileDown,
   FileText,
-  MapPin,
   Paperclip,
   Pen,
   Pencil,
   Plus,
   PackagePlus,
-  SearchX,
-  Siren,
   Trash2,
   Undo2,
   Upload,
@@ -52,13 +48,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -71,6 +60,7 @@ import { RichText } from "@/components/RichText";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { downloadText } from "@/lib/export";
 import {
   INCIDENT_STEP_LABELS,
   blockedIncidentSteps,
@@ -101,7 +91,6 @@ import {
 import { reportToPdf } from "@/lib/reportPdf";
 import {
   richDocIsEmpty,
-  richDocToPlainText,
   richDocToStore,
 } from "@/lib/richDoc";
 import {
@@ -111,7 +100,6 @@ import {
   exceedsFileLimit,
   uploadToStorage,
 } from "@/lib/upload";
-import { cn } from "@/lib/utils";
 import {
   INCIDENT_STATUS_META,
   PRIORITY_META,
@@ -123,6 +111,7 @@ import {
   isNoteWithinEditWindow,
   liveNotes,
   noteEditDeadline,
+  noteRestoration,
   noteRestoreUndoIndex,
   retiredNotes,
 } from "@/lib/workshop";

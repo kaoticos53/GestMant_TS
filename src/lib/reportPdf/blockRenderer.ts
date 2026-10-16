@@ -32,12 +32,22 @@ function normalizeRow(row: readonly string[], columns: number): string[] {
  * sobre el documento y las páginas utilizando el cursor de avance vertical.
  */
 export class ReportBlockRenderer {
+  private readonly cursor: PdfCursor;
+  private readonly doc: PdfDocument;
+  private readonly measure: PdfMeasureText;
+  private readonly loadImage: PdfLoadImage | undefined;
+
   constructor(
-    private readonly cursor: PdfCursor,
-    private readonly doc: PdfDocument,
-    private readonly measure: PdfMeasureText,
-    private readonly loadImage?: PdfLoadImage,
-  ) {}
+    cursor: PdfCursor,
+    doc: PdfDocument,
+    measure: PdfMeasureText,
+    loadImage?: PdfLoadImage,
+  ) {
+    this.cursor = cursor;
+    this.doc = doc;
+    this.measure = measure;
+    this.loadImage = loadImage;
+  }
 
   async renderBlock(block: ReportBlock): Promise<void> {
     switch (block.type) {

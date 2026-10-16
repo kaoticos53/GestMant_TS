@@ -63,7 +63,6 @@ export function IncidentsView({
   const {
     filter,
     setFilter,
-    detailId,
     setDetailId,
     search,
     setSearch,

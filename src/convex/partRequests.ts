@@ -2,12 +2,7 @@ import { archiveDecidedRequestsBefore } from "./archive";
 import { notifyUsers } from "./notify";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import {
-  type MutationCtx,
-  type QueryCtx,
-  mutation,
-  query,
-} from "./_generated/server";
+import { type QueryCtx, mutation, query } from "./_generated/server";
 import { hasCapability, memberOrNull } from "./permissions";
 import { freeReference } from "./references";
 import {
@@ -24,7 +19,6 @@ import {
 } from "./schema";
 
 import {
-  type PartPayload,
   actorName,
   attachmentArgs,
   buildPart,

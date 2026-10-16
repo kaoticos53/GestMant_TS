@@ -40,7 +40,7 @@ import type { ManualDoc } from "./ManualsView";
 
 import { EquipmentDetailSheet } from "./equipment/components/EquipmentDetailSheet";
 import { EquipmentFormDialog } from "./equipment/dialogs/EquipmentFormDialog";
-import type { EquipmentDoc } from "./equipment/types";
+import type { EquipmentDoc, EquipmentFormDialogProps } from "./equipment/types";
 
 export function EquipmentView({
   canManage = false,
@@ -88,11 +88,8 @@ export function EquipmentView({
   } | null>(null);
   const [formTarget, setFormTarget] = useState<{
     item: EquipmentDoc | null;
-    initialValues?: {
-      model?: string;
-      serialNumber?: string;
-      location?: string;
-    };
+    /** Los mismos campos que admite el formulario: no se declaran dos veces. */
+    initialValues?: EquipmentFormDialogProps["initialValues"];
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EquipmentDoc | null>(null);
   // El formulario de un manual abierto desde aquí: el que se corrige o el que

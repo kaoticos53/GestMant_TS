@@ -55,7 +55,6 @@ import { cn } from "@/lib/utils";
 import {
   PRIORITY_META,
   STATUS_META,
-  formatCurrency,
   formatDateTime,
   getErrorMessage,
   type Priority,

@@ -14,7 +14,6 @@ import {
 import {
   canAdvanceIncident,
   incidentStepStatus,
-  isClosedIncident,
   type IncidentAction,
   type IncidentStepStatus,
 } from "../lib/incidentFlow";
@@ -27,11 +26,9 @@ import {
 } from "./schema";
 
 import {
-  type Actor,
   actorName,
   getIncident,
   historyEntry,
-  isAssignedTo,
   isModerator,
   requireActor,
   requireEquipmentEditor,

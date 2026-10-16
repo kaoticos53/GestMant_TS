@@ -6,7 +6,7 @@ import { LogOut, Search, Siren, Sparkles } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { Link } from "react-router";
 import { IncidentLookup } from "../IncidentLookup";
-import type { RequestFilterId } from "../RequestsView";
+import type { RequestFilterId } from "../requests/types";
 import type { NavId } from "../types";
 
 const ArchiveView = lazy(() =>

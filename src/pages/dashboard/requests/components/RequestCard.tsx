@@ -2,7 +2,6 @@ import {
   Archive,
   Check,
   Clock,
-  ExternalLink,
   FileText,
   ImageIcon,
   PackageCheck,

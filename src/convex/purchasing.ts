@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import { notifyUsers } from "./notify";
 import { freeReference } from "./references";
@@ -22,7 +22,6 @@ import {
 import {
   actorName,
   missingLines,
-  NO_SUPPLIER,
   requirePurchasing,
 } from "./_purchasing/helpers";
 

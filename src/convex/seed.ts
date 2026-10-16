@@ -25,7 +25,7 @@ import {
 import { AUTO_ARCHIVE_BY } from "./archive";
 import { hasCapability, roleCan } from "./permissions";
 import { DEFAULT_ROLE } from "../lib/roles";
-import { DOCUMENT_ACTIONS, ROLES } from "./schema";
+import { DOCUMENT_ACTIONS } from "./schema";
 
 /**
  * Datos de ejemplo del taller. Se cargan de una vez con `seedDemoData` (una
