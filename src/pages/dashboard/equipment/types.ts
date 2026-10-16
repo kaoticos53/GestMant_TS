@@ -21,6 +21,11 @@ export interface EquipmentFormDialogProps {
     serialNumber?: string;
     location?: string;
     modelId?: Id<"equipmentModels">;
+    brand?: string;
+    name?: string;
+    supplier?: string;
+    maintenanceIntervalDays?: number;
+    description?: string;
   };
   onSuccess?: (createdId: Id<"equipment">) => void;
   onClose: () => void;

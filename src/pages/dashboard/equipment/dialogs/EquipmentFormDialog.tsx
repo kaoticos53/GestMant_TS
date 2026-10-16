@@ -29,19 +29,20 @@ export function EquipmentFormDialog({
   const update = useMutation(api.equipment.update);
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
+  const allEquipment = useQuery(api.equipment.list, {}) ?? [];
   const autoCode = useQuery(api.equipment.nextCode);
 
   const isEdit = item !== null;
   const [code, setCode] = useState(item?.code ?? "");
-  const [brand, setBrand] = useState(item?.brand ?? "");
-  const [name, setName] = useState(item?.name ?? "");
+  const [brand, setBrand] = useState(item?.brand ?? initialValues?.brand ?? "");
+  const [name, setName] = useState(item?.name ?? initialValues?.name ?? "");
   const [model, setModel] = useState(item?.model ?? initialValues?.model ?? "");
   const [location, setLocation] = useState(item?.location ?? initialValues?.location ?? "");
-  const [description, setDescription] = useState(item?.description ?? "");
+  const [description, setDescription] = useState(item?.description ?? initialValues?.description ?? "");
   const [serialNumber, setSerialNumber] = useState(
     item?.serialNumber ?? initialValues?.serialNumber ?? "",
   );
-  const [supplier, setSupplier] = useState(item?.supplier ?? "");
+  const [supplier, setSupplier] = useState(item?.supplier ?? initialValues?.supplier ?? "");
   const [purchaseDate, setPurchaseDate] = useState(
     dateToInput(item?.purchaseDate),
   );
@@ -54,7 +55,9 @@ export function EquipmentFormDialog({
   const [intervalDays, setIntervalDays] = useState(
     item?.maintenanceIntervalDays !== undefined
       ? String(item.maintenanceIntervalDays)
-      : "",
+      : initialValues?.maintenanceIntervalDays !== undefined
+        ? String(initialValues.maintenanceIntervalDays)
+        : "",
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,48 +75,132 @@ export function EquipmentFormDialog({
     for (const cm of catalogModels) {
       if (cm.model?.trim()) set.add(cm.model.trim());
     }
+    for (const eq of allEquipment) {
+      if (eq.model?.trim()) set.add(eq.model.trim());
+    }
     for (const m of inventoryModels) {
       if (m?.trim()) set.add(m.trim());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
-  }, [catalogModels, inventoryModels]);
+  }, [catalogModels, allEquipment, inventoryModels]);
 
-  // Modelo del catálogo coincidente con el texto actual
-  const matchedCatalogModel = useMemo(() => {
+  interface MatchedTemplate {
+    brand?: string;
+    name?: string;
+    supplier?: string;
+    maintenanceIntervalDays?: number;
+    description?: string;
+    source: "catalog" | "inventory";
+    sourceLabel: string;
+  }
+
+  // Plantilla del modelo coincidente (prioridad catálogo, fallback inventario existente)
+  const matchedTemplate = useMemo<MatchedTemplate | null>(() => {
     const trimmed = model.trim().toLowerCase();
     if (!trimmed) return null;
-    return (
-      catalogModels.find((cm) => cm.model.trim().toLowerCase() === trimmed) ??
-      null
+
+    // 1. Catálogo oficial de modelos
+    const cat = catalogModels.find(
+      (cm) => cm.model.trim().toLowerCase() === trimmed,
     );
-  }, [model, catalogModels]);
+    if (cat) {
+      return {
+        brand: cat.brand,
+        name: cat.name,
+        supplier: cat.defaultSupplier,
+        maintenanceIntervalDays: cat.defaultMaintenanceIntervalDays,
+        description: cat.description,
+        source: "catalog",
+        sourceLabel: `Plantilla: ${cat.name}`,
+      };
+    }
+
+    // 2. Fallback: equipo ya existente en inventario con ese modelo
+    const inv = allEquipment.find(
+      (eq) => eq.model?.trim().toLowerCase() === trimmed,
+    );
+    if (inv) {
+      return {
+        brand: inv.brand,
+        name: inv.name,
+        supplier: inv.supplier,
+        maintenanceIntervalDays: inv.maintenanceIntervalDays,
+        description: inv.description,
+        source: "inventory",
+        sourceLabel: `Equipo previo: ${inv.name}`,
+      };
+    }
+
+    return null;
+  }, [model, catalogModels, allEquipment]);
 
   // Aplicar datos de plantilla del modelo
-  const applyModelTemplate = (templateModel: typeof matchedCatalogModel) => {
-    if (!templateModel) return;
-    if (templateModel.brand && !brand.trim()) setBrand(templateModel.brand);
-    if (templateModel.name && !name.trim()) setName(templateModel.name);
-    if (templateModel.defaultSupplier && !supplier.trim())
-      setSupplier(templateModel.defaultSupplier);
-    if (
-      templateModel.defaultMaintenanceIntervalDays !== undefined &&
-      !intervalDays.trim()
-    ) {
-      setIntervalDays(String(templateModel.defaultMaintenanceIntervalDays));
+  const applyModelTemplate = (
+    template: MatchedTemplate | null,
+    force = false,
+  ) => {
+    if (!template) return;
+    if (template.brand && (force || !brand.trim())) {
+      setBrand(template.brand);
     }
-    if (templateModel.description && !description.trim()) {
-      setDescription(templateModel.description);
+    if (template.name && (force || !name.trim())) {
+      setName(template.name);
+    }
+    if (template.supplier && (force || !supplier.trim())) {
+      setSupplier(template.supplier);
+    }
+    if (
+      template.maintenanceIntervalDays !== undefined &&
+      (force || !intervalDays.trim())
+    ) {
+      setIntervalDays(String(template.maintenanceIntervalDays));
+    }
+    if (template.description && (force || !description.trim())) {
+      setDescription(template.description);
     }
   };
+
+  // En altas nuevas, cuando cargue la consulta asíncrona o cambie el modelo coincidente,
+  // si los campos clave están vacíos, cargar automáticamente la plantilla.
+  useEffect(() => {
+    if (isEdit || !matchedTemplate) return;
+    if (!name.trim() || !brand.trim()) {
+      applyModelTemplate(matchedTemplate, false);
+    }
+  }, [isEdit, matchedTemplate]);
 
   const handleModelChange = (newModel: string) => {
     setModel(newModel);
     const trimmed = newModel.trim().toLowerCase();
-    const found = catalogModels.find(
+    if (!trimmed) return;
+    const cat = catalogModels.find(
       (cm) => cm.model.trim().toLowerCase() === trimmed,
     );
-    if (found) {
-      applyModelTemplate(found);
+    if (cat) {
+      applyModelTemplate({
+        brand: cat.brand,
+        name: cat.name,
+        supplier: cat.defaultSupplier,
+        maintenanceIntervalDays: cat.defaultMaintenanceIntervalDays,
+        description: cat.description,
+        source: "catalog",
+        sourceLabel: `Plantilla: ${cat.name}`,
+      }, false);
+      return;
+    }
+    const inv = allEquipment.find(
+      (eq) => eq.model?.trim().toLowerCase() === trimmed,
+    );
+    if (inv) {
+      applyModelTemplate({
+        brand: inv.brand,
+        name: inv.name,
+        supplier: inv.supplier,
+        maintenanceIntervalDays: inv.maintenanceIntervalDays,
+        description: inv.description,
+        source: "inventory",
+        sourceLabel: `Equipo previo: ${inv.name}`,
+      }, false);
     }
   };
 
@@ -251,10 +338,25 @@ export function EquipmentFormDialog({
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="eq-model">Modelo *</Label>
-              {matchedCatalogModel && (
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                  Plantilla vinculada: {matchedCatalogModel.name}
-                </span>
+              {matchedTemplate && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    {matchedTemplate.sourceLabel}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyModelTemplate(matchedTemplate, true);
+                      toast.success(
+                        `Datos cargados desde la plantilla de ${matchedTemplate.name || model}`,
+                      );
+                    }}
+                    className="text-[11px] font-medium text-signal underline hover:opacity-85"
+                    title="Cargar datos de la plantilla en los campos"
+                  >
+                    (Cargar datos)
+                  </button>
+                </div>
               )}
             </div>
             <Input

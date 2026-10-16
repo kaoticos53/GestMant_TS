@@ -412,7 +412,16 @@ export function EquipmentView({
                                   onClick={() =>
                                     setFormTarget({
                                       item: null,
-                                      initialValues: { model: item.model },
+                                      initialValues: {
+                                        model: item.model,
+                                        brand: item.brand,
+                                        name: item.name,
+                                        supplier: item.supplier,
+                                        maintenanceIntervalDays:
+                                          item.maintenanceIntervalDays,
+                                        description: item.description,
+                                        modelId: item.modelId,
+                                      },
                                     })
                                   }
                                   title={`Añadir otra unidad de ${item.model} (usar modelo como plantilla)`}
