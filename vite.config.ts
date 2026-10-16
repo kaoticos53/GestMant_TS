@@ -2,11 +2,83 @@ import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+/**
+ * El hueco que la CSP deja donde va la dirección pública de la API, y el archivo
+ * donde la compilación escribe lo que hay que poner en él.
+ *
+ * La política de seguridad del sitio —la del `index.html` y la de nginx, que son
+ * la misma dicha dos veces— no puede nombrar la dirección de la API de una
+ * instalación concreta: el repositorio no sabe si el taller vive en
+ * `api.tudominio.com` o dentro de una red local. Pero dejarla fuera no es una
+ * opción: `connect-src` es una lista cerrada, y si la dirección no está en ella
+ * el navegador no deja que la app llame a su propia API —ni la conexión en vivo
+ * ni la descarga de un parte—. La app se queda entonces diciendo que la API no
+ * responde, con el backend en pie y contestando.
+ *
+ * Así que la dirección entra al compilar, que es cuando ya se sabe
+ * (`VITE_CONVEX_URL`, la misma que Vite graba dentro del sitio): aquí se rellena
+ * el hueco del `index.html` y se deja el valor en `pulso-csp.txt`, que es lo que
+ * lee el `Dockerfile` del NAS para rellenar la cabecera de nginx. Una regla, dos
+ * sitios, y el mismo valor en los dos.
+ */
+export const API_CSP_TOKEN = "__PULSO_API_CONNECT_SRC__";
+export const API_CSP_ASSET = "pulso-csp.txt";
+
+/**
+ * Las direcciones que hay que autorizar para hablar con la API, en las dos formas
+ * que usa el navegador: la de las peticiones —descargar el parte, subir una
+ * foto— y la de la conexión en vivo, que va por WebSocket.
+ *
+ * Van las dos porque la coincidencia de esquemas de una CSP es literal: un
+ * `https://` no autoriza el `wss://` de la misma casa. El esquema se copia del
+ * valor de origen, para que una instalación local no acabe autorizando un `https`
+ * que no sirve; y sin dirección —una compilación sin `VITE_CONVEX_URL`— no se
+ * devuelve nada, que deja la política como estaba en lugar de con una entrada
+ * inválida dentro.
+ */
+export function apiConnectSources(url: string | null | undefined): string {
+  const raw = (url ?? "").trim();
+  const host = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/.*$/, "");
+  if (host === "") return "";
+  const plain = /^(http|ws):\/\//i.test(raw);
+  return plain ? `http://${host} ws://${host}` : `https://${host} wss://${host}`;
+}
+
+/**
+ * Mete esa dirección en la CSP del sitio y deja escrita la que le toca a nginx.
+ *
+ * El hueco se rellena también al servir (`npm run dev`), no solo al compilar: una
+ * entrada sin sustituir en una política es una entrada inválida, y el navegador
+ * lo cuenta por la consola.
+ */
+function apiCspPlugin(): Plugin {
+  let sources = "";
+  // El apunte solo se escribe al compilar: al servir no hay una carpeta de salida
+  // donde dejarlo, y el propio Vite avisa de que ahí no pinta nada.
+  let building = false;
+  return {
+    name: "pulso-api-csp",
+    configResolved(config) {
+      building = config.command === "build";
+      sources = apiConnectSources(
+        process.env.VITE_CONVEX_URL ?? config.env.VITE_CONVEX_URL,
+      );
+    },
+    transformIndexHtml(html) {
+      return html.split(API_CSP_TOKEN).join(sources);
+    },
+    buildStart() {
+      if (!building) return;
+      this.emitFile({ type: "asset", fileName: API_CSP_ASSET, source: sources });
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), vlyPlugin(), tailwindcss()],
+  plugins: [react(), vlyPlugin(), tailwindcss(), apiCspPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

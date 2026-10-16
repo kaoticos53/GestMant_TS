@@ -111,3 +111,16 @@ FROM nginx:alpine AS app
 
 COPY docker/synology/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# La CSP nombra la dirección pública de la API, y esa dirección es la de cada
+# instalación: la compilación la dejó escrita en `pulso-csp.txt` —el mismo valor
+# que metió en el `index.html`—, y aquí se pone en la cabecera que sirve nginx.
+#
+# Hace falta porque `connect-src` es una lista cerrada: si la dirección de esta
+# instalación no está en ella, el navegador no deja que la app llame a su propia
+# API —ni la conexión en vivo ni la descarga de un parte—, y la app se queda
+# diciendo que la API no responde aunque esté en pie y conteste. El apunte no se
+# queda sirviéndose: estaba para esto.
+RUN sed -i "s|__PULSO_API_CONNECT_SRC__|$(cat /usr/share/nginx/html/pulso-csp.txt)|g" \
+      /etc/nginx/conf.d/default.conf \
+  && rm /usr/share/nginx/html/pulso-csp.txt

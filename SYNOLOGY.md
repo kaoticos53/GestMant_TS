@@ -743,6 +743,18 @@ Es casi siempre el WebSocket. Mira en la consola del navegador la petición
 del proxy inverso y marca **WebSocket** en Encabezado personalizado. Y comprueba
 que la API responde: `curl -sS https://api.tudominio.com/version`.
 
+**La app dice que la API no responde, pero la API responde.**
+Es la **CSP** del sitio —la política que le dice al navegador a qué direcciones
+puede llamar la app—, que lleva dentro la dirección pública de la API en sus dos
+formas: la de las peticiones y la de la conexión en vivo (el WebSocket). Esa
+dirección entra al **construir** la imagen, tomada de `CONVEX_CLOUD_ORIGIN`, así
+que si cambiaste esa dirección en el `.env` y no has vuelto a construir, la
+política autoriza la vieja y el navegador bloquea la nueva: abrir la API en el
+navegador funciona —la verás contestar— y la app se queda en «No se puede hablar
+con la API del taller · No responde». Se arregla reconstruyendo (Container
+Manager → **Build**, o `npm run nas`), y si sigue igual se ve en la consola del
+navegador como un aviso de *Content Security Policy* sobre `connect-src`.
+
 **El contenedor `funciones` sale con un aviso y se para.**
 Es lo que pasa cuando le falta la clave de administrador en el `.env` (la primera
 vez, antes del paso 5) o cuando la que hay no es la de esta instancia: lo dice con
