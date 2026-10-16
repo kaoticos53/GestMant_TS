@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,7 @@ export function EquipmentFormDialog({
   const update = useMutation(api.equipment.update);
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
+  const autoCode = useQuery(api.equipment.nextCode);
 
   const isEdit = item !== null;
   const [code, setCode] = useState(item?.code ?? "");
@@ -57,6 +58,13 @@ export function EquipmentFormDialog({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // En altas nuevas, pre-rellenar con el código libre correlativo autogenerado
+  useEffect(() => {
+    if (!isEdit && !code && autoCode) {
+      setCode(autoCode);
+    }
+  }, [isEdit, code, autoCode]);
 
   // Combinar modelos únicos de inventario y catálogo para sugerencias
   const allSuggestedModels = useMemo(() => {
@@ -111,7 +119,8 @@ export function EquipmentFormDialog({
 
   const handleSubmit = async () => {
     setError(null);
-    if (!code.trim()) {
+    const finalCode = (code.trim() || (!isEdit ? (autoCode ?? "") : "")).trim();
+    if (isEdit && !finalCode) {
       setError("El código de inventario es obligatorio.");
       return;
     }
@@ -154,7 +163,7 @@ export function EquipmentFormDialog({
     try {
       const payload = {
         modelId: matchedCatalogModel?._id ?? initialValues?.modelId,
-        code: code.trim(),
+        code: finalCode || undefined,
         brand: brand.trim(),
         name: name.trim(),
         model: model.trim(),
@@ -202,12 +211,19 @@ export function EquipmentFormDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="eq-code">Código *</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="eq-code">Código *</Label>
+              {!isEdit && (
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  Autogenerado y único
+                </span>
+              )}
+            </div>
             <Input
               id="eq-code"
               value={code}
               onChange={(event) => setCode(event.target.value)}
-              placeholder="EQ-007"
+              placeholder={autoCode ?? "EQ-001"}
               className="font-mono"
               disabled={busy}
             />

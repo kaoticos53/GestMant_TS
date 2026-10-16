@@ -228,4 +228,48 @@ describe("equipos: la descripción es la nota del equipo", () => {
     const cleared = (await findEquipment(authed, "EQ-100"))!;
     expect(cleared.description).toBeUndefined();
   });
+
+  test("create sin código genera automáticamente el siguiente correlativo único", async () => {
+    const { authed } = await authedTest("manager");
+    const id1 = await authed.mutation(api.equipment.create, {
+      name: "Cámara de estudio",
+      model: "HDC-3500",
+    });
+    const id2 = await authed.mutation(api.equipment.create, {
+      name: "Óptica teleobjetivo",
+      model: "HJ24ex7.5B",
+    });
+
+    const list = await authed.query(api.equipment.list, {});
+    const eq1 = list.find((e) => e._id === id1);
+    const eq2 = list.find((e) => e._id === id2);
+
+    expect(eq1?.code).toMatch(/^EQ-\d{3,}$/);
+    expect(eq2?.code).toMatch(/^EQ-\d{3,}$/);
+    expect(eq1?.code).not.toEqual(eq2?.code);
+  });
+
+  test("nextCode sugiere el siguiente código correlativo libre", async () => {
+    const { authed } = await authedTest("manager");
+    const next = await authed.query(api.equipment.nextCode, {});
+    expect(next).toMatch(/^EQ-\d{3,}$/);
+  });
+
+  test("create con código repetido falla por colisión de unicidad", async () => {
+    const { authed } = await authedTest("manager");
+    await authed.mutation(api.equipment.create, {
+      code: "EQ-555",
+      name: "Monitor de vídeo",
+      model: "LMD-A240",
+    });
+
+    await expectConvexError(
+      authed.mutation(api.equipment.create, {
+        code: "eq-555",
+        name: "Monitor duplicado",
+        model: "LMD-A240",
+      }),
+      "Ya existe un equipo con el código EQ-555.",
+    );
+  });
 });

@@ -56,8 +56,8 @@ export const report = mutation({
     // caso cambie de estado (`convex/incidentMail`). Opcional a propósito.
     reporterEmail: v.optional(v.string()),
     location: v.optional(v.string()),
-    equipmentKind: v.string(),
-    model: v.string(),
+    equipmentKind: v.optional(v.string()),
+    model: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     description: v.string(),
     reportedAt: v.number(),

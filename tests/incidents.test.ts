@@ -165,14 +165,6 @@ describe("reporte público de incidencias", () => {
       "Indica tu nombre y apellidos.",
     );
     await expectConvexError(
-      t.mutation(api.incidents.report, { ...reportArgs, equipmentKind: " " }),
-      "Indica el tipo de equipo.",
-    );
-    await expectConvexError(
-      t.mutation(api.incidents.report, { ...reportArgs, model: " " }),
-      "Indica el modelo del equipo.",
-    );
-    await expectConvexError(
       t.mutation(api.incidents.report, { ...reportArgs, description: "corta" }),
       "Describe la incidencia",
     );
@@ -192,6 +184,24 @@ describe("reporte público de incidencias", () => {
       }),
       "La fecha de notificación no puede ser futura.",
     );
+  });
+
+  test("admite la notificación sin modelo ni tipo de equipo", async () => {
+    const { t } = await setup();
+    const created = await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      equipmentKind: undefined,
+      model: undefined,
+    });
+    expect(created.reference).toBe("INC-0001");
+    const incident = await t.run(async (ctx) =>
+      ctx.db
+        .query("incidents")
+        .withIndex("by_reference", (q) => q.eq("reference", "INC-0001"))
+        .first(),
+    );
+    expect(incident?.equipmentKind).toBeUndefined();
+    expect(incident?.model).toBeUndefined();
   });
 
   test("el freno de 30 segundos corta a quien repite, no a otra persona", async () => {

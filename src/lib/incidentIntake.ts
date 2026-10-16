@@ -60,8 +60,8 @@ export interface IncidentIntakeInput {
   /** Correo de quien notifica, si lo deja. Opcional a propósito. */
   reporterEmail?: string;
   location?: string;
-  equipmentKind: string;
-  model: string;
+  equipmentKind?: string;
+  model?: string;
   serialNumber?: string;
   /** La descripción tal cual sale del editor (documento de `richDoc`). */
   description: string;
@@ -77,8 +77,8 @@ export interface IncidentIntake {
   reporterRole?: string;
   reporterEmail?: string;
   location?: string;
-  equipmentKind: string;
-  model: string;
+  equipmentKind?: string;
+  model?: string;
   serialNumber?: string;
   description: string;
   reportedAt: number;
@@ -139,14 +139,8 @@ export function readIncidentIntake(
   if (!reporterName) {
     return { ok: false, error: "Indica tu nombre y apellidos." };
   }
-  const equipmentKind = input.equipmentKind.trim();
-  if (!equipmentKind) {
-    return { ok: false, error: "Indica el tipo de equipo." };
-  }
-  const model = input.model.trim();
-  if (!model) {
-    return { ok: false, error: "Indica el modelo del equipo." };
-  }
+  const equipmentKind = clean(input.equipmentKind);
+  const model = clean(input.model);
   const rawEmail = clean(input.reporterEmail);
   const reporterEmail =
     rawEmail === undefined ? undefined : normalizeReporterEmail(rawEmail);
@@ -193,8 +187,8 @@ export function readIncidentIntake(
       reporterName,
       description,
       reportedAt: input.reportedAt,
-      equipmentKind,
-      model,
+      ...(equipmentKind !== undefined ? { equipmentKind } : {}),
+      ...(model !== undefined ? { model } : {}),
       ...(reporterRole !== undefined ? { reporterRole } : {}),
       ...(reporterEmail !== undefined ? { reporterEmail } : {}),
       ...(location !== undefined ? { location } : {}),
@@ -222,8 +216,8 @@ export interface IncidentIntakeRecord {
   reporterRole?: string;
   reporterEmail?: string;
   location?: string;
-  equipmentKind: string;
-  model: string;
+  equipmentKind?: string;
+  model?: string;
   serialNumber?: string;
   description: string;
   reportedAt: number;
@@ -253,8 +247,10 @@ export function incidentIntakeRecord(
       ? { reporterEmail: intake.reporterEmail }
       : {}),
     ...(intake.location !== undefined ? { location: intake.location } : {}),
-    equipmentKind: intake.equipmentKind,
-    model: intake.model,
+    ...(intake.equipmentKind !== undefined
+      ? { equipmentKind: intake.equipmentKind }
+      : {}),
+    ...(intake.model !== undefined ? { model: intake.model } : {}),
     ...(intake.serialNumber !== undefined
       ? { serialNumber: intake.serialNumber }
       : {}),
@@ -282,8 +278,10 @@ export function incidentIntakeNotice(
   intake: IncidentIntake,
   reference: string,
 ): string {
+  const parts = [intake.equipmentKind, intake.model].filter(Boolean);
+  const what = parts.length > 0 ? parts.join(" ") : "Equipo sin especificar";
   const where = intake.location ? ` · ${intake.location}` : "";
-  return `Nueva incidencia ${reference}: ${intake.equipmentKind} ${intake.model}${where}`;
+  return `Nueva incidencia ${reference}: ${what}${where}`;
 }
 
 /**

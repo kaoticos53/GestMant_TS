@@ -161,11 +161,62 @@ async function codeClash(ctx: QueryCtx, code: string, excludeId?: string) {
   return existing.some((item) => item._id !== excludeId);
 }
 
+/**
+ * Genera el siguiente código de inventario libre y único para un equipo («EQ-001», «EQ-002»...).
+ * Inspecciona los equipos existentes, calcula el correlativo más alto y busca el primer código libre.
+ */
+export async function generateFreeEquipmentCode(ctx: QueryCtx): Promise<string> {
+  const all = await ctx.db.query("equipment").collect();
+  let highest = 0;
+  for (const item of all) {
+    if (!item.code) continue;
+    const match = /^EQ-(\d+)$/i.exec(item.code.trim());
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (Number.isFinite(num) && num > highest) {
+        highest = num;
+      }
+    }
+  }
+
+  let candidateNum = highest + 1;
+  while (true) {
+    const candidateCode = `EQ-${String(candidateNum).padStart(3, "0")}`;
+    const clashInList = all.some(
+      (eq) => eq.code?.trim().toUpperCase() === candidateCode.toUpperCase(),
+    );
+    if (!clashInList) {
+      const existing = await ctx.db
+        .query("equipment")
+        .withIndex("by_code", (q) => q.eq("code", candidateCode))
+        .first();
+      if (!existing) {
+        return candidateCode;
+      }
+    }
+    candidateNum++;
+  }
+}
+
+/**
+ * Consulta el próximo código libre y correlativo sugerido para un nuevo equipo.
+ */
+export const nextCode = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    return await generateFreeEquipmentCode(ctx);
+  },
+});
+
 export const create = mutation({
   args: equipmentArgs,
   handler: async (ctx, args) => {
     await requireManager(ctx);
-    const code = args.code?.trim().toUpperCase() || "";
+    let code = args.code?.trim().toUpperCase() || "";
+    if (!code) {
+      code = await generateFreeEquipmentCode(ctx);
+    }
     validate(code, args.name, args.model);
     validateDates(
       args.purchaseDate,

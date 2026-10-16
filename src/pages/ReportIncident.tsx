@@ -17,8 +17,9 @@ import { MAX_FILE_SIZE_LABEL, MAX_REPORT_IMAGES } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
 import logo from "@/assets/logo.svg";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight, Check, Home, Loader2, Siren } from "lucide-react";
-import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { ArrowRight, Check, Home, Loader2, Siren, UserCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 /** Timestamp → valor de <input type="date"> (AAAA-MM-DD en hora local). */
@@ -37,13 +38,14 @@ function fromDateInputValue(value: string): number | undefined {
 const TODAY_INPUT = toDateInputValue(Date.now());
 
 export default function ReportIncident() {
+  const { user, isAuthenticated } = useAuth();
   const report = useMutation(api.incidents.report);
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("");
-  const [location, setLocation] = useState("");
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [role, setRole] = useState(user?.position ?? "");
+  const [location, setLocation] = useState(user?.location ?? "");
   const [equipmentKind, setEquipmentKind] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -58,6 +60,15 @@ export default function ReportIncident() {
   // no dependa de haber copiado el código de esta pantalla.
   const [sentTo, setSentTo] = useState<string | null>(null);
 
+  // Autocompletar con los datos del perfil si el usuario está autenticado
+  useEffect(() => {
+    if (!user) return;
+    if (user.name) setName((prev) => (prev.trim() ? prev : user.name!));
+    if (user.email) setEmail((prev) => (prev.trim() ? prev : user.email!));
+    if (user.position) setRole((prev) => (prev.trim() ? prev : user.position!));
+    if (user.location) setLocation((prev) => (prev.trim() ? prev : user.location!));
+  }, [user]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -65,14 +76,6 @@ export default function ReportIncident() {
     const timestamp = fromDateInputValue(reportedAt);
     if (!name.trim()) {
       setError("Indica tu nombre y apellidos.");
-      return;
-    }
-    if (!equipmentKind.trim()) {
-      setError("Indica el tipo de equipo afectado.");
-      return;
-    }
-    if (!model.trim()) {
-      setError("Indica el modelo del equipo.");
       return;
     }
     // El correo es opcional, pero si se escribe tiene que servir para
@@ -101,8 +104,8 @@ export default function ReportIncident() {
         reporterEmail: reporterEmail || undefined,
         reporterRole: role.trim() || undefined,
         location: location.trim() || undefined,
-        equipmentKind: equipmentKind.trim(),
-        model: model.trim(),
+        equipmentKind: equipmentKind.trim() || undefined,
+        model: model.trim() || undefined,
         serialNumber: serialNumber.trim() || undefined,
         // El editor ya entrega el documento listo; `richDocToStore` lo deja tal
         // cual (y quita el hueco vacío si no se escribió nada).
@@ -121,10 +124,10 @@ export default function ReportIncident() {
   const reset = () => {
     setCode(null);
     setSentTo(null);
-    setName("");
-    setEmail("");
-    setRole("");
-    setLocation("");
+    setName(user?.name ?? "");
+    setEmail(user?.email ?? "");
+    setRole(user?.position ?? "");
+    setLocation(user?.location ?? "");
     setEquipmentKind("");
     setModel("");
     setSerialNumber("");
@@ -227,9 +230,20 @@ export default function ReportIncident() {
               </div>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="grid gap-2">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                {isAuthenticated && user && (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-signal/25 bg-signal/10 px-3.5 py-2.5 text-xs text-foreground">
+                    <UserCheck className="size-4 shrink-0 text-signal" />
+                    <span>
+                      Sesión iniciada: datos de contacto autocompletados desde tu perfil (
+                      <strong className="font-semibold">{user.name || user.email}</strong>). Puedes modificarlos si lo requieres.
+                    </span>
+                  </div>
+                )}
+
+                {/* Bloque 1: Datos de quien notifica */}
+                <div className="grid gap-4 sm:grid-cols-2 items-start">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-name">Nombre y apellidos *</Label>
                     <Input
                       id="inc-name"
@@ -241,7 +255,7 @@ export default function ReportIncident() {
                       required
                     />
                   </div>
-                  <div className="grid gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-email">Correo electrónico</Label>
                     <Input
                       id="inc-email"
@@ -256,7 +270,7 @@ export default function ReportIncident() {
                       Si lo dejas, te avisamos cuando el caso cambie de estado.
                     </p>
                   </div>
-                  <div className="grid gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-role">Puesto</Label>
                     <Input
                       id="inc-role"
@@ -266,7 +280,7 @@ export default function ReportIncident() {
                       disabled={busy}
                     />
                   </div>
-                  <div className="grid gap-2">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-location">Ubicación</Label>
                     <Input
                       id="inc-location"
@@ -276,7 +290,11 @@ export default function ReportIncident() {
                       disabled={busy}
                     />
                   </div>
-                  <div className="grid gap-2">
+                </div>
+
+                {/* Bloque 2: Equipo y notificación */}
+                <div className="grid gap-4 sm:grid-cols-2 items-start">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-date">Fecha de notificación *</Label>
                     <Input
                       id="inc-date"
@@ -287,19 +305,18 @@ export default function ReportIncident() {
                       required
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="inc-kind">Tipo de equipo *</Label>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="inc-kind">Tipo de equipo</Label>
                     <Input
                       id="inc-kind"
                       value={equipmentKind}
                       onChange={(event) => setEquipmentKind(event.target.value)}
                       placeholder="p. ej. Cámara de estudio"
                       disabled={busy}
-                      required
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="inc-model">Modelo *</Label>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="inc-model">Modelo</Label>
                     <Input
                       id="inc-model"
                       list="incident-models-datalist"
@@ -308,7 +325,6 @@ export default function ReportIncident() {
                       placeholder="p. ej. HDC-3500"
                       className="font-mono"
                       disabled={busy}
-                      required
                     />
                     <datalist id="incident-models-datalist">
                       {inventoryModels.map((m) => (
@@ -316,7 +332,7 @@ export default function ReportIncident() {
                       ))}
                     </datalist>
                   </div>
-                  <div className="grid gap-2 sm:col-span-2">
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-serial">Número de serie</Label>
                     <Input
                       id="inc-serial"
@@ -329,7 +345,8 @@ export default function ReportIncident() {
                   </div>
                 </div>
 
-                <div className="grid gap-2">
+                {/* Bloque 3: Descripción ocupando todo el ancho de la ficha */}
+                <div className="grid w-full gap-2">
                   <Label htmlFor="inc-description">
                     Descripción de la incidencia *
                   </Label>

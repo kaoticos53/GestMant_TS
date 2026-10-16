@@ -85,8 +85,6 @@ describe("lo que se admite en el formulario público de incidencias", () => {
   test("los motivos van en el orden en el que se rellena el formulario", () => {
     const vacío: Partial<IncidentIntakeInput> = {
       reporterName: " ",
-      equipmentKind: " ",
-      model: " ",
       reporterEmail: "no-es-un-correo",
       description: "corta",
     };
@@ -95,33 +93,28 @@ describe("lo que se admite en el formulario público de incidencias", () => {
     // campo la queja pasa al siguiente: quien rellena el formulario no ve seis
     // errores a la vez, ve el que le toca.
     expect(errorOf(vacío)).toBe("Indica tu nombre y apellidos.");
-    expect(errorOf({ ...vacío, reporterName: "Laura Peña" })).toBe(
-      "Indica el tipo de equipo.",
-    );
     expect(
       errorOf({
         ...vacío,
         reporterName: "Laura Peña",
-        equipmentKind: "Cámara",
-      }),
-    ).toBe("Indica el modelo del equipo.");
-    expect(
-      errorOf({
-        ...vacío,
-        reporterName: "Laura Peña",
-        equipmentKind: "Cámara",
-        model: "HDC-3500",
       }),
     ).toContain("no parece una dirección válida");
     expect(
       errorOf({
         ...vacío,
         reporterName: "Laura Peña",
-        equipmentKind: "Cámara",
-        model: "HDC-3500",
         reporterEmail: "laura@taller.es",
       }),
     ).toContain("mínimo 10 caracteres");
+  });
+
+  test("el tipo de equipo y el modelo son opcionales", () => {
+    const intake = intakeOf({
+      equipmentKind: undefined,
+      model: undefined,
+    });
+    expect("equipmentKind" in intake).toBe(false);
+    expect("model" in intake).toBe(false);
   });
 
   test("el correo es opcional, pero si se deja tiene que servir para responder", () => {
