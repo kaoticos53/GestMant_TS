@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
@@ -19,58 +19,147 @@ import { describe, expect, test } from "vitest";
  * carga por encima del presupuesto de una prueba, y la cobraba la primera que
  * llegaba a tocarla.
  *
- * Así que el arreglo fue mover el coste, no ampliar el plazo: el grafo se carga
- * en un archivo de preparación, antes de que empiecen las pruebas. Medido, las
- * pruebas pasaron a ser el 3 % del tiempo rastreado y ninguna se acerca a los
- * cinco segundos; antes, la primera de un archivo pesado llegaba a 2,8 s.
+ * Así que el arreglo fue mover el coste, no ampliar el plazo: el grafo lo carga
+ * `tests/precalentarModulos.ts`, y lo importan los archivos que levantan el
+ * backend. Medido, las pruebas pasaron a ser el 3 % del tiempo rastreado y
+ * ninguna se acerca a los cinco segundos; antes, la primera de un archivo pesado
+ * llegaba a 2,8 s.
  *
- * Y esto vigila que el arreglo no se deshaga: que la preparación siga puesta,
- * que siga cargando el grafo y que el plazo no se haya tocado. Subirlo taparía
- * el síntoma —la prueba seguiría cargando módulos en su tiempo— y volvería a
- * esconder el problema la próxima vez que la máquina vaya cargada.
+ * Y esto vigila las piezas del arreglo, que son cuatro y se caen por su cuenta:
+ * que la preparación siga cargando el grafo; que la importen **todos** los
+ * archivos que levantan el backend; que no la importe quien no lo levanta —es
+ * trabajo regalado, y dentro de jsdom cuesta más—; y que no vuelva a
+ * engancharse por `setupFiles`, que es la forma de cobrarle la carga a los
+ * ciento ocho archivos de prueba de una vez. El plazo, por último, no se toca:
+ * subirlo taparía el síntoma y volvería a esconder el problema la próxima vez
+ * que la máquina vaya cargada.
  */
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
-/** La configuración de Vite, que es donde vive el bloque de pruebas. */
+/** El directorio de las pruebas, que es donde vive todo esto. */
+const PRUEBAS = fileURLToPath(new URL(".", import.meta.url));
+
+/** Este mismo archivo: lleva los patrones y no se mira a sí mismo. */
+const GUARDIAN = fileURLToPath(import.meta.url);
+
+/** La configuración de Vite, que es donde se engancharía un `setupFiles`. */
 const CONFIG = join(RAIZ, "vite.config.ts");
 
 /** El archivo que carga el grafo del backend antes de las pruebas. */
-const PREPARACION = "tests/setup/precalentarModulos.ts";
+const PREPARACION = "tests/precalentarModulos.ts";
 
 /** Lo que Vitest da por defecto a una prueba y a un gancho, en milisegundos. */
 const PLAZO_POR_DEFECTO = 5000;
 const PLAZO_DE_GANCHO_POR_DEFECTO = 10000;
 
+/** Quien levanta el backend en memoria. Por trozos, como en su guardián hermano. */
+const LEVANTA_EL_BACKEND = new RegExp(`${"convexTest"}\\(`);
+
+/** La importación que se cobra el grafo antes de las pruebas. */
+const IMPORTA_LA_PREPARACION = new RegExp(
+  `["']\\./${"precalentar"}[A-Za-z]*["']`,
+);
+
+/**
+ * Menos archivos que esto levantando el backend significaría que el detector se
+ * ha roto —un patrón que no encuentra nada deja el guardián pasando en vacío—,
+ * así que se exige un suelo: hoy son veintiocho.
+ */
+const MINIMO_CON_BACKEND = 20;
+
+/** Todas las pruebas del directorio, también las que vivan en subcarpetas. */
+function pruebas(dir: string): string[] {
+  const encontradas: string[] = [];
+  for (const entrada of readdirSync(dir)) {
+    if (entrada === "node_modules") continue;
+    const completo = join(dir, entrada);
+    if (statSync(completo).isDirectory()) {
+      encontradas.push(...pruebas(completo));
+    } else if (/\.test\.tsx?$/.test(entrada)) {
+      encontradas.push(completo);
+    }
+  }
+  return encontradas.sort();
+}
+
+/** Las pruebas que se miran: todas menos este archivo. */
+const todas = pruebas(PRUEBAS).filter((file) => file !== GUARDIAN);
+
+/** El contenido de una prueba, tal cual está en el repositorio. */
+const texto = (file: string) => readFileSync(file, "utf8");
+
+/** El nombre corto, para que un fallo se lea de un vistazo. */
+const corto = (file: string) => relative(PRUEBAS, file).split(sep).join("/");
+
 const config = readFileSync(CONFIG, "utf8");
 
 describe("la suite completa corre de una pieza", () => {
-  test("el arnés carga el grafo de Convex antes de las pruebas", () => {
-    // Sin esta preparación, la primera prueba de cada archivo vuelve a pagar la
-    // carga de los módulos del backend dentro de su propio plazo.
-    const preparaciones = /setupFiles\s*:\s*\[([^\]]*)\]/.exec(config)?.[1];
-    expect(preparaciones, "vite.config.ts no declara setupFiles").toBeDefined();
-    expect(preparaciones).toContain(PREPARACION);
-  });
-
-  test("esa preparación carga de verdad el grafo del backend", () => {
+  test("la preparación carga de verdad el grafo del backend", () => {
     const ruta = join(RAIZ, PREPARACION);
     expect(existsSync(ruta), `no existe ${PREPARACION}`).toBe(true);
 
     const contenido = readFileSync(ruta, "utf8");
     // El mismo glob que usan las pruebas: si cambia allí y no aquí, la
-    // preparación cargaría otra cosa —o nada— y el plazo volvería a pagarse solo.
+    // preparación no cargaría nada y el plazo volvería a pagarse solo.
     expect(contenido).toMatch(/import\.meta\.glob\(\s*"[^"]*src\/convex\//);
-    // Y hay que esperarlo: un glob que no se llama no carga nada.
-    expect(contenido).toMatch(/Promise\.all\(/);
+    // Y hay que esperarlo: un glob que no se llama no carga nada, y uno que se
+    // llama sin esperar deja la carga a medias dentro de la primera prueba.
     expect(contenido).toMatch(/await\s+Promise\.all/);
+  });
+
+  test("todos los archivos que levantan el backend la importan", () => {
+    const conBackend = todas.filter((file) =>
+      LEVANTA_EL_BACKEND.test(texto(file)),
+    );
+    // El control: sin esta línea, un detector roto dejaría esta prueba en verde.
+    expect(conBackend.length).toBeGreaterThan(MINIMO_CON_BACKEND);
+
+    const sinPreparar = conBackend
+      .filter((file) => !IMPORTA_LA_PREPARACION.test(texto(file)))
+      .map(corto);
+
+    expect(
+      sinPreparar.join("\n"),
+      `Estos archivos levantan el backend y no importan ${PREPARACION}:\n` +
+        `su primera prueba pagará la carga del grafo dentro de su propio plazo,\n` +
+        `que es lo que hacía fallar la suite entera según qué máquina.\n` +
+        `Añade al principio: import "./precalentarModulos";`,
+    ).toBe("");
+  });
+
+  test("quien no levanta el backend no paga la carga", () => {
+    // La preparación no vive en `setupFiles` justamente por esto: importada de
+    // más, cada archivo que no toca Convex —ochenta de ciento ocho— cargaría el
+    // backend para nada, y dentro de jsdom además cuesta más.
+    const deMas = todas
+      .filter((file) => IMPORTA_LA_PREPARACION.test(texto(file)))
+      .filter((file) => !LEVANTA_EL_BACKEND.test(texto(file)))
+      .map(corto);
+
+    expect(
+      deMas.join("\n"),
+      "Estos archivos importan la preparación sin levantar el backend: quita el\n" +
+        `import de ${PREPARACION}, que solo hace falta donde hay \`convexTest\`.`,
+    ).toBe("");
+  });
+
+  test("la carga no se le cobra a toda la suite de una vez", () => {
+    // `setupFiles` corre en los ciento ocho archivos, así que enganchar ahí la
+    // preparación es volver al problema por la puerta de atrás: todos pagan por
+    // un grafo que solo usan veintiocho.
+    expect(
+      /setupFiles/.test(config),
+      "vite.config.ts no debe enganchar la carga del backend en `setupFiles`:\n" +
+        `ahí la pagan los ciento ocho archivos de prueba. La importan solo los que\n` +
+        `la usan, desde ${PREPARACION}.`,
+    ).toBe(false);
   });
 
   test("el plazo de las pruebas no se ha subido", () => {
     // Un `testTimeout` alto es la forma rápida de que esto se calle sin arreglar
     // nada: la prueba seguiría haciendo el trabajo del arnés y solo se tardaría
-    // más en saberlo. Si de verdad hace falta más tiempo, la causa está en otro
-    // sitio —mira el comentario de `tests/setup/precalentarModulos.ts`—.
+    // más en saberlo.
     const plazos = [
       ...config.matchAll(/\b(testTimeout|hookTimeout)\s*:\s*(\d[\d_]*)/g),
     ].map(([, clave, valor]) => ({

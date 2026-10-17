@@ -1,7 +1,3 @@
-/// <reference types="vitest/config" />
-// El bloque de pruebas de abajo (`test`) lo entiende Vitest y no Vite, y por eso
-// hace falta la referencia: importar `defineConfig` de `vitest/config` ataría la
-// compilación del sitio a que Vitest esté instalado, y esto solo son tipos.
 import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -165,13 +161,6 @@ export default defineConfig({
       // re-optimizes and full-reloads the preview mid-screenshot.
       '@vly-ai/integrations',
     ],
-  },
-  test: {
-    // El grafo de funciones de Convex lo carga el arnés y no la primera prueba
-    // de cada archivo: ese trabajo era el que agotaba el plazo de esa prueba al
-    // correr la suite entera. Por qué se carga, y por qué no se sube el plazo,
-    // está en ese mismo archivo: `tests/setup/precalentarModulos.ts`.
-    setupFiles: ["tests/setup/precalentarModulos.ts"],
   },
   // Performance hints
   server: { allowedHosts: true,

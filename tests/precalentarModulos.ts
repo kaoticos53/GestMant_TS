@@ -10,13 +10,18 @@
  * misma CPU se estiraba por encima de los cinco segundos y hacía fallar al
  * primero que lo tocaba: el archivo que fallaba cambiaba de una corrida a otra.
  *
- * Cargarlos aquí mueve ese coste a donde le toca: se ejecuta antes de las
- * pruebas —así el primer test encuentra los módulos ya evaluados y su tiempo es
- * el suyo— y no toca ningún plazo. La carga sigue ocurriendo una vez por
- * archivo, porque cada archivo recibe un entorno nuevo; lo que cambia es a quién
- * se le cobra.
+ * Cargarlo aquí —y esperarlo— mueve ese coste a donde le toca: quien importa
+ * este archivo lo paga al evaluarse, antes de sus pruebas, así que el primer test
+ * encuentra los módulos ya puestos y su tiempo es el suyo. No se toca ningún
+ * plazo.
+ *
+ * Se importa **solo en los archivos que levantan el backend** (`convexTest`), y
+ * por eso no vive en `setupFiles`: puesto ahí lo pagan los ciento ocho archivos
+ * de prueba, ochenta de ellos sin tocar Convex y muchos dentro del entorno de
+ * jsdom, donde cargar el backend cuesta más y no sirve para nada. Que la lista de
+ * quien lo importa siga completa lo vigila `tests/suiteEstable.test.ts`.
  */
-const modulos = import.meta.glob("../../src/convex/**/!(*.*.*)*.*s");
+const modulos = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 await Promise.all(Object.values(modulos).map((cargar) => cargar()));
 

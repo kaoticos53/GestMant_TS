@@ -6,6 +6,7 @@
 // contrato: solo agregados —ni un nombre, ni una referencia, ni un código—, la
 // papelera fuera, los equipos de baja fuera, y la media sin publicar mientras la
 // muestra sea tan pequeña que señale a un caso concreto.
+import "./precalentarModulos";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";

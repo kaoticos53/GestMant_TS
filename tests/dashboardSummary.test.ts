@@ -5,6 +5,7 @@
 // archivado fuera, y cada bloque con el permiso de su lista— y que el aviso de
 // trabajo sin constancia llega ya decidido: quién está parado y cuántos días
 // lleva, ordenado de lo más parado a lo menos.
+import "./precalentarModulos";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";

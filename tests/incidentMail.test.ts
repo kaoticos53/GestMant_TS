@@ -1,3 +1,4 @@
+import "./precalentarModulos";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { afterEach, describe, expect, test, vi } from "vitest";
