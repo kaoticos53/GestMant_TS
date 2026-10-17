@@ -1,9 +1,8 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
 import { formatPublicCode } from "../src/lib/publicCode";
 import {
   INCIDENT_MAIL_STATUSES,
@@ -18,9 +17,6 @@ import {
   reporterFirstName,
   reporterNoticeText,
 } from "../src/lib/incidentMail";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 
@@ -214,7 +210,7 @@ describe("el texto del aviso a quien notificó", () => {
 /* ------------------------------------------------------------------ */
 
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const coordinatorId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Elena Vidal",

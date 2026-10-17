@@ -6,18 +6,15 @@
 // contrato: solo agregados —ni un nombre, ni una referencia, ni un código—, la
 // papelera fuera, los equipos de baja fuera, y la media sin publicar mientras la
 // muestra sea tan pequeña que señale a un caso concreto.
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
 import {
   formatCount,
   formatMinutes,
   publishedMeanMinutes,
 } from "../src/lib/workshopStats";
-
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 
@@ -102,7 +99,7 @@ function repuesto(t: Test, code: string) {
 
 /** El taller de la prueba: dos equipos en servicio, uno de baja y tres repuestos. */
 async function taller() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   await equipo(t, "EQ-001");
   await equipo(t, "EQ-002");
   await equipo(t, "EQ-003", true);

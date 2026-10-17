@@ -1,20 +1,16 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { richDocBlocks, richDocToPlainText } from "../src/lib/richDoc";
 import { api } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
 
 /** Instancia de test con un usuario autenticado del rol indicado. */
 async function authedTest(role: "admin" | "manager" | "technician") {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Usuario de prueba",

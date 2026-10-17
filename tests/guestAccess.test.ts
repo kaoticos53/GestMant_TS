@@ -1,13 +1,8 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
-import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
 import { PUBLIC_CODE_LENGTH } from "../src/lib/publicCode";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 /**
  * Una sesión de invitado: el usuario existe, pero es anónimo y el backend no lo
@@ -27,7 +22,7 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
 }
 
 async function guest() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Invitado",
@@ -115,7 +110,7 @@ describe("el invitado sigue su incidencia, y solo eso", () => {
    * caso y nada más.
    */
   async function tallerConIncidencia() {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const guestId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Invitado",
@@ -239,7 +234,7 @@ describe("el invitado sigue su incidencia, y solo eso", () => {
 describe("el invitado puede notificar: notificar es la puerta pública", () => {
   /** El taller (un coordinador al lado, que es quien ve la cola) y el invitado. */
   async function tallerConGestor() {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const managerId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Elena Vidal",

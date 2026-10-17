@@ -1,17 +1,14 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
-
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 async function setup(
   role?: "admin" | "manager" | "technician",
   email = "user@taller.es",
 ) {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Usuario de prueba",

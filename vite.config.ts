@@ -2,7 +2,7 @@ import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vitest/config";
 
 /**
  * El hueco que la CSP deja donde va la dirección pública de la API, y el archivo
@@ -78,6 +78,30 @@ function apiCspPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  test: {
+    /**
+     * El arnés corre en hilos, no en procesos, y es la diferencia entre siete
+     * segundos y un minuto.
+     *
+     * Medido con `npx vitest run` (ciento siete archivos, mil quinientas
+     * cincuenta y una pruebas): **61 s** en el pool de procesos y **7,4 s** en el
+     * de hilos. Ninguna prueba cambia de resultado.
+     *
+     * La causa no era transformar: con `isolate` —que se queda— cada archivo
+     * monta su propio registro de módulos, y eso cuesta lo mismo en cualquiera de
+     * los dos pools (7,4 s con aislamiento contra 6,6 s sin él, siempre en hilos).
+     * Lo que cuesta es el proceso: cada uno tiene **su propia** caché de
+     * transformación, así que el grafo del backend —cuarenta y nueve módulos,
+     * medio segundo— se transformaba otra vez por cada proceso, y además cada
+     * archivo abría el suyo. Un hilo comparte la caché del servidor de Vite: el
+     * grafo se transforma una vez y los hilos solo lo evalúan.
+     *
+     * Lo que hay que vigilar al tocar esto es lo que comparten los hilos y no los
+     * procesos —el entorno y el directorio de trabajo—: hoy solo una prueba escribe
+     * `process.env`, y lo borra en su `afterEach`.
+     */
+    pool: "threads",
+  },
   plugins: [react(), vlyPlugin(), tailwindcss(), apiCspPlugin()],
   resolve: {
     alias: {

@@ -1,13 +1,8 @@
-import "./precalentarModulos";
-import { convexTest } from "convex-test";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { TableNames } from "../src/convex/_generated/dataModel";
-import schema from "../src/convex/schema";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 /** Las tablas del taller que vacía el reset (las cuentas y los ajustes no). */
 const WORKSHOP_TABLES: TableNames[] = [
@@ -35,7 +30,7 @@ const WORKSHOP_TABLES: TableNames[] = [
 
 /** Test con sesión iniciada y el rol indicado. */
 async function authedTest(role: "admin" | "manager" | "technician") {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Usuario de prueba",
@@ -129,7 +124,7 @@ describe("vaciar el taller", () => {
   });
 
   test("una cuenta dada de baja no puede vaciar el taller", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const userId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Responsable Inactivo",
@@ -150,7 +145,7 @@ describe("vaciar el taller", () => {
   });
 
   test("un invitado anónimo no puede vaciar el taller", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const userId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Invitado",

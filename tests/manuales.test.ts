@@ -1,10 +1,9 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
-import schema from "../src/convex/schema";
 import {
   MANUAL_TYPES,
   canDeleteManual,
@@ -29,9 +28,6 @@ import {
   hasDangerousExtension,
   looksLikePdf,
 } from "../src/lib/upload";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
@@ -72,7 +68,7 @@ async function addUser(
 
 /** Instancia de test con una sesión del taller del rol indicado. */
 async function authedTest(role: "admin" | "manager" | "technician") {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const authed = await addUser(t, role, `Prueba ${role}`);
   return { t, authed };
 }
@@ -346,7 +342,7 @@ describe("manuales: la ficha y su clasificación", () => {
 
 describe("manuales: quién puede qué", () => {
   test("el invitado no los ve ni los escribe", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const userId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Invitado",
@@ -370,7 +366,7 @@ describe("manuales: quién puede qué", () => {
   });
 
   test("sin sesión tampoco: la lista queda vacía", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     expect(await t.query(api.manuals.list, {})).toEqual([]);
   });
 
@@ -395,7 +391,7 @@ describe("manuales: quién puede qué", () => {
   });
 
   test("un técnico no toca la nota de otro; su autor y el responsable sí", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const ana = await addUser(t, "technician", "Ana");
     const bruno = await addUser(t, "technician", "Bruno");
     const manager = await addUser(t, "manager", "Marta");
@@ -438,7 +434,7 @@ describe("manuales: quién puede qué", () => {
   });
 
   test("el autor borra su nota; un manual con archivo solo lo borra quien gestiona", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const tecnico = await addUser(t, "technician", "Ana");
     const manager = await addUser(t, "manager", "Marta");
 

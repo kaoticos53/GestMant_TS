@@ -1,14 +1,10 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
 import { AUTO_ARCHIVE_BY } from "../src/lib/archive";
 import { utcWeekday } from "../src/lib/weeklyReport";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -31,7 +27,7 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
  * semana, otra cerrada y archivada, y una petición entregada.
  */
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const now = Date.now();
   const adminId = await t.run((ctx) =>
     ctx.db.insert("users", {

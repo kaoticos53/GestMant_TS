@@ -1,16 +1,11 @@
-import "./precalentarModulos";
-import { convexTest } from "convex-test";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 /** Instancia de test con un usuario autenticado. */
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Iván Torres",
@@ -64,7 +59,7 @@ describe("imágenes de las notas y las descripciones", () => {
   });
 
   test("una cuenta dada de baja no puede pedir subidas ni enlazar imágenes", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const userId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Usuario Inactivo",
@@ -89,7 +84,7 @@ describe("imágenes de las notas y las descripciones", () => {
   });
 
   test("un invitado anónimo no puede pedir subidas ni enlazar imágenes", async () => {
-    const t = convexTest(schema, modules);
+    const t = backend();
     const userId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Invitado",

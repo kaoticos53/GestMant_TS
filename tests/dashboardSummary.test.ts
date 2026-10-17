@@ -5,15 +5,11 @@
 // archivado fuera, y cada bloque con el permiso de su lista— y que el aviso de
 // trabajo sin constancia llega ya decidido: quién está parado y cuántos días
 // lleva, ordenado de lo más parado a lo menos.
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
-import schema from "../src/convex/schema";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
@@ -22,7 +18,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 /** El taller con su gente: quien gobierna, quien trabaja y quien no es del taller. */
 async function taller() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const gestor = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Rita Repuestos",

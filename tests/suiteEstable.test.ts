@@ -12,27 +12,32 @@ import { describe, expect, test } from "vitest";
  * misma clase de prueba —**la primera de su archivo**— y ninguna era lenta: cada
  * archivo, en solitario, tarda menos de lo que dura un parpadeo.
  *
- * La causa no estaba en las pruebas. La primera que llama a `convexTest` paga la
- * carga perezosa de `import.meta.glob("../src/convex/**")` —transformar y evaluar
- * las decenas de módulos del backend—, y ese trabajo es del arnés. Al correr la
- * suite entera, veintisiete procesos compitiendo por la misma CPU estiraban esa
- * carga por encima del presupuesto de una prueba, y la cobraba la primera que
- * llegaba a tocarla.
+ * La causa no estaba en las pruebas. La primera que levantaba el backend pagaba
+ * la carga perezosa de su glob de módulos —transformar y evaluar las decenas de
+ * módulos del backend—, y ese trabajo es del arnés. Al correr la suite entera,
+ * veintisiete procesos compitiendo por la misma CPU estiraban esa carga por
+ * encima del presupuesto de una prueba, y la cobraba la primera que llegaba a
+ * tocarla.
  *
- * Así que el arreglo fue mover el coste, no ampliar el plazo: el grafo lo carga
- * `tests/precalentarModulos.ts`, y lo importan los archivos que levantan el
- * backend. Medido, las pruebas pasaron a ser el 3 % del tiempo rastreado y
- * ninguna se acerca a los cinco segundos; antes, la primera de un archivo pesado
- * llegaba a 2,8 s.
+ * Así que el arreglo fue mover el coste, no ampliar el plazo: `tests/backend.ts`
+ * guarda el glob y el esquema, los carga al evaluarse —antes de las pruebas— y
+ * da la única puerta para levantar el backend, `backend()`. Medido, las pruebas
+ * pasaron a ser el 3 % del tiempo rastreado y ninguna se acerca a los cinco
+ * segundos; antes, la primera de un archivo pesado llegaba a 2,8 s.
  *
- * Y esto vigila las piezas del arreglo, que son cuatro y se caen por su cuenta:
- * que la preparación siga cargando el grafo; que la importen **todos** los
- * archivos que levantan el backend; que no la importe quien no lo levanta —es
- * trabajo regalado, y dentro de jsdom cuesta más—; y que no vuelva a
- * engancharse por `setupFiles`, que es la forma de cobrarle la carga a los
- * ciento ocho archivos de prueba de una vez. El plazo, por último, no se toca:
- * subirlo taparía el síntoma y volvería a esconder el problema la próxima vez
- * que la máquina vaya cargada.
+ * Y esto vigila las piezas, que se caen por su cuenta: que el glob viva en un
+ * solo sitio y se espere; que nadie levante el backend por su cuenta con un
+ * `convexTest` propio; que todo el que lo levanta pase por la línea compartida y
+ * que no la importe quien no lo levanta —es trabajo regalado, y dentro de jsdom
+ * cuesta más—; que la carga no vuelva a engancharse por `setupFiles`, que es la
+ * forma de cobrársela a los ciento ocho archivos de prueba de una vez; y que
+ * nadie suba el plazo, que taparía el síntoma y volvería a esconder el problema
+ * la próxima vez que la máquina vaya cargada.
+ *
+ * Y vigila el pool, que resultó ser la mitad del asunto: con un proceso por
+ * archivo cada proceso transformaba el grafo entero otra vez. Los hilos
+ * comparten la caché del servidor y hacen la suite ocho veces más rápida sin
+ * tocar una sola prueba.
  */
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
@@ -46,20 +51,31 @@ const GUARDIAN = fileURLToPath(import.meta.url);
 /** La configuración de Vite, que es donde se engancharía un `setupFiles`. */
 const CONFIG = join(RAIZ, "vite.config.ts");
 
-/** El archivo que carga el grafo del backend antes de las pruebas. */
-const PREPARACION = "tests/precalentarModulos.ts";
+/** El archivo que guarda el esquema, el glob y la puerta del backend. */
+const COMPARTIDA = "tests/backend.ts";
 
 /** Lo que Vitest da por defecto a una prueba y a un gancho, en milisegundos. */
 const PLAZO_POR_DEFECTO = 5000;
 const PLAZO_DE_GANCHO_POR_DEFECTO = 10000;
 
-/** Quien levanta el backend en memoria. Por trozos, como en su guardián hermano. */
-const LEVANTA_EL_BACKEND = new RegExp(`${"convexTest"}\\(`);
-
-/** La importación que se cobra el grafo antes de las pruebas. */
-const IMPORTA_LA_PREPARACION = new RegExp(
-  `["']\\./${"precalentar"}[A-Za-z]*["']`,
+/**
+ * El glob de módulos de convex-test, con su `!(*.*.*)` que deja fuera lo que no
+ * es una función del backend. Se pide la forma entera y no un `glob` cualquiera:
+ * `crons.test.ts` tiene el suyo, y es otra cosa —el inventario de funciones, con
+ * `eager: true`, para comprobar que las tareas programadas apuntan a algo real—.
+ */
+const EL_GLOB_DEL_BACKEND = new RegExp(
+  `import\\.meta\\.glob\\(\\s*"\\.\\./src/convex/\\*\\*/!\\(`,
 );
+
+/** Levantar el backend por la puerta compartida. Por trozos, como su hermano. */
+const LEVANTA_EL_BACKEND = new RegExp(`\\b${"backend"}\\(`);
+
+/** La importación de esa puerta, y solo esa: estática, al principio del archivo. */
+const IMPORTA_LA_COMPARTIDA = new RegExp(`from "\\./${"backend"}"`);
+
+/** Levantar Convex a mano, que es lo que ya no hace ningún archivo de prueba. */
+const LLAMA_A_CONVEXTEST = new RegExp(`${"convex"}Test\\(`);
 
 /**
  * Menos archivos que esto levantando el backend significaría que el detector se
@@ -68,91 +84,126 @@ const IMPORTA_LA_PREPARACION = new RegExp(
  */
 const MINIMO_CON_BACKEND = 20;
 
-/** Todas las pruebas del directorio, también las que vivan en subcarpetas. */
-function pruebas(dir: string): string[] {
+/** Todos los `.ts`/`.tsx` del directorio, también los de subcarpetas. */
+function fuentes(dir: string): string[] {
   const encontradas: string[] = [];
   for (const entrada of readdirSync(dir)) {
     if (entrada === "node_modules") continue;
     const completo = join(dir, entrada);
     if (statSync(completo).isDirectory()) {
-      encontradas.push(...pruebas(completo));
-    } else if (/\.test\.tsx?$/.test(entrada)) {
+      encontradas.push(...fuentes(completo));
+    } else if (/\.tsx?$/.test(entrada)) {
       encontradas.push(completo);
     }
   }
   return encontradas.sort();
 }
 
-/** Las pruebas que se miran: todas menos este archivo. */
-const todas = pruebas(PRUEBAS).filter((file) => file !== GUARDIAN);
+/** Lo que se mira: todo menos este archivo. */
+const todas = fuentes(PRUEBAS).filter((file) => file !== GUARDIAN);
 
-/** El contenido de una prueba, tal cual está en el repositorio. */
+/** Solo las pruebas, que es donde se levanta el backend. */
+const dePrueba = todas.filter((file) => /\.test\.tsx?$/.test(file));
+
+/** El contenido, tal cual está en el repositorio. */
 const texto = (file: string) => readFileSync(file, "utf8");
 
-/** El nombre corto, para que un fallo se lea de un vistazo. */
-const corto = (file: string) => relative(PRUEBAS, file).split(sep).join("/");
+/** La ruta como se lee en el repositorio, para que un fallo se lea de un vistazo. */
+const corto = (file: string) => relative(RAIZ, file).split(sep).join("/");
 
 const config = readFileSync(CONFIG, "utf8");
 
 describe("la suite completa corre de una pieza", () => {
-  test("la preparación carga de verdad el grafo del backend", () => {
-    const ruta = join(RAIZ, PREPARACION);
-    expect(existsSync(ruta), `no existe ${PREPARACION}`).toBe(true);
+  test("el glob del backend vive en un solo sitio, y se espera", () => {
+    const ruta = join(RAIZ, COMPARTIDA);
+    expect(existsSync(ruta), `no existe ${COMPARTIDA}`).toBe(true);
 
-    const contenido = readFileSync(ruta, "utf8");
-    // El mismo glob que usan las pruebas: si cambia allí y no aquí, la
-    // preparación no cargaría nada y el plazo volvería a pagarse solo.
-    expect(contenido).toMatch(/import\.meta\.glob\(\s*"[^"]*src\/convex\//);
-    // Y hay que esperarlo: un glob que no se llama no carga nada, y uno que se
-    // llama sin esperar deja la carga a medias dentro de la primera prueba.
-    expect(contenido).toMatch(/await\s+Promise\.all/);
+    const duenios = todas
+      .filter((file) => EL_GLOB_DEL_BACKEND.test(texto(file)))
+      .map(corto);
+    expect(
+      duenios.join("\n"),
+      `El glob que levanta el backend solo puede estar en ${COMPARTIDA}:\n` +
+        "copiado en otro archivo, su carga vuelve a pagarse dentro de la primera\n" +
+        "prueba de ese archivo. Usa `backend()`.",
+    ).toBe(COMPARTIDA);
+
+    // Y hay que esperarlo: un glob que se llama sin esperar deja la carga a
+    // medias dentro de la primera prueba.
+    expect(texto(ruta)).toMatch(/await\s+Promise\.all/);
   });
 
-  test("todos los archivos que levantan el backend la importan", () => {
-    const conBackend = todas.filter((file) =>
+  test("nadie levanta el backend a mano", () => {
+    const sueltos = todas
+      .filter((file) => LLAMA_A_CONVEXTEST.test(texto(file)))
+      .map(corto);
+
+    expect(
+      sueltos.join("\n"),
+      `Solo ${COMPARTIDA} llama a \`convexTest\`: es ahí donde vive el esquema y\n` +
+        "donde se espera la carga del grafo. Desde una prueba, `backend()`.",
+    ).toBe(COMPARTIDA);
+  });
+
+  test("todos los que levantan el backend pasan por la línea compartida", () => {
+    const conBackend = dePrueba.filter((file) =>
       LEVANTA_EL_BACKEND.test(texto(file)),
     );
     // El control: sin esta línea, un detector roto dejaría esta prueba en verde.
     expect(conBackend.length).toBeGreaterThan(MINIMO_CON_BACKEND);
 
-    const sinPreparar = conBackend
-      .filter((file) => !IMPORTA_LA_PREPARACION.test(texto(file)))
+    const sinCompartida = conBackend
+      .filter((file) => !IMPORTA_LA_COMPARTIDA.test(texto(file)))
       .map(corto);
 
     expect(
-      sinPreparar.join("\n"),
-      `Estos archivos levantan el backend y no importan ${PREPARACION}:\n` +
-        `su primera prueba pagará la carga del grafo dentro de su propio plazo,\n` +
-        `que es lo que hacía fallar la suite entera según qué máquina.\n` +
-        `Añade al principio: import "./precalentarModulos";`,
+      sinCompartida.join("\n"),
+      `Estos archivos levantan el backend sin importarlo de ${COMPARTIDA}:\n` +
+        'añade al principio: import { backend } from "./backend";',
     ).toBe("");
   });
 
   test("quien no levanta el backend no paga la carga", () => {
-    // La preparación no vive en `setupFiles` justamente por esto: importada de
-    // más, cada archivo que no toca Convex —ochenta de ciento ocho— cargaría el
-    // backend para nada, y dentro de jsdom además cuesta más.
-    const deMas = todas
-      .filter((file) => IMPORTA_LA_PREPARACION.test(texto(file)))
+    // La puerta compartida no vive en `setupFiles` justamente por esto: importada
+    // de más, cada archivo que no toca Convex —ochenta de ciento ocho— cargaría
+    // el backend para nada, y dentro de jsdom además cuesta más.
+    const deMas = dePrueba
+      .filter((file) => IMPORTA_LA_COMPARTIDA.test(texto(file)))
       .filter((file) => !LEVANTA_EL_BACKEND.test(texto(file)))
       .map(corto);
 
     expect(
       deMas.join("\n"),
-      "Estos archivos importan la preparación sin levantar el backend: quita el\n" +
-        `import de ${PREPARACION}, que solo hace falta donde hay \`convexTest\`.`,
+      "Estos archivos importan la puerta compartida sin levantar el backend:\n" +
+        'quita el import de "./backend", que solo hace falta para llamar a `backend()`.',
     ).toBe("");
+  });
+
+  test("el arnés corre en hilos y no abre un proceso por archivo", () => {
+    // Cada proceso del pool tiene su propia caché de transformación, así que con
+    // procesos el grafo del backend se transforma otra vez en cada uno y el
+    // resultado es un minuto de suite en lugar de siete segundos. Si alguien
+    // vuelve a `forks`, que sea por una razón medida y cambie este guardián con
+    // la misma medición en la mano.
+    const [, pool] = /\bpool\s*:\s*["']([\w-]+)["']/.exec(config) ?? [];
+
+    expect(
+      pool,
+      "vite.config.ts debe fijar `pool: \"threads\"`: con un proceso por archivo\n" +
+        "la suite tarda 61 s y con hilos 7,4 s, porque cada proceso vuelve a\n" +
+        "transformar el grafo del backend.",
+    ).toBe("threads");
   });
 
   test("la carga no se le cobra a toda la suite de una vez", () => {
     // `setupFiles` corre en los ciento ocho archivos, así que enganchar ahí la
-    // preparación es volver al problema por la puerta de atrás: todos pagan por
-    // un grafo que solo usan veintiocho.
+    // carga es volver al problema por la puerta de atrás: todos pagan por un
+    // grafo que solo usan veintiocho.
     expect(
       /setupFiles/.test(config),
       "vite.config.ts no debe enganchar la carga del backend en `setupFiles`:\n" +
-        `ahí la pagan los ciento ocho archivos de prueba. La importan solo los que\n` +
-        `la usan, desde ${PREPARACION}.`,
+        "ahí la pagan los ciento ocho archivos de prueba. La importan solo los que\n" +
+        `la usan, desde ${COMPARTIDA}.`,
     ).toBe(false);
   });
 

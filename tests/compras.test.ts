@@ -1,19 +1,15 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
-import schema from "../src/convex/schema";
 import {
   groupBySupplier,
   groupSummary,
   orderTotals,
   requestsMissingStock,
 } from "../src/lib/purchasing";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
@@ -24,7 +20,7 @@ type Authed = ReturnType<Test["withIdentity"]>;
  * como se comprueban los permisos de verdad.
  */
 async function taller() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const responsable = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Rita Repuestos",

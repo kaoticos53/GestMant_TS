@@ -1,14 +1,10 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
-import schema from "../src/convex/schema";
 import { richDocToPlainText } from "../src/lib/richDoc";
 import { DEFAULT_TRASH_RETENTION_DAYS } from "../src/lib/trash";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
@@ -16,7 +12,7 @@ type Authed = ReturnType<Test["withIdentity"]>;
 const DAY = 24 * 60 * 60 * 1000;
 
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const managerId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Elena Vidal",

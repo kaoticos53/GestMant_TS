@@ -1,15 +1,11 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import { MAX_UPLOADS_PER_HOUR } from "../src/convex/reportUploads";
-import schema from "../src/convex/schema";
 import { MAX_FILE_SIZE, MAX_REPORT_IMAGES } from "../src/lib/upload";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 
@@ -30,7 +26,7 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
 
 /** Instancia de test. Nadie tiene sesión: es el punto del formulario público. */
 function harness() {
-  return convexTest(schema, modules);
+  return backend();
 }
 
 /** Los primeros bytes de un PNG: es lo que mira la acreditación del archivo. */
@@ -317,7 +313,7 @@ describe("limpieza de lo que nadie usó", () => {
 
 /** Instancia con un mando del taller dentro: el panel de Ajustes es cosa suya. */
 async function harnessWithManager() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Iván Torres",
@@ -515,7 +511,7 @@ describe("imágenes del formulario sin usar (panel del taller)", () => {
  * almacén.
  */
 async function harnessWithRoles() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const adminId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Ana Ruiz",

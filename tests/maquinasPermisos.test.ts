@@ -1,10 +1,9 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
-import schema from "../src/convex/schema";
 import {
   nextIncidentStatus,
   type IncidentAction,
@@ -51,9 +50,6 @@ import { documentedRows } from "./machineDoc";
  * (stock descontado, correo a quien notificó, ficha de mantenimiento). Eso es de
  * cada mutación, no de la puerta.
  */
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 type Test = ReturnType<typeof convexTest>;
 type Authed = ReturnType<Test["withIdentity"]>;
@@ -111,7 +107,7 @@ interface Mundo {
 
 /** Monta el taller: los roles del sistema, los cuatro a medida y un repuesto. */
 async function taller(): Promise<Mundo> {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const como = (id: Id<"users">): Authed =>
     t.withIdentity({ subject: `${id}|sesion` });
 

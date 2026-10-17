@@ -1,5 +1,4 @@
-import "./precalentarModulos";
-import { convexTest } from "convex-test";
+import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
@@ -12,7 +11,6 @@ import {
   manualsForEquipment,
 } from "../src/lib/manuals";
 import { PART_CATEGORIES } from "../src/lib/workshop";
-import schema from "../src/convex/schema";
 
 /** La firma de un PNG: es lo que distingue una foto de un puñado de bytes. */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -22,12 +20,9 @@ const DAY = 24 * 60 * 60 * 1000;
 /** La petición de la muestra que salió en dos tandas, una por semana. */
 const PET_EN_DOS_TANDAS = "PET-0005";
 
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
-
 /** Test con sesión iniciada y el rol indicado. */
 async function authedTest(role: "manager" | "technician") {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const userId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Usuario de prueba",
@@ -508,7 +503,7 @@ describe("ampliar la muestra", () => {
 
 /** Taller con administrador, responsable y técnico para repartir los roles. */
 async function taller() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const adminId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Ada Admin",

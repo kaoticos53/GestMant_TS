@@ -1,16 +1,12 @@
-import "./precalentarModulos";
+import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import { DEFAULT_GRANTS } from "../src/lib/permissions";
-import schema from "../src/convex/schema";
-
-/** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
-const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
 async function setup() {
-  const t = convexTest(schema, modules);
+  const t = backend();
   const adminId = await t.run((ctx) =>
     ctx.db.insert("users", {
       name: "Ada Admin",
