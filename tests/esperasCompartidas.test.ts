@@ -19,6 +19,13 @@ import { describe, expect, test } from "vitest";
  * forma es esperar a esa condición (`vi.waitFor`). Lo que vigila es que nadie
  * vuelva a resolverlo con un plazo ni se traiga su propia copia del helper.
  *
+ * Y vigila la misma apuesta hecha al revés: **medir** el reloj para deducir un
+ * hecho. `expect(Date.now() - fila.createdAt).toBeLessThan(1000)` no pregunta si
+ * el vale es nuevo, pregunta si la máquina llegó hasta ahí en menos de un
+ * segundo —y en una máquina cargada la respuesta es que no, con el mismo fallo
+ * que si el vale fuera viejo—. Un test que necesita saber si algo es nuevo se
+ * toma un instante antes y compara con él: eso no depende de lo que tarde nadie.
+ *
  * Se lee el código como texto, como `finalesDeLinea.test.ts`: aquí no hay nada
  * que ejecutar, se busca la firma del fallo. Los patrones se montan por trozos
  * para que este archivo no se encuentre a sí mismo.
@@ -52,6 +59,15 @@ const ESPERA_FIJA = new RegExp(
   `new Promise\\(\\(resolve\\) => setTimeout\\(resolve, \\s*\\d`,
 );
 
+/**
+ * La medida del reloj dentro de una aserción: `expect(Date.now() - …)`.
+ *
+ * Se pide el reloj como sujeto —justo después del paréntesis— y no en cualquier
+ * parte de la línea: comparar dos fechas de los propios datos (`expect(fila.at)
+ * .toBeLessThan(Date.now() - DAY)`) no apuesta por una duración y se deja pasar.
+ */
+const MEDIR_EL_RELOJ = new RegExp(`expect\\(\\s*${"Date.now"}\\(\\)\\s*-`);
+
 describe("las esperas de los tests", () => {
   test("el detector ve una copia y un plazo cuando los hay", () => {
     // Control positivo: sin esto, un patrón roto dejaría el guardián pasando en
@@ -64,6 +80,19 @@ describe("las esperas de los tests", () => {
     ).toBe(true);
     // Y no se lleva por delante el helper: sus vueltas no llevan plazo.
     expect(ESPERA_FIJA.test(`setTimeout(resolve, ${`turn`})`)).toBe(false);
+
+    // El otro detector, con su control positivo y su frontera: mide el reloj
+    // quien lo pide como sujeto, no quien compara una fecha de los datos.
+    expect(
+      MEDIR_EL_RELOJ.test(
+        `expect(${"Date.now"}() - fila.createdAt).toBeLessThan(1000);`,
+      ),
+    ).toBe(true);
+    expect(
+      MEDIR_EL_RELOJ.test(
+        `expect(fila.createdAt).toBeLessThan(${"Date.now"}() - DAY);`,
+      ),
+    ).toBe(false);
   });
 
   test("ninguna prueba se define su propio settle", () => {
@@ -77,6 +106,20 @@ describe("las esperas de los tests", () => {
         '`tests/settle.ts` y se importa: `import { settle } from "./settle";`.\n' +
         "Si lo que hacía falta era esperar a que algo apareciera, la forma es\n" +
         "`vi.waitFor`, no un plazo.",
+    ).toBe("");
+  });
+
+  test("ninguna prueba mide el reloj para saber si algo es nuevo", () => {
+    const medidas = pruebas(DIR)
+      .filter((file) => MEDIR_EL_RELOJ.test(readFileSync(file, "utf8")))
+      .map((file) => relative(DIR, file));
+
+    expect(
+      medidas.join("\n"),
+      "Una prueba mide el reloj para deducir un hecho: `expect(Date.now() - …)`\n" +
+        "pregunta si la máquina llegó a tiempo, y en una máquina cargada la\n" +
+        "respuesta es que no. Toma el instante antes (`const antes = Date.now()`)\n" +
+        "y compara con él: eso no depende de lo que tarde nadie.",
     ).toBe("");
   });
 
