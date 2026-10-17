@@ -907,6 +907,32 @@ const schema = defineSchema({
     .index("by_code", ["code"])
     .index("by_windowStart", ["windowStart"]),
 
+  // La foto pública del taller: una sola fila con lo poco del trabajo que se
+  // puede enseñar a quien no ha entrado nunca. Existe para que la portada no
+  // cuente nada al vuelo: contar equipos, repuestos e incidencias es leer esas
+  // tablas enteras, y una página abierta a internet no puede permitirse que
+  // cada visita las recorra. La foto la refresca el cron de `publicStats` cada
+  // quince minutos, así que puede ir por detrás del trabajo real —de ahí que la
+  // portada diga cuándo se tomó—, y solo guarda agregados: ni nombres, ni
+  // referencias, ni ubicaciones, ni quién hizo qué. La fila es una sola por
+  // clave fija, y por eso la tabla no crece.
+  publicStats: defineTable({
+    key: v.string(), // "taller": la fila única
+    // Equipos dados de alta y en servicio (los de baja no cuentan).
+    equipment: v.number(),
+    // Repuestos del catálogo del almacén.
+    spareParts: v.number(),
+    // Incidencias vivas, sin cerrar, fuera de la papelera y del archivo.
+    openIncidents: v.number(),
+    // Incidencias cerradas en la ventana de la media, para dar contexto.
+    closedLastMonth: v.number(),
+    // Media de cierre en minutos, redondeada; nula cuando aún no hay muestra
+    // bastante para publicarla sin señalar a un caso concreto.
+    meanResolutionMinutes: v.union(v.number(), v.null()),
+    // Cuándo se tomaron estos números, para que la portada lo diga.
+    computedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // Documentos de una incidencia: el archivo de verdad vive en el
   // almacenamiento del servidor y aquí queda su ficha (nombre visible, nota
   // opcional y de quién es). `storageId` es opcional porque los documentos

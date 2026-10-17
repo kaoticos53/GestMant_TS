@@ -126,4 +126,20 @@ crons.daily(
   {},
 );
 
+/**
+ * Las cifras públicas de la portada: una foto cada cuarto de hora.
+ *
+ * No son trabajo del taller sino lo que se enseña fuera, y por eso van por
+ * intervalo y no por hora del día: quien abre la portada por la mañana no debe
+ * ver los números de anoche. Cada pasada cuenta el catálogo y las incidencias
+ * enteros, que es lo caro; hacerlo cada quince minutos deja esa cuenta fuera del
+ * camino de las visitas, que solo leen la fila que esto escribe.
+ */
+crons.interval(
+  "actualizar las cifras publicas",
+  { minutes: 15 },
+  internal.publicStats.refresh,
+  {},
+);
+
 export default crons;

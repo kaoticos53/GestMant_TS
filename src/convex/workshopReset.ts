@@ -64,6 +64,10 @@ const RESET_TABLES: TableNames[] = [
   // código de incidencia: tras vaciar, un código nuevo no debería heredar el
   // cupo gastado del que tenía antes.
   "publicLookupLimits",
+  // La foto pública del taller: es un resumen de lo que se acaba de vaciar, así
+  // que no puede quedarse contando el trabajo que ya no está. Se borra, y el
+  // cron de `publicStats` toma una nueva —con ceros— en su siguiente pasada.
+  "publicStats",
   // El flag de «muestra cargada» vive aquí: si no se va, volver a cargar datos
   // de ejemplo no haría nada.
   "appSettings",

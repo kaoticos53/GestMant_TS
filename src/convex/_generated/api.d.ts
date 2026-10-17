@@ -42,6 +42,7 @@ import type * as partRequests from "../partRequests.js";
 import type * as permissions from "../permissions.js";
 import type * as publicCodes from "../publicCodes.js";
 import type * as publicLookupLimits from "../publicLookupLimits.js";
+import type * as publicStats from "../publicStats.js";
 import type * as purchasing from "../purchasing.js";
 import type * as references from "../references.js";
 import type * as reportUploads from "../reportUploads.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   permissions: typeof permissions;
   publicCodes: typeof publicCodes;
   publicLookupLimits: typeof publicLookupLimits;
+  publicStats: typeof publicStats;
   purchasing: typeof purchasing;
   references: typeof references;
   reportUploads: typeof reportUploads;
