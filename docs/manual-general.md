@@ -142,7 +142,7 @@ La autenticación de Pulso Taller se gestiona mediante `@convex-dev/auth`, imple
 ### 2.2 Roles Predefinidos del Sistema
 El sistema provee de base cuatro roles canónicos:
 
-1. **`guest` (Invitado):** Sesión anónima de consulta. Puede acceder a la Landing page, reportar incidencias públicas y consultar el estado de una incidencia mediante su código único de seguimiento. No tiene acceso a módulos internos, catálogo ni inventario.
+1. **`guest` (Invitado):** Rol de solo consulta para sesiones anónimas heredadas. La pantalla de acceso ya no ofrece entrar como invitado: cualquiera puede notificar una incidencia y seguir su estado con el código único de seguimiento, sin cuenta y sin acceder a los módulos internos, el catálogo ni el inventario.
 2. **`technician` (Técnico):** Profesional de guardia o taller. Accede a su cola de incidencias asignadas, escribe en el cuaderno técnico, sube documentación fotográfica, solicita repuestos al almacén y consulta manuales de servicio.
 3. **`manager` (Responsable de Repuestos / Coordinador de Taller):** Responsable de la gestión del taller. Asigna incidencias a los técnicos, aprueba o rechaza peticiones de repuesto, emite órdenes de compra, recepciona albaranes, administra el inventario de equipos y emite partes de trabajo oficiales en PDF.
 4. **`admin` (Administrador):** Máxima autoridad técnica. Posee todas las facultades del Responsable y gestiona además las cuentas de usuario, la matriz de permisos de roles, los ajustes fiscales del taller, las alertas de "trabajo sin traza" y los registros de auditoría de seguridad.

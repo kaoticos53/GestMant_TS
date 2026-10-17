@@ -1315,7 +1315,7 @@ export function panelLines(
   if (firstTime) {
     lines.push(
       `  La primera vez, la app todavia no tiene usuarios: entra en ${color.bold(`${appUrl}/auth`)}`,
-      "  y usa la pestana de contrasena o el acceso como invitado.",
+      "  y entra con una cuenta del taller (correo y contrasena).",
     );
   }
   lines.push("", `  Abre la app en ${color.bold(appUrl)}`);

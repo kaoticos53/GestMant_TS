@@ -27,6 +27,7 @@ import {
   REQUEST_STATUSES,
   priorityValidator,
   requestStatusValidator,
+  type RequestDecision,
 } from "./schema";
 
 import {
@@ -178,9 +179,64 @@ export const decisions = query({
       .query("requestDecisions")
       .withIndex("by_request", (q) => q.eq("requestId", args.requestId))
       .collect();
-    return rows.sort((a, b) => b.at - a.at);
+    // Lo más reciente primero. Las constancias nuevas ya no pueden compartir
+    // hora (las apunta `recordDecision`), pero una base con historia de antes
+    // puede tenerlas empatadas: se desempata por lo que no empata nunca —cuándo
+    // se creó la fila y su identificador—, para que dos lecturas iguales no
+    // enseñen el rastro en dos órdenes distintos.
+    return rows.sort(
+      (a, b) =>
+        b.at - a.at ||
+        b._creationTime - a._creationTime ||
+        (a._id < b._id ? 1 : a._id > b._id ? -1 : 0),
+    );
   },
 });
+
+/**
+ * La hora con la que se apunta una constancia: la de ahora, pero siempre por
+ * delante de la última de la misma petición.
+ *
+ * Dos entregas seguidas —dos tandas, o la que completa el material— pueden caer
+ * en el mismo milisegundo, y entonces el rastro ordenado por hora tenía dos
+ * filas empatadas: se enseñaban en el orden que quisiera la consulta, que no
+ * tiene por qué ser el de los hechos. Avanzar un milisegundo no se nota en la
+ * ficha y hace que «lo más reciente primero» signifique siempre lo mismo.
+ *
+ * La última se busca por orden de creación y no de hora: es la que se acaba de
+ * escribir, aunque su hora venga desplazada por este mismo ajuste.
+ */
+async function decisionAt(
+  ctx: MutationCtx,
+  requestId: Id<"partRequests">,
+): Promise<number> {
+  const last = await ctx.db
+    .query("requestDecisions")
+    .withIndex("by_request", (q) => q.eq("requestId", requestId))
+    .order("desc")
+    .first();
+  const now = Date.now();
+  return last === null ? now : Math.max(now, last.at + 1);
+}
+
+/**
+ * Apunta una constancia de la petición: quién, qué y cuándo. La hora sale de
+ * `decisionAt`, que es lo que mantiene el rastro en orden aunque dos decisiones
+ * caigan en el mismo milisegundo.
+ */
+async function recordDecision(
+  ctx: MutationCtx,
+  requestId: Id<"partRequests">,
+  by: string,
+  decision: RequestDecision,
+): Promise<void> {
+  await ctx.db.insert("requestDecisions", {
+    requestId,
+    by,
+    decision,
+    at: await decisionAt(ctx, requestId),
+  });
+}
 
 export const create = mutation({
   args: {
@@ -426,18 +482,18 @@ export const onHold = mutation({
     });
 
     if (reason) {
-      await ctx.db.insert("requestDecisions", {
-        requestId: args.requestId,
-        by: await actorName(ctx, decisionActor),
-        decision: {
+      await recordDecision(
+        ctx,
+        args.requestId,
+        await actorName(ctx, decisionActor),
+        {
           reason:
             request.status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
               ? "pendingExternalQuote"
               : "other",
           note: reasonOneLine(reason),
         },
-        at: now,
-      });
+      );
     }
   },
 });
@@ -500,14 +556,9 @@ export const returnMaterial = mutation({
       await syncIncidentWithParts(ctx, request.incidentId, name);
     }
 
-    await ctx.db.insert("requestDecisions", {
-      requestId: args.requestId,
-      by: name,
-      decision: {
-        reason: "materialReturned",
-        note: reasonOneLine(reason) || "Material devuelto por el técnico.",
-      },
-      at: now,
+    await recordDecision(ctx, args.requestId, name, {
+      reason: "materialReturned",
+      note: reasonOneLine(reason) || "Material devuelto por el técnico.",
     });
   },
 });
@@ -551,15 +602,9 @@ export const cancel = mutation({
       await syncIncidentWithParts(ctx, request.incidentId, name);
     }
 
-    await ctx.db.insert("requestDecisions", {
-      requestId: args.requestId,
-      by: name,
-      decision: {
-        reason: "requestCancelled",
-        note:
-          reasonOneLine(reason) || "Cancelada por decisión del responsable.",
-      },
-      at: now,
+    await recordDecision(ctx, args.requestId, name, {
+      reason: "requestCancelled",
+      note: reasonOneLine(reason) || "Cancelada por decisión del responsable.",
     });
   },
 });
@@ -807,16 +852,11 @@ async function deliverMaterial(
     await ctx.db.patch(request._id, { lines });
   }
 
-  await ctx.db.insert("requestDecisions", {
-    requestId: request._id,
-    by,
-    decision: {
-      reason: complete
-        ? REJECTION_REASONS.MATERIAL_DELIVERED
-        : REJECTION_REASONS.MATERIAL_PARTIALLY_DELIVERED,
-      note: deliveryNote(salido),
-    },
-    at: now,
+  await recordDecision(ctx, request._id, by, {
+    reason: complete
+      ? REJECTION_REASONS.MATERIAL_DELIVERED
+      : REJECTION_REASONS.MATERIAL_PARTIALLY_DELIVERED,
+    note: deliveryNote(salido),
   });
 
   // La entrega completa cierra la espera: cuando ya no queda material pendiente

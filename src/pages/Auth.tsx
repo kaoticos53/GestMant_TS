@@ -16,12 +16,7 @@ import { Label } from "@/components/ui/label";
 
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
-import {
-  ArrowRight,
-  Loader2,
-  Mail,
-  UserX,
-} from "lucide-react";
+import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -158,22 +153,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       setOtp("");
     }
   };
-
-  const handleGuestLogin = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await signIn("anonymous");
-      navigate(redirect);
-    } catch (error) {
-      console.error("Guest login error:", error);
-      setError(
-        `No se ha podido entrar como invitado: ${error instanceof Error ? error.message : "error desconocido"}`,
-      );
-      setIsLoading(false);
-    }
-  };
-
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -422,29 +401,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </CardContent>
               </form>
             )}
-
-            <div className="px-6 pb-4 grid gap-3">
-              <div className="relative flex items-center gap-2">
-                <span className="w-full border-t border-border/70" />
-                <span className="bg-background px-2 text-xs uppercase text-muted-foreground">
-                  O
-                </span>
-                <span className="w-full border-t border-border/70" />
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleGuestLogin}
-                disabled={isLoading}
-              >
-                <UserX className="mr-2 h-4 w-4" />
-                Entrar como invitado
-              </Button>
-
-
-            </div>
 
             <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
               Secured by{" "}

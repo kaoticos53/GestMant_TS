@@ -257,7 +257,8 @@ En http://localhost:5173/auth → pestaña **Contraseña** → botón
 
 La primera vez que pulsas **Entrar** la cuenta de administrador se crea sola
 (verás un `InvalidAccountId` en la consola: es el sondeo previsto antes del alta).
-También puedes pulsar **«Entrar como invitado»** para un acceso anónimo rápido.
+No hay acceso de invitado: para ver cómo va una incidencia notificada se usa el
+código de seguimiento, sin cuenta, desde la consulta de la página de inicio.
 
 Dentro del panel, el botón **«Cargar datos de ejemplo»** rellena el taller con
 repuestos, equipos, manuales, incidencias y peticiones de demostración. Los
@@ -312,7 +313,7 @@ Se organizan en dos sitios distintos y es fácil confundirlos:
 - **Código por email (OTP)**: `emailOtp.ts` envía los códigos a través de la
   pasarela de integraciones de freebuff y necesita `VLY_INTEGRATION_KEY`, una
   variable del proyecto original en la nube que no está en el repositorio. Usa
-  contraseña o el acceso como invitado.
+  contraseña.
 - **La barra flotante de Freebuff** y el envío de errores a su panel: solo tienen
   sentido dentro del editor en la nube.
 - **`main.ts`** es el servidor Deno/Hono para servir `dist/` en despliegue; no se

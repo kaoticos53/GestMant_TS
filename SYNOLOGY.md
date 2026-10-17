@@ -706,7 +706,7 @@ Es lo mismo que no funciona en el entorno local, por la misma razón: son piezas
 que dependen del proyecto original en la nube (la pasarela de Freebuff que usa `VLY_INTEGRATION_KEY`).
 
 - **Entrar con código por email (OTP)**: `emailOtp.ts` manda los códigos por la
-  pasarela y necesita `VLY_INTEGRATION_KEY`. Usa contraseña o el acceso como invitado.
+  pasarela y necesita `VLY_INTEGRATION_KEY`. Usa contraseña.
 - **Aviso por email a quien notifica una incidencia**: `incidentMail.ts` intenta
   enviar el código de seguimiento si el informador dejó su correo. Al no haber pasarela,
   la ficha de la incidencia muestra el aviso informativo:

@@ -184,8 +184,8 @@ export default function ReportIncident() {
                   {formatPublicCode(code)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Guárdalo: con él se sigue el caso. Entrando como invitado
-                  puedes ver en qué punto va, sin cuenta del taller.
+                  Guárdalo: con él se sigue el caso. Desde la página de
+                  inicio puedes ver en qué punto va, sin cuenta del taller.
                 </p>
               </div>
               {sentTo && (

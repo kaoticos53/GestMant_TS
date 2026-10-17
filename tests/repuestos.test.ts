@@ -1,6 +1,6 @@
 import { ConvexError } from "convex/values";
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { richDocBlocks, richDocToPlainText } from "../src/lib/richDoc";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
@@ -676,6 +676,45 @@ describe("partRequests.issueLines — el material sale de una en una", () => {
     expect(trail[0].at).toBeTypeOf("number");
     expect(trail[1].at).toBeTypeOf("number");
     expect(trail[0].at).toBeGreaterThanOrEqual(trail[1].at);
+  });
+
+  test("dos tandas en el mismo milisegundo conservan el orden en que pasaron", async () => {
+    // El reloj congelado: las dos entregas caen en la misma hora, que es lo que
+    // pasaba de verdad con dos mutations seguidas —y lo que dejaba el rastro
+    // empatado, en el orden que quisiera la consulta—.
+    const reloj = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      const { t, authed } = await authedTest();
+      const { requestId, fuente, filtro } = await approvedWithTwoLines(
+        t,
+        authed,
+      );
+
+      await authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: fuente, quantity: 2 }],
+      });
+      await authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [
+          { sparePartId: fuente, quantity: 3 },
+          { sparePartId: filtro, quantity: 2 },
+        ],
+      });
+
+      const trail = await authed.query(api.partRequests.decisions, {
+        requestId,
+      });
+      // La última tanda es la que completa el material, y va primero.
+      expect(trail.map((row) => row.decision?.reason)).toEqual([
+        "materialDelivered",
+        "materialPartiallyDelivered",
+      ]);
+      // La hora escrita se apunta siempre por delante de la anterior: no empatan.
+      expect(trail[0].at).toBeGreaterThan(trail[1].at);
+    } finally {
+      reloj.mockRestore();
+    }
   });
 
   test("el rastro de una petición no lo lee quien no es del taller", async () => {
