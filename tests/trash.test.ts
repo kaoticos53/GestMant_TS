@@ -268,6 +268,12 @@ describe("la papelera del almacén", () => {
       "No se han podido comprobar las imágenes",
     );
 
+    // El instante desde el que cuenta lo que venga: el vale que vuelve es una
+    // fila **nueva**, no la de ayer resucitada. Se compara con este instante y no
+    // con «hace menos de un segundo», que era una pregunta sobre lo que tarda la
+    // máquina en llegar hasta aquí: en una máquina cargada fallaba por tardar, no
+    // por otra cosa.
+    const antes = Date.now();
     expect(
       await coordinator.mutation(api.trash.restore, { id: item.id }),
     ).toEqual({ kept: false });
@@ -278,7 +284,7 @@ describe("la papelera del almacén", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].storageId).toBe(storageId);
     expect(rows[0].claimedAt).toBeTypeOf("number");
-    expect(Date.now() - rows[0].createdAt).toBeLessThan(1000);
+    expect(rows[0].createdAt).toBeGreaterThanOrEqual(antes);
     // Y sale de la papelera: ya no hay nada que borrar.
     expect((await coordinator.query(api.trash.list, {})).pending).toHaveLength(
       0,
