@@ -32,7 +32,11 @@ export function AssignDialog({
   mode: "assign" | "workshop";
   onClose: () => void;
 }) {
-  const assignable = useQuery(api.members.listAssignable);
+  // Con la incidencia delante: el coordinador ve la lista siempre, y el técnico
+  // de taller solo con la orden que lleva (`members.listAssignable`).
+  const assignable = useQuery(api.members.listAssignable, {
+    incidentId: incident._id,
+  });
   const assign = useMutation(api.incidents.assign);
   const assignWorkshop = useMutation(api.incidents.assignWorkshop);
   const [targetId, setTargetId] = useState<string>("");

@@ -104,6 +104,21 @@ crons.daily(
   {},
 );
 
+/**
+ * Purga del freno de la consulta pública: borra las ventanas caducadas de la
+ * tabla que cuenta cuántas veces se sigue un código por hora. Va la última de
+ * las purgas y no depende de ninguna otra pasada —ni ninguna depende de ella—:
+ * una ventana caducada ya no frena a nadie, así que quitarla no cambia lo que
+ * pasa en la puerta, solo lo que se guarda. Sin esta pasada, la tabla se quedaría
+ * con todos los códigos seguidos alguna vez en vez de con los de la última hora.
+ */
+crons.daily(
+  "borrar las ventanas caducadas",
+  { hourUTC: 5, minuteUTC: 45 },
+  internal.publicLookupLimits.purgeExpired,
+  {},
+);
+
 crons.daily(
   "resumen semanal",
   { hourUTC: 7, minuteUTC: 0 },

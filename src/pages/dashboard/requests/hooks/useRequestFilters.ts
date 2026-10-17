@@ -5,11 +5,7 @@ import { requestMatchesEquipment } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import type { QueueSortId } from "../../QueueToolbar";
-import type {
-  EquipmentDoc,
-  RequestDoc,
-  RequestFilterId,
-} from "../types";
+import type { EquipmentDoc, RequestDoc, RequestFilterId } from "../types";
 import { countByStatus, inQueueOrder, searchableFields } from "../helpers";
 
 export function useRequestFilters({

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // mocking de convex/react, del backend y de la sesión *antes* de que el
 // componente los importe
+import { settle } from "./settle";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -125,12 +126,6 @@ afterEach(async () => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
 });
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 /** Pinta lo que se le pase y devuelve el contenedor. */
 async function mount(node: ReactNode): Promise<HTMLElement> {

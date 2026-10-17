@@ -50,6 +50,10 @@ import {
   canEditRequest,
   canRequestStep,
   isRequestInMotion,
+  lineDelivered,
+  lineRemaining,
+  requestDelivery,
+  requestMaterialState,
 } from "@/lib/requestFlow";
 import { cn } from "@/lib/utils";
 import {
@@ -62,11 +66,12 @@ import {
 
 import type { PartDoc, RequestDoc } from "../types";
 import { DecisionNotes } from "./DecisionNotes";
+import { DeliveryTrail } from "./DeliveryTrail";
 
 export function RequestDetailSheet({
   request,
   parts,
-  canManage,
+  canManage: canManageRequest,
   onClose,
   onAssociate,
   onApprove,
@@ -98,10 +103,29 @@ export function RequestDetailSheet({
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
+  // Lo archivado es solo lectura, se abra desde donde se abra: su trabajo se
+  // cerró y sus pasos ya no se dan desde la cola. La vista que la abre también
+  // quita el permiso, pero la regla vive aquí para que una petición archivada no
+  // pueda volver a tramitarse por olvidarlo en otra pantalla.
+  const archivedAt = request.archivedAt;
+  const canManage = canManageRequest && archivedAt === undefined;
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
   const partById = new Map(parts.map((part) => [part._id, part]));
   const noReference = request.lines.length === 0;
+  // La entrega puede ir de una en una: lo que ya salió del almacén se cuenta por
+  // línea, y es lo que distingue una petición aprobada de una entregada a medias.
+  const delivery = requestDelivery(request.lines, request.status);
+  const material = requestMaterialState(request.status, delivery);
+  // La última vez que salió algo del almacén para esta petición: con la entrega
+  // por tandas, es lo que dice si el material lleva días saliendo o salió ayer.
+  const lastDeliveredAt = request.lines.reduce<number | null>(
+    (latest, line) =>
+      line.deliveredAt === undefined
+        ? latest
+        : Math.max(latest ?? 0, line.deliveredAt),
+    null,
+  );
   const images = request.attachments.filter((a) => a.kind === "image");
   // Lo que la máquina deja hacer desde aquí, y lo que no: los pasos que no se
   // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/requestFlow`).
@@ -161,7 +185,15 @@ export function RequestDetailSheet({
     },
     {
       label: "Entrega",
-      value: request.issuedAt ? formatDateTime(request.issuedAt) : "—",
+      value: request.issuedAt
+        ? formatDateTime(request.issuedAt)
+        : delivery.anyDelivered
+          ? `${delivery.deliveredUnits} de ${delivery.totalUnits} unidades entregadas${
+              lastDeliveredAt === null
+                ? ""
+                : ` · última el ${formatDateTime(lastDeliveredAt)}`
+            }`
+          : "—",
     },
   ];
 
@@ -182,6 +214,15 @@ export function RequestDetailSheet({
               />
               {status.label}
             </Badge>
+            {material === "partial" && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/25 bg-amber-500/10 text-amber-700"
+              >
+                <PackageCheck className="size-3" />
+                Entrega parcial
+              </Badge>
+            )}
             {noReference && (
               <Badge
                 variant="outline"
@@ -207,6 +248,13 @@ export function RequestDetailSheet({
         </SheetHeader>
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
+          {archivedAt !== undefined && (
+            <p className="rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+              En el archivo desde el {formatDateTime(archivedAt)}: la petición
+              se consulta en solo lectura y no se trabaja desde la cola. Para
+              volver a tramitarla, recupérala desde el módulo Archivo.
+            </p>
+          )}
           <dl className="grid grid-cols-2 gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             {details.map((detail) => (
               <div key={detail.label}>
@@ -327,6 +375,8 @@ export function RequestDetailSheet({
                 {request.lines.map((line) => {
                   const part = partById.get(line.sparePartId);
                   const hasShortage = !part || part.stock < line.quantity;
+                  const delivered = lineDelivered(line, request.status);
+                  const remaining = lineRemaining(line, request.status);
                   return (
                     <li
                       key={line.sparePartId}
@@ -343,8 +393,21 @@ export function RequestDetailSheet({
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold tabular-nums">
-                          ×{line.quantity}
+                          pedido ×{line.quantity}
                         </p>
+                        {/* Lo entregado, a la vista: con la entrega por
+                            tandas, el estado de la petición ya no cuenta si
+                            salió todo o solo parte. */}
+                        <p className="text-xs tabular-nums text-muted-foreground">
+                          {delivered > 0
+                            ? `entregado ×${delivered}${remaining > 0 ? ` · faltan ×${remaining}` : ""}`
+                            : "sin entregar"}
+                        </p>
+                        {line.deliveredAt !== undefined && (
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(line.deliveredAt)}
+                          </p>
+                        )}
                         <p
                           className={cn(
                             "text-xs tabular-nums",
@@ -364,6 +427,10 @@ export function RequestDetailSheet({
               </ul>
             )}
           </div>
+
+          {/* Quién entregó qué y cuándo: lo que las líneas no cuentan, porque
+              guardan el acumulado por repuesto y no cada tanda. */}
+          <DeliveryTrail requestId={request._id} />
 
           {request.notes && (
             <div className="rounded-xl border border-border/70 bg-muted/50 p-4">
@@ -414,7 +481,7 @@ export function RequestDetailSheet({
             {canManage && canRequestStep(request.status, "issue") && (
               <Button type="button" className="gap-2" onClick={onIssue}>
                 <PackageCheck className="size-4" />
-                Marcar entregada
+                Entregar material
               </Button>
             )}
             {/* Espera y cancelación: la petición ya está decidida o a medias,
@@ -567,4 +634,3 @@ export function RequestDetailSheet({
 /* ------------------------------------------------------------------ */
 /* Asociar repuesto (catálogo existente o investigación nueva)         */
 /* ------------------------------------------------------------------ */
-

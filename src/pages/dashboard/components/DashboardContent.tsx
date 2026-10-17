@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import type { Capability } from "@/lib/permissions";
 import { LogOut, Search, Siren, Sparkles } from "lucide-react";
 import { Suspense, lazy } from "react";
@@ -69,7 +69,7 @@ export interface DashboardContentProps {
   showEmptyNotice: boolean;
   loading: boolean;
   activeTab: NavId;
-  user: any;
+  user: Doc<"users"> | null | undefined;
   displayName: string;
   adminOk: boolean;
   can: (capability: Capability) => boolean;
@@ -92,6 +92,8 @@ export interface DashboardContentProps {
   onStartEmpty: () => void;
   onSwitchAccount: () => void;
   onOpenIncident: (id: Id<"incidents">) => void;
+  /** Abrir una petición concreta en su módulo (la ficha de la incidencia). */
+  onOpenRequest: (id: Id<"partRequests">) => void;
   goToTab: (id: NavId) => void;
   onEquipmentViewRequests: (equipmentId: string) => void;
 }
@@ -124,6 +126,7 @@ export function DashboardContent({
   onStartEmpty,
   onSwitchAccount,
   onOpenIncident,
+  onOpenRequest,
   goToTab,
   onEquipmentViewRequests,
 }: DashboardContentProps) {
@@ -138,9 +141,9 @@ export function DashboardContent({
         </h2>
         <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
           Estás en una sesión de invitado: escribe el código que te dieron al
-          notificarla para comprobar su estado y seguimiento, o notifica una nueva incidencia.
-          La cola de trabajo, las peticiones y el inventario están reservados para
-          usuarios con cuenta del taller.
+          notificarla para comprobar su estado y seguimiento, o notifica una
+          nueva incidencia. La cola de trabajo, las peticiones y el inventario
+          están reservados para usuarios con cuenta del taller.
         </p>
         <IncidentLookup
           className="mx-auto mt-5 max-w-md"
@@ -234,6 +237,11 @@ export function DashboardContent({
           currentUserName={displayName}
           canAssign={can("manageIncidents")}
           initialDetailId={initialIncidentId}
+          // Ver las peticiones es lo que permite saltar a una: sin ese permiso la
+          // ficha las enseña —el estado del material es parte del caso— pero no
+          // ofrece un botón que llevaría a un módulo cerrado.
+          canOpenRequests={can("viewRequests")}
+          onOpenRequest={onOpenRequest}
         />
       ) : activeTab === "requests" ? (
         <RequestsView

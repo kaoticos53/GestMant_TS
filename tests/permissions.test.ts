@@ -51,7 +51,10 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
     () => null,
     (err: unknown) => err,
   );
-  expect(error, `Se esperaba un error que contuviera: ${fragment}`).not.toBeNull();
+  expect(
+    error,
+    `Se esperaba un error que contuviera: ${fragment}`,
+  ).not.toBeNull();
   const message =
     error instanceof ConvexError ? String(error.data) : String(error);
   expect(message).toContain(fragment);
@@ -280,7 +283,9 @@ describe("capacidades aplicadas en los módulos", () => {
     );
 
     // Con los permisos por defecto sí puede aprobar
-    await manager.mutation(api.partRequests.approve, { requestId: request._id });
+    await manager.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
 
     // Ahora se le quita la capacidad y la siguiente decisión falla
     await admin.mutation(api.permissions.setRolePermissions, {
@@ -300,10 +305,13 @@ describe("capacidades aplicadas en los módulos", () => {
       reporterName: "Laura Peña",
       equipmentKind: "Cámara de estudio",
       model: "HDC-3500",
-      description: "La cámara se apaga sola en directo cuando se mueve el cable.",
+      description:
+        "La cámara se apaga sola en directo cuando se mueve el cable.",
       reportedAt: Date.now() - 60 * 60 * 1000,
     });
-    const [incident] = await t.run((ctx) => ctx.db.query("incidents").collect());
+    const [incident] = await t.run((ctx) =>
+      ctx.db.query("incidents").collect(),
+    );
 
     await admin.mutation(api.permissions.setRolePermissions, {
       role: "manager",
@@ -319,7 +327,7 @@ describe("capacidades aplicadas en los módulos", () => {
     );
     await expectConvexError(
       manager.query(api.members.listAssignable, {}),
-      "Solo el coordinador puede asignar incidencias",
+      "Solo el coordinador o el técnico de la orden",
     );
   });
 
@@ -330,7 +338,8 @@ describe("capacidades aplicadas en los módulos", () => {
       reporterName: "Laura Peña",
       equipmentKind: "Cámara de estudio",
       model: "HDC-3500",
-      description: "La cámara se apaga sola en directo cuando se mueve el cable.",
+      description:
+        "La cámara se apaga sola en directo cuando se mueve el cable.",
       reportedAt: Date.now() - 60 * 60 * 1000,
     };
     await t.mutation(api.incidents.report, report);

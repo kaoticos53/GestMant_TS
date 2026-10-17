@@ -3,6 +3,7 @@ import {
   INCIDENT_STEP_LABELS,
   INCIDENT_STEPS,
   incidentStepBlocker,
+  nextIncidentStatus,
   type IncidentAction,
   type IncidentStatus,
 } from "../src/lib/incidentFlow";
@@ -178,9 +179,9 @@ describe("la ficha de las máquinas, contra las tablas del código", () => {
     expect(desajustes).toEqual([]);
   });
 
-  test("los destinos que no son un estado son los dos que la máquina resuelve sola", () => {
-    // Si apareciera un tercero —una tabla con un destino que no es un estado—,
-    // esta prueba lo delata y la ficha tendría que contar cómo se resuelve.
+  test("los destinos que no son un estado son los tres que la máquina resuelve sola", () => {
+    // Si apareciera otro —una tabla con un destino que no es un estado—, esta
+    // prueba lo delata y la ficha tendría que contar cómo se resuelve.
     const sueltos: string[] = [];
     for (const maquina of MAQUINAS) {
       const estados = new Set(Object.keys(maquina.estados));
@@ -189,12 +190,16 @@ describe("la ficha de las máquinas, contra las tablas del código", () => {
       }
     }
     expect(sueltos).toEqual([
+      "incident: keptStatus",
       "request: heldFrom",
       "purchaseOrder: allReceived",
     ]);
   });
 
-  test("los dos destinos abiertos se cuentan como los resuelve el módulo", () => {
+  test("los destinos abiertos se cuentan como los resuelve el módulo", () => {
+    const reasignar = ficha("incident")
+      .states.flatMap((estado) => estado.steps)
+      .find((step) => step.action === "reassignWorkshop")!;
     const reanudar = ficha("request")
       .states.flatMap((estado) => estado.steps)
       .find((step) => step.action === "resume")!;
@@ -202,8 +207,12 @@ describe("la ficha de las máquinas, contra las tablas del código", () => {
       .states.flatMap((estado) => estado.steps)
       .find((step) => step.action === "receive")!;
 
+    expect(reasignar.to.kind).toBe("decided");
     expect(reanudar.to.kind).toBe("decided");
     expect(recepcionar.to.kind).toBe("decided");
+    if (reasignar.to.kind === "decided") {
+      expect(reasignar.to.note).toContain("mismo estado");
+    }
     if (reanudar.to.kind === "decided") {
       expect(reanudar.to.note).toContain("el que salió");
     }
@@ -212,6 +221,9 @@ describe("la ficha de las máquinas, contra las tablas del código", () => {
     }
 
     // Y lo que cuentan las notas es lo que hacen las funciones del módulo.
+    expect(nextIncidentStatus("waitingParts", "reassignWorkshop")).toBe(
+      "waitingParts",
+    );
     expect(resumedStatus(undefined)).toBe("pending");
     expect(
       purchaseOrderStatusAfterReceiving([{ quantity: 2, receivedQuantity: 2 }]),

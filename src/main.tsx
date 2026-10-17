@@ -14,6 +14,7 @@ const Landing = lazy(() => import("./pages/Landing"));
 const AuthPage = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ReportIncident = lazy(() => import("./pages/ReportIncident"));
+const FollowIncident = lazy(() => import("./pages/FollowIncident"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Simple loading fallback for route transitions
@@ -127,6 +128,8 @@ createRoot(document.getElementById("root")!).render(
                 element={<AuthPage redirectAfterAuth="/dashboard" />}
               />
               <Route path="/reportar" element={<ReportIncident />} />
+              {/* La dirección del enlace del correo: pública, sin sesión. */}
+              <Route path="/seguimiento" element={<FollowIncident />} />
               <Route
                 path="/dashboard"
                 element={

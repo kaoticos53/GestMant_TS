@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -41,11 +42,6 @@ function installMissingDomApis() {
 let roots: Root[] = [];
 
 /** Deja pasar un turno: Radix engancha sus escuchas en un temporizador. */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
-}
 
 /** Monta lo que se le pase y espera a que los diálogos enganchen su escucha. */
 async function mount(ui: ReactNode) {

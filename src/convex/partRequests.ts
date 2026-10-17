@@ -2,17 +2,28 @@ import { archiveDecidedRequestsBefore } from "./archive";
 import { notifyUsers } from "./notify";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type QueryCtx, mutation, query } from "./_generated/server";
+import {
+  type MutationCtx,
+  type QueryCtx,
+  mutation,
+  query,
+} from "./_generated/server";
 import { hasCapability, memberOrNull } from "./permissions";
 import { freeReference } from "./references";
 import {
   canEditRequest,
+  canRequestStep,
+  deliveryNote,
   isRequestInMotion,
+  lineDelivered,
+  lineRemaining,
   nextRequestStatus,
+  requestDelivery,
   type RequestAction,
 } from "../lib/requestFlow";
 import { richDocToStore } from "../lib/richDoc";
 import {
+  REJECTION_REASONS,
   REQUEST_STATUSES,
   priorityValidator,
   requestStatusValidator,
@@ -28,6 +39,10 @@ import {
   requireDecisionCapability,
   requireUser,
 } from "./_partRequests/helpers";
+import {
+  holdIncidentForParts,
+  syncIncidentWithParts,
+} from "./_partRequests/incidentSync";
 
 async function assertPending(ctx: QueryCtx, requestId: Id<"partRequests">) {
   const request = await ctx.db.get(requestId);
@@ -43,6 +58,11 @@ async function assertPending(ctx: QueryCtx, requestId: Id<"partRequests">) {
 /* La máquina de la petición («¿desde aquí se puede dar este paso?») vive en
  * `lib/requestFlow`, compartida con los botones de la ficha y con la recepción
  * de compras. Aquí solo quedan los avisos, que son de quien lo intenta. */
+
+/** El nombre con el que firma quien abre una petición desde la incidencia. */
+function actorLabel(user: Doc<"users"> | null, fallback: string): string {
+  return user?.name?.trim() || user?.email?.trim() || fallback;
+}
 
 /** El paso, o el aviso de por qué no se puede dar desde donde está. */
 function requireRequestStep(
@@ -104,6 +124,61 @@ export const list = query({
         ),
       })),
     );
+  },
+});
+
+/**
+ * Una petición concreta, para abrirla desde donde no hay cola.
+ *
+ * La cola no carga el archivo a propósito: sus adjuntos no se firman si no se
+ * piden, y un archivo entero de URLs no es lo que nadie necesita al abrir el
+ * módulo. Pero la ficha de una incidencia enlaza con el material que se pidió
+ * para el caso, y ese material puede estar ya archivado. Esta es la puerta para
+ * ese caso: una petición, la que se va a mirar, con sus adjuntos resueltos.
+ *
+ * Se abre también la archivada —en solo lectura la pinta la ficha— y no la
+ * retirada: lo que está en la papelera se ve desde la papelera, no por aquí.
+ * Quien no es del taller recibe `null`, como en la cola: esta puerta no enseña
+ * más de lo que enseña la lista.
+ */
+export const detail = query({
+  args: { requestId: v.id("partRequests") },
+  handler: async (ctx, args) => {
+    if ((await memberOrNull(ctx)) === null) return null;
+    const request = await ctx.db.get(args.requestId);
+    if (!request || request.deletedAt !== undefined) return null;
+    return {
+      ...request,
+      attachments: await Promise.all(
+        (request.attachments ?? []).map(async (attachment) => ({
+          ...attachment,
+          url: await ctx.storage.getUrl(attachment.storageId),
+        })),
+      ),
+    };
+  },
+});
+
+/**
+ * La constancia de lo que le ha pasado a una petición: quién decidió qué y
+ * cuándo. Incluye cada tanda de material que ha salido, que es lo que no se puede
+ * reconstruir desde la petición —sus líneas guardan el acumulado por repuesto,
+ * no quién entregó cada cosa—.
+ *
+ * Va aparte del documento porque es una lista que crece con cada decisión: no
+ * tiene por qué viajar con cada lectura de la cola. Lo más reciente primero, que
+ * es lo que se mira al abrir la ficha, y del taller para dentro: fuera de él no
+ * se consulta.
+ */
+export const decisions = query({
+  args: { requestId: v.id("partRequests") },
+  handler: async (ctx, args) => {
+    if ((await memberOrNull(ctx)) === null) return [];
+    const rows = await ctx.db
+      .query("requestDecisions")
+      .withIndex("by_request", (q) => q.eq("requestId", args.requestId))
+      .collect();
+    return rows.sort((a, b) => b.at - a.at);
   },
 });
 
@@ -225,6 +300,13 @@ export const create = mutation({
     if (args.incidentId) {
       const incident = await ctx.db.get(args.incidentId);
       if (incident) {
+        // Pedir material para un caso lo deja esperando: la incidencia no se
+        // trabaja hasta que llegue. El paso y su rastro son de `incidentSync`,
+        // que es quien habla con la máquina de la incidencia.
+        await holdIncidentForParts(ctx, incident, {
+          reference,
+          by: actorLabel(requester, requesterName),
+        });
         const interested = [
           incident.assigneeId,
           incident.workshopAssigneeId,
@@ -367,8 +449,11 @@ export const resume = mutation({
     await requireDecisionCapability(ctx, "reanudar peticiones");
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    const resumed = requireRequestStep(request, "resume", () =>
-      `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
+    const resumed = requireRequestStep(
+      request,
+      "resume",
+      () =>
+        `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
     );
 
     await ctx.db.patch(args.requestId, {
@@ -393,8 +478,11 @@ export const returnMaterial = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    const returned = requireRequestStep(request, "returnMaterial", (status) =>
-      `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
+    const returned = requireRequestStep(
+      request,
+      "returnMaterial",
+      (status) =>
+        `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
     );
 
     const now = Date.now();
@@ -405,6 +493,12 @@ export const returnMaterial = mutation({
       returnedAt: now,
       ...(reason ? { returnNote: reason } : {}),
     });
+
+    // Devolver el material deja la incidencia, otra vez, sin lo que necesita:
+    // si era la última petición entregada, vuelve a la espera de repuestos.
+    if (request.incidentId) {
+      await syncIncidentWithParts(ctx, request.incidentId, name);
+    }
 
     await ctx.db.insert("requestDecisions", {
       requestId: args.requestId,
@@ -450,6 +544,12 @@ export const cancel = mutation({
       cancelledAt: now,
       ...(reason ? { cancelNote: reason } : {}),
     });
+
+    // Sin material que vaya a llegar, la incidencia no se queda esperando: vuelve
+    // a donde estaba (`partsSettled*`).
+    if (request.incidentId) {
+      await syncIncidentWithParts(ctx, request.incidentId, name);
+    }
 
     await ctx.db.insert("requestDecisions", {
       requestId: args.requestId,
@@ -504,8 +604,11 @@ export const approve = mutation({
     if (!request) throw new ConvexError("La petición ya no existe.");
     // Pendiente o con el material ya recibido: lo comprado entra en el almacén
     // y se aprueba desde ahí, que es cuando hay existencias que apartar.
-    const approved = requireRequestStep(request, "approve", () =>
-      `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
+    const approved = requireRequestStep(
+      request,
+      "approve",
+      () =>
+        `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
     );
     if (request.lines.length === 0) {
       throw new ConvexError(
@@ -561,17 +664,28 @@ export const reject = mutation({
     );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    const rejected = requireRequestStep(request, "reject", () =>
-      `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
+    const rejected = requireRequestStep(
+      request,
+      "reject",
+      () =>
+        `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
     );
 
+    const now = Date.now();
+    const name = await actorName(ctx, userId);
     const reason = decisionReason(args.note);
     await ctx.db.patch(args.requestId, {
       status: rejected,
-      decidedBy: await actorName(ctx, userId),
-      decidedAt: Date.now(),
+      decidedBy: name,
+      decidedAt: now,
       ...(reason ? { decisionNote: reason } : {}),
     });
+
+    // Un rechazo que deja la incidencia sin peticiones pendientes no la deja
+    // esperando: eso lo decide `incidentSync`.
+    if (request.incidentId) {
+      await syncIncidentWithParts(ctx, request.incidentId, name);
+    }
   },
 });
 
@@ -631,25 +745,209 @@ export const archiveDecidedBefore = mutation({
   },
 });
 
-/** Marca una petición aprobada como entregada al técnico. */
+/**
+ * La entrega, aplicada a las líneas y a la petición: lo que sale, lo que queda y
+ * —si ya no queda nada— el paso de la máquina que la cierra.
+ *
+ * Va aparte porque la usan las dos formas de entregar, la de una línea y la de
+ * todas: la cuenta no puede salir distinta según por dónde se entre. Mientras
+ * falte material la petición sigue **aprobada** y lo entregado vive en sus
+ * líneas; el estado `issued` significa «está todo en manos del técnico», que es
+ * lo que necesitan la incidencia y el seguimiento para dejar de esperar.
+ *
+ * Cada tanda deja además su constancia (`requestDecisions`): quién la entregó,
+ * cuándo y qué salió en ella. Las líneas guardan el acumulado por repuesto —cuánto
+ * llevan entregado—, y eso no dice quién sacó cada cosa ni en qué momento; el
+ * rastro sí, y es lo que se consulta cuando hay que responder por una entrega.
+ *
+ * `entregas` son unidades que se suman a lo ya entregado de cada línea. Quien
+ * llama ya validó que caben en lo que queda: aquí solo se aplican.
+ */
+async function deliverMaterial(
+  ctx: MutationCtx,
+  request: Doc<"partRequests">,
+  entregas: Map<Id<"spareParts">, number>,
+  by: string,
+  note: string | undefined,
+): Promise<void> {
+  const now = Date.now();
+  const lines = request.lines.map((line) => {
+    const extra = entregas.get(line.sparePartId) ?? 0;
+    if (extra === 0) return line;
+    return {
+      ...line,
+      deliveredQuantity: lineDelivered(line, request.status) + extra,
+      deliveredAt: now,
+    };
+  });
+  // Lo que sale en esta tanda, línea a línea: es lo que se apunta en la constancia
+  // y lo que distingue una tanda de la siguiente.
+  const salido = request.lines
+    .map((line) => ({ ...line, quantity: entregas.get(line.sparePartId) ?? 0 }))
+    .filter((line) => line.quantity > 0);
+
+  // ¿Se ha entregado ya todo? Es la única pregunta que cierra la petición; el
+  // resto de entregas parciales no cambian el estado, solo las líneas.
+  const complete = requestDelivery(lines, request.status).complete;
+  if (complete) {
+    const issued = requireRequestStep(
+      request,
+      "issue",
+      (status) =>
+        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
+    );
+    const reason = decisionReason(note);
+    await ctx.db.patch(request._id, {
+      lines,
+      status: issued,
+      issuedAt: now,
+      ...(reason ? { issueNote: reason } : {}),
+    });
+  } else {
+    await ctx.db.patch(request._id, { lines });
+  }
+
+  await ctx.db.insert("requestDecisions", {
+    requestId: request._id,
+    by,
+    decision: {
+      reason: complete
+        ? REJECTION_REASONS.MATERIAL_DELIVERED
+        : REJECTION_REASONS.MATERIAL_PARTIALLY_DELIVERED,
+      note: deliveryNote(salido),
+    },
+    at: now,
+  });
+
+  // La entrega completa cierra la espera: cuando ya no queda material pendiente
+  // para la incidencia, pasa a «en reparación». Si aún falta otra petición,
+  // sigue esperando.
+  if (complete && request.incidentId) {
+    await syncIncidentWithParts(ctx, request.incidentId, by);
+  }
+}
+
+/** Marca una petición aprobada como entregada al técnico, toda de una vez. */
 export const markIssued = mutation({
   args: {
     requestId: v.id("partRequests"),
     note: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "marcar peticiones como entregadas");
+    const issuerId = await requireDecisionCapability(
+      ctx,
+      "marcar peticiones como entregadas",
+    );
     const request = await ctx.db.get(args.requestId);
     if (!request) throw new ConvexError("La petición ya no existe.");
-    const issued = requireRequestStep(request, "issue", (status) =>
-      `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
+    // El paso se comprueba antes de tocar nada: desde una petición ya entregada
+    // o sin aprobar no hay material que sacar.
+    requireRequestStep(
+      request,
+      "issue",
+      (status) =>
+        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
     );
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: issued,
-      issuedAt: Date.now(),
-      ...(reason ? { issueNote: reason } : {}),
-    });
+    const entregas = new Map(
+      request.lines
+        .map(
+          (line) =>
+            [line.sparePartId, lineRemaining(line, request.status)] as const,
+        )
+        .filter(([, quantity]) => quantity > 0),
+    );
+    await deliverMaterial(
+      ctx,
+      request,
+      entregas,
+      await actorName(ctx, issuerId),
+      args.note,
+    );
+  },
+});
+
+/**
+ * Entrega el material de una petición de una en una: las unidades que se indican,
+ * por línea.
+ *
+ * El almacén aprueba la petición entera —el stock se descuenta completo—, pero el
+ * material puede salir por tandas: quien entrega apunta las dos piezas que se
+ * lleva el técnico y las que siguen en el almacén no se dan por entregadas. La
+ * petición continúa **aprobada** hasta la última unidad, y es entonces cuando
+ * pasa a entregada y la incidencia deja de esperar (`deliverMaterial`).
+ *
+ * No se puede entregar de lo que no hay: cada cantidad se valida contra lo que
+ * queda de su línea, y una línea que ya salió entera no admite más. La entrega
+ * se firma con quien la hace, y la nota —si la hay— se guarda con la entrega
+ * completa, que es la que cierra la petición.
+ */
+export const issueLines = mutation({
+  args: {
+    requestId: v.id("partRequests"),
+    lines: v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        quantity: v.number(),
+      }),
+    ),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const issuerId = await requireDecisionCapability(
+      ctx,
+      "marcar peticiones como entregadas",
+    );
+    const request = await ctx.db.get(args.requestId);
+    if (!request) throw new ConvexError("La petición ya no existe.");
+    if (!canRequestStep(request.status, "issue")) {
+      throw new ConvexError(
+        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${request.status}).`,
+      );
+    }
+    if (args.lines.length === 0) {
+      throw new ConvexError(
+        "Indica qué repuestos se entregan en esta tanda y cuántas unidades de cada uno.",
+      );
+    }
+
+    const entregas = new Map<Id<"spareParts">, number>();
+    for (const entry of args.lines) {
+      const line = request.lines.find(
+        (candidate) => candidate.sparePartId === entry.sparePartId,
+      );
+      if (!line) {
+        throw new ConvexError(
+          "Uno de los repuestos indicados no forma parte de esta petición: actualiza la ficha y vuelve a intentarlo.",
+        );
+      }
+      const quantity = Math.floor(entry.quantity);
+      if (!Number.isFinite(entry.quantity) || quantity < 1) {
+        throw new ConvexError(
+          `Indica cuántas unidades de ${line.code} (${line.name}) se entregan: una o más.`,
+        );
+      }
+      const remaining = lineRemaining(line, request.status);
+      if (remaining === 0) {
+        throw new ConvexError(
+          `De ${line.code} (${line.name}) ya está entregado todo: no queda nada por sacar.`,
+        );
+      }
+      const already = entregas.get(line.sparePartId) ?? 0;
+      if (quantity + already > remaining) {
+        throw new ConvexError(
+          `De ${line.code} (${line.name}) quedan ${remaining} por entregar y se indican ${quantity + already}.`,
+        );
+      }
+      entregas.set(line.sparePartId, already + quantity);
+    }
+
+    await deliverMaterial(
+      ctx,
+      request,
+      entregas,
+      await actorName(ctx, issuerId),
+      args.note,
+    );
   },
 });
 
@@ -665,4 +963,3 @@ export {
   trash,
   type WithdrawnRequestItem,
 } from "./_partRequests/trash";
-

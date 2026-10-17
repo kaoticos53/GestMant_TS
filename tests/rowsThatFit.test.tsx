@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -109,12 +110,6 @@ interface Handle {
 }
 
 let roots: Root[] = [];
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 /**
  * El área y una lista de mentira, con el enganche midiéndola: la tabla de

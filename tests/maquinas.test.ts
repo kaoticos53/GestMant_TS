@@ -3,7 +3,7 @@ import { CAPABILITIES } from "../src/lib/permissions";
 import {
   INCIDENT_STEP_LABELS,
   canAdvanceIncident,
-  incidentStepStatus,
+  nextIncidentStatus,
   type IncidentAction,
 } from "../src/lib/incidentFlow";
 import {
@@ -20,7 +20,6 @@ import {
   PURCHASE_ORDER_STEP_LABELS,
   canAdvancePurchaseOrder,
   nextPurchaseRequestStatus,
-  purchaseOrderStatusAfterReceiving,
   type PurchaseOrderAction,
   type PurchaseRequestAction,
 } from "../src/lib/purchaseFlow";
@@ -30,9 +29,10 @@ import {
   type IncidentStatus,
   type RequestStatus,
 } from "../src/lib/workshop";
-// El documento, leído por el mismo sitio que `maquinasPermisos.test.ts`: aquí se
-// comprueba contra las tablas del código y allí contra el backend.
-import { diagrams, documentedRows } from "./machineDoc";
+// El documento, leído por el mismo sitio que `maquinasPermisos.test.ts` y
+// `especificaciones.test.ts`: aquí se comprueba contra las tablas del código, y
+// allí contra el backend y contra el documento de especificaciones.
+import { diagrams, documentedRows, parametricDestination } from "./machineDoc";
 
 /**
  * El diagrama de las tres máquinas —`MAQUINAS.md`, en la raíz— leído contra el
@@ -44,33 +44,6 @@ import { diagrams, documentedRows } from "./machineDoc";
  * —la máquina no la permite—, ni un destino equivocado, ni un paso sin nadie que
  * pueda darlo, ni una capacidad inventada.
  */
-
-/**
- * ¿El destino de este paso depende de algo más que el estado del que sale? Se
- * pregunta al código en vez de escribirlo a mano: si algún día reanudar volviera
- * siempre al mismo sitio, o una recepción ya no pudiera quedar a medias, esto
- * deja de dar por bueno el destino abierto y el documento tendrá que decir un
- * estado concreto.
- */
-function parametric(machine: string, action: string): boolean {
-  if (machine === "request" && action === "resume") {
-    return (
-      nextRequestStatus("onHold", "resume", "approved") !==
-      nextRequestStatus("onHold", "resume", undefined)
-    );
-  }
-  if (machine === "purchaseOrder" && action === "receive") {
-    // Recibir todo de un artículo y nada de otro: completada, o parcial.
-    const all = purchaseOrderStatusAfterReceiving([
-      { quantity: 1, receivedQuantity: 1 },
-    ]);
-    const part = purchaseOrderStatusAfterReceiving([
-      { quantity: 2, receivedQuantity: 1 },
-    ]);
-    return all !== part;
-  }
-  return false;
-}
 
 /**
  * Una de las tres máquinas (la compra lleva dos dentro), tal y como la conoce el
@@ -123,8 +96,10 @@ const MACHINES: Machine[] = [
     labels: INCIDENT_STEP_LABELS,
     allows: (status, action) =>
       canAdvanceIncident(status as IncidentStatus, action as IncidentAction),
-    destination: (_status, action) =>
-      incidentStepStatus(action as IncidentAction),
+    // Cambiar el técnico de taller no mueve el caso: el destino depende del
+    // estado del que sale, y lo resuelve la misma función que el backend.
+    destination: (status, action) =>
+      nextIncidentStatus(status as IncidentStatus, action as IncidentAction),
     parametricTo: null,
   },
   {
@@ -136,7 +111,7 @@ const MACHINES: Machine[] = [
       nextRequestStatus(status as RequestStatus, action as RequestAction) !==
       null,
     destination: (status, action) =>
-      parametric("request", action)
+      parametricDestination("request", action)
         ? null
         : nextRequestStatus(status as RequestStatus, action as RequestAction),
     parametricTo: PARAMETRIC.request,
@@ -163,7 +138,7 @@ const MACHINES: Machine[] = [
     allows: (status, action) =>
       canAdvancePurchaseOrder(status, action as PurchaseOrderAction),
     destination: (_status, action) =>
-      parametric("purchaseOrder", action)
+      parametricDestination("purchaseOrder", action)
         ? null
         : ("cancelled" as const satisfies PurchaseOrderStatus),
     parametricTo: PARAMETRIC.purchaseOrder,

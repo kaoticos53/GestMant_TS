@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -25,12 +26,6 @@ const COLUMNS = {
 } as const;
 
 let roots: Root[] = [];
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 /** Monta la tabla con el enganche de verdad, como la monta una vista. */
 async function mount({

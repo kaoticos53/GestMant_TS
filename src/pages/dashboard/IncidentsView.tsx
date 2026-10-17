@@ -2,14 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import {
-  Archive,
-  FileDown,
-  MapPin,
-  SearchX,
-  Siren,
-  X,
-} from "lucide-react";
+import { Archive, FileDown, MapPin, SearchX, Siren, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,22 +11,20 @@ import { TablePagination } from "@/components/TablePagination";
 import { RichText } from "@/components/RichText";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { isClosedIncident } from "@/lib/incidentFlow";
+import { isClosedIncident, isIncidentInWorkshop } from "@/lib/incidentFlow";
 import { cn } from "@/lib/utils";
 import {
   INCIDENT_FILTERS,
   INCIDENT_STATUS_META,
   formatDateTime,
   getErrorMessage,
+  incidentStatusLabel,
   type IncidentStatus,
 } from "@/lib/workshop";
 
 import { IncidentReportsDialog } from "./IncidentReportsDialog";
 import { QueueToolbar } from "./QueueToolbar";
-import {
-  SORT_OPTIONS,
-  type IncidentDoc,
-} from "./incidents/types";
+import { SORT_OPTIONS, type IncidentDoc } from "./incidents/types";
 import { useIncidentFilters } from "./incidents/hooks/useIncidentFilters";
 import { IncidentDetailSheet } from "./incidents/components/IncidentDetailSheet";
 
@@ -42,6 +33,8 @@ export function IncidentsView({
   currentUserName = "Técnico",
   canAssign = false,
   initialDetailId = null,
+  canOpenRequests = false,
+  onOpenRequest,
 }: {
   /** Identidad actual (para autoasignación y permisos de atención). */
   currentUserId?: Id<"users"> | null;
@@ -50,6 +43,10 @@ export function IncidentsView({
   canAssign?: boolean;
   /** Incidencia abierta al montar (la elige el aviso del panel). */
   initialDetailId?: Id<"incidents"> | null;
+  /** Puede ver el módulo de peticiones, así que puede saltar a una. */
+  canOpenRequests?: boolean;
+  /** Abrir una petición concreta en su módulo. */
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }) {
   const incidents = useQuery(api.incidents.list, {}) ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
@@ -230,6 +227,12 @@ export function IncidentsView({
                     {section.items.map((incident) => {
                       const status = INCIDENT_STATUS_META[incident.status];
                       const isClosed = isClosedIncident(incident.status);
+                      // El estado de la espera y el de la reparación se enseñan con
+                      // el sitio: «En espera de repuestos · taller».
+                      const statusLabel = incidentStatusLabel(
+                        incident.status,
+                        isIncidentInWorkshop(incident),
+                      );
                       return (
                         <div key={incident._id} data-row className="relative">
                           <button
@@ -250,7 +253,7 @@ export function IncidentsView({
                                   variant="outline"
                                   className={status.badgeClassName}
                                 >
-                                  {status.label}
+                                  {statusLabel}
                                 </Badge>
                                 {incident.location && (
                                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -350,6 +353,8 @@ export function IncidentsView({
           currentUserId={currentUserId ?? null}
           currentUserName={currentUserName}
           canAssign={canAssign}
+          canOpenRequests={canOpenRequests}
+          onOpenRequest={onOpenRequest}
           onClose={() => setDetailId(null)}
         />
       )}

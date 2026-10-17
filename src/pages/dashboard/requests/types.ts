@@ -1,11 +1,4 @@
-import {
-  Ban,
-  Check,
-  CirclePause,
-  PackageCheck,
-  Undo2,
-  X,
-} from "lucide-react";
+import { Ban, Check, CirclePause, PackageCheck, Undo2, X } from "lucide-react";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import type { QueueSortOption } from "../QueueToolbar";
 
@@ -67,12 +60,7 @@ export const FILTERS: { id: RequestFilterId; label: string }[] = [
 ];
 
 export type DecisionMode =
-  | "approve"
-  | "reject"
-  | "issue"
-  | "hold"
-  | "return"
-  | "cancel";
+  "approve" | "reject" | "issue" | "hold" | "return" | "cancel";
 
 export const DECISION_META: Record<
   DecisionMode,
@@ -103,13 +91,13 @@ export const DECISION_META: Record<
     success: (request) => `${request.reference} rechazada`,
   },
   issue: {
-    title: "Marcar como entregada",
+    title: "Entregar material",
     label: "Nota de la entrega (opcional)",
     placeholder: "p. ej. entregado en mano a Marcos Vega",
-    confirm: "Marcar entregada",
+    confirm: "Entregar",
     description:
-      "El material sale del taller hacia el técnico que lo pidió: queda constancia de la entrega y de cómo se hizo.",
-    success: (request) => `${request.reference} marcada como entregada`,
+      "El material sale del taller hacia el técnico que lo pidió. Se puede entregar todo de una vez o por tandas: lo que quede en cero sigue en el almacén y la petición no se da por entregada hasta que haya salido todo.",
+    success: (request) => `${request.reference}: entrega apuntada`,
   },
   hold: {
     title: "Poner en espera",

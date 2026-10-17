@@ -62,6 +62,8 @@ export const REJECTION_REASON_LABELS: Record<string, string> = {
   incidentClosed: "Incidencia ya cerrada",
   requestCancelled: "Petición cancelada",
   materialReturned: "Material devuelto",
+  materialDelivered: "Material entregado",
+  materialPartiallyDelivered: "Material entregado en parte",
   pendingExternalQuote: "Pendiente de presupuesto externo",
   other: "Otro motivo",
 };
@@ -209,6 +211,8 @@ export type IncidentStatus =
   | "reported"
   | "assigned"
   | "workshop"
+  | "waitingParts"
+  | "repairing"
   | "resolved"
   | "unresolved";
 
@@ -231,6 +235,19 @@ export const INCIDENT_STATUS_META: Record<
     badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
     description: "Entrada de incidencia a taller abierta",
   },
+  waitingParts: {
+    label: "En espera de repuestos",
+    badgeClassName: "border-sky-600/25 bg-sky-600/10 text-sky-700",
+    description:
+      "Con una petición de repuestos abierta: no se trabaja hasta que llegue el material",
+  },
+  repairing: {
+    label: "En reparación",
+    badgeClassName:
+      "border-violet-600/25 bg-violet-600/10 text-violet-700 dark:text-violet-300",
+    description:
+      "Con el material entregado: el trabajo sigue en el sitio o en el taller",
+  },
   resolved: {
     label: "Resuelta",
     badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
@@ -242,6 +259,21 @@ export const INCIDENT_STATUS_META: Record<
     description: "Cerrada sin poder resolverla",
   },
 };
+
+/**
+ * El nombre del estado para pantalla. En los dos estados que conviven con una
+ * entrada a taller abierta se añade dónde está el equipo —«En espera de
+ * repuestos · taller»—: el estado dice qué le pasa al caso y el sitio, dónde se
+ * trabaja. En los demás el sitio ya se lee del propio estado o no viene al caso.
+ */
+export function incidentStatusLabel(
+  status: IncidentStatus,
+  inWorkshop: boolean,
+): string {
+  const label = INCIDENT_STATUS_META[status].label;
+  if (status !== "waitingParts" && status !== "repairing") return label;
+  return `${label} · ${inWorkshop ? "taller" : "en el sitio"}`;
+}
 
 /**
  * La referencia de una incidencia: el número con el que el taller la cita entre
@@ -301,6 +333,8 @@ export const INCIDENT_FILTERS: { id: IncidentStatus | "all"; label: string }[] =
     { id: "reported", label: "Nuevas" },
     { id: "assigned", label: "Asignadas" },
     { id: "workshop", label: "En taller" },
+    { id: "waitingParts", label: "Esperando repuestos" },
+    { id: "repairing", label: "En reparación" },
     { id: "resolved", label: "Resueltas" },
     { id: "unresolved", label: "Sin resolución" },
   ];
@@ -605,10 +639,7 @@ export function formatClockTime(timestamp: number): string {
  * el archivo que había se sustituyó y el anterior ya no está en el almacén.
  */
 export type DocumentTrailAction =
-  | "attached"
-  | "edited"
-  | "replaced"
-  | "removed";
+  "attached" | "edited" | "replaced" | "removed";
 
 /**
  * Frase con la que el rastro cuenta cada cambio: quién viene aparte, esto es

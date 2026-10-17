@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -29,12 +30,6 @@ const COLUMNS = {
 const HIDDEN = "hidden md:table-cell";
 
 let roots: Root[] = [];
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 /** Monta la barra y las cabeceras con el mismo estado que llevan las vistas. */
 async function mountTable() {

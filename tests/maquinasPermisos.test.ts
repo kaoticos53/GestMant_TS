@@ -4,7 +4,10 @@ import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import schema from "../src/convex/schema";
-import { INCIDENT_STEPS, type IncidentAction } from "../src/lib/incidentFlow";
+import {
+  nextIncidentStatus,
+  type IncidentAction,
+} from "../src/lib/incidentFlow";
 import { CAPABILITIES, type Capability } from "../src/lib/permissions";
 import {
   PURCHASE_ORDER_STEPS,
@@ -223,6 +226,35 @@ async function peticionBase(
 /** De dónde salió la suspensión de las peticiones que se suspenden en la prueba. */
 const HELD_FROM: RequestStatus = "pending";
 
+/**
+ * Una petición de repuestos vinculada a una incidencia: la que mueve los pasos de
+ * repuestos de la máquina de la incidencia —entregar el material, cerrarla sin él—.
+ */
+async function peticionDeIncidencia(
+  mundo: Mundo,
+  incidentId: Id<"incidents">,
+  status: RequestStatus,
+): Promise<Id<"partRequests">> {
+  return await mundo.t.run((ctx) =>
+    ctx.db.insert("partRequests", {
+      reference: "PET-9001",
+      requesterName: "Teo Técnico",
+      priority: "normal",
+      status,
+      incidentId,
+      lines: [
+        {
+          sparePartId: mundo.pieza,
+          code: PIEZA.code,
+          name: PIEZA.name,
+          quantity: 1,
+        },
+      ],
+      createdAt: Date.now(),
+    }),
+  );
+}
+
 /** La petición de compra de esa petición de repuestos. */
 async function compraBase(
   mundo: Mundo,
@@ -363,6 +395,16 @@ async function montarIncidencia(
   action: IncidentAction,
 ): Promise<Caso> {
   const ahora = Date.now();
+  // El estado no dice dónde está el equipo: eso es la entrada a taller abierta, y
+  // el paso es quien exige una cosa u otra —el cierre de taller pide la orden, la
+  // verificación pide que no la haya—.
+  const enTaller =
+    from === "workshop" ||
+    ((from === "waitingParts" || from === "repairing") &&
+      (action === "partsSettledWorkshop" ||
+        action === "reassignWorkshop" ||
+        action === "closeResolved" ||
+        action === "closeUnresolved"));
   const incidentId = await mundo.t.run((ctx) =>
     ctx.db.insert("incidents", {
       reference: "INC-0001",
@@ -380,7 +422,7 @@ async function montarIncidencia(
             assigneeName:
               dueno === "asignado" ? persona.nombre : "Otro Técnico",
           }),
-      ...(from === "workshop"
+      ...(enTaller
         ? {
             workshopAssigneeId:
               dueno === "taller" ? persona.id : mundo.otroDeTaller,
@@ -392,6 +434,17 @@ async function montarIncidencia(
       updatedAt: ahora,
     }),
   );
+
+  // Los pasos de los repuestos no son botones de la incidencia: los mueve la
+  // petición. Esperar material la abre el propio paso; entregarla o cerrarla sin
+  // material necesitan una petición ya vinculada, montada en el estado del que sale
+  // su paso.
+  const vinculada =
+    action === "partsArrived"
+      ? await peticionDeIncidencia(mundo, incidentId, "approved")
+      : action === "partsSettledOnsite" || action === "partsSettledWorkshop"
+        ? await peticionDeIncidencia(mundo, incidentId, "pending")
+        : null;
 
   const dar: Record<IncidentAction, () => Promise<unknown>> = {
     assign: () =>
@@ -430,6 +483,25 @@ async function montarIncidencia(
       persona.sesion.mutation(api.incidents.close, {
         incidentId,
         outcome: "unresolved",
+      }),
+    waitParts: () =>
+      persona.sesion.mutation(api.partRequests.create, {
+        requesterName: persona.nombre,
+        priority: "normal",
+        description: "Falta una pieza para terminar el trabajo",
+        incidentId,
+      }),
+    partsArrived: () =>
+      persona.sesion.mutation(api.partRequests.markIssued, {
+        requestId: vinculada!,
+      }),
+    partsSettledOnsite: () =>
+      persona.sesion.mutation(api.partRequests.cancel, {
+        requestId: vinculada!,
+      }),
+    partsSettledWorkshop: () =>
+      persona.sesion.mutation(api.partRequests.cancel, {
+        requestId: vinculada!,
       }),
   };
 
@@ -618,7 +690,16 @@ function destinoDelDiagrama(
   from: string,
 ): string {
   if (machine === "incident") {
-    return INCIDENT_STEPS[action as IncidentAction].to;
+    // Cambiar el técnico de taller no mueve el caso: el destino depende del
+    // estado del que sale.
+    const destino = nextIncidentStatus(
+      from as IncidentStatus,
+      action as IncidentAction,
+    );
+    if (destino === null) {
+      throw new Error(`La máquina no permite ${action} desde ${from}.`);
+    }
+    return destino;
   }
   if (machine === "request") {
     const destino = nextRequestStatus(

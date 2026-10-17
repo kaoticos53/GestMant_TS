@@ -51,7 +51,7 @@ describe("el texto del aviso a quien notificó", () => {
       expect(mail.html).toContain("A7K2-QX9M");
       // Y el enlace de seguimiento lleva el código ya puesto, para no teclearlo.
       expect(mail.text).toContain(
-        "https://taller.example/dashboard?codigo=A7K2QX9M",
+        "https://taller.example/seguimiento?codigo=A7K2QX9M",
       );
     }
   });
@@ -97,7 +97,7 @@ describe("el texto del aviso a quien notificó", () => {
     // vuelve al caso sin cuenta del taller.
     expect(mail.text).toContain("Guarda este código");
     expect(mail.text).toContain(
-      "https://taller.example/dashboard?codigo=A7K2QX9M",
+      "https://taller.example/seguimiento?codigo=A7K2QX9M",
     );
     // Del alta no hay estado que contar —«Nueva» es que acaba de entrar— ni
     // nadie a cargo que anunciar.
@@ -123,8 +123,8 @@ describe("el texto del aviso a quien notificó", () => {
     expect(mail.text).not.toContain("Lo lleva");
     // Y sin enlace de seguimiento: el código ya no contesta. Lo que se le dice
     // es lo que puede hacer.
-    expect(mail.text).not.toContain("/dashboard?codigo=");
-    expect(mail.html).not.toContain("/dashboard?codigo=");
+    expect(mail.text).not.toContain("/seguimiento?codigo=");
+    expect(mail.html).not.toContain("/seguimiento?codigo=");
     expect(mail.text).toContain("vuelve a notificarlo");
     // Aun sin dirección pública, la retirada se cuenta igual.
     const sinApp = renderIncidentMail({
@@ -156,11 +156,11 @@ describe("el texto del aviso a quien notificó", () => {
     // El código va sin guiones: en una dirección sobran, y la consulta los quita
     // igualmente si alguien pega el que se lee.
     expect(incidentTrackingLink("A7K2QX9M", "https://taller.example/")).toBe(
-      "https://taller.example/dashboard?codigo=A7K2QX9M",
+      "https://taller.example/seguimiento?codigo=A7K2QX9M",
     );
     // Sin barra final de más, y sin dirección no hay enlace que dar.
     expect(incidentTrackingLink("A7K2QX9M", "https://taller.example")).toBe(
-      "https://taller.example/dashboard?codigo=A7K2QX9M",
+      "https://taller.example/seguimiento?codigo=A7K2QX9M",
     );
     expect(incidentTrackingLink("A7K2QX9M", "  ")).toBe(null);
     expect(incidentTrackingLink("A7K2QX9M")).toBe(null);

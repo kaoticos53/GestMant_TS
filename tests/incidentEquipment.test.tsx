@@ -2,6 +2,7 @@
 // Se sustituyen los hooks de Convex *antes* de que la ficha los importe: aquí se
 // comprueba la pantalla —el botón, el diálogo y lo que se manda al guardar—, no
 // la conversación con el servidor (esa está en tests/incidents.test.ts).
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -138,11 +139,6 @@ afterEach(() => {
 });
 
 /** Deja pasar un turno: Radix engancha sus escuchas en un temporizador. */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-}
 
 /** Monta la cola con esas incidencias y abre la ficha de la primera. */
 async function abrirFicha(
@@ -201,8 +197,10 @@ describe("ficha de la incidencia — corregir los datos del equipo", () => {
     await settle();
 
     // El diálogo abre con lo que llegó con la notificación puesto en el campo
-    const modelo = document.querySelector<HTMLInputElement>("#equipment-model")!;
-    const serie = document.querySelector<HTMLInputElement>("#equipment-serial")!;
+    const modelo =
+      document.querySelector<HTMLInputElement>("#equipment-model")!;
+    const serie =
+      document.querySelector<HTMLInputElement>("#equipment-serial")!;
     expect(modelo.value).toBe("HDC 350");
     expect(serie.value).toBe("");
     // Y sin cambiar nada no se deja guardar: corregir el dato no es un trámite
@@ -228,7 +226,8 @@ describe("ficha de la incidencia — corregir los datos del equipo", () => {
     act(() => boton("Corregir datos del equipo")!.click());
     await settle();
 
-    const modelo = document.querySelector<HTMLInputElement>("#equipment-model")!;
+    const modelo =
+      document.querySelector<HTMLInputElement>("#equipment-model")!;
     escribir(modelo, "   ");
 
     expect(document.body.textContent).toContain(

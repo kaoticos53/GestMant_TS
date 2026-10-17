@@ -2,6 +2,7 @@
 // Se sustituyen los hooks de Convex *antes* de que la vista los importe: aquí se
 // comprueba la pantalla —la búsqueda, lo que se añade y lo que se manda al
 // guardar—, no la conversación con el servidor (esa está en tests/repuestos.test.ts).
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -16,17 +17,22 @@ import {
 
 const { EQUIPOS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
   /**
-   * El taller de verdad: cientos de equipos. Antes se pintaba un botón por cada
-   * uno —con miles, la ficha no se podía abrir—, así que esta lista es el caso
-   * que el arreglo existe para cubrir. Uno de cada cincuenta es la misma cámara:
-   * ocho coincidencias para una búsqueda, más de las que se enseñan a la vez.
+   * El taller con más de cien equipos. Antes se pintaba un botón por cada uno
+   * —con miles, la ficha no se podía abrir—, así que esta lista es el caso que el
+   * arreglo existe para cubrir. Uno de cada quince es la misma cámara: ocho
+   * coincidencias para una búsqueda, más de las que se enseñan a la vez.
+   *
+   * Son ciento veinte y no cuatrocientos por el coste de montar la vista en
+   * jsdom: el defecto que se vigila —un botón por equipo— se ve igual con la
+   * lista larga, y con menos el montaje deja de rondar el límite de tiempo de la
+   * prueba cuando la suite entera corre en paralelo.
    */
-  EQUIPOS: Array.from({ length: 400 }, (_, index) => ({
+  EQUIPOS: Array.from({ length: 120 }, (_, index) => ({
     _id: `eq-${index}`,
     _creationTime: 1,
     code: `EQ-${String(index + 1).padStart(3, "0")}`,
-    name: index % 50 === 0 ? `Cámara de estudio ${index}` : `Equipo ${index}`,
-    model: index % 50 === 0 ? "HDC-3500" : `MOD-${index}`,
+    name: index % 15 === 0 ? `Cámara de estudio ${index}` : `Equipo ${index}`,
+    model: index % 15 === 0 ? "HDC-3500" : `MOD-${index}`,
   })),
   /** El catálogo que sirve el backend de mentira: lo pone cada prueba. */
   CATALOGO: [] as unknown[],
@@ -112,13 +118,6 @@ afterEach(() => {
   container.remove();
   document.body.innerHTML = "";
 });
-
-/** Deja pasar un turno: Radix engancha sus escuchas en un temporizador. */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  });
-}
 
 /** Pinta la vista con el catálogo puesto. */
 async function pintar() {
@@ -216,7 +215,7 @@ describe("la ficha de un repuesto — Compatible con", () => {
     await abrirNuevoRepuesto();
 
     // El campo está para buscar, y de los equipos no hay ni rastro en pantalla:
-    // solo se ofrece lo que se busca. Un botón por equipo serían cuatrocientos.
+    // solo se ofrece lo que se busca. Un botón por equipo serían ciento veinte.
     expect(campoBusqueda().value).toBe("");
     expect(document.body.textContent).not.toContain("MOD-3");
     expect(resultados()).toEqual([]);
@@ -224,7 +223,10 @@ describe("la ficha de un repuesto — Compatible con", () => {
     expect(document.querySelectorAll("button").length).toBeLessThan(30);
   });
 
-  test("se busca, se añade de uno en uno y se guarda lo añadido", async () => {
+  test("se busca, se añade de uno en uno, se quita y se guarda lo añadido", async () => {
+    // Un solo montaje para el ciclo entero: añadir, quitar y guardar son pasos
+    // del mismo gesto, y montar la ficha otra vez para cada uno es lo que hacía
+    // que la prueba se acercara al límite de tiempo con la suite en paralelo.
     await abrirNuevoRepuesto();
 
     // Ocho equipos de la misma cámara: se enseñan los primeros y se dice cuántos hay.
@@ -246,7 +248,20 @@ describe("la ficha de un repuesto — Compatible con", () => {
     ).toBe(false);
     expect(document.body.textContent).toContain("Coinciden 7 equipos");
 
-    // Lo que se ve añadido es lo que se guarda.
+    // Se añade otro, y se quita el primero: el que se quita vuelve a ofrecerse.
+    await pulsar(resultados()[0]);
+    expect(compatibles()).toHaveLength(2);
+    await pulsar(compatibles()[0]);
+    expect(
+      compatibles().map((item) => item.getAttribute("aria-label")),
+    ).toEqual(["Quitar Cámara de estudio 15 HDC-3500"]);
+    expect(
+      resultados().some((item) =>
+        (item.textContent ?? "").trim().startsWith("Cámara de estudio 0"),
+      ),
+    ).toBe(true);
+
+    // Lo que se ve añadido es lo que se guarda: el que se quitó no viaja.
     escribir(
       document.querySelector<HTMLInputElement>("#part-code")!,
       "ALI-24015",
@@ -259,32 +274,11 @@ describe("la ficha de un repuesto — Compatible con", () => {
 
     expect(GUARDADOS).toHaveLength(1);
     expect(GUARDADOS[0].code).toBe("ALI-24015");
-    expect(GUARDADOS[0].compatibleWith).toEqual(["eq-0"]);
-  });
-
-  test("quitar un compatible lo devuelve a la búsqueda", async () => {
-    await abrirNuevoRepuesto();
-
-    escribir(campoBusqueda(), "cámara");
-    await pulsar(resultados()[0]);
-    await pulsar(resultados()[0]);
-    expect(compatibles()).toHaveLength(2);
-
-    await pulsar(compatibles()[0]);
-
-    // Se queda el otro, y el que se quitó vuelve a ofrecerse.
-    expect(
-      compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual(["Quitar Cámara de estudio 50 HDC-3500"]);
-    expect(
-      resultados().some((item) =>
-        (item.textContent ?? "").trim().startsWith("Cámara de estudio 0"),
-      ),
-    ).toBe(true);
+    expect(GUARDADOS[0].compatibleWith).toEqual(["eq-15"]);
   });
 
   test("al abrir un repuesto se ven solo sus compatibles, no el inventario", async () => {
-    CATALOGO.push(repuesto(["eq-0", "eq-50"]));
+    CATALOGO.push(repuesto(["eq-0", "eq-15"]));
     await pintar();
 
     await pulsar(
@@ -298,7 +292,7 @@ describe("la ficha de un repuesto — Compatible con", () => {
       compatibles().map((item) => item.getAttribute("aria-label")),
     ).toEqual([
       "Quitar Cámara de estudio 0 HDC-3500",
-      "Quitar Cámara de estudio 50 HDC-3500",
+      "Quitar Cámara de estudio 15 HDC-3500",
     ]);
     expect(document.body.textContent).not.toContain("MOD-3");
     expect(document.querySelectorAll("button").length).toBeLessThan(40);

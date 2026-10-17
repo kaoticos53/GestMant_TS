@@ -1,16 +1,22 @@
 import { readFileSync } from "node:fs";
+import { nextRequestStatus } from "../src/lib/requestFlow";
+import { purchaseOrderStatusAfterReceiving } from "../src/lib/purchaseFlow";
 
 /**
  * El documento de las tres máquinas (`MAQUINAS.md`, en la raíz), leído como
  * datos: sus tablas de pasos —el estado del que sale cada paso, a dónde lleva y
  * las capacidades que nombra su columna «quién»— y sus dibujos.
  *
- * Vive aquí, y no dentro de una prueba, porque lo leen dos y no pueden leer cosas
+ * Vive aquí, y no dentro de una prueba, porque lo leen tres y no pueden leer cosas
  * distintas: `maquinas.test.ts` lo compara con las tablas del código —que sea el
- * dibujo de lo que hace la máquina— y `maquinasPermisos.test.ts` comprueba contra
+ * dibujo de lo que hace la máquina—, `especificaciones.test.ts` hace lo mismo con
+ * el documento de especificaciones, y `maquinasPermisos.test.ts` comprueba contra
  * él lo que el backend deja pasar, rol por rol. Con dos copias del lector, el día
  * que cambie el formato del documento una de las dos dejaría de leer filas y
  * seguiría en verde, que es justo lo que estas pruebas existen para evitar.
+ *
+ * Aquí vive también lo que deciden los tres igual: si el destino de un paso
+ * depende de algo más que el estado del que sale (abajo).
  */
 
 /** Una fila de una de las tablas del documento. */
@@ -46,16 +52,24 @@ function token(cell: string): string | null {
 
 /**
  * Las tablas del documento, por máquina. La cabecera es
- * `### Tabla de pasos — <máquina>` y de ahí cuelgan sus filas hasta la siguiente
- * cabecera: es lo que permite comprobar cada tabla contra su máquina.
+ * `<nivel> Tabla de pasos — <máquina>` y de ahí cuelgan sus filas hasta la
+ * siguiente cabecera: es lo que permite comprobar cada tabla contra su máquina.
+ *
+ * El nivel se pide porque los documentos las colocan a distinta profundidad: en
+ * `MAQUINAS.md` cuelgan de la sección de cada máquina (`###`), y en las
+ * especificaciones van dentro de su apartado (`####`). El resto del formato —las
+ * cuatro columnas y su significado— es el mismo, y por eso se leen con el mismo
+ * lector.
  */
 export function documentedRows(
   queDoc: string = MACHINES_DOC,
+  level = "###",
 ): Record<string, DocRow[]> {
   const tables: Record<string, DocRow[]> = {};
+  const cabecera = new RegExp(`^${level} Tabla de pasos — (\\w+)$`);
   let current: string | null = null;
   for (const line of queDoc.split(/\r?\n/)) {
-    const heading = /^### Tabla de pasos — (\w+)$/.exec(line.trim());
+    const heading = cabecera.exec(line.trim());
     if (heading) {
       current = heading[1];
       tables[current] = tables[current] ?? [];
@@ -84,6 +98,40 @@ export function documentedRows(
     });
   }
   return tables;
+}
+
+/**
+ * ¿El destino de este paso depende de algo más que el estado del que sale? Se
+ * pregunta al código en vez de escribirlo a mano: si algún día reanudar volviera
+ * siempre al mismo sitio, o una recepción ya no pudiera quedar a medias, los
+ * documentos dejan de poder dar por bueno el destino abierto —`heldFrom`,
+ * `allReceived`— y tendrán que decir un estado concreto.
+ *
+ * Lo leen `maquinas.test.ts` y `especificaciones.test.ts`: los dos documentos
+ * tienen que permitirse y prohibirse lo mismo, y esa decisión no se escribe dos
+ * veces.
+ */
+export function parametricDestination(
+  machine: string,
+  action: string,
+): boolean {
+  if (machine === "request" && action === "resume") {
+    return (
+      nextRequestStatus("onHold", "resume", "approved") !==
+      nextRequestStatus("onHold", "resume", undefined)
+    );
+  }
+  if (machine === "purchaseOrder" && action === "receive") {
+    // Recibir todo de un artículo y nada de otro: completada, o parcial.
+    const all = purchaseOrderStatusAfterReceiving([
+      { quantity: 1, receivedQuantity: 1 },
+    ]);
+    const part = purchaseOrderStatusAfterReceiving([
+      { quantity: 2, receivedQuantity: 1 },
+    ]);
+    return all !== part;
+  }
+  return false;
 }
 
 /**

@@ -2,6 +2,7 @@
 // Lo que ofrece la ficha de una petición sale de la máquina (`lib/requestFlow`),
 // no de una lista paralela en la vista. Aquí se comprueba en pantalla; lo que
 // hace de verdad cada paso está en tests/repuestos.test.ts.
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -15,7 +16,14 @@ import {
 } from "vitest";
 
 const { COLA } = vi.hoisted(() => ({
-  COLA: { requests: [] as unknown[] },
+  COLA: {
+    /** La cola: lo que se trabaja, sin lo archivado. */
+    requests: [] as unknown[],
+    /** La petición que se pide abrir por su id (las archivadas). */
+    detalle: undefined as unknown,
+    /** La constancia de la petición abierta: sus decisiones, entregas incluidas. */
+    decisiones: [] as unknown[],
+  },
 }));
 
 vi.mock("convex/react", async () => {
@@ -23,10 +31,15 @@ vi.mock("convex/react", async () => {
   return {
     // La cola la carga la propia vista: se le sirve lo que la prueba haya puesto.
     // Lo demás (catálogo, equipos, compras de la petición) va vacío.
-    useQuery: (query: unknown) =>
-      getFunctionName(query as never) === "partRequests:list"
-        ? COLA.requests
-        : [],
+    useQuery: (query: unknown) => {
+      const nombre = getFunctionName(query as never);
+      if (nombre === "partRequests:list") return COLA.requests;
+      // La puerta de una petición concreta: es la que abre lo archivado.
+      if (nombre === "partRequests:detail") return COLA.detalle;
+      // La constancia de la petición abierta: quién entregó qué y cuándo.
+      if (nombre === "partRequests:decisions") return COLA.decisiones;
+      return [];
+    },
     useMutation: () => async () => undefined,
   };
 });
@@ -103,6 +116,9 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  COLA.requests = [];
+  COLA.detalle = undefined;
+  COLA.decisiones = [];
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -115,13 +131,6 @@ afterEach(() => {
   // prueba siguiente no lea lo de esta.
   document.body.innerHTML = "";
 });
-
-/** Deja pasar un turno: Radix engancha sus escuchas en un temporizador. */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-}
 
 /**
  * La ficha abierta, no la cola: las dos están en el documento a la vez, así que
@@ -163,6 +172,26 @@ async function abrirFicha(request: Doc<"partRequests">) {
 /** El botón de la ficha abierta, que es lo que la prueba mira. */
 function botonDeLaFicha(texto: string): HTMLButtonElement | undefined {
   return boton(texto, ficha());
+}
+
+/**
+ * La ficha abierta como lo hace el panel al llegar desde una incidencia: la
+ * petición viene en `initialDetailId`, sin pasar por la cola. Es el camino de
+ * las archivadas, que no están listadas en ninguna sección.
+ */
+async function abrirFichaDirecta(request: Doc<"partRequests">) {
+  // Tal y como es en producción: la cola no trae la archivada, y la ficha llega
+  // por la consulta puntual.
+  COLA.requests = [];
+  COLA.detalle = request;
+  await act(async () => {
+    root.render(
+      <MemoryRouter>
+        <RequestsView canManage initialDetailId={request._id} />
+      </MemoryRouter>,
+    );
+  });
+  await settle();
 }
 
 describe("ficha de la petición — los pasos que ofrece son los que deja la máquina", () => {
@@ -221,7 +250,87 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
 
     expect(ficha().textContent).toContain("material comprometido");
     // Y lo que sí se puede desde ahí sigue ahí, sin explicación de más.
-    expect(botonDeLaFicha("Marcar entregada")).toBeDefined();
+    expect(botonDeLaFicha("Entregar material")).toBeDefined();
+  });
+
+  test("una petición archivada se abre en solo lectura y no vuelve a la cola", async () => {
+    // Lo archivado no se lista ni se trabaja, pero tiene que poder consultarse:
+    // la ficha de la incidencia enlaza con el material que se pidió para el caso.
+    const archivada = peticion({
+      status: "issued",
+      issuedAt: AYER,
+      archivedAt: AYER + 86_400_000,
+      archivedBy: "Elena Vidal",
+    });
+    await abrirFichaDirecta(archivada);
+
+    // La ficha está delante, con su aviso de dónde vive y por qué no se toca.
+    const texto = ficha().textContent ?? "";
+    expect(texto).toContain("En el archivo desde el");
+    expect(texto).toContain("solo lectura");
+    expect(texto).toContain("recupérala desde el módulo Archivo");
+
+    // Y ninguna acción: los pasos de la máquina, el archivo y la retirada se
+    // apagan aunque quien mire sea quien decide peticiones.
+    for (const paso of [
+      "Aprobar",
+      "Rechazar",
+      "Entregar material",
+      "En espera",
+      "Devolver material",
+      "Cancelar petición",
+      "Archivar",
+      "Retirar",
+    ]) {
+      expect(botonDeLaFicha(paso), paso).toBeUndefined();
+    }
+
+    // Y no se ha colado en la cola: lo archivado se consulta, no se trabaja.
+    expect(boton("Ver detalle")).toBeUndefined();
+  });
+
+  test("la ficha dice quién entregó cada tanda de material, y cuándo", async () => {
+    // Lo que las líneas no pueden contar: que salió en dos veces y quién lo sacó.
+    COLA.decisiones = [
+      {
+        _id: "dec-2",
+        _creationTime: AYER,
+        requestId: "pet-1",
+        by: "Elena Vidal",
+        decision: {
+          reason: "materialDelivered",
+          note: "1 × TRI-60004 Triac BTA16-600B",
+        },
+        at: AYER + 60 * 60 * 1000,
+      },
+      {
+        _id: "dec-1",
+        _creationTime: AYER,
+        requestId: "pet-1",
+        by: "Marcos Vega",
+        decision: {
+          reason: "materialPartiallyDelivered",
+          note: "1 × TRI-60004 Triac BTA16-600B",
+        },
+        at: AYER,
+      },
+    ];
+    await abrirFicha(peticion({ status: "issued", issuedAt: AYER }));
+
+    const texto = ficha().textContent ?? "";
+    expect(texto).toContain("Entregas del material");
+    // Cada tanda con quien la entregó, su hora y lo que salió.
+    expect(texto).toContain("Marcos Vega");
+    expect(texto).toContain("Material entregado en parte");
+    expect(texto).toContain("Elena Vidal");
+    expect(texto).toContain("Material entregado");
+    expect(texto).toContain("1 × TRI-60004 Triac BTA16-600B");
+  });
+
+  test("sin entregas apuntadas, la constancia no ocupa sitio", async () => {
+    await abrirFicha(peticion({ status: "pending" }));
+
+    expect(ficha().textContent).not.toContain("Entregas del material");
   });
 
   test("una petición rechazada lo dice una vez, no paso a paso", async () => {

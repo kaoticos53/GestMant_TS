@@ -40,12 +40,7 @@ function cargarFuentes(dir: string, extensiones = [".ts", ".tsx"]): Fuente[] {
     return {
       ruta: relative(RAIZ, completo).split(sep).join("/"),
       codigo,
-      tree: ts.createSourceFile(
-        completo,
-        codigo,
-        ts.ScriptTarget.Latest,
-        true,
-      ),
+      tree: ts.createSourceFile(completo, codigo, ts.ScriptTarget.Latest, true),
     };
   });
 }
@@ -66,7 +61,11 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
     ];
 
     test("ninguna mutación pública carece de comprobación de identidad o sesión", () => {
-      const mutacionesSinAuth: { ruta: string; mutacion: string; linea: number }[] = [];
+      const mutacionesSinAuth: {
+        ruta: string;
+        mutacion: string;
+        linea: number;
+      }[] = [];
 
       for (const fuente of FUENTES_BACKEND) {
         // schema.ts define tipos y tablas, no callbacks
@@ -76,7 +75,9 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
         for (const statement of fuente.tree.statements) {
           if (
             ts.isVariableStatement(statement) &&
-            statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+            statement.modifiers?.some(
+              (m) => m.kind === ts.SyntaxKind.ExportKeyword,
+            )
           ) {
             for (const decl of statement.declarationList.declarations) {
               if (
@@ -88,23 +89,30 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
                 const nombreMutacion = decl.name.getText(fuente.tree);
                 const codigoMutacion = decl.initializer.getText(fuente.tree);
 
-                // Puertas públicas expresas del formulario de reporte anónimo con rate limit
-                const esIntakePublico =
+                // Puertas públicas expresas, cada una con su freno por delante:
+                // el alta anónima de una incidencia (`registerIncidentIntake`), la
+                // subida de sus fotos (`MAX_UPLOADS_PER_HOUR`) y la consulta del
+                // seguimiento por código (`admitPublicLookup`, treinta por hora).
+                const esPuertaPublicaFrenada =
+                  codigoMutacion.includes("registerIncidentIntake") ||
+                  (fuente.ruta.endsWith("incidents.ts") &&
+                    nombreMutacion === "byCode" &&
+                    codigoMutacion.includes("admitPublicLookup")) ||
                   (fuente.ruta.endsWith("reportUploads.ts") &&
                     nombreMutacion === "generateUploadUrl" &&
-                    codigoMutacion.includes("MAX_UPLOADS_PER_HOUR")) ||
-                  codigoMutacion.includes("registerIncidentIntake");
+                    codigoMutacion.includes("MAX_UPLOADS_PER_HOUR"));
 
                 const tieneComprobacion =
-                  esIntakePublico ||
+                  esPuertaPublicaFrenada ||
                   PATRONES_AUTENTICACION.some((patron) =>
                     codigoMutacion.includes(patron),
                   );
 
                 if (!tieneComprobacion) {
                   const linea =
-                    fuente.tree.getLineAndCharacterOfPosition(decl.getStart(fuente.tree))
-                      .line + 1;
+                    fuente.tree.getLineAndCharacterOfPosition(
+                      decl.getStart(fuente.tree),
+                    ).line + 1;
                   mutacionesSinAuth.push({
                     ruta: fuente.ruta,
                     mutacion: nombreMutacion,
@@ -118,7 +126,10 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       }
 
       const informe = mutacionesSinAuth
-        .map((m) => `${m.ruta}:${m.linea}  mutación «${m.mutacion}» no invoca comprobación de identidad`)
+        .map(
+          (m) =>
+            `${m.ruta}:${m.linea}  mutación «${m.mutacion}» no invoca comprobación de identidad`,
+        )
         .join("\n");
 
       expect(
@@ -162,8 +173,9 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
               node.expression.text === "eval"
             ) {
               const linea =
-                fuente.tree.getLineAndCharacterOfPosition(node.getStart(fuente.tree))
-                  .line + 1;
+                fuente.tree.getLineAndCharacterOfPosition(
+                  node.getStart(fuente.tree),
+                ).line + 1;
               usosInseguros.push(`${fuente.ruta}:${linea} usa eval()`);
             }
           }
@@ -173,8 +185,9 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
               node.expression.text === "Function"
             ) {
               const linea =
-                fuente.tree.getLineAndCharacterOfPosition(node.getStart(fuente.tree))
-                  .line + 1;
+                fuente.tree.getLineAndCharacterOfPosition(
+                  node.getStart(fuente.tree),
+                ).line + 1;
               usosInseguros.push(`${fuente.ruta}:${linea} usa new Function()`);
             }
           }

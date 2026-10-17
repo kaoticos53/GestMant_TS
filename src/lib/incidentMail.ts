@@ -40,6 +40,8 @@ export const INCIDENT_MAIL_STATUSES = [
   "reported",
   "assigned",
   "workshop",
+  "waitingParts",
+  "repairing",
   "resolved",
   "unresolved",
 ] as const;
@@ -123,6 +125,14 @@ const NOTICE_MAIL_TEXT: Record<
     headline: "El equipo ha entrado en el taller",
     what: "El equipo no se puede reparar en el sitio: se ha trasladado al taller para trabajar en él.",
   },
+  waitingParts: {
+    headline: "El taller está esperando repuestos",
+    what: "Para arreglarlo hace falta una pieza que el taller no tiene y ha pedido. El caso sigue abierto: el trabajo continúa en cuanto llegue el material.",
+  },
+  repairing: {
+    headline: "Ya está el material: el equipo está en reparación",
+    what: "Ha llegado lo que faltaba y el técnico lo tiene en sus manos: el trabajo del equipo continúa con la pieza puesta.",
+  },
   resolved: {
     headline: "Tu incidencia se ha resuelto",
     what: "El taller ha dado el caso por resuelto y lo ha cerrado.",
@@ -160,9 +170,13 @@ function appBase(appUrl: string | null | undefined): string | null {
 
 /**
  * El enlace para seguir el caso: la consulta del código con el código ya puesto
- * —`/dashboard?codigo=A7K2QX9M`—, para que al invitado no le toque teclearlo
+ * —`/seguimiento?codigo=A7K2QX9M`—, para que al invitado no le toque teclearlo
  * mirando el correo. Va sin los guiones: en una dirección sobran, y la consulta
  * los quita igualmente si alguien pega el que se lee.
+ *
+ * Y va a la página pública de seguimiento, no al panel: quien recibe el correo no
+ * tiene cuenta, y llevarlo a una pantalla de acceso para enseñarle el estado de su
+ * propio aviso sería pedirle un paso de más.
  */
 export function incidentTrackingLink(
   code: string,
@@ -170,7 +184,7 @@ export function incidentTrackingLink(
 ): string | null {
   const base = appBase(appUrl);
   if (base === null) return null;
-  return `${base}/dashboard?codigo=${encodeURIComponent(code)}`;
+  return `${base}/seguimiento?codigo=${encodeURIComponent(code)}`;
 }
 
 /**

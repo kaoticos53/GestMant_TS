@@ -461,6 +461,243 @@ describe("partRequests.onHold / resume — suspender es un paréntesis", () => {
   });
 });
 
+describe("partRequests.issueLines — el material sale de una en una", () => {
+  /** Una petición aprobada con dos líneas, devuelta ya guardada. */
+  async function approvedWithTwoLines(t: Test, authed: Authed) {
+    const fuente = await seedPart(t, {
+      code: "ALI-12024",
+      name: "Fuente de alimentación 12 V",
+      stock: 10,
+    });
+    const filtro = await seedPart(t, {
+      code: "FIL-00042",
+      name: "Filtro de aire",
+      stock: 10,
+    });
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Sandra Ruiz",
+      priority: "normal",
+      lines: [
+        { sparePartId: fuente, quantity: 5 },
+        { sparePartId: filtro, quantity: 2 },
+      ],
+    });
+    const [created] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, { requestId: created._id });
+    return { requestId: created._id, fuente, filtro };
+  }
+
+  /** La petición guardada, con sus líneas ya entregadas. */
+  async function saved(authed: Authed) {
+    const [request] = await authed.query(api.partRequests.list, {});
+    return request;
+  }
+
+  test("entregar una línea no cierra la petición: sigue aprobada, con lo entregado apuntado", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId, fuente } = await approvedWithTwoLines(t, authed);
+
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: fuente, quantity: 2 }],
+    });
+
+    const request = await saved(authed);
+    // Lo que salió, apuntado en su línea; lo demás, intacto.
+    expect(request.lines[0].deliveredQuantity).toBe(2);
+    expect(request.lines[0].deliveredAt).toBeTypeOf("number");
+    expect(request.lines[1].deliveredQuantity).toBeUndefined();
+    // Y la petición no se da por entregada: falta material.
+    expect(request.status).toBe("approved");
+    expect(request.issuedAt).toBeUndefined();
+    // El stock sigue como quedó al aprobar: apartar el material no es entregarlo.
+    expect((await t.run((ctx) => ctx.db.get(fuente)))?.stock).toBe(5);
+
+    // La segunda tanda entrega el resto de una línea, y sigue sin cerrarse.
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: fuente, quantity: 3 }],
+    });
+    const aMedias = await saved(authed);
+    expect(aMedias.lines[0].deliveredQuantity).toBe(5);
+    expect(aMedias.status).toBe("approved");
+  });
+
+  test("la última unidad que sale cierra la petición, con su fecha de entrega", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId, fuente, filtro } = await approvedWithTwoLines(t, authed);
+
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: fuente, quantity: 5 }],
+    });
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: filtro, quantity: 2 }],
+      note: "Las dos piezas que quedaban",
+    });
+
+    const request = await saved(authed);
+    expect(request.status).toBe("issued");
+    expect(request.issuedAt).toBeTypeOf("number");
+    expect(request.issueNote).toBe("Las dos piezas que quedaban");
+    expect(request.lines.map((line) => line.deliveredQuantity)).toEqual([5, 2]);
+
+    // Y una petición ya entregada no admite más tandas.
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: fuente, quantity: 1 }],
+      }),
+      "Solo se pueden entregar peticiones aprobadas",
+    );
+  });
+
+  test("no se entrega lo que no hay: ni de más, ni repetido, ni de otra petición", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId, fuente } = await approvedWithTwoLines(t, authed);
+    const ajeno = await seedPart(t, { code: "OTR-00001", stock: 5 });
+
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: fuente, quantity: 6 }],
+      }),
+      "quedan 5 por entregar",
+    );
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: ajeno, quantity: 1 }],
+      }),
+      "no forma parte de esta petición",
+    );
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: fuente, quantity: 0 }],
+      }),
+      "una o más",
+    );
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, { requestId, lines: [] }),
+      "Indica qué repuestos se entregan",
+    );
+
+    // Dos entradas de la misma línea se suman antes de comparar: pedir 3 y 3 de
+    // una línea con 5 no puede colarse por venir repartido.
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [
+          { sparePartId: fuente, quantity: 3 },
+          { sparePartId: fuente, quantity: 3 },
+        ],
+      }),
+      "quedan 5 por entregar",
+    );
+
+    // Y nada de lo rechazado dejó rastro: la petición sigue aprobada y sin tandas.
+    const request = await saved(authed);
+    expect(request.status).toBe("approved");
+    expect(request.lines[0].deliveredQuantity).toBeUndefined();
+    expect(request.lines[1].deliveredQuantity).toBeUndefined();
+  });
+
+  test("una línea ya entregada entera no admite más tandas", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId, filtro } = await approvedWithTwoLines(t, authed);
+
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: filtro, quantity: 2 }],
+    });
+
+    await expectConvexError(
+      authed.mutation(api.partRequests.issueLines, {
+        requestId,
+        lines: [{ sparePartId: filtro, quantity: 1 }],
+      }),
+      "ya está entregado todo",
+    );
+  });
+
+  test("entregar todo de una vez sigue siendo un solo paso, y apunta lo entregado en cada línea", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId } = await approvedWithTwoLines(t, authed);
+
+    await authed.mutation(api.partRequests.markIssued, { requestId });
+
+    const request = await saved(authed);
+    expect(request.status).toBe("issued");
+    expect(request.lines.map((line) => line.deliveredQuantity)).toEqual([5, 2]);
+
+    // Y deja la misma constancia que una entrega por tandas, con lo que salió.
+    const trail = await authed.query(api.partRequests.decisions, { requestId });
+    expect(trail.map((row) => row.decision?.reason)).toEqual([
+      "materialDelivered",
+    ]);
+    expect(trail[0].decision?.note).toBe(
+      "5 × ALI-12024 Fuente de alimentación 12 V · 2 × FIL-00042 Filtro de aire",
+    );
+  });
+
+  test("cada tanda deja constancia: quién la entregó, cuándo y qué salió", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId, fuente, filtro } = await approvedWithTwoLines(t, authed);
+
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [{ sparePartId: fuente, quantity: 2 }],
+    });
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId,
+      lines: [
+        { sparePartId: fuente, quantity: 3 },
+        { sparePartId: filtro, quantity: 2 },
+      ],
+    });
+
+    const trail = await authed.query(api.partRequests.decisions, { requestId });
+    // Lo más reciente primero, y cada tanda con lo que salió en ella —no con el
+    // acumulado—: es lo que no se puede reconstruir desde las líneas.
+    expect(trail.map((row) => row.decision?.reason)).toEqual([
+      "materialDelivered",
+      "materialPartiallyDelivered",
+    ]);
+    expect(trail[0].by).toBe("Responsable de repuestos");
+    expect(trail[0].decision?.note).toBe(
+      "3 × ALI-12024 Fuente de alimentación 12 V · 2 × FIL-00042 Filtro de aire",
+    );
+    expect(trail[1].decision?.note).toBe(
+      "2 × ALI-12024 Fuente de alimentación 12 V",
+    );
+    // Y cada constancia con su hora, que es la otra mitad de la pregunta.
+    expect(trail[0].at).toBeTypeOf("number");
+    expect(trail[1].at).toBeTypeOf("number");
+    expect(trail[0].at).toBeGreaterThanOrEqual(trail[1].at);
+  });
+
+  test("el rastro de una petición no lo lee quien no es del taller", async () => {
+    const { t, authed } = await authedTest();
+    const { requestId } = await approvedWithTwoLines(t, authed);
+    await authed.mutation(api.partRequests.markIssued, { requestId });
+
+    // Con una sesión de invitado —sin ser del taller— no hay constancia que leer.
+    const guestId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Invitado",
+        role: "guest",
+        isAnonymous: true,
+      }),
+    );
+    const guest = t.withIdentity({ subject: `${guestId}|session1` });
+    expect(
+      await guest.query(api.partRequests.decisions, { requestId }),
+    ).toEqual([]);
+  });
+});
+
 describe("asociación de repuestos — investigación del responsable", () => {
   async function freeRequest(authed: Authed) {
     await authed.mutation(api.partRequests.create, {
@@ -927,5 +1164,76 @@ describe("descripciones y notas con formato", () => {
       (item) => item.description === "Una tercera petición.",
     )!;
     expect(third.notes).toBeUndefined();
+  });
+});
+
+describe("partRequests.detail — abrir una petición concreta, sin cargar la cola", () => {
+  /** Una petición insertada tal cual, para ponerle el estado que pide la prueba. */
+  async function peticionInsertada(
+    extra: Record<string, unknown> = {},
+  ): Promise<{ t: Test; authed: Authed; id: Id<"partRequests"> }> {
+    const { t, authed } = await authedTest();
+    const id = await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0001",
+        requesterName: "Sandra Ruiz",
+        priority: "normal",
+        status: "issued",
+        lines: [],
+        attachments: [],
+        createdAt: Date.now(),
+        ...extra,
+      }),
+    );
+    return { t, authed, id };
+  }
+
+  test("la archivada se abre por su id aunque la cola no la traiga", async () => {
+    // Es el caso de la ficha de una incidencia: enlaza con su material, y ese
+    // material puede estar ya en el archivo. La cola no lo carga —sus adjuntos no
+    // se firman si no se piden—, así que la ficha se abre por esta puerta.
+    const { authed, id } = await peticionInsertada({
+      archivedAt: Date.now(),
+      archivedBy: "Elena Vidal",
+    });
+
+    const detalle = await authed.query(api.partRequests.detail, {
+      requestId: id,
+    });
+    expect(detalle?.reference).toBe("PET-0001");
+    expect(detalle?.archivedAt).toBeTypeOf("number");
+
+    // Y no ha vuelto a la cola: abrir no recupera.
+    expect(await authed.query(api.partRequests.list, {})).toEqual([]);
+  });
+
+  test("lo retirado no se abre: eso vive en la papelera", async () => {
+    const { authed, id } = await peticionInsertada({
+      deletedAt: Date.now(),
+      deletedBy: "Elena Vidal",
+    });
+    expect(
+      await authed.query(api.partRequests.detail, { requestId: id }),
+    ).toBeNull();
+  });
+
+  test("una petición que ya no existe contesta sin reventar", async () => {
+    // La ficha de la incidencia puede llegar con un id que la papelera ya borró
+    // de verdad: tiene que decir que no hay nada, no tumbar la pantalla.
+    const { t, authed, id } = await peticionInsertada();
+    await t.run((ctx) => ctx.db.delete(id));
+
+    expect(
+      await authed.query(api.partRequests.detail, { requestId: id }),
+    ).toBeNull();
+  });
+
+  test("sin sesión no hay nada que leer", async () => {
+    const { t, id } = await peticionInsertada({ archivedAt: Date.now() });
+
+    // La misma puerta que la cola: fuera del taller no se enseña ni una ficha.
+    expect(
+      await t.query(api.partRequests.detail, { requestId: id }),
+    ).toBeNull();
   });
 });

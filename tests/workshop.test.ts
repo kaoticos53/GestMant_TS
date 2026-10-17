@@ -13,6 +13,7 @@ import {
   formatFileSize,
   hasTechnicianNote,
   inProgressSince,
+  incidentStatusLabel,
   isNoteWithinEditWindow,
   liveNotes,
   matchesIncidentQuery,
@@ -51,9 +52,9 @@ describe("formatFileSize — tamaño de un archivo para leerlo de un vistazo", (
 
 describe("requestMatchesEquipment — filtro de peticiones por modelo", () => {
   test("sin equipo filtrado, coincide con todo", () => {
-    expect(requestMatchesEquipment({ equipment: "Cualquier cosa" }, undefined)).toBe(
-      true,
-    );
+    expect(
+      requestMatchesEquipment({ equipment: "Cualquier cosa" }, undefined),
+    ).toBe(true);
   });
 
   test("coincide por el id elegido del inventario", () => {
@@ -85,9 +86,9 @@ describe("requestMatchesEquipment — filtro de peticiones por modelo", () => {
   });
 
   test("el id de otro equipo no coincide aunque el texto no exista", () => {
-    expect(
-      requestMatchesEquipment({ equipmentId: "eq02otro" }, equipo),
-    ).toBe(false);
+    expect(requestMatchesEquipment({ equipmentId: "eq02otro" }, equipo)).toBe(
+      false,
+    );
   });
 });
 
@@ -244,7 +245,9 @@ describe("noteRestoreUndoIndex — volver al texto que quitó una restauración"
 
   test("una nota sin historial no tiene nada que deshacer", () => {
     expect(noteRestoreUndoIndex({ note: "Solo texto." }, 0)).toBeNull();
-    expect(noteRestoreUndoIndex({ note: "Solo texto.", versions: [] }, 0)).toBeNull();
+    expect(
+      noteRestoreUndoIndex({ note: "Solo texto.", versions: [] }, 0),
+    ).toBeNull();
   });
 
   test("volver a la versión que ya dice lo mismo no se deshace: no habría cambio", () => {
@@ -254,7 +257,9 @@ describe("noteRestoreUndoIndex — volver al texto que quitó una restauración"
   });
 
   test("una posición que no está en el historial no se inventa", () => {
-    expect(noteRestoreUndoIndex({ note: "Tercera versión.", versions }, 7)).toBeNull();
+    expect(
+      noteRestoreUndoIndex({ note: "Tercera versión.", versions }, 7),
+    ).toBeNull();
   });
 });
 
@@ -305,7 +310,10 @@ describe("trabajo en curso sin constancia del técnico", () => {
       ),
     ).toBe(null);
     expect(
-      workWithoutTraceDays(asignadaHace(DEFAULT_WORK_WITHOUT_TRACE_DAYS), ahora),
+      workWithoutTraceDays(
+        asignadaHace(DEFAULT_WORK_WITHOUT_TRACE_DAYS),
+        ahora,
+      ),
     ).toBe(DEFAULT_WORK_WITHOUT_TRACE_DAYS);
   });
 
@@ -319,9 +327,13 @@ describe("trabajo en curso sin constancia del técnico", () => {
   });
 
   test("los límites del margen configurable son los que acepta el backend", () => {
-    expect(workWithoutTraceDays(asignadaHace(MIN_WORK_WITHOUT_TRACE_DAYS), ahora, MIN_WORK_WITHOUT_TRACE_DAYS)).toBe(
-      MIN_WORK_WITHOUT_TRACE_DAYS,
-    );
+    expect(
+      workWithoutTraceDays(
+        asignadaHace(MIN_WORK_WITHOUT_TRACE_DAYS),
+        ahora,
+        MIN_WORK_WITHOUT_TRACE_DAYS,
+      ),
+    ).toBe(MIN_WORK_WITHOUT_TRACE_DAYS);
     expect(
       workWithoutTraceDays(
         asignadaHace(MAX_WORK_WITHOUT_TRACE_DAYS),
@@ -460,9 +472,9 @@ describe("aviso de trabajo sin constancia — a qué roles les llega", () => {
   test("manda la lista guardada, no los permisos del rol", () => {
     // Un rol que no coordina entra si quien configura lo añade a mano...
     expect(alertReachesRole("technician", ["technician"])).toBe(true);
-    expect(alertReachesRole("auxiliar-de-almacen", ["auxiliar-de-almacen"])).toBe(
-      true,
-    );
+    expect(
+      alertReachesRole("auxiliar-de-almacen", ["auxiliar-de-almacen"]),
+    ).toBe(true);
     // ...y uno que coordina se queda fuera si no está en la lista.
     expect(alertReachesRole("manager", ["admin"])).toBe(false);
     expect(alertReachesRole("admin", [])).toBe(false);
@@ -564,7 +576,13 @@ describe("matchesIncidentQuery — encontrar la incidencia en la lista", () => {
   ];
 
   test("la referencia se encuentra escrita como se escriba", () => {
-    for (const typed of ["INC-0004", "inc-4", "4", " la 0004 ", "Incidencia 4"]) {
+    for (const typed of [
+      "INC-0004",
+      "inc-4",
+      "4",
+      " la 0004 ",
+      "Incidencia 4",
+    ]) {
       expect(
         matchesIncidentQuery(campos, "INC-0004", typed),
         `«${typed}»`,
@@ -627,5 +645,31 @@ describe("documentTrailLabel — la frase del rastro de auditoría", () => {
     ).toBe(
       "Reemplazó el archivo de «Acta.pdf» y lo renombró a «Acta (hoy).pdf»",
     );
+  });
+});
+
+describe("incidentStatusLabel — el estado y, cuando importa, dónde está el equipo", () => {
+  test("esperar repuestos y repararse dicen el sitio", () => {
+    expect(incidentStatusLabel("waitingParts", true)).toBe(
+      "En espera de repuestos · taller",
+    );
+    expect(incidentStatusLabel("waitingParts", false)).toBe(
+      "En espera de repuestos · en el sitio",
+    );
+    expect(incidentStatusLabel("repairing", true)).toBe(
+      "En reparación · taller",
+    );
+    expect(incidentStatusLabel("repairing", false)).toBe(
+      "En reparación · en el sitio",
+    );
+  });
+
+  test("en los demás estados el sitio no se añade: ya lo dice el estado o no viene al caso", () => {
+    // «En taller» ya lo dice; «Nueva» o «Resuelta» no son de ningún sitio.
+    expect(incidentStatusLabel("workshop", true)).toBe("En taller");
+    expect(incidentStatusLabel("reported", false)).toBe("Nueva");
+    expect(incidentStatusLabel("assigned", false)).toBe("Asignada");
+    expect(incidentStatusLabel("resolved", true)).toBe("Resuelta");
+    expect(incidentStatusLabel("unresolved", false)).toBe("Sin resolución");
   });
 });

@@ -237,7 +237,7 @@ export function RequestCard({
               onClick={onIssue}
             >
               <PackageCheck className="size-3.5" />
-              Marcar entregada
+              Entregar material
             </Button>
           )}
           {/* El archivo es solo para lo ya terminado: lo que sigue en movimiento

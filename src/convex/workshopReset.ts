@@ -60,6 +60,10 @@ const RESET_TABLES: TableNames[] = [
   "reportUploadPurges",
   "trashFiles",
   "weeklyReports",
+  // El freno de la consulta pública no es trabajo del taller, pero se cuenta por
+  // código de incidencia: tras vaciar, un código nuevo no debería heredar el
+  // cupo gastado del que tenía antes.
+  "publicLookupLimits",
   // El flag de «muestra cargada» vive aquí: si no se va, volver a cargar datos
   // de ejemplo no haría nada.
   "appSettings",
@@ -76,7 +80,10 @@ const NO_SESSION_MESSAGE = "Debes iniciar sesión para vaciar el taller.";
  */
 export const checkResetPermission = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, args): Promise<{ allowed: boolean; reason?: "session" | "permission" }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ allowed: boolean; reason?: "session" | "permission" }> => {
     const user = await ctx.db.get(args.userId);
     if (!user || user.active === false || user.isAnonymous === true) {
       return { allowed: false, reason: "session" };
@@ -151,9 +158,12 @@ export const resetWorkshop = action({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new ConvexError(NO_SESSION_MESSAGE);
 
-    const check = await ctx.runQuery(internal.workshopReset.checkResetPermission, {
-      userId,
-    });
+    const check = await ctx.runQuery(
+      internal.workshopReset.checkResetPermission,
+      {
+        userId,
+      },
+    );
     if (!check.allowed) {
       throw new ConvexError(
         check.reason === "session" ? NO_SESSION_MESSAGE : NO_PERMISSION_MESSAGE,
@@ -162,7 +172,7 @@ export const resetWorkshop = action({
 
     let deleted = 0;
     let passes = 0;
-    for (; passes < MAX_PASSES; ) {
+    for (; passes < MAX_PASSES;) {
       const batch = await ctx.runMutation(internal.workshopReset.clearBatch, {
         userId,
       });

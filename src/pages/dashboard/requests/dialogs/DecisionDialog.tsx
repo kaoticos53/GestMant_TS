@@ -12,10 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { isPurchaseRequestAwaitingDelivery } from "@/lib/purchaseFlow";
+import { lineRemaining } from "@/lib/requestFlow";
 import { richDocIsEmpty } from "@/lib/richDoc";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/workshop";
@@ -44,11 +46,22 @@ export function DecisionDialog({
   const approve = useMutation(api.partRequests.approve);
   const requestPurchase = useMutation(api.purchasing.requestPurchase);
   const reject = useMutation(api.partRequests.reject);
-  const markIssued = useMutation(api.partRequests.markIssued);
+  const issueLines = useMutation(api.partRequests.issueLines);
   const onHold = useMutation(api.partRequests.onHold);
   const returnMaterial = useMutation(api.partRequests.returnMaterial);
   const cancel = useMutation(api.partRequests.cancel);
   const [note, setNote] = useState("");
+  // Lo que se entrega en esta tanda, por línea. Arranca con todo lo que queda:
+  // la entrega completa, que es lo que hacía el botón de antes, se hace pulsando
+  // sin tocar nada; entregar de una en una es bajar el resto a cero.
+  const [entrega, setEntrega] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      request.lines.map((line) => [
+        line.sparePartId,
+        lineRemaining(line, request.status),
+      ]),
+    ),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const meta = DECISION_META[mode];
@@ -61,6 +74,12 @@ export function DecisionDialog({
   });
 
   const isApprove = mode === "approve";
+  const isIssue = mode === "issue";
+  /** Unidades que se entregan en esta tanda, todas las líneas juntas. */
+  const entregandoAhora = request.lines.reduce(
+    (sum, line) => sum + (entrega[line.sparePartId] ?? 0),
+    0,
+  );
   const missingReference = isApprove && request.lines.length === 0;
   const blocked = isApprove && (missingReference || shortages.length > 0);
   // De lo que falta, qué ya está en la cola de compras: así no se compra dos
@@ -103,6 +122,20 @@ export function DecisionDialog({
   };
 
   const handleConfirm = async () => {
+    // Lo que se entrega, línea a línea: solo las líneas con algo que sacar. Una
+    // tanda en cero no es una entrega, así que no llega al servidor.
+    const tanda = request.lines
+      .map((line) => ({
+        sparePartId: line.sparePartId,
+        quantity: entrega[line.sparePartId] ?? 0,
+      }))
+      .filter((line) => line.quantity > 0);
+    if (isIssue && tanda.length === 0) {
+      setError(
+        "Indica al menos una unidad para entregar: lo que se quede en cero sigue en el almacén.",
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -112,7 +145,7 @@ export function DecisionDialog({
       const payload = { requestId: request._id, ...reason };
       if (mode === "approve") await approve(payload);
       else if (mode === "reject") await reject(payload);
-      else if (mode === "issue") await markIssued(payload);
+      else if (mode === "issue") await issueLines({ ...payload, lines: tanda });
       else if (mode === "hold") await onHold(payload);
       else if (mode === "return") await returnMaterial(payload);
       else await cancel(payload);
@@ -208,6 +241,60 @@ export function DecisionDialog({
           </p>
         )}
 
+        {isIssue && (
+          <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Qué se entrega en esta tanda
+            </p>
+            <ul className="mt-2 space-y-2">
+              {request.lines.map((line) => {
+                const remaining = lineRemaining(line, request.status);
+                const quantity = entrega[line.sparePartId] ?? 0;
+                return (
+                  <li
+                    key={line.sparePartId}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0 text-sm">
+                      <span className="font-mono text-xs">{line.code}</span>{" "}
+                      <span className="text-muted-foreground">{line.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {remaining === 0
+                          ? "ya está entregado"
+                          : `quedan ${remaining} por entregar`}
+                      </span>
+                    </span>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={remaining}
+                      inputMode="numeric"
+                      aria-label={`Unidades de ${line.name} que se entregan`}
+                      className="w-20 shrink-0 text-right tabular-nums"
+                      value={quantity}
+                      disabled={busy || remaining === 0}
+                      onChange={(event) => {
+                        const value = Math.floor(Number(event.target.value));
+                        const clamped = Number.isFinite(value)
+                          ? Math.max(0, Math.min(remaining, value))
+                          : 0;
+                        setEntrega((current) => ({
+                          ...current,
+                          [line.sparePartId]: clamped,
+                        }));
+                      }}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              Lo que quede a cero sigue en el almacén: la petición no se da por
+              entregada hasta que se haya sacado todo.
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-2">
           <Label htmlFor="decision-note">{meta.label}</Label>
           {/* El motivo se escribe con el editor, como las notas del cuaderno:
@@ -236,7 +323,7 @@ export function DecisionDialog({
           <Button
             type="button"
             onClick={handleConfirm}
-            disabled={busy || blocked}
+            disabled={busy || blocked || (isIssue && entregandoAhora === 0)}
             className="gap-2"
           >
             <DecisionIcon className="size-4" />

@@ -456,6 +456,21 @@ export default function Dashboard() {
     setTab("requests");
   };
 
+  /**
+   * Abrir una petición concreta en su módulo (hoy la llama la ficha de la
+   * incidencia, que enseña el material que se pidió para el caso). Se remonta la
+   * cola con la petición delante, que es el mismo camino que usa el buscador
+   * global: así se abre aunque la cola ya estuviera montada en otra pestaña.
+   */
+  const openRequest = (id: Id<"partRequests">) => {
+    if (!can("viewRequests")) return;
+    setInitialRequestId(id);
+    setRequestsInitialFilter("all");
+    setRequestsEquipmentFilter("all");
+    setRequestsViewKey((key) => key + 1);
+    setTab("requests");
+  };
+
   const openIncident = (id: Id<"incidents">) => {
     setInitialIncidentId(id);
     setIncidentsViewKey((key) => key + 1);
@@ -824,6 +839,7 @@ export default function Dashboard() {
               onStartEmpty={handleStartEmpty}
               onSwitchAccount={() => void handleSwitchAccount()}
               onOpenIncident={openIncident}
+              onOpenRequest={openRequest}
               goToTab={goToTab}
               onEquipmentViewRequests={(equipmentId) => {
                 setRequestsEquipmentFilter(equipmentId);

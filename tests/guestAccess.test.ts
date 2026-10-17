@@ -179,7 +179,7 @@ describe("el invitado sigue su incidencia, y solo eso", () => {
 
     // El código, escrito como se escriba: es lo que se le dio al notificar y lo
     // único que un invitado puede consultar.
-    const tracking = await sesion.query(api.incidents.byCode, {
+    const tracking = await sesion.mutation(api.incidents.byCode, {
       code: "a7k2-qx9m",
     });
     expect(tracking?.code).toBe("A7K2QX9M");
@@ -221,7 +221,7 @@ describe("el invitado sigue su incidencia, y solo eso", () => {
     const sesion = await tallerConIncidencia();
     for (const typed of ["", "   ", "la del monitor", "ZZZZZZZZ", "INC-0007"]) {
       expect(
-        await sesion.query(api.incidents.byCode, { code: typed }),
+        await sesion.mutation(api.incidents.byCode, { code: typed }),
         `«${typed}»`,
       ).toBeNull();
     }
@@ -290,7 +290,7 @@ describe("el invitado puede notificar: notificar es la puerta pública", () => {
     // El invitado sigue su caso con el código —como cualquier visitante— y sigue
     // sin ver la cola: notificar le da un caso que seguir, no una ventana al
     // taller.
-    const seguimiento = await guest.query(api.incidents.byCode, {
+    const seguimiento = await guest.mutation(api.incidents.byCode, {
       code: created.code,
     });
     expect(seguimiento?.code).toBe(created.code);

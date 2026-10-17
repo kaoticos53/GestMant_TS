@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -40,9 +41,7 @@ async function mount(node: ReactNode): Promise<HTMLElement> {
   await act(async () => {
     root.render(<>{node}</>);
   });
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  await settle();
   return container;
 }
 

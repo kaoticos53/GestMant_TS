@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,10 +14,72 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { richDocToStore } from "@/lib/richDoc";
 import { getErrorMessage } from "@/lib/workshop";
+import type { Doc } from "@/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { dateToInput, inputToDate } from "../helpers";
-import type { EquipmentFormDialogProps } from "../types";
+import type { EquipmentDoc, EquipmentFormDialogProps } from "../types";
+
+interface MatchedTemplate {
+  brand?: string;
+  name?: string;
+  supplier?: string;
+  maintenanceIntervalDays?: number;
+  description?: string;
+  source: "catalog" | "inventory";
+  sourceLabel: string;
+}
+
+/** El primero que trae algo escrito: la ficha, lo que llega de fuera o la plantilla. */
+function firstFilled(...values: (string | undefined)[]): string {
+  return values.find((value) => value?.trim()) ?? "";
+}
+
+/**
+ * La plantilla que corresponde a un modelo: primero el catálogo oficial y, si
+ * no está, un equipo que ya exista con ese modelo. Es lo que rellena la ficha
+ * nada más elegir el modelo y lo que anuncia el enlace «Cargar datos».
+ */
+function findModelTemplate(
+  model: string,
+  catalogModels: Doc<"equipmentModels">[],
+  allEquipment: EquipmentDoc[],
+): MatchedTemplate | null {
+  const trimmed = model.trim().toLowerCase();
+  if (!trimmed) return null;
+
+  const cat = catalogModels.find(
+    (cm) => cm.model.trim().toLowerCase() === trimmed,
+  );
+  if (cat) {
+    return {
+      brand: cat.brand,
+      name: cat.name,
+      supplier: cat.defaultSupplier,
+      maintenanceIntervalDays: cat.defaultMaintenanceIntervalDays,
+      description: cat.description,
+      source: "catalog",
+      sourceLabel: `Plantilla: ${cat.name}`,
+    };
+  }
+
+  const inv = allEquipment.find(
+    (eq) => eq.model?.trim().toLowerCase() === trimmed,
+  );
+  if (inv) {
+    return {
+      brand: inv.brand,
+      name: inv.name,
+      supplier: inv.supplier,
+      maintenanceIntervalDays: inv.maintenanceIntervalDays,
+      description: inv.description,
+      source: "inventory",
+      sourceLabel: `Equipo previo: ${inv.name}`,
+    };
+  }
+
+  return null;
+}
 
 export function EquipmentFormDialog({
   item,
@@ -33,16 +95,46 @@ export function EquipmentFormDialog({
   const autoCode = useQuery(api.equipment.nextCode);
 
   const isEdit = item !== null;
-  const [code, setCode] = useState(item?.code ?? "");
-  const [brand, setBrand] = useState(item?.brand ?? initialValues?.brand ?? "");
-  const [name, setName] = useState(item?.name ?? initialValues?.name ?? "");
+  // La plantilla del modelo con el que se abre la ficha, si ya se conoce: los
+  // campos nacen con ella. Si el catálogo llega después, queda el enlace
+  // «Cargar datos» del modelo, que la aplica cuando se pulse.
+  const initialTemplate = isEdit
+    ? null
+    : findModelTemplate(
+        initialValues?.model ?? "",
+        catalogModels,
+        allEquipment,
+      );
+  const [code, setCode] = useState<string | null>(item?.code ?? null);
+  // El código que se ve y el que se manda: el escrito o, en un alta, el libre
+  // que propone el taller. Así el campo lo enseña sin copiarlo a un estado
+  // aparte que se quedaría con el primero que llegara.
+  const codeValue = isEdit ? (code ?? "") : (code ?? autoCode ?? "");
+  const [brand, setBrand] = useState(
+    firstFilled(item?.brand, initialValues?.brand, initialTemplate?.brand),
+  );
+  const [name, setName] = useState(
+    firstFilled(item?.name, initialValues?.name, initialTemplate?.name),
+  );
   const [model, setModel] = useState(item?.model ?? initialValues?.model ?? "");
   const [location, setLocation] = useState(item?.location ?? initialValues?.location ?? "");
-  const [description, setDescription] = useState(item?.description ?? initialValues?.description ?? "");
+  const [description, setDescription] = useState(
+    firstFilled(
+      item?.description,
+      initialValues?.description,
+      initialTemplate?.description,
+    ),
+  );
   const [serialNumber, setSerialNumber] = useState(
     item?.serialNumber ?? initialValues?.serialNumber ?? "",
   );
-  const [supplier, setSupplier] = useState(item?.supplier ?? initialValues?.supplier ?? "");
+  const [supplier, setSupplier] = useState(
+    firstFilled(
+      item?.supplier,
+      initialValues?.supplier,
+      initialTemplate?.supplier,
+    ),
+  );
   const [purchaseDate, setPurchaseDate] = useState(
     dateToInput(item?.purchaseDate),
   );
@@ -52,22 +144,15 @@ export function EquipmentFormDialog({
   const [decommissionDate, setDecommissionDate] = useState(
     dateToInput(item?.decommissionDate),
   );
-  const [intervalDays, setIntervalDays] = useState(
-    item?.maintenanceIntervalDays !== undefined
-      ? String(item.maintenanceIntervalDays)
-      : initialValues?.maintenanceIntervalDays !== undefined
-        ? String(initialValues.maintenanceIntervalDays)
-        : "",
-  );
+  const [intervalDays, setIntervalDays] = useState(() => {
+    const days =
+      item?.maintenanceIntervalDays ??
+      initialValues?.maintenanceIntervalDays ??
+      initialTemplate?.maintenanceIntervalDays;
+    return days !== undefined ? String(days) : "";
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // En altas nuevas, pre-rellenar con el código libre correlativo autogenerado
-  useEffect(() => {
-    if (!isEdit && !code && autoCode) {
-      setCode(autoCode);
-    }
-  }, [isEdit, code, autoCode]);
 
   // Combinar modelos únicos de inventario y catálogo para sugerencias
   const allSuggestedModels = useMemo(() => {
@@ -84,55 +169,11 @@ export function EquipmentFormDialog({
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [catalogModels, allEquipment, inventoryModels]);
 
-  interface MatchedTemplate {
-    brand?: string;
-    name?: string;
-    supplier?: string;
-    maintenanceIntervalDays?: number;
-    description?: string;
-    source: "catalog" | "inventory";
-    sourceLabel: string;
-  }
-
   // Plantilla del modelo coincidente (prioridad catálogo, fallback inventario existente)
-  const matchedTemplate = useMemo<MatchedTemplate | null>(() => {
-    const trimmed = model.trim().toLowerCase();
-    if (!trimmed) return null;
-
-    // 1. Catálogo oficial de modelos
-    const cat = catalogModels.find(
-      (cm) => cm.model.trim().toLowerCase() === trimmed,
-    );
-    if (cat) {
-      return {
-        brand: cat.brand,
-        name: cat.name,
-        supplier: cat.defaultSupplier,
-        maintenanceIntervalDays: cat.defaultMaintenanceIntervalDays,
-        description: cat.description,
-        source: "catalog",
-        sourceLabel: `Plantilla: ${cat.name}`,
-      };
-    }
-
-    // 2. Fallback: equipo ya existente en inventario con ese modelo
-    const inv = allEquipment.find(
-      (eq) => eq.model?.trim().toLowerCase() === trimmed,
-    );
-    if (inv) {
-      return {
-        brand: inv.brand,
-        name: inv.name,
-        supplier: inv.supplier,
-        maintenanceIntervalDays: inv.maintenanceIntervalDays,
-        description: inv.description,
-        source: "inventory",
-        sourceLabel: `Equipo previo: ${inv.name}`,
-      };
-    }
-
-    return null;
-  }, [model, catalogModels, allEquipment]);
+  const matchedTemplate = useMemo(
+    () => findModelTemplate(model, catalogModels, allEquipment),
+    [model, catalogModels, allEquipment],
+  );
 
   /**
    * El modelo del catálogo oficial que coincide con lo escrito, si lo hay: es
@@ -172,53 +213,19 @@ export function EquipmentFormDialog({
     }
   };
 
-  // En altas nuevas, cuando cargue la consulta asíncrona o cambie el modelo coincidente,
-  // si los campos clave están vacíos, cargar automáticamente la plantilla.
-  useEffect(() => {
-    if (isEdit || !matchedTemplate) return;
-    if (!name.trim() || !brand.trim()) {
-      applyModelTemplate(matchedTemplate, false);
-    }
-  }, [isEdit, matchedTemplate]);
-
   const handleModelChange = (newModel: string) => {
     setModel(newModel);
-    const trimmed = newModel.trim().toLowerCase();
-    if (!trimmed) return;
-    const cat = catalogModels.find(
-      (cm) => cm.model.trim().toLowerCase() === trimmed,
+    applyModelTemplate(
+      findModelTemplate(newModel, catalogModels, allEquipment),
+      false,
     );
-    if (cat) {
-      applyModelTemplate({
-        brand: cat.brand,
-        name: cat.name,
-        supplier: cat.defaultSupplier,
-        maintenanceIntervalDays: cat.defaultMaintenanceIntervalDays,
-        description: cat.description,
-        source: "catalog",
-        sourceLabel: `Plantilla: ${cat.name}`,
-      }, false);
-      return;
-    }
-    const inv = allEquipment.find(
-      (eq) => eq.model?.trim().toLowerCase() === trimmed,
-    );
-    if (inv) {
-      applyModelTemplate({
-        brand: inv.brand,
-        name: inv.name,
-        supplier: inv.supplier,
-        maintenanceIntervalDays: inv.maintenanceIntervalDays,
-        description: inv.description,
-        source: "inventory",
-        sourceLabel: `Equipo previo: ${inv.name}`,
-      }, false);
-    }
   };
 
   const handleSubmit = async () => {
     setError(null);
-    const finalCode = (code.trim() || (!isEdit ? (autoCode ?? "") : "")).trim();
+    const finalCode = (
+      (code ?? "").trim() || (!isEdit ? (autoCode ?? "") : "")
+    ).trim();
     if (isEdit && !finalCode) {
       setError("El código de inventario es obligatorio.");
       return;
@@ -320,7 +327,7 @@ export function EquipmentFormDialog({
             </div>
             <Input
               id="eq-code"
-              value={code}
+              value={codeValue}
               onChange={(event) => setCode(event.target.value)}
               placeholder={autoCode ?? "EQ-001"}
               className="font-mono"

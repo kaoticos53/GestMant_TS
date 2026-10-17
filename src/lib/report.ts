@@ -569,11 +569,7 @@ export function inReportPeriod(
 
 /** Atajos de periodo pensados para entregar el trabajo de un mes. */
 export type ReportPeriodId =
-  | "thisMonth"
-  | "lastMonth"
-  | "last30"
-  | "all"
-  | "custom";
+  "thisMonth" | "lastMonth" | "last30" | "all" | "custom";
 
 export const REPORT_PERIODS: {
   id: Exclude<ReportPeriodId, "custom">;
@@ -744,6 +740,8 @@ const INCIDENT_STATUS_ORDER: IncidentStatus[] = [
   "reported",
   "assigned",
   "workshop",
+  "waitingParts",
+  "repairing",
   "resolved",
   "unresolved",
 ];

@@ -1,10 +1,15 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { scheduleReporterEmail } from "./incidentMail";
 import { registerIncidentIntake } from "./incidentIntake";
 import { notifyUsers } from "./notify";
+import { admitPublicLookup } from "./publicLookupLimits";
 import {
   hasAnyCapability,
   hasCapability,
@@ -14,16 +19,16 @@ import {
 import {
   canAdvanceIncident,
   incidentStepStatus,
+  isIncidentInWorkshop,
   type IncidentAction,
   type IncidentStepStatus,
 } from "../lib/incidentFlow";
+import type { PendingPart } from "../lib/incidentTracking";
 import { normalizePublicCode } from "../lib/publicCode";
+import { isRequestAwaitingDelivery, lineRemaining } from "../lib/requestFlow";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 import { normalizeIncidentReference } from "../lib/workshop";
-import {
-  INCIDENT_STATUSES,
-  incidentStatusValidator,
-} from "./schema";
+import { INCIDENT_STATUSES, incidentStatusValidator } from "./schema";
 
 import {
   actorName,
@@ -109,6 +114,50 @@ export const list = query({
 });
 
 /**
+ * Los repuestos que el caso sigue esperando, contados para quien lo notificó: qué
+ * repuesto, cuánta cantidad y desde cuándo.
+ *
+ * Sale de las peticiones vivas —ni retiradas a la papelera ni ya entregadas— y de
+ * sus líneas, y de la petición no sale nada más que eso: ni su referencia
+ * («PET-0007»), ni quién la pidió, ni el proveedor o el precio. Lo que falta es
+ * concreto —«2 × Fuente de alimentación»— sin abrir el expediente del taller, que
+ * es justo lo que el seguimiento no enseña.
+ *
+ * Se cuenta lo que **queda**, no lo que se pidió: una petición entregada a medias
+ * enseña solo las unidades que aún están en el almacén. Una línea ya entregada
+ * entera no se enseña, y por eso lo que sale en blanco es «no falta nada de esta
+ * petición».
+ *
+ * Se ordena por fecha de petición: lo que lleva más tiempo esperando va primero,
+ * que es lo que se mira cuando se pregunta cuándo llega.
+ */
+async function pendingPartsOf(
+  ctx: QueryCtx | MutationCtx,
+  incidentId: Id<"incidents">,
+): Promise<PendingPart[]> {
+  const requests = await ctx.db
+    .query("partRequests")
+    .withIndex("by_incident", (q) => q.eq("incidentId", incidentId))
+    .collect();
+  return requests
+    .filter(
+      (request) =>
+        request.deletedAt === undefined &&
+        isRequestAwaitingDelivery(request.status),
+    )
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .flatMap((request) =>
+      request.lines
+        .map((line) => ({
+          name: line.name,
+          quantity: lineRemaining(line, request.status),
+          since: request.createdAt,
+        }))
+        .filter((part) => part.quantity > 0),
+    );
+}
+
+/**
  * El recorte del seguimiento: lo que se enseña de una incidencia fuera del
  * expediente del taller. Lo sirven las dos consultas —la de quien notificó, por
  * su código (`byCode`), y la del taller, por su referencia (`byReference`)—, y por
@@ -118,7 +167,10 @@ export const list = query({
  * columna nueva del esquema no se cuela aquí sola, y las notas internas, el
  * expediente y quién dio cada paso del historial se quedan dentro.
  */
-function trackingOf(incident: Doc<"incidents">) {
+async function trackingOf(
+  ctx: QueryCtx | MutationCtx,
+  incident: Doc<"incidents">,
+) {
   return {
     // El código, no la referencia: fuera del taller el caso se llama por el
     // código que se le dio a quien notificó. La referencia es el número con el
@@ -141,37 +193,54 @@ function trackingOf(incident: Doc<"incidents">) {
       status: entry.status,
       at: entry.at,
     })),
+    // Qué falta, en concreto: los repuestos que aún no han llegado, con su
+    // cantidad y desde cuándo se esperan. Es la respuesta a «¿por qué no está
+    // todavía?» sin tener que abrir la petición.
+    pendingParts: await pendingPartsOf(ctx, incident._id),
   };
 }
 
 /**
- * Consultar una incidencia por el código que se le dio a quien la notificó
+ * Seguir una incidencia por el código que se le dio a quien la notificó
  * («A7K2-QX9M»). Es la puerta de fuera del taller: la que usan el invitado que
  * avisó de una avería y cualquiera al que le hayan pasado un código.
  *
- * Pide sesión, y una de invitado vale: el código circula por un correo o por un
- * papel, y esto no es una puerta abierta para quien ni siquiera ha entrado.
- * Nunca devuelve la ficha entera: lo que sale de aquí es el recorte de
- * `trackingOf`, sin notas internas, documentos ni adjuntos.
+ * Está abierta a propósito, sin pedir sesión: el buscador de la portada y el
+ * enlace del correo los usa gente que no ha entrado nunca en la aplicación, y
+ * mandarla a una pantalla de acceso para leer el estado de su propio aviso es
+ * justo lo contrario de lo que el código viene a resolver.
+ *
+ * Lo que cierra esta puerta no es una sesión, es el código: se reparte al azar
+ * sobre 32 caracteres —más de un billón de combinaciones— y no dice nada de
+ * nadie, así que ir probando no lleva a ningún caso. Y nunca devuelve la ficha
+ * entera: lo que sale de aquí es el recorte de `trackingOf`, sin notas internas,
+ * documentos ni adjuntos.
  *
  * El código es lo único que se acepta, y a propósito: la referencia interna —que
  * es un correlativo, «INC-0001», «INC-0002»…— la consulta el taller
- * (`byReference`). Aceptarla aquí sería dejar la cola entera al alcance de quien
- * vaya probando números, que es justo lo que el código viene a evitar.
+ * (`byReference`, esa sí exige ser del taller). Aceptarla aquí dejaría la cola
+ * entera al alcance de quien fuese probando números, que es justo lo que el
+ * código viene a evitar.
+ *
+ * **Es una mutación y no una consulta** por el freno: cada código admite treinta
+ * consultas por hora (`lib/publicLookup`), y contar una consulta es escribir. Una
+ * consulta de Convex no puede escribir, así que el límite no se podría aplicar
+ * sin dejar la puerta abierta a quien llamase a la función directamente. Se
+ * cuenta antes de buscar —también los códigos que no llevan a nada— y, agotado el
+ * cupo, se lanza el aviso con lo que falta para que vuelva: el freno que ya
+ * protege el formulario de avisos (`incidents.report`), con el código como clave
+ * porque sin sesión no hay otra identidad que contar.
  *
  * `null` si no hay ninguno con ese código —el panel lo cuenta como «no
- * encontramos ninguna»—, y también si lo escrito no tiene forma de código.
+ * encontramos ninguna»—, y también si lo escrito no tiene forma de código: lo que
+ * no puede ser un código no gasta cupo, porque no llega a ser una consulta.
  */
-export const byCode = query({
+export const byCode = mutation({
   args: { code: v.string() },
   handler: async (ctx, args) => {
-    if ((await getAuthUserId(ctx)) === null) {
-      throw new ConvexError(
-        "Debes iniciar sesión para consultar una incidencia por su código.",
-      );
-    }
     const code = normalizePublicCode(args.code);
     if (code === null) return null;
+    await admitPublicLookup(ctx, code);
     // `first` y no `unique`, por lo mismo que en la referencia: una muestra
     // cargada o una instalación con datos viejos puede tener el mismo código dos
     // veces, y eso tiene que contestar (con el más antiguo) en vez de tumbar la
@@ -184,7 +253,7 @@ export const byCode = query({
     // equivocada, así que su código deja de contar el caso. Si se recupera desde
     // la papelera, vuelve a contestar como si nunca hubiera pasado.
     if (incident === null || incident.deletedAt !== undefined) return null;
-    return trackingOf(incident);
+    return await trackingOf(ctx, incident);
   },
 });
 
@@ -223,7 +292,7 @@ export const byReference = query({
     // equivocada, así que su referencia deja de contar el caso. Si se recupera
     // desde la papelera, vuelve a contestar como si nunca hubiera pasado.
     if (incident === null || incident.deletedAt !== undefined) return null;
-    return trackingOf(incident);
+    return await trackingOf(ctx, incident);
   },
 });
 
@@ -243,8 +312,10 @@ export const assign = mutation({
       );
     }
     const incident = await getIncident(ctx, args.incidentId);
-    const assigned = requireIncidentStep(incident, "assign", () =>
-      "Solo se puede asignar una incidencia pendiente o ya en curso.",
+    const assigned = requireIncidentStep(
+      incident,
+      "assign",
+      () => "Solo se puede asignar una incidencia pendiente o ya en curso.",
     );
     const assignee = await ctx.db.get(args.assigneeId);
     if (!assignee)
@@ -314,12 +385,7 @@ export const selfAssign = mutation({
       updatedAt: now,
       history: [
         ...incident.history,
-        historyEntry(
-          assigned,
-          now,
-          name,
-          "Autoasignada por el técnico",
-        ),
+        historyEntry(assigned, now, name, "Autoasignada por el técnico"),
       ],
     });
     await scheduleReporterEmail(ctx, incident, assigned);
@@ -376,10 +442,19 @@ export const verify = mutation({
       );
     }
     // El paso se comprueba antes de nada: verificar solo se puede desde una
-    // incidencia asignada, y a dónde lleva cada uno lo dice la máquina.
+    // incidencia asignada o en reparación, y a dónde lleva cada uno lo dice la
+    // máquina.
     if (!canAdvanceIncident(incident.status, VERIFY_STEPS[args.outcome])) {
       throw new ConvexError(
         "La incidencia debe estar asignada para verificarla.",
+      );
+    }
+    // Verificar es el cierre del trabajo en el sitio. El estado «en reparación»
+    // no dice dónde está el equipo —eso lo dice su entrada a taller abierta—, así
+    // que con la orden abierta el trabajo se cierra desde ahí y no por aquí.
+    if (isIncidentInWorkshop(incident)) {
+      throw new ConvexError(
+        "El equipo está en el taller: el trabajo se cierra desde la orden de taller.",
       );
     }
     if (args.equipmentId) {
@@ -482,8 +557,10 @@ export const verify = mutation({
 });
 
 /**
- * Entrada de incidencia a taller: el coordinador (o el técnico que la deriva)
- * la asigna al mismo u otro técnico.
+ * Cambiar el técnico de la entrada a taller: el coordinador —o el técnico que la
+ * lleva— la pasa al mismo u otro técnico, con el equipo en el taller. No mueve el
+ * caso: sigue en taller, esperando material o reparándose, y solo cambia quién lo
+ * lleva.
  */
 export const assignWorkshop = mutation({
   args: {
@@ -499,9 +576,19 @@ export const assignWorkshop = mutation({
         "Solo el coordinador o el técnico de la orden pueden reasignar la entrada a taller.",
       );
     }
+    // Cambiar el técnico de taller no mueve el caso: vale con el equipo en el
+    // taller —derivado, esperando material o ya reparándose— y la incidencia se
+    // queda en el estado en el que está. El estado no dice dónde está el equipo,
+    // así que una espera o una reparación en el sitio no tienen orden que
+    // reasignar y se rechazan aquí, como el cierre en el sitio desde taller.
     if (!canAdvanceIncident(incident.status, "reassignWorkshop")) {
       throw new ConvexError(
-        "La incidencia no tiene ninguna entrada de taller abierta.",
+        "La incidencia no está en taller, ni esperando repuestos, ni en reparación: no hay orden de taller que reasignar.",
+      );
+    }
+    if (!isIncidentInWorkshop(incident)) {
+      throw new ConvexError(
+        "El equipo no está en el taller: no hay orden de taller que reasignar.",
       );
     }
     const assignee = await ctx.db.get(args.assigneeId);
@@ -516,8 +603,11 @@ export const assignWorkshop = mutation({
       updatedAt: now,
       history: [
         ...incident.history,
+        // El rastro queda con el estado en el que está el caso —esperando
+        // material, reparándose o en taller—, no con «en taller» de prestado: el
+        // paso cambia quién lo lleva, no dónde está.
         historyEntry(
-          INCIDENT_STATUSES.WORKSHOP,
+          incident.status,
           now,
           actorName(actor),
           `Orden de taller asignada a ${assigneeName}`,
@@ -568,6 +658,13 @@ export const close = mutation({
         : "closeUnresolved",
       () => "La incidencia no tiene una entrada de taller abierta.",
     );
+    // Cerrar el trabajo de taller pide una orden abierta: desde «en reparación»
+    // sin entrada a taller, el cierre es la verificación en el sitio.
+    if (!isIncidentInWorkshop(incident)) {
+      throw new ConvexError(
+        "La incidencia no tiene una entrada de taller abierta: su cierre es la verificación en el sitio.",
+      );
+    }
     if (args.equipmentId) {
       const equipment = await ctx.db.get(args.equipmentId);
       if (!equipment)
@@ -662,11 +759,14 @@ export const updateEquipment = mutation({
     const incident = await getIncident(ctx, args.incidentId);
     await requireEquipmentEditor(ctx, actor, incident);
 
-    let equipmentId = args.equipmentId ?? incident.equipmentId;
+    const equipmentId = args.equipmentId ?? incident.equipmentId;
     let linkedEq = null;
     if (args.equipmentId) {
       linkedEq = await ctx.db.get(args.equipmentId);
-      if (!linkedEq) throw new ConvexError("El equipo seleccionado no existe en el inventario.");
+      if (!linkedEq)
+        throw new ConvexError(
+          "El equipo seleccionado no existe en el inventario.",
+        );
     }
 
     const model =
@@ -807,7 +907,6 @@ function requireIncidentStep<A extends IncidentAction>(
   }
   return incidentStepStatus(action);
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Re-exportaciones de sub-módulos CQS (notas, documentos, papelera)  */

@@ -19,7 +19,7 @@ import logo from "@/assets/logo.svg";
 import { useMutation, useQuery } from "convex/react";
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowRight, Check, Home, Loader2, Siren, UserCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 
 /** Timestamp → valor de <input type="date"> (AAAA-MM-DD en hora local). */
@@ -42,10 +42,18 @@ export default function ReportIncident() {
   const report = useMutation(api.incidents.report);
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
 
-  const [name, setName] = useState(user?.name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [role, setRole] = useState(user?.position ?? "");
-  const [location, setLocation] = useState(user?.location ?? "");
+  // Lo que la persona ha escrito en cada campo de contacto (`null` = sin tocar).
+  // Su perfil llega después de pintar la página, así que lo que enseña el campo
+  // se deriva aquí: no se copia a un estado que se quedaría con la primera
+  // versión y no habría forma de vaciar del todo.
+  const [name, setName] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
+  const nameValue = name ?? user?.name ?? "";
+  const emailValue = email ?? user?.email ?? "";
+  const roleValue = role ?? user?.position ?? "";
+  const locationValue = location ?? user?.location ?? "";
   const [equipmentKind, setEquipmentKind] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
@@ -60,28 +68,19 @@ export default function ReportIncident() {
   // no dependa de haber copiado el código de esta pantalla.
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  // Autocompletar con los datos del perfil si el usuario está autenticado
-  useEffect(() => {
-    if (!user) return;
-    if (user.name) setName((prev) => (prev.trim() ? prev : user.name!));
-    if (user.email) setEmail((prev) => (prev.trim() ? prev : user.email!));
-    if (user.position) setRole((prev) => (prev.trim() ? prev : user.position!));
-    if (user.location) setLocation((prev) => (prev.trim() ? prev : user.location!));
-  }, [user]);
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
 
     const timestamp = fromDateInputValue(reportedAt);
-    if (!name.trim()) {
+    if (!nameValue.trim()) {
       setError("Indica tu nombre y apellidos.");
       return;
     }
     // El correo es opcional, pero si se escribe tiene que servir para
     // responderle: más vale decirlo aquí, cuando se puede corregir, que
     // descubrirlo cuando el aviso ya no llega a nadie.
-    const reporterEmail = email.trim().toLowerCase();
+    const reporterEmail = emailValue.trim().toLowerCase();
     if (reporterEmail && !looksLikeEmail(reporterEmail)) {
       setError("Ese correo no parece una dirección válida. Revísalo o déjalo en blanco.");
       return;
@@ -100,10 +99,10 @@ export default function ReportIncident() {
     setBusy(true);
     try {
       const created = await report({
-        reporterName: name.trim(),
+        reporterName: nameValue.trim(),
         reporterEmail: reporterEmail || undefined,
-        reporterRole: role.trim() || undefined,
-        location: location.trim() || undefined,
+        reporterRole: roleValue.trim() || undefined,
+        location: locationValue.trim() || undefined,
         equipmentKind: equipmentKind.trim() || undefined,
         model: model.trim() || undefined,
         serialNumber: serialNumber.trim() || undefined,
@@ -124,10 +123,10 @@ export default function ReportIncident() {
   const reset = () => {
     setCode(null);
     setSentTo(null);
-    setName(user?.name ?? "");
-    setEmail(user?.email ?? "");
-    setRole(user?.position ?? "");
-    setLocation(user?.location ?? "");
+    setName(null);
+    setEmail(null);
+    setRole(null);
+    setLocation(null);
     setEquipmentKind("");
     setModel("");
     setSerialNumber("");
@@ -170,8 +169,8 @@ export default function ReportIncident() {
                 Incidencia {formatPublicCode(code)} registrada
               </CardTitle>
               <CardDescription>
-                Gracias, {name.split(" ")[0]}. El equipo coordinador del taller
-                ha recibido tu aviso y se pondrá manos a la obra.
+                Gracias, {nameValue.split(" ")[0]}. El equipo coordinador del
+                taller ha recibido tu aviso y se pondrá manos a la obra.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -197,7 +196,7 @@ export default function ReportIncident() {
               )}
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Button asChild className="gap-2">
-                  <Link to={`/dashboard?codigo=${encodeURIComponent(code)}`}>
+                  <Link to={`/seguimiento?codigo=${encodeURIComponent(code)}`}>
                     Seguir esta incidencia
                     <ArrowRight className="size-4" />
                   </Link>
@@ -247,7 +246,7 @@ export default function ReportIncident() {
                     <Label htmlFor="inc-name">Nombre y apellidos *</Label>
                     <Input
                       id="inc-name"
-                      value={name}
+                      value={nameValue}
                       onChange={(event) => setName(event.target.value)}
                       placeholder="Sandra Ruiz"
                       autoComplete="name"
@@ -260,7 +259,7 @@ export default function ReportIncident() {
                     <Input
                       id="inc-email"
                       type="email"
-                      value={email}
+                      value={emailValue}
                       onChange={(event) => setEmail(event.target.value)}
                       placeholder="p. ej. sandra.ruiz@taller.es"
                       autoComplete="email"
@@ -274,7 +273,7 @@ export default function ReportIncident() {
                     <Label htmlFor="inc-role">Puesto</Label>
                     <Input
                       id="inc-role"
-                      value={role}
+                      value={roleValue}
                       onChange={(event) => setRole(event.target.value)}
                       placeholder="p. ej. Realización"
                       disabled={busy}
@@ -284,7 +283,7 @@ export default function ReportIncident() {
                     <Label htmlFor="inc-location">Ubicación</Label>
                     <Input
                       id="inc-location"
-                      value={location}
+                      value={locationValue}
                       onChange={(event) => setLocation(event.target.value)}
                       placeholder="p. ej. Plató 2"
                       disabled={busy}

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act, useState, type RefObject } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -21,12 +22,6 @@ import { ListArea } from "@/components/ListArea";
  */
 
 let roots: Root[] = [];
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 /**
  * El área montada, con un botón por el que la prueba mueve lo que se está

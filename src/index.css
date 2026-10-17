@@ -217,6 +217,12 @@
   .rich-text.ProseMirror.rich-text-compact {
     min-height: 3rem;
   }
+  /* Abierto en grande, en su diálogo: el hueco de una pantalla, no el de una
+   * ficha. Va aquí y no con una clase de Tailwind porque el hueco del editor
+   * lo pone esta hoja, y estas reglas van por delante de las utilidades. */
+  .rich-text.ProseMirror.rich-text-grande {
+    min-height: 50vh;
+  }
   .rich-text p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     float: left;

@@ -46,8 +46,15 @@ caso de uso en `lib/incidentIntake`): quien avisa una avería no tiene cuenta ni
 permisos, y la ficha nace **notificada** sin dueño.
 
 Cómo se llama cada estado en pantalla: `reported` **Nueva** · `assigned`
-**Asignada** · `workshop` **En taller** · `resolved` **Resuelta** · `unresolved`
-**Sin resolución**.
+**Asignada** · `workshop` **En taller** · `waitingParts` **En espera de
+repuestos** · `repairing` **En reparación** · `resolved` **Resuelta** ·
+`unresolved` **Sin resolución**.
+
+Dos de esos estados no dicen dónde está el equipo: esperar repuestos o estar en
+reparación pasa igual en el banco que en el taller. Eso lo dice su **entrada a
+taller abierta** (`workshopAssigneeId`), que es la que decide qué cierre toca —el
+trabajo de taller o la verificación en el sitio— y la que la ficha enseña junto al
+estado: «En espera de repuestos · taller».
 
 ```mermaid
 stateDiagram-v2
@@ -58,9 +65,22 @@ stateDiagram-v2
     assigned --> resolved: verifyOnsite — asignado o coordinador
     assigned --> workshop: verifyWorkshop — asignado o coordinador
     assigned --> unresolved: verifyUnresolved — asignado o coordinador
+    assigned --> waitingParts: waitParts — al abrir la petición
+    workshop --> waitingParts: waitParts — al abrir la petición
     workshop --> workshop: reassignWorkshop — coordinador o técnico de taller
+    waitingParts --> waitingParts: reassignWorkshop — coordinador o técnico de taller
+    repairing --> repairing: reassignWorkshop — coordinador o técnico de taller
     workshop --> resolved: closeResolved — técnico de taller o coordinador
     workshop --> unresolved: closeUnresolved — técnico de taller o coordinador
+    waitingParts --> repairing: partsArrived — al entregarse todo el material
+    waitingParts --> assigned: partsSettledOnsite — peticiones cerradas sin material
+    waitingParts --> workshop: partsSettledWorkshop — peticiones cerradas sin material
+    repairing --> resolved: verifyOnsite — asignado o coordinador
+    repairing --> workshop: verifyWorkshop — asignado o coordinador
+    repairing --> unresolved: verifyUnresolved — asignado o coordinador
+    repairing --> waitingParts: waitParts — al abrir otra petición o devolver el material
+    repairing --> resolved: closeResolved — técnico de taller o coordinador
+    repairing --> unresolved: closeUnresolved — técnico de taller o coordinador
     resolved --> [*]
     unresolved --> [*]
 ```
@@ -69,19 +89,53 @@ Ningún paso sale de un estado cerrado: lo resuelto y lo que quedó sin resoluci
 no se reabren desde aquí —volver a por ello es una incidencia nueva, con su propio
 rastro—.
 
+Cuatro cosas que no son de estilo:
+
+- **Pedir material abre una espera.** Abrir una petición de repuestos para la
+  incidencia la deja en `waitingParts` (`waitParts`): no se trabaja hasta que
+  llegue la pieza. Y vale también desde `repairing`, porque devolver el material
+  que ya estaba puesto la deja otra vez sin lo que necesita.
+- **La entrega cierra la espera.** Cuando ya no queda ninguna petición viva sin
+  entregar y alguna llegó a entregarse, la incidencia pasa a `repairing`
+  (`partsArrived`). Un rechazo o una cancelación no cuentan como entrega: si se
+  cierran todas sin material, la incidencia vuelve a donde estaba —al taller si su
+  entrada sigue abierta, a la asignación si no— (`partsSettled*`) en vez de
+  esperar algo que ya no va a llegar.
+- **El sitio decide el cierre.** `repairing` admite los dos caminos —el cierre de
+  taller y la verificación en el sitio— porque el estado no sabe dónde está el
+  equipo: el backend exige la entrada a taller abierta para `close*` y su ausencia
+  para `verify*`, y la ficha solo enseña el que toca.
+- **Cambiar el técnico de taller no mueve el caso.** Vale con el equipo en el
+  taller —derivado, esperando material o ya reparándose— y la incidencia se queda
+  en el estado en el que está: cambia quién la lleva, no dónde está. Esperar o
+  reparar en el sitio no tiene orden que reasignar, y el backend lo rechaza.
+
 ### Tabla de pasos — incident
 
-| desde                | paso                                                 | hasta                       | quién                                                                                 |
-| -------------------- | ---------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------- |
-| `reported` Nueva     | `assign` Asignar a un técnico                        | `assigned` Asignada         | `manageIncidents` el coordinador o el administrador                                   |
-| `assigned` Asignada  | `assign` Asignar a un técnico                        | `assigned` Asignada         | `manageIncidents` cambiar de técnico es cosa del coordinador                          |
-| `reported` Nueva     | `selfAssign` Autoasignarme                           | `assigned` Asignada         | `viewIncidents` o `manageIncidents` cualquiera que vea la cola se lleva una pendiente |
-| `assigned` Asignada  | `verifyOnsite` Verificar y resolver en el sitio      | `resolved` Resuelta         | `manageIncidents` o **el técnico asignado**                                           |
-| `assigned` Asignada  | `verifyWorkshop` Verificar y derivar a taller        | `workshop` En taller        | `manageIncidents` o **el técnico asignado**                                           |
-| `assigned` Asignada  | `verifyUnresolved` Verificar y cerrar sin resolución | `unresolved` Sin resolución | `manageIncidents` o **el técnico asignado**                                           |
-| `workshop` En taller | `reassignWorkshop` Cambiar el técnico de taller      | `workshop` En taller        | `manageIncidents` o **el técnico de la orden de taller**                              |
-| `workshop` En taller | `closeResolved` Cerrar como resuelta                 | `resolved` Resuelta         | `manageIncidents` o **el técnico asignado o el de taller**                            |
-| `workshop` En taller | `closeUnresolved` Cerrar sin resolución              | `unresolved` Sin resolución | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| desde                                 | paso                                                             | hasta                                 | quién                                                                                 |
+| ------------------------------------- | ---------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------- |
+| `reported` Nueva                      | `assign` Asignar a un técnico                                    | `assigned` Asignada                   | `manageIncidents` el coordinador o el administrador                                   |
+| `assigned` Asignada                   | `assign` Asignar a un técnico                                    | `assigned` Asignada                   | `manageIncidents` cambiar de técnico es cosa del coordinador                          |
+| `reported` Nueva                      | `selfAssign` Autoasignarme                                       | `assigned` Asignada                   | `viewIncidents` o `manageIncidents` cualquiera que vea la cola se lleva una pendiente |
+| `assigned` Asignada                   | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado**                                           |
+| `assigned` Asignada                   | `verifyWorkshop` Verificar y derivar a taller                    | `workshop` En taller                  | `manageIncidents` o **el técnico asignado**                                           |
+| `assigned` Asignada                   | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado**                                           |
+| `assigned` Asignada                   | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` lo abre quien pide el material para el caso                          |
+| `workshop` En taller                  | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` lo abre quien pide el material para el caso                          |
+| `workshop` En taller                  | `reassignWorkshop` Cambiar el técnico de taller                  | `workshop` En taller                  | `manageIncidents` o **el técnico de la orden de taller**                              |
+| `waitingParts` En espera de repuestos | `reassignWorkshop` Cambiar el técnico de taller                  | `waitingParts` En espera de repuestos | `manageIncidents` o **el técnico de la orden de taller**, con el equipo en el taller  |
+| `repairing` En reparación             | `reassignWorkshop` Cambiar el técnico de taller                  | `repairing` En reparación             | `manageIncidents` o **el técnico de la orden de taller**, con el equipo en el taller  |
+| `workshop` En taller                  | `closeResolved` Cerrar como resuelta                             | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `workshop` En taller                  | `closeUnresolved` Cerrar sin resolución                          | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `waitingParts` En espera de repuestos | `partsArrived` Repuestos entregados                              | `repairing` En reparación             | `decideRequests` lo marca la entrega de la petición, no un botón de la incidencia     |
+| `waitingParts` En espera de repuestos | `partsSettledOnsite` Cerrar la espera sin material (en el sitio) | `assigned` Asignada                   | `decideRequests` la petición se rechazó o se canceló sin servir material              |
+| `waitingParts` En espera de repuestos | `partsSettledWorkshop` Cerrar la espera sin material (en taller) | `workshop` En taller                  | `decideRequests` la petición se rechazó o se canceló sin servir material              |
+| `repairing` En reparación             | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado**                                           |
+| `repairing` En reparación             | `verifyWorkshop` Verificar y derivar a taller                    | `workshop` En taller                  | `manageIncidents` o **el técnico asignado**                                           |
+| `repairing` En reparación             | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado**                                           |
+| `repairing` En reparación             | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` otra petición, o el material devuelto                                |
+| `repairing` En reparación             | `closeResolved` Cerrar como resuelta                             | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `repairing` En reparación             | `closeUnresolved` Cerrar sin resolución                          | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado o el de taller**                            |
 
 La segunda puerta no es una capacidad sino una pregunta —«¿la tengo yo?»— y por
 eso va en negrita: el técnico asignado verifica y cierra **su** incidencia sin
@@ -98,8 +152,8 @@ material comprado, la petición pasa a **material recibido**, que es desde donde
 se puede aprobar y entregar.
 
 Cómo se llama cada estado en pantalla: `pending` **Pendiente** · `approved`
-**Aprobada** · `onHold` **En espera** · `pendingSupplierQuote` **Esperando
-presupuesto** · `issued` **Entregada** · `materialReceived` **Material recibido** ·
+**Aprobada** · `onHold` **En espera** · `pendingSupplierQuote` **Presupuesto
+pendiente** · `issued` **Entregada** · `materialReceived` **Material recibido** ·
 `returned` **Devuelta** · `rejected` **Rechazada** · `cancelled` **Cancelada**.
 
 ```mermaid
@@ -138,6 +192,14 @@ Dos cosas que no son de estilo:
   `pending`, `onHold` y `pendingSupplierQuote`: de una ya aprobada o entregada no
   se compra nada, y de una rechazada, retirada o devuelta tampoco.
 
+- **El material sale de una en una.** `issue` cierra la petición cuando ya no
+  queda nada por entregar, pero las tandas se apuntan por línea
+  (`request.lines[].deliveredQuantity`): una petición con parte del material
+  entregado sigue en `approved`, que es su estado verdadero —falta material—, y
+  `requestDelivery` es quien cuenta qué salió y qué queda. La incidencia no pasa a
+  «en reparación» hasta la última unidad, y el seguimiento público solo enseña lo
+  que sigue faltando.
+
 ### Tabla de pasos — request
 
 | desde                                        | paso                                | hasta                                        | quién                                                                            |
@@ -147,18 +209,18 @@ Dos cosas que no son de estilo:
 | `pending` Pendiente                          | `reject` Rechazar                   | `rejected` Rechazada                         | `decideRequests` responsable de repuestos o administrador                        |
 | `pending` Pendiente                          | `hold` Poner en espera              | `onHold` En espera                           | `decideRequests` responsable de repuestos o administrador                        |
 | `approved` Aprobada                          | `hold` Poner en espera              | `onHold` En espera                           | `decideRequests` el material sigue apartado mientras tanto                       |
-| `pendingSupplierQuote` Esperando presupuesto | `hold` Poner en espera              | `onHold` En espera                           | `decideRequests` responsable de repuestos o administrador                        |
+| `pendingSupplierQuote` Presupuesto pendiente | `hold` Poner en espera              | `onHold` En espera                           | `decideRequests` responsable de repuestos o administrador                        |
 | `onHold` En espera                           | `resume` Reanudar                   | `heldFrom` vuelve al estado del que salió    | `decideRequests` responsable de repuestos o administrador                        |
-| `approved` Aprobada                          | `issue` Marcar entregada            | `issued` Entregada                           | `decideRequests` responsable de repuestos o administrador                        |
+| `approved` Aprobada                          | `issue` Entregar material           | `issued` Entregada                           | `decideRequests` responsable de repuestos o administrador; de una en una, lo entregado se apunta por línea y la petición no se cierra hasta la última |
 | `issued` Entregada                           | `returnMaterial` Devolver material  | `returned` Devuelta                          | `decideRequests` devuelve el material quien decide sobre repuestos               |
 | `pending` Pendiente                          | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` todavía no hay material comprometido                            |
 | `onHold` En espera                           | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` una suspensión no compromete material                           |
-| `pendingSupplierQuote` Esperando presupuesto | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` esperar un presupuesto no compromete nada                       |
-| `pending` Pendiente                          | `requestQuote` Pedir presupuesto    | `pendingSupplierQuote` Esperando presupuesto | `decideRequests` responsable de repuestos o administrador                        |
-| `onHold` En espera                           | `requestQuote` Pedir presupuesto    | `pendingSupplierQuote` Esperando presupuesto | `decideRequests` responsable de repuestos o administrador                        |
+| `pendingSupplierQuote` Presupuesto pendiente | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` esperar un presupuesto no compromete nada                       |
+| `pending` Pendiente                          | `requestQuote` Pedir presupuesto    | `pendingSupplierQuote` Presupuesto pendiente | `decideRequests` responsable de repuestos o administrador                        |
+| `onHold` En espera                           | `requestQuote` Pedir presupuesto    | `pendingSupplierQuote` Presupuesto pendiente | `decideRequests` responsable de repuestos o administrador                        |
 | `pending` Pendiente                          | `receiveMaterial` Material recibido | `materialReceived` Material recibido         | `managePurchasing` lo marca la recepción de la orden, no un botón de la petición |
 | `onHold` En espera                           | `receiveMaterial` Material recibido | `materialReceived` Material recibido         | `managePurchasing` lo marca la recepción de la orden                             |
-| `pendingSupplierQuote` Esperando presupuesto | `receiveMaterial` Material recibido | `materialReceived` Material recibido         | `managePurchasing` lo marca la recepción de la orden                             |
+| `pendingSupplierQuote` Presupuesto pendiente | `receiveMaterial` Material recibido | `materialReceived` Material recibido         | `managePurchasing` lo marca la recepción de la orden                             |
 
 ---
 

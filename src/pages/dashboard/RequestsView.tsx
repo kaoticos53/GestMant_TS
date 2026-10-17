@@ -1,14 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import {
-  Check,
-  ClipboardList,
-  FileDown,
-  Plus,
-  SearchX,
-  X,
-} from "lucide-react";
+import { Check, ClipboardList, FileDown, Plus, SearchX, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ListArea } from "@/components/ListArea";
@@ -80,13 +73,16 @@ export function RequestsView({
     mode: DecisionMode;
   } | null>(null);
   const [resumingId, setResumingId] = useState<string | null>(null);
-  const [associateTarget, setAssociateTarget] = useState<RequestDoc | null>(null);
+  const [associateTarget, setAssociateTarget] = useState<RequestDoc | null>(
+    null,
+  );
   const [newOpen, setNewOpen] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const {
     filter,
     setFilter,
+    detailId,
     setDetailId,
     search,
     setSearch,
@@ -109,6 +105,17 @@ export function RequestsView({
     initialFilter,
     initialDetailId,
   });
+
+  // Lo que se pide abrir y no está en la cola: una petición archivada, a la que
+  // enlaza la ficha de su incidencia. Se pide solo esa, en vez de cargar el
+  // archivo entero con sus adjuntos, y se abre en solo lectura.
+  const focused = useQuery(
+    api.partRequests.detail,
+    detailId !== null && !requests.some((request) => request._id === detailId)
+      ? { requestId: detailId }
+      : "skip",
+  );
+  const openRequest = detailRequest ?? focused ?? null;
 
   const handleResume = async (request: RequestDoc) => {
     setResumingId(request._id);
@@ -384,29 +391,26 @@ export function RequestsView({
         />
       )}
 
-      {detailRequest && (
+      {openRequest && (
         <RequestDetailSheet
-          request={detailRequest}
+          request={openRequest}
           parts={parts}
-          canManage={canManage}
+          // Lo archivado se abre en solo lectura: su trabajo terminó y sus pasos
+          // ya no se dan desde la cola. Quien quiera volver a tramitarla la
+          // recupera desde Archivo, que es donde vive.
+          canManage={canManage && openRequest.archivedAt === undefined}
           onClose={() => setDetailId(null)}
-          onAssociate={() => setAssociateTarget(detailRequest)}
+          onAssociate={() => setAssociateTarget(openRequest)}
           onApprove={() =>
-            setDecision({ request: detailRequest, mode: "approve" })
+            setDecision({ request: openRequest, mode: "approve" })
           }
-          onReject={() =>
-            setDecision({ request: detailRequest, mode: "reject" })
-          }
-          onIssue={() => setDecision({ request: detailRequest, mode: "issue" })}
-          onHold={() => setDecision({ request: detailRequest, mode: "hold" })}
-          onReturn={() =>
-            setDecision({ request: detailRequest, mode: "return" })
-          }
-          onCancel={() =>
-            setDecision({ request: detailRequest, mode: "cancel" })
-          }
-          onResume={() => void handleResume(detailRequest)}
-          resuming={resumingId === detailRequest._id}
+          onReject={() => setDecision({ request: openRequest, mode: "reject" })}
+          onIssue={() => setDecision({ request: openRequest, mode: "issue" })}
+          onHold={() => setDecision({ request: openRequest, mode: "hold" })}
+          onReturn={() => setDecision({ request: openRequest, mode: "return" })}
+          onCancel={() => setDecision({ request: openRequest, mode: "cancel" })}
+          onResume={() => void handleResume(openRequest)}
+          resuming={resumingId === openRequest._id}
         />
       )}
 

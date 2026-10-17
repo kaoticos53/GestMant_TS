@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import {
   Archive,
+  ArrowUpRight,
   Check,
   ChevronDown,
   FileDown,
@@ -65,9 +66,20 @@ import {
   INCIDENT_STEP_LABELS,
   blockedIncidentSteps,
   canAdvanceIncident,
+  canChangeWorkshopTechnician,
+  incidentTakesPartRequests,
   isClosedIncident,
+  isIncidentInWorkshop,
+  isIncidentWaitingParts,
 } from "@/lib/incidentFlow";
 import { reporterNoticeText } from "@/lib/incidentMail";
+import {
+  lineDelivered,
+  lineRemaining,
+  requestDelivery,
+  requestMaterialState,
+  type RequestMaterialState,
+} from "@/lib/requestFlow";
 import {
   noteRemovedToast,
   noteRestoreUndoneToast,
@@ -91,6 +103,7 @@ import {
 import { reportToPdf } from "@/lib/reportPdf";
 import {
   richDocIsEmpty,
+  richDocToPlainText,
   richDocToStore,
 } from "@/lib/richDoc";
 import {
@@ -103,11 +116,15 @@ import {
 import {
   INCIDENT_STATUS_META,
   PRIORITY_META,
+  // El estado de una petición de material: el nombre y lo que significa. Se
+  // aliasa porque en esta ficha convive con el estado de la incidencia.
+  STATUS_META as REQUEST_STATUS_META,
   documentTrailLabel,
   equipmentLabel,
   formatClockTime,
   formatDateTime,
   getErrorMessage,
+  incidentStatusLabel,
   isNoteWithinEditWindow,
   liveNotes,
   noteEditDeadline,
@@ -125,6 +142,34 @@ import { IncidentRequestDialog } from "../dialogs/IncidentRequestDialog";
 import { EquipmentFormDialog } from "../../equipment/dialogs/EquipmentFormDialog";
 import { NoteHistory } from "./NoteHistory";
 
+/**
+ * Cómo se lee el material de cada línea cuando se mira desde el caso: la ficha
+ * del caso se lee para decidir el siguiente paso, y ese paso depende de si la
+ * pieza ya está en manos del técnico o sigue esperando. El estado sale de
+ * `lib/requestFlow`, no de comparar cadenas aquí.
+ */
+const MATERIAL_STATE_LABEL: Record<RequestMaterialState, string> = {
+  pending: "sin entregar",
+  partial: "entrega parcial",
+  delivered: "entregado",
+  returned: "devuelto",
+  dropped: "no se sirvió",
+};
+
+/**
+ * Cómo se llama lo que le pasa a una línea de la que no ha salido nada.
+ *
+ * El estado de la petición no sirve tal cual: una entrega parcial de la petición
+ * no dice nada de esta línea en concreto, que sigue esperando en el almacén; lo
+ * que sí vale es que la petición se cerrara sin servir el material o que volviera
+ * del técnico.
+ */
+function untouchedLineLabel(material: RequestMaterialState): string {
+  return material === "partial" || material === "delivered"
+    ? MATERIAL_STATE_LABEL.pending
+    : MATERIAL_STATE_LABEL[material];
+}
+
 export function IncidentDetailSheet({
   incident,
   equipment,
@@ -132,6 +177,8 @@ export function IncidentDetailSheet({
   currentUserId,
   currentUserName,
   canAssign,
+  canOpenRequests = false,
+  onOpenRequest,
   onClose,
 }: {
   incident: IncidentDoc;
@@ -140,6 +187,10 @@ export function IncidentDetailSheet({
   currentUserId: Id<"users"> | null;
   currentUserName: string;
   canAssign: boolean;
+  /** Puede ver el módulo de peticiones: se le ofrece el enlace a cada una. */
+  canOpenRequests?: boolean;
+  /** Abrir una petición concreta en su módulo. */
+  onOpenRequest?: (id: Id<"partRequests">) => void;
   onClose: () => void;
 }) {
   const selfAssign = useMutation(api.incidents.selfAssign);
@@ -213,17 +264,32 @@ export function IncidentDetailSheet({
   );
 
   const status = INCIDENT_STATUS_META[incident.status];
+  // El estado no dice dónde está el equipo: lo dice su entrada a taller abierta.
+  // La ficha lo usa para el cierre que toca —taller o sitio— y para la insignia.
+  const inWorkshop = isIncidentInWorkshop(incident);
+  const statusLabel = incidentStatusLabel(incident.status, inWorkshop);
   const linkedEquipment = incident.equipmentId
     ? (equipment.find((item) => item._id === incident.equipmentId) ?? null)
     : null;
-  const linkedRequest = requests.find(
-    (request) => request.incidentId === incident._id,
-  );
+  // El material que se ha pedido para este caso, todo: también lo que ya está
+  // en el archivo. Un caso puede necesitar varias peticiones a lo largo de su
+  // vida, y ver una sola escondía el resto justo cuando más importa saber qué
+  // llegó y qué no (`lib/requestFlow` cuenta cada una en su estado). Se ordenan
+  // de la más antigua a la más reciente: así se leen como pasos del caso.
+  const linkedRequests = requests
+    .filter((request) => request.incidentId === incident._id)
+    .sort((a, b) => a.createdAt - b.createdAt);
   const isAssignee =
     currentUserId !== null &&
     (incident.assigneeId === currentUserId ||
       incident.workshopAssigneeId === currentUserId);
   const canWork = canAssign || isAssignee;
+  // Cambiar el técnico de taller: lo puede hacer quien coordina y el técnico de la
+  // orden —con el equipo en el taller y el paso permitido desde el estado—.
+  const canReassignWorkshop = canChangeWorkshopTechnician(incident, {
+    id: currentUserId,
+    coordinates: canAssign,
+  });
   // Lo que la máquina deja hacer desde aquí y lo que no: los pasos que no se
   // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/incidentFlow`).
   // Solo se cuentan a quien va a actuar: al resto le basta saber que no le toca.
@@ -630,7 +696,7 @@ export function IncidentDetailSheet({
               {incident.reference}
             </span>
             <Badge variant="outline" className={status.badgeClassName}>
-              {status.label}
+              {statusLabel}
             </Badge>
             {incident.maintenanceId && (
               <Badge
@@ -772,8 +838,7 @@ export function IncidentDetailSheet({
                 <span className="text-muted-foreground">Técnico: </span>
                 {incident.assigneeName ?? "Sin asignar"}
               </p>
-              {(incident.status === "workshop" ||
-                incident.workshopAssigneeName) && (
+              {inWorkshop && (
                 <p>
                   <span className="text-muted-foreground">
                     Entrada a taller:{" "}
@@ -793,13 +858,211 @@ export function IncidentDetailSheet({
                   className="rounded-lg border border-border/70 bg-background/60 p-3 text-sm leading-6"
                 />
               )}
-              {linkedRequest && (
-                <p className="font-mono text-xs text-muted-foreground">
-                  Petición {linkedRequest.reference} ·{" "}
-                  {PRIORITY_META[linkedRequest.priority].label}
-                </p>
+            </div>
+          </div>
+
+          {/* El listado de material del caso, con el estado de cada petición. La
+              ficha del taller se lee para decidir el siguiente paso, y ese paso
+              depende de si el material está pedido, aprobado o entregado. */}
+          <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Peticiones de material
+              </p>
+              {linkedRequests.length > 0 && (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {linkedRequests.length}
+                </span>
               )}
             </div>
+            {linkedRequests.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                No se ha pedido material para este caso.
+                {incidentTakesPartRequests(incident.status) &&
+                  " Cuando falte una pieza, se abre una petición desde las acciones de la ficha."}
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {linkedRequests.map((request) => {
+                  const meta = REQUEST_STATUS_META[request.status];
+                  const archived = request.archivedAt !== undefined;
+                  // El material puede salir por tandas: la cuenta por línea es
+                  // la que dice qué ha llegado y qué sigue en el almacén.
+                  const delivery = requestDelivery(
+                    request.lines,
+                    request.status,
+                  );
+                  const material = requestMaterialState(
+                    request.status,
+                    delivery,
+                  );
+                  // Lo que se pidió, línea a línea. Antes solo se veía el estado
+                  // de la petición, así que para saber qué pieza —y cuántas—
+                  // había que abrirla y perder de vista el caso.
+                  const deliveredAt =
+                    material === "delivered"
+                      ? request.issuedAt
+                      : material === "returned"
+                        ? request.returnedAt
+                        : undefined;
+                  // Lo pedido sin pasar por el catálogo se describe en la
+                  // petición: se lee aquí aplanado, que es lo que hace falta
+                  // para saber qué falta.
+                  const described = richDocToPlainText(request.description);
+                  return (
+                    <li
+                      key={request._id}
+                      className="rounded-lg border border-border/60 bg-background/60 p-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-muted-foreground">
+                            {request.reference}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={meta.badgeClassName}
+                          >
+                            {meta.label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {PRIORITY_META[request.priority].label}
+                          </span>
+                          {material === "partial" && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/40 bg-amber-500/10 text-amber-800 first-letter:uppercase"
+                            >
+                              {MATERIAL_STATE_LABEL.partial}
+                            </Badge>
+                          )}
+                          {archived && (
+                            <Badge
+                              variant="outline"
+                              className="border-border bg-muted text-muted-foreground"
+                            >
+                              En el archivo
+                            </Badge>
+                          )}
+                        </div>
+                        {canOpenRequests && onOpenRequest && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 px-2 text-xs"
+                            onClick={() => onOpenRequest(request._id)}
+                          >
+                            <ArrowUpRight className="size-3.5" />
+                            {archived ? "Ver petición" : "Abrir petición"}
+                          </Button>
+                        )}
+                      </div>
+                      {/* Qué significa el estado, no solo su nombre: es la
+                          misma explicación que se usa en la cola de peticiones. */}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {meta.description} · abierta el{" "}
+                        {formatDateTime(request.createdAt)} por{" "}
+                        {request.requesterName}
+                      </p>
+                      {request.lines.length > 0 ? (
+                        <ul className="mt-2 divide-y divide-border/50 border-t border-border/50">
+                          {request.lines.map((line) => {
+                            const delivered = lineDelivered(
+                              line,
+                              request.status,
+                            );
+                            const remaining = lineRemaining(
+                              line,
+                              request.status,
+                            );
+                            return (
+                              <li
+                                key={line.sparePartId}
+                                className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5"
+                              >
+                                <span className="min-w-0 truncate">
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    {line.code}
+                                  </span>{" "}
+                                  {line.name}
+                                </span>
+                                {/* Lo pedido y lo que ya salió del almacén, en la
+                                  misma línea: decirlo aquí evita abrir la
+                                  petición solo para ver cuánto ha llegado. */}
+                                <span className="shrink-0 text-xs tabular-nums">
+                                  <span className="text-muted-foreground">
+                                    pedido{" "}
+                                  </span>
+                                  <span className="font-semibold text-foreground">
+                                    ×{line.quantity}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {" · "}
+                                  </span>
+                                  {delivered > 0 ? (
+                                    <>
+                                      <span className="text-muted-foreground">
+                                        entregado{" "}
+                                      </span>
+                                      <span className="font-semibold text-foreground">
+                                        ×{delivered}
+                                      </span>
+                                      {remaining > 0 && (
+                                        <>
+                                          <span className="text-muted-foreground">
+                                            {" · faltan "}
+                                          </span>
+                                          <span className="font-semibold text-foreground">
+                                            ×{remaining}
+                                          </span>
+                                        </>
+                                      )}
+                                      {material === "returned" && (
+                                        <span className="text-muted-foreground">
+                                          {" · devuelto"}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      {untouchedLineLabel(material)}
+                                    </span>
+                                  )}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : described !== "" ? (
+                        <p className="mt-2 whitespace-pre-line border-t border-border/50 pt-2 text-sm text-foreground/80">
+                          {described}
+                        </p>
+                      ) : (
+                        <p className="mt-2 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                          Sin repuesto del catálogo y sin descripción: la
+                          petición no dice qué material falta.
+                        </p>
+                      )}
+                      {deliveredAt !== undefined && (
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                          {material === "delivered"
+                            ? "Material entregado el "
+                            : "Material devuelto el "}
+                          {formatDateTime(deliveredAt)}
+                        </p>
+                      )}
+                      {archived && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Está en el archivo del taller: se abre en solo
+                          lectura, sin sacarla de allí ni devolverla a la cola.
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
@@ -1234,8 +1497,11 @@ export function IncidentDetailSheet({
               </>
             )}
 
+            {/* Verificar es el cierre en el sitio: con el equipo en taller, lo que
+                se cierra es el trabajo de taller (más abajo). */}
             {canAdvanceIncident(incident.status, "verifyWorkshop") &&
-              canWork && (
+              canWork &&
+              !inWorkshop && (
                 <>
                   {canAssign && (
                     <Button
@@ -1258,6 +1524,22 @@ export function IncidentDetailSheet({
                   </Button>
                 </>
               )}
+
+            {/* La petición de repuestos se abre mientras el caso se trabaja —asignado,
+                en taller, esperando material o reparándose—: es cuando se descubre
+                que falta la pieza. La incidencia pasa a «en espera de repuestos» y no
+                vuelve a «en reparación» hasta que se entregue todo el material. */}
+            {canWork && incidentTakesPartRequests(incident.status) && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setRequestOpen(true)}
+              >
+                <PackagePlus className="size-4" />
+                Petición de repuestos
+              </Button>
+            )}
 
             {isClosedIncident(incident.status) && canAssign && (
               <Button
@@ -1289,44 +1571,48 @@ export function IncidentDetailSheet({
               </Button>
             )}
 
+            {/* Cambiar el técnico de taller con el equipo en el taller, esté
+                derivado, esperando material o ya reparándose: la incidencia no se
+                mueve, solo quién la lleva. Lo ven quien coordina y el técnico que
+                ya tiene la orden; con el equipo en el sitio no hay nada que
+                reasignar. */}
+            {canReassignWorkshop && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setAssignTarget("workshop")}
+              >
+                <UserPlus className="size-4" />
+                Asignar orden
+              </Button>
+            )}
+
+            {/* Finalizar el trabajo de taller: con la orden abierta, se cierra la
+                incidencia desde aquí, esté esperando material o ya reparándose. */}
             {canAdvanceIncident(incident.status, "closeResolved") &&
-              canWork && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setRequestOpen(true)}
-                  >
-                    <PackagePlus className="size-4" />
-                    Petición de repuestos
-                  </Button>
-                  {canAssign && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => setAssignTarget("workshop")}
-                    >
-                      <UserPlus className="size-4" />
-                      Asignar orden
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    className="gap-2"
-                    onClick={() => setCloseOpen(true)}
-                  >
-                    <Wrench className="size-4" />
-                    Finalizar trabajo
-                  </Button>
-                </>
+              canWork &&
+              inWorkshop && (
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => setCloseOpen(true)}
+                >
+                  <Wrench className="size-4" />
+                  Finalizar trabajo
+                </Button>
               )}
           </div>
           {!canWork && !canAdvanceIncident(incident.status, "selfAssign") && (
             <p className="mt-2 text-right text-xs text-muted-foreground">
               Solo el técnico asignado o el coordinador pueden actuar sobre esta
               incidencia.
+            </p>
+          )}
+          {canWork && isIncidentWaitingParts(incident.status) && (
+            <p className="mt-2 text-right text-xs text-muted-foreground">
+              Esperando el material de la petición: cuando se entregue todo, la
+              incidencia pasa a «En reparación» sola.
             </p>
           )}
         </div>

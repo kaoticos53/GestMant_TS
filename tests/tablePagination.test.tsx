@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -70,12 +71,6 @@ interface Handle {
 }
 
 let roots: Root[] = [];
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
 
 async function mountTable(props: HarnessProps = {}): Promise<Handle> {
   const container = document.createElement("div");

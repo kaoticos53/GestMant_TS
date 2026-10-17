@@ -104,10 +104,10 @@ export interface SheetMachine {
 }
 
 /**
- * Los dos destinos que no son un estado: la tabla los escribe como un nombre
- * —`heldFrom`, `allReceived`— porque quien resuelve a dónde va cada uno es una
- * función de su módulo. Aquí solo se cuenta con qué palabras se leen, y el test
- * de la ficha exige que no haya ninguno más.
+ * Los destinos que no son un estado: la tabla los escribe como un nombre
+ * —`heldFrom`, `allReceived`, `keptStatus`— porque quien resuelve a dónde va cada
+ * uno es una función de su módulo. Aquí solo se cuenta con qué palabras se leen,
+ * y el test de la ficha exige que no haya ninguno más.
  */
 const DECIDED_DESTINATIONS: Record<string, string> = {
   // `resume` no vuelve siempre a «pendiente»: vuelve al estado del que salió
@@ -116,6 +116,9 @@ const DECIDED_DESTINATIONS: Record<string, string> = {
   // «Recepcionar» no deja un estado fijo: mira artículo a artículo lo que ha
   // llegado (`purchaseOrderStatusAfterReceiving`).
   allReceived: "Completada o parcial, según lo que haya llegado",
+  // Cambiar el técnico de taller no mueve el caso: sigue en taller, esperando
+  // material o reparándose, con otra persona a cargo.
+  keptStatus: "El mismo estado en el que está: solo cambia quién lo lleva",
 };
 
 /** Traduce el destino de una fila de la tabla a como se lee en pantalla. */

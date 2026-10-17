@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
+import { settle } from "./settle";
 import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { toast } from "sonner";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -57,16 +54,6 @@ function installMissingDomApis() {
 }
 
 let roots: Root[] = [];
-
-/**
- * Deja pasar un turno: sonner monta el aviso —y el contenedor de los avisos— en
- * el siguiente, así que sin esperar no habría nada que pulsar.
- */
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
-}
 
 /** Lanza un aviso y espera a tenerlo a la vista. */
 async function showNotice(fire: () => void) {
@@ -141,7 +128,9 @@ function IncidentSheet({
   onInteractOutside,
 }: {
   onClose: () => void;
-  onInteractOutside: React.ComponentProps<typeof SheetContent>["onInteractOutside"];
+  onInteractOutside: React.ComponentProps<
+    typeof SheetContent
+  >["onInteractOutside"];
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -168,7 +157,9 @@ function PlainDialog({
   onInteractOutside,
 }: {
   onClose: () => void;
-  onInteractOutside: React.ComponentProps<typeof DialogContent>["onInteractOutside"];
+  onInteractOutside: React.ComponentProps<
+    typeof DialogContent
+  >["onInteractOutside"];
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -213,8 +204,9 @@ beforeEach(() => {
   toast.dismiss();
   installMissingDomApis();
   // React pide que se le diga que está en un entorno de pruebas.
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-    true;
+  (
+    globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
 afterEach(async () => {

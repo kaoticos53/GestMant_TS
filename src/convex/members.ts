@@ -87,7 +87,9 @@ export const ensureRole = mutation({
     const user = await ctx.db.get(userId);
     if (!user) throw new ConvexError("Usuario no encontrado.");
     if (user.active === false) {
-      throw new ConvexError("Esta cuenta ha sido dada de baja o no está activa.");
+      throw new ConvexError(
+        "Esta cuenta ha sido dada de baja o no está activa.",
+      );
     }
 
     if (user.role) return user.role;
@@ -113,9 +115,7 @@ export const ensureRole = mutation({
     // configurado de forma segura en el entorno puede recibir el rol de administrador.
     // Si ya existe un administrador, ningún nuevo registro puede autopromocionarse.
     const role =
-      matchesConfiguredAdmin || isFirstUser
-        ? ROLES.ADMIN
-        : DEFAULT_ROLE;
+      matchesConfiguredAdmin || isFirstUser ? ROLES.ADMIN : DEFAULT_ROLE;
     await ctx.db.patch(userId, { role });
     return role;
   },
@@ -379,15 +379,29 @@ export const patchActive = internalMutation({
 /**
  * Usuarios que pueden recibir el trabajo (coordinador/admin al asignar una
  * incidencia). No confundir con `list`, que es solo para administradores.
+ *
+ * El técnico de taller también cambia a quién le toca la orden —siempre pudo
+ * hacerlo en el servidor (`incidents.assignWorkshop`)—, pero solo la que lleva,
+ * así que la lista se abre con esa incidencia delante (`incidentId`). Sin la
+ * incidencia, la puerta sigue siendo la de coordinación.
  */
 export const listAssignable = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { incidentId: v.optional(v.id("incidents")) },
+  handler: async (ctx, args) => {
     const userId = await requireUser(ctx);
     const me = await ctx.db.get(userId);
-    if (!me || !(await hasCapability(ctx, me, "manageIncidents"))) {
+    const canCoordinate =
+      me !== null && (await hasCapability(ctx, me, "manageIncidents"));
+    // El caso se mira solo si hace falta: quien coordina no lo necesita.
+    const incident =
+      !canCoordinate && args.incidentId !== undefined
+        ? await ctx.db.get(args.incidentId)
+        : null;
+    const ownsWorkshopOrder =
+      !canCoordinate && me !== null && incident?.workshopAssigneeId === me._id;
+    if (!canCoordinate && !ownsWorkshopOrder) {
       throw new ConvexError(
-        "Solo el coordinador puede asignar incidencias a otros técnicos.",
+        "Solo el coordinador o el técnico de la orden de taller pueden asignar incidencias a otros técnicos.",
       );
     }
     const users = await ctx.db.query("users").collect();

@@ -13,6 +13,7 @@ import { SAMPLE_MANUALS, sampleManualPdf } from "../lib/sampleManuals";
 import { PUBLIC_CODE_LENGTH, publicCodeFrom } from "../lib/publicCode";
 import { richDocToStore } from "../lib/richDoc";
 import { formatReference, nextSequence } from "../lib/references";
+import { deliveryNote } from "../lib/requestFlow";
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
 import {
@@ -25,7 +26,7 @@ import {
 import { AUTO_ARCHIVE_BY } from "./archive";
 import { hasCapability, roleCan } from "./permissions";
 import { DEFAULT_ROLE } from "../lib/roles";
-import { DOCUMENT_ACTIONS } from "./schema";
+import { DOCUMENT_ACTIONS, REJECTION_REASONS } from "./schema";
 
 /**
  * Datos de ejemplo del taller. Se cargan de una vez con `seedDemoData` (una
@@ -752,7 +753,13 @@ function line(
   ids: Record<string, Id<"spareParts">>,
   code: string,
   quantity: number,
-) {
+  /**
+   * Lo que ya ha salido de esta línea y cuándo. El taller entrega de una en una,
+   * y la muestra enseña ese caso —una petición aprobada con parte del material ya
+   * en manos del técnico—, no solo peticiones intactas o entregadas enteras.
+   */
+  delivered?: { quantity: number; at: number },
+): SeedRequestLine {
   const sparePartId = ids[code];
   const name = ALL_PARTS.find((p) => p.code === code)?.name;
   if (!sparePartId || !name) {
@@ -760,7 +767,145 @@ function line(
       `Datos de ejemplo incompletos: falta el repuesto ${code}.`,
     );
   }
-  return { sparePartId, code, name, quantity };
+  return {
+    sparePartId,
+    code,
+    name,
+    quantity,
+    ...(delivered
+      ? { deliveredQuantity: delivered.quantity, deliveredAt: delivered.at }
+      : {}),
+  };
+}
+
+/** Una línea de una petición de la muestra, con lo entregado si ya salió algo. */
+interface SeedRequestLine {
+  sparePartId: Id<"spareParts">;
+  code: string;
+  name: string;
+  quantity: number;
+  deliveredQuantity?: number;
+  deliveredAt?: number;
+}
+
+/** Una petición de la muestra curada, antes de enlazarla con su equipo. */
+interface SeedRequest {
+  reference: string;
+  requesterName: string;
+  requesterTeam: string;
+  equipment: string;
+  /** Código del equipo del inventario con el que se enlaza. */
+  equipmentCode: string;
+  priority: Priority;
+  status: RequestStatus;
+  lines: SeedRequestLine[];
+  notes?: string;
+  description?: string;
+  decisionNote?: string;
+  decidedBy?: string;
+  decidedAt?: number;
+  issuedAt?: number;
+  issueNote?: string;
+  createdAt: number;
+  /**
+   * Las tandas en que salió el material, si salió en más de una. Es lo que la
+   * línea no puede guardar —lleva el acumulado de su repuesto y la fecha de la
+   * última unidad— y lo que enseña el rastro de entregas: quién sacó qué y
+   * cuándo. Sin esto, la constancia se escribe de una vez desde las líneas.
+   */
+  deliveries?: SeedDelivery[];
+}
+
+/** Una tanda de material que salió del almacén de una vez. */
+interface SeedDelivery {
+  at: number;
+  by: string;
+  /** Lo que salió en esa tanda, por código de repuesto. */
+  lines: { code: string; quantity: number }[];
+}
+
+/** El nombre del repuesto de la muestra, para escribir la constancia. */
+function seededPartName(code: string): string {
+  const name = ALL_PARTS.find((part) => part.code === code)?.name;
+  if (!name) {
+    throw new ConvexError(
+      `Datos de ejemplo incompletos: falta el repuesto ${code}.`,
+    );
+  }
+  return name;
+}
+
+/**
+ * La constancia de una entrega de la muestra: quién sacó el material, cuándo y
+ * qué salió. Es la forma que escribe el taller al entregar
+ * (`partRequests.issueLines`), para que la muestra se lea con las pantallas
+ * reales: el rastro de entregas y lo que falta en cada línea.
+ *
+ * Una petición puede traer sus tandas declaradas —lo que salió en cada semana,
+ * con su firma y su fecha— y entonces se escribe una constancia por tanda; la
+ * última que completa el material es la que la cierra. Sin tandas declaradas se
+ * escribe una sola, con lo que las líneas tengan apuntado como entregado.
+ */
+async function insertSeededDeliveries(
+  ctx: MutationCtx,
+  requestId: Id<"partRequests">,
+  request: {
+    status: RequestStatus;
+    decidedBy?: string;
+    lines: SeedRequestLine[];
+    deliveries?: SeedDelivery[];
+  },
+  now: number,
+) {
+  if (request.deliveries !== undefined) {
+    const total = request.lines.reduce((sum, line) => sum + line.quantity, 0);
+    let acumulado = 0;
+    for (const batch of request.deliveries) {
+      acumulado += batch.lines.reduce((sum, line) => sum + line.quantity, 0);
+      await ctx.db.insert("requestDecisions", {
+        requestId,
+        by: batch.by,
+        decision: {
+          reason:
+            acumulado >= total
+              ? REJECTION_REASONS.MATERIAL_DELIVERED
+              : REJECTION_REASONS.MATERIAL_PARTIALLY_DELIVERED,
+          note: deliveryNote(
+            batch.lines.map((line) => ({
+              code: line.code,
+              name: seededPartName(line.code),
+              quantity: line.quantity,
+            })),
+          ),
+        },
+        at: batch.at,
+      });
+    }
+    return;
+  }
+
+  const entregado = request.lines.filter(
+    (line) => (line.deliveredQuantity ?? 0) > 0,
+  );
+  if (entregado.length === 0) return;
+  await ctx.db.insert("requestDecisions", {
+    requestId,
+    by: request.decidedBy ?? "Responsable de repuestos",
+    decision: {
+      reason:
+        request.status === "issued"
+          ? REJECTION_REASONS.MATERIAL_DELIVERED
+          : REJECTION_REASONS.MATERIAL_PARTIALLY_DELIVERED,
+      note: deliveryNote(
+        entregado.map((line) => ({
+          code: line.code,
+          name: line.name,
+          quantity: line.deliveredQuantity ?? 0,
+        })),
+      ),
+    },
+    at: Math.max(...entregado.map((line) => line.deliveredAt ?? now)),
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1381,7 +1526,10 @@ const RECENT_LIMIT_DAYS = 50;
 /* ------------------------------------------------------------------ */
 
 /** Peticiones de ejemplo ya resueltas o pendientes, en distintos estados. */
-function seedRequests(ids: Record<string, Id<"spareParts">>, now: number) {
+function seedRequests(
+  ids: Record<string, Id<"spareParts">>,
+  now: number,
+): SeedRequest[] {
   return [
     {
       reference: "PET-0001",
@@ -1430,12 +1578,7 @@ function seedRequests(ids: Record<string, Id<"spareParts">>, now: number) {
       equipmentCode: "EQ-003",
       priority: "normal" as const,
       status: "pending" as const,
-      lines: [] as {
-        sparePartId: Id<"spareParts">;
-        code: string;
-        name: string;
-        quantity: number;
-      }[],
+      lines: [],
       description: FREE_REQUESTS[0],
       notes: "Sin referencia concreta: hay que buscar proveedor y part number.",
       createdAt: now - 8 * H,
@@ -1448,9 +1591,16 @@ function seedRequests(ids: Record<string, Id<"spareParts">>, now: number) {
       equipmentCode: "EQ-005",
       priority: "normal" as const,
       status: "approved" as const,
-      lines: [line(ids, "ILU-LED60", 1)],
+      // La petición sigue abierta con parte del material ya entregado: el difusor
+      // salió hace unas horas y el panel sigue en el almacén. Es la muestra de
+      // una petición a medias, con su constancia (`insertSeededDeliveries`).
+      lines: [
+        line(ids, "ILU-LED60", 1),
+        line(ids, "ILU-DIF01", 2, { quantity: 1, at: now - 14 * H }),
+      ],
       notes: "Un panel del plató 2 parpadea a 3200 K; se sustituye entero.",
-      decisionNote: "Material apartado en el mostrador 1.",
+      decisionNote:
+        "Material apartado en el mostrador 1. El difusor ya salió; el panel sigue pendiente de entrega.",
       decidedBy: "Responsable de repuestos",
       decidedAt: now - 20 * H,
       createdAt: now - 30 * H,
@@ -1463,14 +1613,36 @@ function seedRequests(ids: Record<string, Id<"spareParts">>, now: number) {
       equipmentCode: "EQ-006",
       priority: "low" as const,
       status: "issued" as const,
-      lines: [line(ids, "VID-BNC01", 4), line(ids, "VEN-08012", 1)],
+      // Salió en dos tandas, una por semana: la primera la mitad del cable y el
+      // adaptador, la segunda el resto del cable. Cada línea lleva su acumulado y
+      // la fecha de su última unidad, y las tandas van declaradas abajo para que
+      // el rastro enseñe las dos, no solo el total.
+      lines: [
+        line(ids, "VID-BNC01", 4, { quantity: 4, at: now - 5 * 24 * H }),
+        line(ids, "VEN-08012", 1, { quantity: 1, at: now - 12 * 24 * H }),
+      ],
+      deliveries: [
+        {
+          at: now - 12 * 24 * H,
+          by: "Responsable de repuestos",
+          lines: [
+            { code: "VID-BNC01", quantity: 2 },
+            { code: "VEN-08012", quantity: 1 },
+          ],
+        },
+        {
+          at: now - 5 * 24 * H,
+          by: "Responsable de repuestos",
+          lines: [{ code: "VID-BNC01", quantity: 2 }],
+        },
+      ],
       decisionNote:
         "Autorizado: hay stock suficiente para la entrega del lunes.",
       decidedBy: "Responsable de repuestos",
-      decidedAt: now - 6 * 24 * H,
+      decidedAt: now - 14 * 24 * H,
       issuedAt: now - 5 * 24 * H,
       issueNote: "Entregado en mano.",
-      createdAt: now - 7 * 24 * H,
+      createdAt: now - 15 * 24 * H,
     },
   ];
 }
@@ -1745,7 +1917,13 @@ function buildIncidents(opts: {
     const stray = pick(rnd, STRAY_EQUIPMENT);
     const reporter = pick(rnd, REPORTERS);
 
-    const open: IncidentStatus[] = ["reported", "assigned", "workshop"];
+    const open: IncidentStatus[] = [
+      "reported",
+      "assigned",
+      "workshop",
+      "waitingParts",
+      "repairing",
+    ];
     const closed: IncidentStatus = rnd() < 0.78 ? "resolved" : "unresolved";
     // Lo reciente está casi todo en marcha (con algún cierre del mismo día);
     // lo antiguo ya está terminado.
@@ -1755,6 +1933,12 @@ function buildIncidents(opts: {
           ? closed
           : pick(rnd, open)
         : closed;
+    // Lo que se está trabajando en taller: la derivada y las que siguen con la
+    // entrada abierta —esperando material o ya reparándose—.
+    const inWorkshop =
+      status === "workshop" ||
+      status === "waitingParts" ||
+      status === "repairing";
 
     const assigneeName = pick(rnd, technicians);
     const kind: EquipmentKind = freeText
@@ -1783,7 +1967,7 @@ function buildIncidents(opts: {
     }
 
     let workshopAssigneeName: string | undefined;
-    if (status === "workshop") {
+    if (inWorkshop) {
       const at = reportedAt + Math.round((6 + rnd() * 18) * H);
       workshopAssigneeName = pick(rnd, technicians);
       history.push({
@@ -1791,6 +1975,29 @@ function buildIncidents(opts: {
         at,
         by: workshopAssigneeName,
         note: pick(rnd, WORKSHOP_NOTES),
+      });
+      updatedAt = at;
+    }
+
+    // El material que falta, contado como lo cuenta la ficha: la petición deja el
+    // caso esperando y su entrega lo devuelve a reparación.
+    if (status === "waitingParts" || status === "repairing") {
+      const at = updatedAt + Math.round((1 + rnd() * 6) * H);
+      history.push({
+        status: "waitingParts",
+        at,
+        by: assigneeName,
+        note: "Petición de repuestos · a la espera de material",
+      });
+      updatedAt = at;
+    }
+    if (status === "repairing") {
+      const at = updatedAt + Math.round((2 + rnd() * 12) * H);
+      history.push({
+        status: "repairing",
+        at,
+        by: assigneeName,
+        note: "Repuestos entregados en su totalidad · a reparación",
       });
       updatedAt = at;
     }
@@ -1939,12 +2146,7 @@ interface GeneratedRequest {
   equipmentId?: Id<"equipment">;
   priority: Priority;
   status: RequestStatus;
-  lines: {
-    sparePartId: Id<"spareParts">;
-    code: string;
-    name: string;
-    quantity: number;
-  }[];
+  lines: SeedRequestLine[];
   description?: string;
   notes?: string;
   decisionNote?: string;
@@ -2037,7 +2239,17 @@ function buildRequests(opts: {
       ...(target ? { equipmentId: target.id } : {}),
       priority: i % 5 === 0 ? "urgent" : i % 3 === 0 ? "low" : "normal",
       status,
-      lines,
+      // Lo que ya salió de una petición entregada va apuntado en su línea, como
+      // lo deja el taller: sin esto la muestra dependería de la lectura de lo
+      // antiguo para saber qué se entregó.
+      lines:
+        issuedAt === undefined
+          ? lines
+          : lines.map((line) => ({
+              ...line,
+              deliveredQuantity: line.quantity,
+              deliveredAt: issuedAt,
+            })),
       ...(noCatalog ? { description: pick(rnd, FREE_REQUESTS) } : {}),
       notes: pick(rnd, REQUESTER_NOTES),
       ...(decision
@@ -2574,7 +2786,18 @@ async function insertWorkload(
     parts,
   });
   for (const request of generatedRequests) {
-    await ctx.db.insert("partRequests", request);
+    const requestId = await ctx.db.insert("partRequests", request);
+    // Lo entregado deja su constancia, como en la aplicación: quién lo entregó
+    // (por defecto, el responsable de repuestos) y qué salió.
+    await insertSeededDeliveries(
+      ctx,
+      requestId,
+      {
+        ...request,
+        decidedBy: request.decidedBy ?? "Responsable de repuestos",
+      },
+      now,
+    );
   }
 
   return {
@@ -2601,13 +2824,24 @@ async function insertCuratedSamples(
 
   const requestIds: Record<string, Id<"partRequests">> = {};
   for (const request of seedRequests(ids, now)) {
-    const { equipmentCode, ...rest } = request;
+    // Las tandas se declaran para la constancia, no son campo de la petición:
+    // fuera del documento, que el esquema no las admite.
+    const { equipmentCode, deliveries, ...rest } = request;
     const equipmentId = equipmentIds[equipmentCode];
     const requestId = await ctx.db.insert("partRequests", {
       ...rest,
       ...(equipmentId ? { equipmentId } : {}),
     });
     requestIds[request.reference] = requestId;
+    await insertSeededDeliveries(
+      ctx,
+      requestId,
+      {
+        ...request,
+        ...(deliveries !== undefined ? { deliveries } : {}),
+      },
+      now,
+    );
   }
 
   for (const item of SEED_MAINTENANCE) {

@@ -13,7 +13,9 @@ import type { QueueSortId } from "../../QueueToolbar";
 import { STATUS_RANK, type IncidentDoc } from "../types";
 
 /** Todo lo que identifica una incidencia para el buscador. */
-export function searchableFields(incident: IncidentDoc): (string | undefined)[] {
+export function searchableFields(
+  incident: IncidentDoc,
+): (string | undefined)[] {
   return [
     incident.reference,
     incident.equipmentKind,
@@ -72,6 +74,9 @@ export function useIncidentFilters({
     reported: matched.filter((item) => item.status === "reported").length,
     assigned: matched.filter((item) => item.status === "assigned").length,
     workshop: matched.filter((item) => item.status === "workshop").length,
+    waitingParts: matched.filter((item) => item.status === "waitingParts")
+      .length,
+    repairing: matched.filter((item) => item.status === "repairing").length,
     resolved: matched.filter((item) => item.status === "resolved").length,
     unresolved: matched.filter((item) => item.status === "unresolved").length,
   };

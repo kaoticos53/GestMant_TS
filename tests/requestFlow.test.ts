@@ -6,11 +6,19 @@ import {
   canBuyForRequest,
   canEditRequest,
   canRequestStep,
+  DELIVERY_REASONS,
+  isDeliveryReason,
   isRequestInMotion,
+  lineDelivered,
+  lineRemaining,
   nextRequestStatus,
+  requestDelivery,
+  requestMaterialState,
+  deliveryNote,
   requestStepBlocker,
   resumedStatus,
   type RequestAction,
+  type RequestMaterialState,
 } from "../src/lib/requestFlow";
 
 /**
@@ -252,6 +260,149 @@ describe("edición y archivo", () => {
     for (const text of ["", "pending ", "PENDING", "withdrawn"]) {
       expect(isRequestInMotion(text), `«${text}»`).toBe(false);
     }
+  });
+});
+
+/**
+ * La misma tabla, escrita con el tipo del esquema: si se añade un estado a la
+ * petición sin decidir qué se dice de su material, esto no compila.
+ */
+const MATERIAL_DESDE: Record<RequestStatus, RequestMaterialState> = {
+  pending: "pending",
+  approved: "pending",
+  rejected: "dropped",
+  issued: "delivered",
+  onHold: "pending",
+  returned: "returned",
+  cancelled: "dropped",
+  pendingSupplierQuote: "pending",
+  materialReceived: "pending",
+};
+
+describe("qué se puede decir del material — la ficha de la incidencia", () => {
+  test("cada estado cuenta lo mismo desde cualquier pantalla", () => {
+    for (const [status, expected] of Object.entries(MATERIAL_DESDE) as [
+      RequestStatus,
+      RequestMaterialState,
+    ][]) {
+      expect(requestMaterialState(status), status).toBe(expected);
+    }
+  });
+
+  test("solo lo entregado cuenta como entregado, y lo apartado no", () => {
+    // Aprobada no es «ya está»: el material sigue en el almacén. Es el error que
+    // la ficha de la incidencia no puede cometer, porque de ahí sale el paso
+    // siguiente del técnico.
+    expect(requestMaterialState("approved")).toBe("pending");
+    expect(requestMaterialState("issued")).toBe("delivered");
+    // Lo devuelto salió y volvió: no se puede montar, así que no cuenta como
+    // entregado aunque pasara por el taller.
+    expect(requestMaterialState("returned")).toBe("returned");
+  });
+});
+
+describe("la entrega de una en una — lo que ha salido y lo que queda", () => {
+  const linea = (quantity: number, deliveredQuantity?: number) => ({
+    quantity,
+    ...(deliveredQuantity === undefined ? {} : { deliveredQuantity }),
+  });
+
+  test("cada línea cuenta lo suyo, y nunca más de lo pedido", () => {
+    expect(lineDelivered(linea(5, 2), "approved")).toBe(2);
+    expect(lineRemaining(linea(5, 2), "approved")).toBe(3);
+    // Sin nada apuntado no se ha entregado nada…
+    expect(lineDelivered(linea(5), "approved")).toBe(0);
+    // …salvo en las peticiones entregadas antes de que se apuntara por línea:
+    // su estado dice que salió todo, y así se siguen leyendo.
+    expect(lineDelivered(linea(5), "issued")).toBe(5);
+    expect(lineDelivered(linea(5), "returned")).toBe(5);
+    // Una fila corregida a mano no puede inventar material ni devolverlo.
+    expect(lineDelivered(linea(5, 9), "approved")).toBe(5);
+    expect(lineDelivered(linea(5, -1), "approved")).toBe(0);
+    expect(lineRemaining(linea(5, 9), "approved")).toBe(0);
+  });
+
+  test("la petición se cuenta por unidades y por líneas", () => {
+    const lines = [linea(5, 2), linea(1), linea(4, 4)];
+    expect(requestDelivery(lines, "approved")).toEqual({
+      totalLines: 3,
+      totalUnits: 10,
+      deliveredUnits: 6,
+      pendingUnits: 4,
+      deliveredLines: 1,
+      anyDelivered: true,
+      complete: false,
+    });
+
+    // Entregado todo, la petición está completa…
+    const todo = lines.map((line) => ({
+      ...line,
+      deliveredQuantity: line.quantity,
+    }));
+    expect(requestDelivery(todo, "approved")).toMatchObject({
+      deliveredUnits: 10,
+      pendingUnits: 0,
+      deliveredLines: 3,
+      complete: true,
+    });
+
+    // …y una petición sin líneas no lo está: no hay nada que entregar.
+    expect(requestDelivery([], "approved")).toMatchObject({
+      totalUnits: 0,
+      anyDelivered: false,
+      complete: false,
+    });
+  });
+
+  test("la constancia de una tanda cuenta lo que salió en ella, no lo que lleva la petición", () => {
+    // Dos piezas en una tanda y una en otra: el rastro de cada entrega tiene que
+    // decir qué salió esa vez —las líneas solo guardan el acumulado—.
+    expect(
+      deliveryNote([
+        {
+          code: "ALI-12024",
+          name: "Fuente de alimentación 12 V",
+          quantity: 2,
+        },
+        { code: "FIL-00042", name: "Filtro de aire", quantity: 1 },
+      ]),
+    ).toBe(
+      "2 × ALI-12024 Fuente de alimentación 12 V · 1 × FIL-00042 Filtro de aire",
+    );
+    // Sin líneas no hay nada que apuntar (una tanda en cero no llega al servidor).
+    expect(deliveryNote([])).toBe("");
+  });
+
+  test("las razones de entrega se distinguen del resto de decisiones", () => {
+    expect(DELIVERY_REASONS).toHaveLength(2);
+    expect(isDeliveryReason("materialDelivered")).toBe(true);
+    expect(isDeliveryReason("materialPartiallyDelivered")).toBe(true);
+    // Lo que no es una entrega no se cuela en el rastro de entregas.
+    for (const otra of [
+      "materialReturned",
+      "requestCancelled",
+      "other",
+      undefined,
+      "",
+    ]) {
+      expect(isDeliveryReason(otra), String(otra)).toBe(false);
+    }
+  });
+
+  test("una entrega a medias se ve como tal, no como entregada ni como nada", () => {
+    const aMedias = requestDelivery([linea(5, 2)], "approved");
+    // El estado de la petición sigue siendo aprobada, pero el material ya no está
+    // entero en el almacén: quien lee la ficha de la incidencia tiene que verlo.
+    expect(requestMaterialState("approved", aMedias)).toBe("partial");
+    // Y sin nada entregado, sigue siendo «sin entregar», que es lo que permite
+    // decirle al técnico que espere.
+    expect(
+      requestMaterialState("approved", requestDelivery([linea(5)], "approved")),
+    ).toBe("pending");
+    // Lo ya entregado no cambia lo que se dice de un cierre.
+    expect(requestMaterialState("issued", aMedias)).toBe("delivered");
+    expect(requestMaterialState("cancelled", aMedias)).toBe("dropped");
+    expect(requestMaterialState("returned", aMedias)).toBe("returned");
   });
 });
 

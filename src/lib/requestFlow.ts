@@ -169,6 +169,189 @@ export function canBuyForRequest(status: string): boolean {
   return BUYABLE_STATUSES.some((buyable) => buyable === status);
 }
 
+/**
+ * Los estados en los que la petición ya no espera a que el material llegue a
+ * manos del técnico: o se entregó, o se cerró sin servir (rechazada, cancelada o
+ * devuelta). Son los que cuentan para saber si una incidencia sigue esperando
+ * repuestos (`convex/_partRequests/incidentSync`).
+ */
+const NO_LONGER_AWAITING_STATUSES: readonly RequestStatus[] = [
+  "issued",
+  "rejected",
+  "cancelled",
+  "returned",
+];
+
+/** ¿La petición sigue pendiente del material? */
+export function isRequestAwaitingDelivery(status: string): boolean {
+  return !NO_LONGER_AWAITING_STATUSES.some((settled) => settled === status);
+}
+
+/**
+ * ¿El material está en manos del técnico? Lo devuelto no: salió del almacén, sí,
+ * pero volvió, así que la incidencia no puede contar con él para reparar. Es la
+ * pregunta que decide si una espera se cierra en «en reparación» o vuelve a
+ * abrirse.
+ */
+export function isRequestDelivered(status: string): boolean {
+  return status === "issued";
+}
+
+/**
+ * Una línea de petición, en lo que a la entrega se refiere: cuánto se pidió y
+ * cuánto ha salido ya del almacén.
+ *
+ * Estructural y no `RequestLine` del esquema a propósito: `src/lib/` no puede
+ * importar Convex, y la ficha de la incidencia, el seguimiento y la petición
+ * tienen cada uno su forma de traer la línea.
+ */
+export interface RequestLineProgress {
+  quantity: number;
+  /** Lo entregado de esta línea, si se ha apuntado. Sin apuntar, se lee abajo. */
+  deliveredQuantity?: number;
+}
+
+/**
+ * Lo entregado de una línea, en unidades.
+ *
+ * Las peticiones que se entregaron antes de que se apuntara por línea no tienen
+ * el dato, y su estado dice que salió todo: se leen enteras para que el histórico
+ * no aparezca de golpe «sin entregar». Y nunca más de lo pedido: una fila
+ * corregida a mano no puede inventar material.
+ */
+export function lineDelivered(
+  line: RequestLineProgress,
+  status: string,
+): number {
+  if (line.deliveredQuantity !== undefined) {
+    return Math.max(0, Math.min(line.deliveredQuantity, line.quantity));
+  }
+  return status === "issued" || status === "returned" ? line.quantity : 0;
+}
+
+/** Lo que queda por entregar de una línea: lo pedido menos lo entregado. */
+export function lineRemaining(
+  line: RequestLineProgress,
+  status: string,
+): number {
+  return Math.max(0, line.quantity - lineDelivered(line, status));
+}
+
+/** El material de una petición, contado por líneas y por unidades. */
+export interface RequestDelivery {
+  /** Líneas que tiene la petición. */
+  totalLines: number;
+  /** Unidades pedidas en total. */
+  totalUnits: number;
+  /** Unidades que ya han salido del almacén. */
+  deliveredUnits: number;
+  /** Unidades que faltan por entregar. */
+  pendingUnits: number;
+  /** Líneas entregadas completas. */
+  deliveredLines: number;
+  /** ¿Ha salido algo ya? Es lo que distingue «parcial» de «sin entregar». */
+  anyDelivered: boolean;
+  /** ¿Está todo lo pedido en manos del técnico? */
+  complete: boolean;
+}
+
+/**
+ * La entrega de una petición, contada entera. Es la cuenta que comparten la
+ * ficha de la petición, la de la incidencia y el seguimiento público: una entrega
+ * de una en una no se puede contar distinto en cada pantalla.
+ *
+ * Se cuenta por unidades y por líneas porque las dos preguntas son distintas:
+ * «¿cuánto falta?» se responde con unidades, y «¿qué líneas están completas?» con
+ * las líneas. Una petición sin líneas no está completa: no hay nada que entregar.
+ */
+export function requestDelivery(
+  lines: readonly RequestLineProgress[],
+  status: string,
+): RequestDelivery {
+  let totalUnits = 0;
+  let deliveredUnits = 0;
+  let deliveredLines = 0;
+  for (const line of lines) {
+    const delivered = lineDelivered(line, status);
+    totalUnits += line.quantity;
+    deliveredUnits += delivered;
+    if (line.quantity > 0 && delivered >= line.quantity) deliveredLines += 1;
+  }
+  return {
+    totalLines: lines.length,
+    totalUnits,
+    deliveredUnits,
+    pendingUnits: Math.max(0, totalUnits - deliveredUnits),
+    deliveredLines,
+    anyDelivered: deliveredUnits > 0,
+    complete: totalUnits > 0 && deliveredUnits >= totalUnits,
+  };
+}
+
+/**
+ * Lo que salió en una tanda, escrito para la constancia: «2 × ALI-12024 Fuente de
+ * alimentación 12 V».
+ *
+ * Es la nota que se guarda con cada entrega (`requestDecisions`), y cuenta lo que
+ * se entregó en esa tanda —no lo que lleva la petición—: la constancia sirve para
+ * saber quién entregó qué y cuándo, y eso solo se responde tanda a tanda. Va en
+ * una línea para que quepa en el note de una decisión y se lea de un vistazo.
+ */
+export function deliveryNote(
+  lines: readonly { code: string; name: string; quantity: number }[],
+): string {
+  return lines
+    .map((line) => `${line.quantity} × ${line.code} ${line.name}`)
+    .join(" · ");
+}
+
+/**
+ * Las razones con las que una entrega deja constancia en la petición
+ * (`requestDecisions`, en `convex/schema`).
+ *
+ * Son dos porque la constancia dice si con esa tanda salió lo último que faltaba
+ * o si la petición sigue esperando al resto: «entregado» y «entregado en parte»
+ * no cuentan lo mismo al leer el rastro.
+ */
+export const DELIVERY_REASONS = [
+  "materialDelivered",
+  "materialPartiallyDelivered",
+] as const;
+
+/** ¿Esta constancia es una entrega de material? */
+export function isDeliveryReason(reason: string | undefined): boolean {
+  return DELIVERY_REASONS.some((delivery) => delivery === reason);
+}
+
+/**
+ * Qué se puede decir del material de una petición cuando se lee desde fuera —la
+ * ficha de la incidencia que lo pidió—: si está en manos del técnico, si volvió,
+ * si ya no va a llegar o si sigue esperando.
+ *
+ * `pending` es todo lo anterior a la entrega, también lo aprobado: el material
+ * apartado sigue en el almacén, y decir «disponible» desde la incidencia daba a
+ * entender que ya se había montado. `partial` es lo que trae la entrega de una en
+ * una: salió parte del material y el resto sigue en el almacén. `dropped` recoge
+ * lo rechazado y lo cancelado —lo devuelto tiene su propio caso, porque sí salió
+ * del almacén—.
+ *
+ * La entrega se cuenta por línea (`requestDelivery`), así que quien la tenga a
+ * mano la pasa y la ficha distingue «sin entregar» de «a medias». Sin la cuenta,
+ * el estado de la petición es toda la información que hay.
+ */
+export type RequestMaterialState =
+  "pending" | "partial" | "delivered" | "returned" | "dropped";
+
+export function requestMaterialState(
+  status: string,
+  delivery?: RequestDelivery,
+): RequestMaterialState {
+  if (isRequestDelivered(status)) return "delivered";
+  if (status === "returned") return "returned";
+  if (!isRequestAwaitingDelivery(status)) return "dropped";
+  return delivery?.anyDelivered ? "partial" : "pending";
+}
+
 /* ------------------------------------------------------------------ */
 /* Por qué no se puede dar un paso                                     */
 /* ------------------------------------------------------------------ */
@@ -179,7 +362,7 @@ export const REQUEST_STEP_LABELS: Record<RequestAction, string> = {
   reject: "Rechazar",
   hold: "Poner en espera",
   resume: "Reanudar",
-  issue: "Marcar entregada",
+  issue: "Entregar material",
   returnMaterial: "Devolver material",
   cancel: "Cancelar petición",
   requestQuote: "Pedir presupuesto",

@@ -20,7 +20,11 @@ export type EquipmentDoc = Doc<"equipment">;
 export const STATUS_RANK: Record<IncidentStatus, number> = {
   reported: 0,
   assigned: 1,
+  // Lo que ya se está trabajando —en taller, esperando material o reparándose—
+  // va junto, antes de lo terminado.
   workshop: 2,
+  waitingParts: 2,
+  repairing: 2,
   unresolved: 3,
   resolved: 4,
 };

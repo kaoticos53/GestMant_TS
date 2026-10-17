@@ -20,6 +20,7 @@ import {
   List,
   ListOrdered,
   Loader2,
+  Maximize2,
   Quote,
   Redo2,
   Strikethrough,
@@ -29,6 +30,14 @@ import {
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 /**
  * Editor de las notas y las descripciones: negrita, cursiva, listas, citas e
@@ -46,21 +55,16 @@ import { Button } from "./ui/button";
  * sesión suben por donde suben siempre; en el formulario público, donde no hay
  * cuenta, van por su propio camino y cada archivo se acredita antes de
  * aceptarlo (ver `imageUploads`).
+ *
+ * Y cuando una nota pide sitio, el botón de la barra la abre en grande, en un
+ * diálogo, con el mismo campo dentro: se escribe cómodo y lo escrito sigue
+ * siendo lo mismo que hay en la ficha.
  */
 
 /** Por dónde sube la imagen: la sesión del taller o el camino del formulario público. */
 type ImageUploads = "session" | "publicReport";
 
-export function RichTextEditor({
-  id,
-  value,
-  onChange,
-  placeholder,
-  disabled = false,
-  imageUploads = "session",
-  compact = false,
-  className,
-}: {
+type RichTextEditorProps = {
   id?: string;
   /** El documento guardado, o el texto de una nota anterior. */
   value: string;
@@ -80,8 +84,102 @@ export function RichTextEditor({
    * no puede quedarse con media pantalla.
    */
   compact?: boolean;
+  /**
+   * Si se puede abrir en grande, en un diálogo, para escribir con más sitio.
+   * Por defecto sí, salvo en el compositor de un chat (`compact`): ahí el
+   * mensaje es corto y el diálogo taparía la conversación que se lee.
+   */
+  expandable?: boolean;
   className?: string;
-}) {
+};
+
+/** Lo que necesita el campo de escritura en sí, sin la puerta a abrirlo en grande. */
+type EditorSurfaceProps = RichTextEditorProps & {
+  /** El cursor va al final nada más montar: el diálogo se abre para escribir. */
+  autoFocus?: boolean;
+  /** Si viene, la barra lleva su botón de abrirlo en grande. */
+  onExpand?: () => void;
+};
+
+/**
+ * El campo de notas y descripciones, con la puerta a escribirlo en grande.
+ *
+ * `EditorSurface` es el campo tal cual; aquí solo se decide si lleva el botón
+ * de abrirlo en un diálogo y se monta ese diálogo con el mismo campo dentro.
+ * No hay nada que guardar aparte: los dos reciben el valor y lo devuelven por
+ * el mismo `onChange`, así que lo que se escribe en grande queda en el campo
+ * en cada pulsación y solo queda cerrar.
+ */
+export function RichTextEditor({
+  compact = false,
+  disabled = false,
+  expandable,
+  ...editor
+}: RichTextEditorProps) {
+  const [expanded, setExpanded] = useState(false);
+  // El compositor de un chat no lleva el botón: el mensaje es corto y el
+  // diálogo taparía justo la conversación que se está leyendo.
+  const canExpand = (expandable ?? !compact) && !disabled;
+
+  return (
+    <>
+      <EditorSurface
+        {...editor}
+        compact={compact}
+        disabled={disabled}
+        {...(canExpand ? { onExpand: () => setExpanded(true) } : {})}
+      />
+
+      {/*
+        Se monta al abrir y se desmonta al cerrar, así que cada vez es un
+        editor nuevo con lo que hay en ese momento: no hay que mantener dos
+        sincronizados más allá de lo que ya hace el valor del padre.
+      */}
+      {canExpand && (
+        <Dialog open={expanded} onOpenChange={setExpanded}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Escribir en grande</DialogTitle>
+              <DialogDescription>
+                Es el mismo campo, con más sitio. Lo que escribas aquí queda
+                guardado igual; cierra cuando termines.
+              </DialogDescription>
+            </DialogHeader>
+            <EditorSurface
+              {...editor}
+              id={editor.id ? `${editor.id}-ampliado` : undefined}
+              disabled={disabled}
+              autoFocus
+              className={cn(
+                "rich-text-grande text-base leading-6",
+                editor.className,
+              )}
+            />
+            <DialogFooter>
+              <Button type="button" onClick={() => setExpanded(false)}>
+                Listo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
+}
+
+/** El campo en sí: la barra de herramientas y el hueco de escritura. */
+function EditorSurface({
+  id,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  imageUploads = "session",
+  compact = false,
+  className,
+  autoFocus = false,
+  onExpand,
+}: EditorSurfaceProps) {
   const generateImageUploadUrl = useMutation(
     api.uploads.generateImageUploadUrl,
   );
@@ -115,6 +213,7 @@ export function RichTextEditor({
     ],
     content: richDocToHtml(value),
     editable: !disabled,
+    autofocus: autoFocus ? "end" : false,
     // La barra tiene que repintarse al cambiar de formato (negrita activa, etc.).
     shouldRerenderOnTransaction: true,
     editorProps: {
@@ -249,7 +348,12 @@ export function RichTextEditor({
     }
   };
 
-  insertImageFileRef.current = insertImageFile;
+  // Pegar o soltar una foto ocurre después de pintar, así que la referencia se
+  // refresca ahí: los manejadores de ProseMirror leen siempre la versión del
+  // último pintado, con el estado de ese momento.
+  useEffect(() => {
+    insertImageFileRef.current = insertImageFile;
+  });
 
   const insertImage = async (chosen: FileList | null) => {
     const picked = chosen?.[0];
@@ -365,6 +469,23 @@ export function RichTextEditor({
           () => editor?.chain().focus().redo().run(),
           <Redo2 className="size-3.5" />,
           !canRun("redo"),
+        )}
+        {onExpand && (
+          <>
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="ml-auto size-7"
+              aria-label="Escribir en grande"
+              title="Escribir en grande"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={onExpand}
+            >
+              <Maximize2 className="size-3.5" />
+            </Button>
+          </>
         )}
       </div>
 

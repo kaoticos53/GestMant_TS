@@ -11,6 +11,11 @@ import {
   endOfDay,
 } from "../src/lib/audit";
 import { richDocBlocks, richDocToPlainText } from "../src/lib/richDoc";
+import {
+  LOOKUP_LIMIT_PER_HOUR,
+  LOOKUP_WINDOW_MS,
+  expiredBefore,
+} from "../src/lib/publicLookup";
 import { DEFAULT_TRASH_RETENTION_DAYS } from "../src/lib/trash";
 import { noteRestoreUndoIndex, noteVersionChanges } from "../src/lib/workshop";
 
@@ -151,9 +156,7 @@ describe("reporte público de incidencias", () => {
     );
 
     // Y ninguna referencia queda repetida.
-    const incidents = await t.run((ctx) =>
-      ctx.db.query("incidents").collect(),
-    );
+    const incidents = await t.run((ctx) => ctx.db.query("incidents").collect());
     const references = incidents.map((item) => item.reference);
     expect(new Set(references).size).toBe(references.length);
   });
@@ -335,6 +338,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
       "history",
       "location",
       "model",
+      "pendingParts",
       "reportedAt",
       "serialNumber",
       "status",
@@ -402,7 +406,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
     // …no vale para la puerta de fuera: es un correlativo y quien tuviera una
     // sesión de invitado podría ir probando «1», «2», «3»…
     expect(
-      await coordinator.query(api.incidents.byCode, { code: reference }),
+      await coordinator.mutation(api.incidents.byCode, { code: reference }),
     ).toBeNull();
   });
 
@@ -439,20 +443,239 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
     expect(tracking?.status).toBe("reported");
     // Y el código sí distingue las dos: quien lo tenga consulta la suya sin
     // depender de un número repetido.
-    const porCodigo = await coordinator.query(api.incidents.byCode, {
+    const porCodigo = await coordinator.mutation(api.incidents.byCode, {
       code: "BBBB-3333",
     });
     expect(porCodigo?.code).toBe("BBBB3333");
   });
 
-  test("sin sesión no se consulta: ni con la referencia buena ni con un código", async () => {
-    const { t, reference, code } = await reported();
-    // La puerta de fuera pide haber entrado alguna vez…
+  test("la puerta de fuera es pública: con el código se sigue el caso sin haber entrado", async () => {
+    const { t, code } = await reported();
+
+    // Quien recibió el código no tiene cuenta: el buscador de la portada y el
+    // enlace del correo los usa gente que no ha entrado nunca. Lo que cierra esta
+    // puerta es el código —se reparte al azar, no se adivina—, no una sesión.
+    const tracking = await t.mutation(api.incidents.byCode, { code });
+    expect(tracking?.code).toBe(code);
+    expect(tracking?.status).toBe("reported");
+
+    // Y que la puerta esté abierta no la convierte en el expediente: lo de dentro
+    // del taller sigue sin salir por aquí.
+    expect(tracking).not.toHaveProperty("notes");
+    expect(tracking).not.toHaveProperty("lifecycleNotes");
+    expect(tracking).not.toHaveProperty("documents");
+    expect(tracking).not.toHaveProperty("reference");
+  });
+
+  test("el seguimiento dice qué falta: el repuesto, la cantidad y desde cuándo", async () => {
+    const { t, coordinator, tech, code, incidentId } = await reported();
+    const [fuente, filtro] = await t.run(async (ctx) => [
+      await ctx.db.insert("spareParts", {
+        code: "ALI-12024",
+        name: "Fuente de alimentación 12 V",
+        category: "Alimentación",
+        unit: "ud",
+        stock: 5,
+        minStock: 1,
+        supplier: "ElectroSuministros S.L.",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+      await ctx.db.insert("spareParts", {
+        code: "FIL-00042",
+        name: "Filtro de aire",
+        category: "Consumibles",
+        unit: "ud",
+        stock: 5,
+        minStock: 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    ]);
+
+    const reference = await tech.mutation(api.partRequests.create, {
+      requesterName: "Iván Torres",
+      priority: "urgent",
+      incidentId,
+      lines: [
+        { sparePartId: fuente, quantity: 2 },
+        { sparePartId: filtro, quantity: 1 },
+      ],
+    });
+
+    const tracking = await t.mutation(api.incidents.byCode, { code });
+    // Lo que falta, en concreto: por línea, con su cantidad y la fecha en que se
+    // pidió —que es lo que responde a «¿desde cuándo?»—.
+    expect(tracking?.pendingParts).toEqual([
+      {
+        name: "Fuente de alimentación 12 V",
+        quantity: 2,
+        since: expect.any(Number),
+      },
+      { name: "Filtro de aire", quantity: 1, since: expect.any(Number) },
+    ]);
+    // Y nada de la petición que sea del taller: ni su referencia, ni quién la
+    // hizo, ni el proveedor o el precio. El nombre del repuesto sí —es lo que
+    // hace concreta la espera—.
+    const serializado = JSON.stringify(tracking);
+    expect(serializado).not.toContain(reference);
+    expect(serializado).not.toContain("Iván Torres");
+    expect(serializado).not.toContain("ElectroSuministros");
+    expect(tracking!.pendingParts[0]).not.toHaveProperty("code");
+
+    // Entregado el material, deja de faltar: la petición sale de la lista aunque
+    // siga viva en el módulo de peticiones.
+    const [pedido] = await coordinator.query(api.partRequests.list, {});
+    await coordinator.mutation(api.partRequests.approve, {
+      requestId: pedido._id,
+    });
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: pedido._id,
+    });
+    expect(
+      (await t.mutation(api.incidents.byCode, { code }))?.pendingParts,
+    ).toEqual([]);
+  });
+
+  test("una petición sin líneas no deja el hueco: el seguimiento no inventa repuestos", async () => {
+    const { t, coordinator, tech, techId, code, incidentId } = await reported();
+    // El caso ya está en manos de un técnico, que es cuando tiene sentido pedir
+    // material para él.
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId,
+      assigneeId: techId,
+    });
+    // Se abrió describiendo la avería; el repuesto se asocia después. Lo que no
+    // hay no se puede enseñar, y el seguimiento no se lo inventa.
+    await tech.mutation(api.partRequests.create, {
+      requesterName: "Iván Torres",
+      priority: "normal",
+      incidentId,
+      description: "Conector de alimentación, todavía sin referencia.",
+    });
+
+    const tracking = await t.mutation(api.incidents.byCode, { code });
+    expect(tracking?.pendingParts).toEqual([]);
+    // El caso sí queda esperando el material: lo que falta se explica con el
+    // estado, y la ficha lo dice en palabras (`lib/incidentTracking`).
+    expect(tracking?.status).toBe("waitingParts");
+  });
+
+  test("la consulta por código tiene su freno: treinta por hora y código", async () => {
+    const { t, code } = await reported();
+
+    // Las treinta primeras caben: quien sigue su caso a mano no se encuentra con
+    // un aviso por mirarlo.
+    for (let intento = 0; intento < LOOKUP_LIMIT_PER_HOUR; intento += 1) {
+      expect(
+        (await t.mutation(api.incidents.byCode, { code }))?.code,
+        `consulta ${intento + 1}`,
+      ).toBe(code);
+    }
+    // La siguiente no: la puerta está abierta y sin el freno un sondeo podría
+    // preguntar sin parar.
     await expectConvexError(
-      t.query(api.incidents.byCode, { code }),
-      "Debes iniciar sesión para consultar una incidencia por su código.",
+      t.mutation(api.incidents.byCode, { code }),
+      `${LOOKUP_LIMIT_PER_HOUR} consultas por hora`,
     );
-    // …y la del taller, ser del taller.
+
+    // El cupo es del código consultado: otro caso se sigue sin esperar.
+    const otro = await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      reporterName: "Marta Ruiz",
+    });
+    expect(
+      (await t.mutation(api.incidents.byCode, { code: otro.code }))?.code,
+    ).toBe(otro.code);
+
+    // Y cumplida la hora vuelve el cupo: la ventana se reinicia sola, sin que
+    // nadie tenga que limpiar nada.
+    const fila = await t.run((ctx) =>
+      ctx.db
+        .query("publicLookupLimits")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .first(),
+    );
+    expect(fila?.count).toBe(LOOKUP_LIMIT_PER_HOUR);
+    await t.run((ctx) =>
+      ctx.db.patch(fila!._id, { windowStart: Date.now() - LOOKUP_WINDOW_MS }),
+    );
+    expect((await t.mutation(api.incidents.byCode, { code }))?.code).toBe(code);
+  });
+
+  test("lo que no tiene forma de código no gasta cupo: no llega a ser una consulta", async () => {
+    const { t, code } = await reported();
+
+    for (let intento = 0; intento < LOOKUP_LIMIT_PER_HOUR; intento += 1) {
+      await t.mutation(api.incidents.byCode, { code });
+    }
+    // Ni una referencia interna ni algo tecleado a medias buscan nada…
+    for (const typed of ["INC-0001", "7", "la del monitor", ""]) {
+      expect(
+        await t.mutation(api.incidents.byCode, { code: typed }),
+        `«${typed}»`,
+      ).toBeNull();
+    }
+    // …ni reinician el cupo del código bueno, que sigue agotado.
+    await expectConvexError(
+      t.mutation(api.incidents.byCode, { code }),
+      `${LOOKUP_LIMIT_PER_HOUR} consultas por hora`,
+    );
+  });
+
+  test("la purga de la noche borra las ventanas caducadas y respeta las que cuentan", async () => {
+    const { t, code } = await reported();
+    // Un código consultado dos veces: su ventana sigue contando y la purga no
+    // tiene nada que hacer con ella.
+    await t.mutation(api.incidents.byCode, { code });
+    await t.mutation(api.incidents.byCode, { code });
+
+    const otro = await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      reporterName: "Marta Ruiz",
+    });
+    await t.mutation(api.incidents.byCode, { code: otro.code });
+    // La de este otro ya cumplió su hora: es lo que la pasada se lleva, y lo que
+    // sin ella se quedaría en la tabla para siempre.
+    await t.run(async (ctx) => {
+      const fila = await ctx.db
+        .query("publicLookupLimits")
+        .withIndex("by_code", (q) => q.eq("code", otro.code))
+        .first();
+      await ctx.db.patch(fila!._id, {
+        windowStart: expiredBefore(Date.now()),
+      });
+    });
+
+    expect(await t.mutation(internal.publicLookupLimits.purgeExpired, {})).toBe(
+      1,
+    );
+
+    // Solo se fue la caducada, y la viva conserva su cuenta: la purga no le
+    // devuelve el cupo a nadie que esté esperando su hora.
+    const filas = await t.run((ctx) =>
+      ctx.db.query("publicLookupLimits").collect(),
+    );
+    expect(filas.map((fila) => fila.code)).toEqual([code]);
+    expect(filas[0].count).toBe(2);
+
+    // Y al código purgado no le cuesta nada: se sigue igual que antes, con la
+    // ventana recién abierta —la que había ya no contaba, así que borrarla no
+    // cambia lo que pasa en la puerta—.
+    expect(
+      (await t.mutation(api.incidents.byCode, { code: otro.code }))?.code,
+    ).toBe(otro.code);
+    const reabierta = await t.run((ctx) =>
+      ctx.db
+        .query("publicLookupLimits")
+        .withIndex("by_code", (q) => q.eq("code", otro.code))
+        .first(),
+    );
+    expect(reabierta?.count).toBe(1);
+  });
+
+  test("la puerta del taller sigue cerrada sin sesión", async () => {
+    const { t, reference } = await reported();
     await expectConvexError(
       t.query(api.incidents.byReference, { reference }),
       "Solo el taller puede consultar una incidencia por su referencia.",
@@ -529,7 +752,48 @@ describe("asignación de incidencias", () => {
     expect(assignable.length).toBe(2);
     await expectConvexError(
       tech.query(api.members.listAssignable, {}),
-      "Solo el coordinador puede asignar incidencias",
+      "Solo el coordinador o el técnico de la orden",
+    );
+  });
+
+  test("el técnico de taller abre el listado con su propia orden delante", async () => {
+    const { t, coordinator, tech, techId, coordinatorId } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+    });
+    const inWorkshop = await firstIncident(coordinator);
+
+    // Con su caso delante, la lista se abre: es con la que elige a quién se la
+    // pasa desde la ficha.
+    const assignable = await tech.query(api.members.listAssignable, {
+      incidentId: inWorkshop._id,
+    });
+    expect(assignable.map((user) => user._id)).toEqual(
+      expect.arrayContaining([coordinatorId, techId]),
+    );
+
+    // Sin incidencia no hay caso que enseñar: sigue siendo la puerta de
+    // coordinación.
+    await expectConvexError(
+      tech.query(api.members.listAssignable, {}),
+      "Solo el coordinador o el técnico de la orden",
+    );
+
+    // Y con una incidencia que no lleva, tampoco: no es una lista abierta a todo
+    // el taller, es la de su orden.
+    const segunda = await t.mutation(api.incidents.report, {
+      ...reportArgs,
+      reporterName: "Marta Ruiz",
+    });
+    const cola = await coordinator.query(api.incidents.list, {});
+    const otra = cola.find((item) => item.reference === segunda.reference)!;
+    await expectConvexError(
+      tech.query(api.members.listAssignable, { incidentId: otra._id }),
+      "Solo el coordinador o el técnico de la orden",
     );
   });
 });
@@ -676,6 +940,329 @@ describe("verificación, taller y cierre", () => {
     expect(updated.status).toBe("unresolved");
     expect(updated.maintenanceId).toBeUndefined();
     expect(updated.notes).toContain("No se pudo reproducir");
+  });
+});
+
+describe("repuestos y la incidencia: la espera y la reparación", () => {
+  /** El repuesto con existencias para poder aprobar y entregar. */
+  async function repuesto(t: ReturnType<typeof convexTest>) {
+    const now = Date.now();
+    return await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "ALI-24015",
+        name: "Fuente de alimentación",
+        category: "Alimentación",
+        unit: "ud",
+        stock: 10,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+  }
+
+  /** Abre una petición para la incidencia y devuelve su referencia. */
+  async function pedir(
+    authed: Authed,
+    incidentId: Id<"incidents">,
+    sparePartId: Id<"spareParts">,
+  ) {
+    return await authed.mutation(api.partRequests.create, {
+      requesterName: "Iván Torres",
+      priority: "normal",
+      description: "Hace falta la fuente para terminar.",
+      incidentId,
+      lines: [{ sparePartId, quantity: 1 }],
+    });
+  }
+
+  /** La petición de esa referencia, tal y como la ve quien decide. */
+  async function peticion(authed: Authed, reference: string) {
+    const requests = await authed.query(api.partRequests.list, {});
+    const request = requests.find((item) => item.reference === reference);
+    expect(request, `sin petición ${reference}`).toBeDefined();
+    return request!;
+  }
+
+  test("pedir material deja la incidencia esperando, y la entrega la pasa a reparación", async () => {
+    const { t, coordinator, tech, coordinatorId } = await setup();
+    const pieza = await repuesto(t);
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+
+    const reference = await pedir(tech, incident._id, pieza);
+    const esperando = await firstIncident(coordinator);
+    expect(esperando.status).toBe("waitingParts");
+    expect(esperando.history.map((entry) => entry.status)).toEqual([
+      "reported",
+      "assigned",
+      "waitingParts",
+    ]);
+    // Sin entrada a taller, el caso espera donde se trabaja: en el sitio.
+    expect(esperando.workshopAssigneeName).toBeUndefined();
+    // Y sin orden de taller no hay técnico de taller que cambiar, aunque el caso
+    // esté esperando material: el estado no dice dónde está el equipo.
+    await expectConvexError(
+      coordinator.mutation(api.incidents.assignWorkshop, {
+        incidentId: incident._id,
+        assigneeId: coordinatorId,
+      }),
+      "no está en el taller",
+    );
+
+    const request = await peticion(coordinator, reference);
+    // El material apartado todavía no es material entregado: sigue esperando.
+    await coordinator.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: request._id,
+    });
+    const reparando = await firstIncident(coordinator);
+    expect(reparando.status).toBe("repairing");
+    expect(reparando.history.map((entry) => entry.status)).toEqual([
+      "reported",
+      "assigned",
+      "waitingParts",
+      "repairing",
+    ]);
+
+    // Y con el material en mano, el trabajo se cierra en el sitio.
+    await tech.mutation(api.incidents.verify, {
+      incidentId: reparando._id,
+      outcome: "onsite",
+    });
+    expect((await firstIncident(coordinator)).status).toBe("resolved");
+  });
+
+  test("el material que sale a medias no adelanta la reparación, y el seguimiento dice qué queda", async () => {
+    const { t, coordinator, tech } = await setup();
+    const pieza = await repuesto(t);
+    const filtro = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "FIL-00042",
+        name: "Filtro de aire",
+        category: "Consumibles",
+        unit: "ud",
+        stock: 10,
+        minStock: 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+    const { code } = await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+
+    const reference = await tech.mutation(api.partRequests.create, {
+      requesterName: "Iván Torres",
+      priority: "normal",
+      incidentId: incident._id,
+      lines: [
+        { sparePartId: pieza, quantity: 2 },
+        { sparePartId: filtro, quantity: 1 },
+      ],
+    });
+    const request = await peticion(coordinator, reference);
+    await coordinator.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+
+    // Sale una de las dos fuentes: hay material en mano, pero falta otra pieza, así
+    // que la incidencia no puede darse por reparando.
+    await coordinator.mutation(api.partRequests.issueLines, {
+      requestId: request._id,
+      lines: [{ sparePartId: pieza, quantity: 1 }],
+    });
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+
+    // Y lo que falta se sigue diciendo en concreto, sin la pieza que ya llegó.
+    const tracking = await t.mutation(api.incidents.byCode, { code });
+    expect(tracking?.pendingParts).toEqual([
+      {
+        name: "Fuente de alimentación",
+        quantity: 1,
+        since: expect.any(Number),
+      },
+      { name: "Filtro de aire", quantity: 1, since: expect.any(Number) },
+    ]);
+
+    // Con lo último en mano, el caso pasa a reparación y ya no falta nada.
+    await coordinator.mutation(api.partRequests.issueLines, {
+      requestId: request._id,
+      lines: [
+        { sparePartId: pieza, quantity: 1 },
+        { sparePartId: filtro, quantity: 1 },
+      ],
+    });
+    expect((await firstIncident(coordinator)).status).toBe("repairing");
+    expect(
+      (await t.mutation(api.incidents.byCode, { code }))?.pendingParts,
+    ).toEqual([]);
+  });
+
+  test("en taller, la espera conserva la orden y el cierre sigue siendo el de taller", async () => {
+    const { t, coordinator, tech, techId, coordinatorId, equipmentId } =
+      await setup();
+    const pieza = await repuesto(t);
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+      equipmentId,
+    });
+
+    const reference = await pedir(tech, incident._id, pieza);
+    const esperando = await firstIncident(coordinator);
+    expect(esperando.status).toBe("waitingParts");
+    // La orden de taller sigue abierta: el equipo no ha salido del taller.
+    expect(esperando.workshopAssigneeName).toBe("Iván Torres");
+
+    // Y el técnico de taller se puede cambiar sin que el caso deje de esperar:
+    // sigue en «en espera de repuestos», solo cambia quién lo lleva.
+    await coordinator.mutation(api.incidents.assignWorkshop, {
+      incidentId: esperando._id,
+      assigneeId: coordinatorId,
+    });
+    const reasignada = await firstIncident(coordinator);
+    expect(reasignada.status).toBe("waitingParts");
+    expect(reasignada.workshopAssigneeName).toBe("Elena Vidal");
+    // El rastro queda con el estado real del caso, no con «en taller» de prestado.
+    expect(reasignada.history.at(-1)).toMatchObject({ status: "waitingParts" });
+
+    const request = await peticion(coordinator, reference);
+    await coordinator.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: request._id,
+    });
+    const reparando = await firstIncident(coordinator);
+    expect(reparando.status).toBe("repairing");
+
+    // Con el material ya entregado también se cambia el técnico de taller, y la
+    // reparación sigue donde estaba.
+    await coordinator.mutation(api.incidents.assignWorkshop, {
+      incidentId: reparando._id,
+      assigneeId: techId,
+    });
+    const reparandoConOtro = await firstIncident(coordinator);
+    expect(reparandoConOtro.status).toBe("repairing");
+    expect(reparandoConOtro.workshopAssigneeName).toBe("Iván Torres");
+    expect(reparandoConOtro.history.at(-1)).toMatchObject({
+      status: "repairing",
+    });
+
+    // Con la orden abierta, el cierre en el sitio no vale…
+    await expectConvexError(
+      tech.mutation(api.incidents.verify, {
+        incidentId: reparando._id,
+        outcome: "onsite",
+      }),
+      "está en el taller",
+    );
+    // …y el trabajo se cierra desde la orden de taller, con su ficha.
+    await tech.mutation(api.incidents.close, {
+      incidentId: reparando._id,
+      outcome: "resolved",
+      notes: "Fuente sustituida.",
+    });
+    const cerrada = await firstIncident(coordinator);
+    expect(cerrada.status).toBe("resolved");
+    expect(cerrada.maintenanceId).toBeTruthy();
+  });
+
+  test("con dos peticiones no se repara hasta que se entrega la última", async () => {
+    const { t, coordinator, tech } = await setup();
+    const pieza = await repuesto(t);
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+
+    const primera = await pedir(tech, incident._id, pieza);
+    const segunda = await pedir(tech, incident._id, pieza);
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+
+    for (const reference of [primera, segunda]) {
+      const request = await peticion(coordinator, reference);
+      await coordinator.mutation(api.partRequests.approve, {
+        requestId: request._id,
+      });
+    }
+    const uno = await peticion(coordinator, primera);
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: uno._id,
+    });
+    // Todavía falta la segunda: la incidencia sigue esperando.
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+
+    const dos = await peticion(coordinator, segunda);
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: dos._id,
+    });
+    expect((await firstIncident(coordinator)).status).toBe("repairing");
+  });
+
+  test("una petición cancelada devuelve la incidencia a donde estaba", async () => {
+    const { t, coordinator, tech } = await setup();
+    const pieza = await repuesto(t);
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+
+    // Asignada: sin taller, vuelve a la asignación.
+    const sinTaller = await pedir(tech, incident._id, pieza);
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+    const primera = await peticion(coordinator, sinTaller);
+    await coordinator.mutation(api.partRequests.cancel, {
+      requestId: primera._id,
+    });
+    expect((await firstIncident(coordinator)).status).toBe("assigned");
+
+    // En taller: el caso vuelve a la orden de taller, no a la asignación.
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+    });
+    const enTaller = await pedir(tech, incident._id, pieza);
+    expect((await firstIncident(coordinator)).status).toBe("waitingParts");
+    const segunda = await peticion(coordinator, enTaller);
+    await coordinator.mutation(api.partRequests.cancel, {
+      requestId: segunda._id,
+    });
+    const vuelta = await firstIncident(coordinator);
+    expect(vuelta.status).toBe("workshop");
+    expect(vuelta.workshopAssigneeName).toBe("Iván Torres");
+  });
+
+  test("devolver el material devuelve la incidencia a la espera", async () => {
+    const { t, coordinator, tech } = await setup();
+    const pieza = await repuesto(t);
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+    await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
+
+    const reference = await pedir(tech, incident._id, pieza);
+    const request = await peticion(coordinator, reference);
+    await coordinator.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    await coordinator.mutation(api.partRequests.markIssued, {
+      requestId: request._id,
+    });
+    expect((await firstIncident(coordinator)).status).toBe("repairing");
+
+    // El material volvió al almacén: otra vez falta la pieza.
+    await coordinator.mutation(api.partRequests.returnMaterial, {
+      requestId: request._id,
+    });
+    const esperando = await firstIncident(coordinator);
+    expect(esperando.status).toBe("waitingParts");
   });
 });
 
@@ -3282,7 +3869,9 @@ describe("papelera de incidencias", () => {
     ).toBeNull();
     // Y por el código tampoco: el aviso por correo se lo cuenta, pero su código
     // deja de contestar hasta que se recupere.
-    expect(await coordinator.query(api.incidents.byCode, { code })).toBeNull();
+    expect(
+      await coordinator.mutation(api.incidents.byCode, { code }),
+    ).toBeNull();
 
     const papelera = await coordinator.query(api.incidents.trash, {});
     expect(papelera.items).toHaveLength(1);
@@ -3311,7 +3900,7 @@ describe("papelera de incidencias", () => {
     ).not.toBeNull();
     // Y quien la notificó vuelve a poder seguirla con su código.
     expect(
-      (await coordinator.query(api.incidents.byCode, { code }))?.code,
+      (await coordinator.mutation(api.incidents.byCode, { code }))?.code,
     ).toBe(code);
     expect((await coordinator.query(api.incidents.trash, {})).items).toEqual(
       [],
@@ -3421,8 +4010,8 @@ describe("papelera de incidencias", () => {
     // El técnico tampoco la ve: la retirada vale para todo el taller, y el
     // motivo queda apuntado para saber por qué está en la papelera.
     expect(await tech.query(api.incidents.list, {})).toEqual([]);
-    expect(
-      (await t.run((ctx) => ctx.db.get(incidentId)))?.deletedReason,
-    ).toBe("Aviso equivocado");
+    expect((await t.run((ctx) => ctx.db.get(incidentId)))?.deletedReason).toBe(
+      "Aviso equivocado",
+    );
   });
 });

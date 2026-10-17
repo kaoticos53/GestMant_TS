@@ -18,6 +18,9 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** La petición de la muestra que salió en dos tandas, una por semana. */
+const PET_EN_DOS_TANDAS = "PET-0005";
+
 /** Todos los módulos de funciones de la app (convex-test los levanta in-process). */
 const modules = import.meta.glob("../src/convex/**/!(*.*.*)*.*s");
 
@@ -95,9 +98,11 @@ describe("datos de ejemplo (cadena de televisión)", () => {
     const incidentStatuses = new Set(incidents.map((item) => item.status));
     expect([...incidentStatuses].sort()).toEqual([
       "assigned",
+      "repairing",
       "reported",
       "resolved",
       "unresolved",
+      "waitingParts",
       "workshop",
     ]);
     const requestStatuses = new Set(requests.map((item) => item.status));
@@ -260,6 +265,96 @@ describe("datos de ejemplo (cadena de televisión)", () => {
       (await authed.query(api.partRequests.list, { includeArchived: true }))
         .length,
     ).toBe(requests.length);
+  });
+
+  test("la muestra trae una entrega por tandas, con su constancia", async () => {
+    // La muestra se lee con las pantallas reales: tiene que traer una petición
+    // con parte del material ya entregado y su rastro de quién lo entregó, no
+    // solo peticiones intactas o entregadas enteras.
+    const authed = await authedTest("manager");
+    await authed.mutation(api.seed.seedDemoData, {});
+    const requests = await authed.query(api.partRequests.list, {
+      includeArchived: true,
+    });
+
+    const aMedias = requests.filter(
+      (request) =>
+        request.status === "approved" &&
+        request.lines.some((line) => (line.deliveredQuantity ?? 0) > 0),
+    );
+    expect(aMedias.length).toBeGreaterThan(0);
+    const muestra = aMedias[0];
+    // A medias de verdad: queda material por entregar.
+    expect(
+      muestra.lines.some(
+        (line) => (line.deliveredQuantity ?? 0) < line.quantity,
+      ),
+    ).toBe(true);
+
+    const trail = await authed.query(api.partRequests.decisions, {
+      requestId: muestra._id,
+    });
+    const entrega = trail.find(
+      (row) => row.decision?.reason === "materialPartiallyDelivered",
+    );
+    expect(entrega).toBeDefined();
+    // Con quién la entregó, cuándo y qué salió en esa tanda.
+    expect(entrega!.by).not.toBe("");
+    expect(entrega!.at).toBeTypeOf("number");
+    for (const line of muestra.lines) {
+      if ((line.deliveredQuantity ?? 0) === 0) continue;
+      expect(entrega!.decision?.note).toContain(`${line.code} ${line.name}`);
+    }
+    // La fecha de la constancia es la de la salida que la línea apunta.
+    const salida = Math.max(
+      ...muestra.lines.map((line) => line.deliveredAt ?? 0),
+    );
+    expect(entrega!.at).toBe(salida);
+
+    // Y una petición que salió en dos tandas, una por semana: el rastro las
+    // enseña por separado, con lo que salió en cada una.
+    const enDosTandas = requests.find(
+      (request) => request.reference === PET_EN_DOS_TANDAS,
+    );
+    expect(enDosTandas).toBeDefined();
+    const tandas = await authed.query(api.partRequests.decisions, {
+      requestId: enDosTandas!._id,
+    });
+    expect(tandas).toHaveLength(2);
+    // Lo más reciente primero: la segunda tanda es la que cierra el material, y
+    // la primera salió una semana antes.
+    expect(tandas[0].decision?.reason).toBe("materialDelivered");
+    expect(tandas[1].decision?.reason).toBe("materialPartiallyDelivered");
+    expect(tandas[0].at - tandas[1].at).toBe(7 * DAY);
+    // Cada tanda con lo suyo: la primera llevó también el adaptador.
+    expect(tandas[1].decision?.note).toContain("VEN-08012");
+    expect(tandas[0].decision?.note).not.toContain("VEN-08012");
+    // Y la suma de las tandas es lo que las líneas dan por entregado: el rastro y
+    // el estado de la petición no pueden contar cosas distintas.
+    for (const line of enDosTandas!.lines) {
+      const enTandas = tandas.reduce((sum, row) => {
+        const match = new RegExp(`(\\d+) × ${line.code}\\b`).exec(
+          row.decision?.note ?? "",
+        );
+        return sum + Number(match?.[1] ?? 0);
+      }, 0);
+      expect(enTandas, line.code).toBe(line.deliveredQuantity);
+    }
+
+    // Y lo entregado entero deja la suya, como «material entregado».
+    const entregadas = requests.filter(
+      (request) => request.status === "issued" && request.lines.length > 0,
+    );
+    expect(entregadas.length).toBeGreaterThan(0);
+    for (const request of entregadas.slice(0, 5)) {
+      const filas = await authed.query(api.partRequests.decisions, {
+        requestId: request._id,
+      });
+      expect(
+        filas.map((row) => row.decision?.reason),
+        request.reference,
+      ).toContain("materialDelivered");
+    }
   });
 
   test("un técnico no puede cargar los datos de ejemplo", async () => {

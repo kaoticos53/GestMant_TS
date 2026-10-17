@@ -18,20 +18,23 @@ import {
 const estado = vi.hoisted(() => ({
   /** Las consultas que la pantalla ha pedido, ya en su forma canónica. */
   consultas: [] as string[],
-  /** Lo que el backend contesta a la última: el seguimiento, `null` o nada aún. */
+  /** Lo que el backend contesta a la última: el seguimiento o `null`. */
   respuesta: undefined as unknown,
+  /** El freno de la puerta, si lo hay: el texto que lanza el backend. */
+  freno: null as string | null,
 }));
 
 vi.mock("@/convex/_generated/api", () => ({
   api: { incidents: { byCode: { nombre: "incidents.byCode" } } },
 }));
 
+// La consulta es una mutación: cada vez que se pide se apunta —y se cuenta, que
+// es lo que la limita a treinta por hora y código—, y contesta el seguimiento,
+// `null` o el freno.
 vi.mock("convex/react", () => ({
-  useQuery: (_query: unknown, args: unknown) => {
-    if (args === "skip") return undefined;
-    // Como la suscripción de verdad: se anota la consulta, no cada repintado.
-    const clave = JSON.stringify(args);
-    if (!estado.consultas.includes(clave)) estado.consultas.push(clave);
+  useMutation: () => async (args: { code: string }) => {
+    estado.consultas.push(JSON.stringify(args));
+    if (estado.freno !== null) throw new Error(estado.freno);
     return estado.respuesta;
   },
 }));
@@ -52,16 +55,23 @@ beforeAll(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-const montar = (initialCode?: string | null) =>
-  act(() => root.render(<IncidentLookup initialCode={initialCode} />));
+// Montar con el código en la dirección dispara la consulta al abrir, que es
+// asíncrona: se espera a que conteste para que la prueba vea lo que ve quien
+// llega desde el correo.
+const montar = async (initialCode?: string | null) => {
+  await act(async () => {
+    root.render(<IncidentLookup initialCode={initialCode} />);
+  });
+};
 
-beforeEach(() => {
+beforeEach(async () => {
   estado.consultas.length = 0;
   estado.respuesta = undefined;
+  estado.freno = null;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  montar();
+  await montar();
 });
 
 afterEach(() => {
@@ -83,9 +93,9 @@ function escribir(texto: string) {
 }
 
 /** Escribe el código y pulsa «Consultar», como quien tiene el correo delante. */
-function consultar(texto: string) {
+async function consultar(texto: string) {
   escribir(texto);
-  act(() => {
+  await act(async () => {
     container
       .querySelector("form")!
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -114,19 +124,19 @@ const seguimiento = {
 };
 
 describe("IncidentLookup — seguir una incidencia por su código", () => {
-  test("el código se teclee como se teclee, se consulta en su forma canónica", () => {
+  test("el código se teclee como se teclee, se consulta en su forma canónica", async () => {
     // Lo que se escribe de verdad: el código del correo, en minúsculas, sin los
     // guiones o con un espacio de más.
     for (const typed of [CODIGO, "a7k2qx9m", "A7K2-QX9M", " a7k2 qx9m "]) {
       estado.consultas.length = 0;
-      consultar(typed);
+      await consultar(typed);
       expect(estado.consultas, `«${typed}»`).toEqual([`{"code":"${CODIGO}"}`]);
     }
   });
 
-  test("el seguimiento llega a la pantalla con su paso a paso", () => {
+  test("el seguimiento llega a la pantalla con su paso a paso", async () => {
     estado.respuesta = seguimiento;
-    consultar(CODIGO);
+    await consultar(CODIGO);
 
     // El código se enseña como se dicta, en dos grupos.
     expect(texto()).toContain("A7K2-QX9M");
@@ -140,7 +150,58 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
     expect(texto()).toContain("Nueva");
   });
 
-  test("llegar con el código en la dirección consulta sin teclear nada", () => {
+  test("la ficha explica qué significa el estado y detalla desde cuándo", async () => {
+    estado.respuesta = seguimiento;
+    await consultar(CODIGO);
+
+    // El nombre del estado no basta: se dice qué implica para quien avisó y
+    // cuánto lleva el caso abierto.
+    expect(texto()).toContain("Ya hay un técnico encargado del caso");
+    expect(texto()).toContain("Lleva abierta");
+    // …y desde cuándo está en el punto en que está, no solo cuándo se avisó.
+    expect(texto()).toContain("En este punto desde");
+
+    // Los datos van con su nombre a la vista, no escondido en un icono: quien
+    // consulta su caso no tiene por qué saber qué es cada número.
+    for (const etiqueta of [
+      "Notificada",
+      "Ubicación",
+      "Número de serie",
+      "Quién la lleva",
+      "Lo que se avisó",
+      "Cómo ha avanzado",
+    ]) {
+      expect(texto(), etiqueta).toContain(etiqueta);
+    }
+
+    // Y se dice qué es esto y qué no: un resumen consultable, no el expediente
+    // del taller. Sin esa frase, la ficha parece incompleta por olvido.
+    expect(texto()).toContain("se quedan en el taller");
+  });
+
+  test("un caso cerrado dice cuánto tardó, y no presume de seguimiento abierto", async () => {
+    estado.respuesta = {
+      ...seguimiento,
+      status: "resolved" as const,
+      closedAt: Date.parse("2026-10-04T09:00:00.000Z"),
+      history: [
+        ...seguimiento.history,
+        {
+          status: "resolved" as const,
+          at: Date.parse("2026-10-04T09:00:00.000Z"),
+        },
+      ],
+    };
+    await consultar(CODIGO);
+
+    expect(texto()).toContain("El caso está cerrado");
+    expect(texto()).toContain("Se cerró 3 días después de notificarla");
+    expect(texto()).not.toContain("Lleva abierta");
+    // La fecha de cierre también va con su nombre, junto a la de notificación.
+    expect(texto()).toContain("Cerrada");
+  });
+
+  test("llegar con el código en la dirección consulta sin teclear nada", async () => {
     estado.respuesta = seguimiento;
     // Se monta de nuevo con el código que traería la dirección, como al pulsar el
     // enlace del correo.
@@ -149,7 +210,7 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    montar(CODIGO);
+    await montar(CODIGO);
 
     // El enlace del correo trae el código puesto: se consulta solo al abrir, y el
     // campo lo enseña para que se vea cuál se está siguiendo.
@@ -160,38 +221,38 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
     expect(texto()).toContain("A7K2-QX9M");
   });
 
-  test("algo que no es un código no se pregunta: se dice lo que falta", () => {
+  test("algo que no es un código no se pregunta: se dice lo que falta", async () => {
     for (const typed of ["la de la cámara", "A7K2"]) {
       estado.consultas.length = 0;
-      consultar(typed);
+      await consultar(typed);
 
       expect(estado.consultas, `«${typed}»`).toEqual([]);
       expect(texto()).toContain("Escribe el código de la incidencia");
     }
   });
 
-  test("una letra que se confunde se señala: no es lo mismo que no haberla escrito", () => {
+  test("una letra que se confunde se señala: no es lo mismo que no haberla escrito", async () => {
     // Con una O tecleada de más, «no encontramos nada» manda a buscar donde no es;
     // lo que hay que decir es que esa letra no cabe en un código.
-    consultar("A7K2QX9O");
+    await consultar("A7K2QX9O");
 
     expect(estado.consultas).toEqual([]);
     expect(texto()).toContain("Un código no lleva la «O»");
     expect(texto()).not.toContain("No encontramos ninguna incidencia");
 
     // Y si son varias, se dicen todas: al dictarlo, el cero y la O van juntos.
-    consultar("O0I12KQ3");
+    await consultar("O0I12KQ3");
     expect(estado.consultas).toEqual([]);
     expect(texto()).toContain("Un código no lleva «O», «0», «I» o «1»");
   });
 
-  test("una referencia interna se reconoce, y se dice de dónde sale el código", () => {
+  test("una referencia interna se reconoce, y se dice de dónde sale el código", async () => {
     // Quien teclea «INC-0004» viene de un aviso viejo: la referencia ya no es la
     // puerta de fuera, así que hay que decirle qué tiene en la mano y cómo se
     // consigue lo que le sirve —el código—, no que le sobran letras.
     for (const typed of ["INC-0004", "inc 4", "incidencia 12", "4"]) {
       estado.consultas.length = 0;
-      consultar(typed);
+      await consultar(typed);
 
       expect(estado.consultas, `«${typed}»`).toEqual([]);
       expect(texto()).toContain("Eso parece la referencia del taller");
@@ -199,9 +260,9 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
     }
   });
 
-  test("si no hay ninguna con ese código, se dice cuál se buscó", () => {
+  test("si no hay ninguna con ese código, se dice cuál se buscó", async () => {
     estado.respuesta = null;
-    consultar("zzzzzzzz");
+    await consultar("zzzzzzzz");
 
     expect(texto()).toContain("No encontramos ninguna incidencia");
     // Con la forma en que se lee y se dicta, para poder compararla con la del
@@ -209,9 +270,9 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
     expect(texto()).toContain("ZZZZ-ZZZZ");
   });
 
-  test("seguir escribiendo no cambia lo que se está leyendo", () => {
+  test("seguir escribiendo no cambia lo que se está leyendo", async () => {
     estado.respuesta = seguimiento;
-    consultar(CODIGO);
+    await consultar(CODIGO);
     expect(texto()).toContain("Cámara de estudio · HDC-3500");
 
     // Lo tecleado después no es una consulta nueva: el resultado sigue siendo el
@@ -220,6 +281,19 @@ describe("IncidentLookup — seguir una incidencia por su código", () => {
 
     expect(estado.consultas).toEqual([`{"code":"${CODIGO}"}`]);
     expect(texto()).toContain("Cámara de estudio · HDC-3500");
+    expect(texto()).not.toContain("No encontramos ninguna incidencia");
+  });
+
+  test("agotado el cupo se dice cuánto falta, no que el código no existe", async () => {
+    // La puerta admite treinta consultas por hora y código: la que sobra no
+    // contesta «no encontramos nada» —eso mandaría a revisar el código—, sino
+    // cuánto queda para volver a preguntar.
+    estado.freno =
+      "Has consultado este código demasiadas veces seguidas (30 consultas por hora). Vuelve a intentarlo en 20 minutos.";
+    await consultar(CODIGO);
+
+    expect(texto()).toContain("30 consultas por hora");
+    expect(texto()).toContain("20 minutos");
     expect(texto()).not.toContain("No encontramos ninguna incidencia");
   });
 });

@@ -36,13 +36,24 @@ export type IncidentAction =
   | "verifyWorkshop" // derivada a taller
   | "verifyUnresolved" // cerrada sin resolución desde la verificación
   | "reassignWorkshop" // cambiar el técnico de la orden de taller
-  | "closeResolved" // trabajo en taller terminado: resuelta
-  | "closeUnresolved"; // trabajo en taller terminado: sin resolución
+  | "waitParts" // se le abre una petición: queda a la espera de material
+  | "partsArrived" // la última petición viva se entregó: a reparar
+  | "partsSettledOnsite" // las peticiones se cerraron sin material: vuelve al sitio
+  | "partsSettledWorkshop" // las peticiones se cerraron sin material: vuelve al taller
+  | "closeResolved" // trabajo terminado: resuelta
+  | "closeUnresolved"; // trabajo terminado: sin resolución
 
-/** Un paso: desde qué estados se puede dar y a cuál lleva. */
+/**
+ * Un paso: desde qué estados se puede dar y a cuál lleva.
+ *
+ * `"keptStatus"` es el único destino que no es un estado fijo: cambiar el técnico
+ * de taller no mueve el caso —sigue en taller, esperando material o reparándose—,
+ * solo cambia quién lo lleva. En qué estado queda lo resuelve
+ * `nextIncidentStatus`, que devuelve el de partida.
+ */
 type IncidentStep = {
   readonly from: readonly IncidentStatus[];
-  readonly to: IncidentStatus;
+  readonly to: IncidentStatus | "keptStatus";
 };
 
 /**
@@ -58,12 +69,34 @@ type IncidentStep = {
 export const INCIDENT_STEPS = {
   assign: { from: ["reported", "assigned"], to: "assigned" },
   selfAssign: { from: ["reported"], to: "assigned" },
-  verifyOnsite: { from: ["assigned"], to: "resolved" },
-  verifyWorkshop: { from: ["assigned"], to: "workshop" },
-  verifyUnresolved: { from: ["assigned"], to: "unresolved" },
-  reassignWorkshop: { from: ["workshop"], to: "workshop" },
-  closeResolved: { from: ["workshop"], to: "resolved" },
-  closeUnresolved: { from: ["workshop"], to: "unresolved" },
+  verifyOnsite: { from: ["assigned", "repairing"], to: "resolved" },
+  verifyWorkshop: { from: ["assigned", "repairing"], to: "workshop" },
+  verifyUnresolved: { from: ["assigned", "repairing"], to: "unresolved" },
+  // Cambiar el técnico de taller no mueve el caso: sigue donde estaba y solo
+  // cambia quién lo lleva. Vale con el equipo en taller —derivado, esperando
+  // material o ya reparándose—, pero el estado no dice dónde está el equipo: que
+  // haya orden abierta lo comprueba quien da el paso (`isIncidentInWorkshop`).
+  reassignWorkshop: {
+    from: ["workshop", "waitingParts", "repairing"],
+    to: "keptStatus",
+  },
+  // La abre la petición de repuestos (`partRequests.create`), y también vale
+  // desde «en reparación»: devolver material deja otra vez la incidencia sin lo
+  // que necesita para terminar.
+  waitParts: {
+    from: ["assigned", "workshop", "repairing"],
+    to: "waitingParts",
+  },
+  // La cierra la entrega del material (`partRequests.markIssued`): la incidencia
+  // deja de esperar y el trabajo puede seguir.
+  partsArrived: { from: ["waitingParts"], to: "repairing" },
+  // Y si las peticiones se cerraron sin servir material —rechazadas, canceladas
+  // o devueltas—, la incidencia no se queda esperando lo que ya no va a llegar:
+  // vuelve a donde estaba, que es lo que dice su entrada a taller abierta.
+  partsSettledOnsite: { from: ["waitingParts"], to: "assigned" },
+  partsSettledWorkshop: { from: ["waitingParts"], to: "workshop" },
+  closeResolved: { from: ["workshop", "repairing"], to: "resolved" },
+  closeUnresolved: { from: ["workshop", "repairing"], to: "unresolved" },
 } as const satisfies Record<IncidentAction, IncidentStep>;
 
 /** Los estados en los que la incidencia ya no se mueve. */
@@ -89,11 +122,33 @@ export type IncidentStepStatus<A extends IncidentAction> =
  * A dónde lleva un paso. No mira dónde está la incidencia: un paso que no se
  * puede dar desde ahí no lleva a ningún sitio, y eso se pregunta aparte con
  * `canAdvanceIncident`. Aquí solo está escrito a dónde va cada uno.
+ *
+ * Los pasos que no mueven el caso —cambiar el técnico de taller— devuelven
+ * `"keptStatus"` en vez de un estado: para saber en cuál queda hay que decir
+ * desde cuál se da, y eso lo hace `nextIncidentStatus`.
  */
 export function incidentStepStatus<A extends IncidentAction>(
   action: A,
 ): IncidentStepStatus<A> {
   return INCIDENT_STEPS[action].to;
+}
+
+/**
+ * El estado en el que queda la incidencia al dar un paso, o `null` si ese paso no
+ * se puede dar desde donde está. Es la cuenta que no vale para un solo estado: un
+ * cierre deja el suyo, y cambiar el técnico de taller deja el caso donde estaba.
+ *
+ * El backend la usa donde el destino no se puede escribir de antemano —el cierre
+ * de taller lo elige el sitio del equipo (`incidentCloseStep`)—, y las pruebas la
+ * usan para comprobar que el documento y la ficha dicen lo mismo que la máquina.
+ */
+export function nextIncidentStatus(
+  status: IncidentStatus,
+  action: IncidentAction,
+): IncidentStatus | null {
+  if (!canAdvanceIncident(status, action)) return null;
+  const to = INCIDENT_STEPS[action].to;
+  return to === "keptStatus" ? status : to;
 }
 
 /**
@@ -113,6 +168,8 @@ export function isClosedIncident(status: string): boolean {
 const IN_PROGRESS_STATUSES: readonly IncidentStatus[] = [
   "assigned",
   "workshop",
+  "waitingParts",
+  "repairing",
 ];
 
 /**
@@ -128,6 +185,100 @@ export function isIncidentInProgress(status: string): boolean {
   return IN_PROGRESS_STATUSES.some((inProgress) => inProgress === status);
 }
 
+/** ¿Está la incidencia esperando el material de una petición? */
+export function isIncidentWaitingParts(status: string): boolean {
+  return status === "waitingParts";
+}
+
+/** ¿Ya está el material en manos del técnico, en reparación? */
+export function isIncidentRepairing(status: string): boolean {
+  return status === "repairing";
+}
+
+/**
+ * ¿El equipo está en el taller? Lo dicen la propia entrada a taller y su
+ * responsable: la incidencia derivada está en taller por definición, y una que
+ * espera repuestos o se está reparando lo está si conserva esa entrada abierta.
+ *
+ * Es la mitad de la respuesta que el estado no lleva: «en espera de repuestos»
+ * dice qué le pasa al caso, no dónde está el equipo. Preguntarlo aquí evita que
+ * el backend y la ficha lo averigüen cada uno a su manera.
+ */
+export function isIncidentInWorkshop(incident: {
+  status: IncidentStatus;
+  workshopAssigneeId?: unknown;
+  workshopAssigneeName?: string;
+}): boolean {
+  return (
+    incident.status === "workshop" ||
+    Boolean(incident.workshopAssigneeId) ||
+    Boolean(incident.workshopAssigneeName?.trim())
+  );
+}
+
+/**
+ * El paso de cierre que corresponde al sitio donde está el equipo: el trabajo de
+ * taller se cierra desde la orden de taller y el que se hace en el sitio, desde
+ * la verificación. La tabla deja los dos caminos abiertos desde «en reparación»
+ * porque el estado no sabe dónde está el equipo; esta es la pregunta que lo
+ * decide, escrita una vez.
+ */
+export function incidentCloseStep(
+  outcome: "resolved" | "unresolved",
+  inWorkshop: boolean,
+): IncidentAction {
+  if (outcome === "resolved")
+    return inWorkshop ? "closeResolved" : "verifyOnsite";
+  return inWorkshop ? "closeUnresolved" : "verifyUnresolved";
+}
+
+/**
+ * ¿Este usuario puede cambiar el técnico de la orden de taller? Son las tres
+ * preguntas que hace el backend antes de tocar nada, contadas para que la ficha
+ * ofrezca el botón a quien de verdad puede darlo: el paso tiene que caber desde
+ * el estado, la orden tiene que estar abierta —el estado no dice dónde está el
+ * equipo—, y o se coordina o se es el técnico que la lleva.
+ *
+ * El técnico de taller entra por la última: siempre ha podido reasignarse la
+ * orden desde el servidor (`assignWorkshop`), pero la ficha se la escondía.
+ */
+export function canChangeWorkshopTechnician(
+  incident: { status: IncidentStatus; workshopAssigneeId?: unknown },
+  actor: { id: string | null; coordinates: boolean },
+): boolean {
+  if (!canAdvanceIncident(incident.status, "reassignWorkshop")) return false;
+  if (!isIncidentInWorkshop(incident)) return false;
+  return (
+    actor.coordinates ||
+    (actor.id !== null && incident.workshopAssigneeId === actor.id)
+  );
+}
+
+/**
+ * A dónde vuelve una incidencia que esperaba repuestos cuando las peticiones se
+ * cierran sin servir material: al taller si la entrada sigue abierta, y si no, a
+ * la asignación de la que salió. Sin esto, cancelar la última petición dejaría
+ * el caso esperando un material que ya no va a llegar.
+ */
+export function incidentWithoutPartsStep(
+  inWorkshop: boolean,
+): "partsSettledWorkshop" | "partsSettledOnsite" {
+  return inWorkshop ? "partsSettledWorkshop" : "partsSettledOnsite";
+}
+
+/**
+ * ¿Se le puede abrir una petición de repuestos? Mientras la incidencia se está
+ * trabajando —asignada, en taller, esperando material o ya reparándose—, porque
+ * es justo cuando se descubre que falta una pieza. Ni recién notificada —no la
+ * ha mirado nadie— ni cerrada.
+ */
+export function incidentTakesPartRequests(status: IncidentStatus): boolean {
+  return (
+    canAdvanceIncident(status, "waitParts") ||
+    canAdvanceIncident(status, "partsArrived")
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Por qué no se puede dar un paso                                     */
 /* ------------------------------------------------------------------ */
@@ -140,6 +291,10 @@ export const INCIDENT_STEP_LABELS: Record<IncidentAction, string> = {
   verifyWorkshop: "Verificar y derivar a taller",
   verifyUnresolved: "Verificar y cerrar sin resolución",
   reassignWorkshop: "Cambiar el técnico de taller",
+  waitParts: "Quedar a la espera de repuestos",
+  partsArrived: "Repuestos entregados",
+  partsSettledOnsite: "Cerrar la espera sin material (en el sitio)",
+  partsSettledWorkshop: "Cerrar la espera sin material (en taller)",
   closeResolved: "Cerrar como resuelta",
   closeUnresolved: "Cerrar sin resolución",
 };
@@ -165,12 +320,17 @@ const CLOSED_REASON = "ya está cerrada: no se reabre desde aquí";
 const INCIDENT_STEP_NEEDS: Record<IncidentAction, string> = {
   assign: "se asigna mientras está notificada o ya asignada",
   selfAssign: "se la queda quien la ve notificada",
-  verifyOnsite: "se verifica una incidencia asignada",
-  verifyWorkshop: "se verifica una incidencia asignada",
-  verifyUnresolved: "se verifica una incidencia asignada",
-  reassignWorkshop: "la orden de taller se cambia mientras está en taller",
-  closeResolved: "se cierra una incidencia que está en taller",
-  closeUnresolved: "se cierra una incidencia que está en taller",
+  verifyOnsite: "se verifica una incidencia asignada o en reparación",
+  verifyWorkshop: "se verifica una incidencia asignada o en reparación",
+  verifyUnresolved: "se verifica una incidencia asignada o en reparación",
+  reassignWorkshop:
+    "la orden de taller se cambia con el equipo en el taller: derivado, esperando material o reparándose",
+  waitParts: "se espera material en una incidencia que se está trabajando",
+  partsArrived: "se da por entregado lo que se estaba esperando",
+  partsSettledOnsite: "se cierra una espera que se quedó sin material",
+  partsSettledWorkshop: "se cierra una espera que se quedó sin material",
+  closeResolved: "se cierra un trabajo terminado",
+  closeUnresolved: "se cierra un trabajo terminado",
 };
 
 /**
@@ -183,34 +343,53 @@ const INCIDENT_STEP_EXCUSES: Partial<
   selfAssign: {
     assigned: "ya tiene técnico: se cambia desde «Asignar a un técnico»",
     workshop: "está en taller: la lleva el técnico de taller",
+    waitingParts: "ya está en marcha: la lleva el técnico asignado",
+    repairing: "ya está en marcha: la lleva el técnico asignado",
+  },
+  waitParts: {
+    reported:
+      "todavía no la ha cogido nadie: primero alguien tiene que mirarla",
   },
   assign: {
     workshop: "está en taller: su técnico se cambia desde la orden de taller",
+    waitingParts:
+      "está esperando repuestos: su técnico se cambia desde la ficha, no volviendo a asignarla",
+    repairing: "está en reparación: no se vuelve a asignar desde cero",
   },
   verifyOnsite: {
     reported:
       "todavía no la ha cogido nadie: asígnala (o autoasígnatela) antes de verificarla",
     workshop: "ya está en taller: el trabajo se cierra desde ahí",
+    waitingParts:
+      "está esperando repuestos: primero tiene que llegar el material",
   },
   verifyWorkshop: {
     reported:
       "todavía no la ha cogido nadie: asígnala (o autoasígnatela) antes de verificarla",
     workshop:
       "ya está en taller: se cierra desde ahí cuando el trabajo termine",
+    waitingParts:
+      "está esperando repuestos: primero tiene que llegar el material",
   },
   verifyUnresolved: {
     reported:
       "todavía no la ha cogido nadie: asígnala (o autoasígnatela) antes de verificarla",
     workshop:
       "ya está en taller: se cierra desde ahí cuando el trabajo termine",
+    waitingParts:
+      "está esperando repuestos: primero tiene que llegar el material",
   },
   closeResolved: {
     reported: "está recién notificada: primero alguien tiene que mirarla",
     assigned: "primero verifícala: no se cierra lo que no se ha verificado",
+    waitingParts:
+      "está esperando repuestos: primero tiene que llegar el material",
   },
   closeUnresolved: {
     reported: "está recién notificada: primero alguien tiene que mirarla",
     assigned: "primero verifícala: no se cierra lo que no se ha verificado",
+    waitingParts:
+      "está esperando repuestos: primero tiene que llegar el material",
   },
 };
 
