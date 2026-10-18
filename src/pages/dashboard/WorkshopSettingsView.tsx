@@ -1,5 +1,7 @@
 import { AuditAlertSettingsCard } from "./settings/AuditAlertSettingsCard";
 import { AutomaticArchiveCard } from "./settings/AutomaticArchiveCard";
+import { MailAudienceCard } from "./settings/MailAudienceCard";
+import { MailServerCard } from "./settings/MailServerCard";
 import { StorageCleanupCard } from "./settings/StorageCleanupCard";
 import { TrashCard } from "./settings/TrashCard";
 import { UnusedUploadsCard } from "./settings/UnusedUploadsCard";
@@ -24,6 +26,7 @@ export function WorkshopSettingsView({
   canManageAudit = false,
   canPurgeUploads = false,
   canManageData = false,
+  canManageMail = false,
 }: {
   /** Quien coordina incidencias o decide peticiones ajusta el archivo. */
   canManageArchive?: boolean;
@@ -41,9 +44,16 @@ export function WorkshopSettingsView({
    * el permiso con el que se puso la muestra de ejemplo.
    */
   canManageData?: boolean;
+  /**
+   * El correo del taller lo configura —y lo prueba— el administrador: es una
+   * llave del deployment y un remitente los dos, no una preferencia de cada rol.
+   */
+  canManageMail?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-5">
+      {canManageMail && <MailServerCard />}
+      {canManageMail && <MailAudienceCard />}
       {canManageArchive && <AutomaticArchiveCard />}
       {canPurgeUploads && <UnusedUploadsCard />}
       {canPurgeUploads && <TrashCard />}

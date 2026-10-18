@@ -6,6 +6,20 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [Sin publicar]
+
+### Novedades
+
+- **Correo:** El repositorio incluye el **relevo de correo** (`npm run mail:relay`), el puente HTTP → SMTP que hace falta para usar un servidor propio desde la opción «Relevo propio»: sin dependencias nuevas, con testigo, direcciones comprobadas, copia oculta que no aparece en las cabeceras y el motivo del SMTP en un 502. Se arranca junto al backend y, en el NAS, como servicio opcional del proyecto (perfil «correo»). La guía está en `RELEVO.md`.
+- **Ajustes del taller:** El correo saliente se configura desde la aplicación —pasarela de la plataforma, Resend, SendGrid, Mailgun, Brevo o un relevo HTTP propio— con remitente, dominio verificado y prueba de envío. Los avisos de incidencia y el resumen semanal salen por el servicio elegido, y la clave del servicio nunca vuelve al navegador.
+- **Ajustes del taller:** Una tarjeta nueva decide qué avisos por correo recibe cada rol, con una columna para el **aviso interno de las incidencias** y otra para el **resumen semanal**. El aviso interno cubre el alta, la asignación —la del coordinador y la autoasignada— y el cierre, con una sola entrega por momento (reasignar no vuelve a avisar); lleva la referencia, el equipo, quién la lleva y el enlace al panel —nunca el código de seguimiento del invitado—, y el correo a quien notificó una incidencia sigue saliendo siempre a la dirección que dejó.
+- **Correo:** El relevo comprueba el servidor de correo **antes de usarlo**, sin mandar nada: al arrancar deja en su registro si la conexión y la autenticación funcionan, y la misma comprobación se puede pedir desde _Ajustes del taller_ o con un `POST /comprobar`, que contesta con el servidor, el cifrado y el método de autenticación que aceptó. Sirve para saber si la contraseña de aplicación de Gmail es la buena antes de que haya una incidencia esperando su aviso.
+- **Ajustes del taller:** El **camino de envío del correo se comprueba solo**. Al abrir el panel —y otra vez al guardar— se le pide al relevo que responda y acepte las credenciales, sin mandar ningún correo, y el estado se enseña en dos líneas: el último envío de verdad y la respuesta del relevo ahora mismo. Si el último envío **no salió**, el bloque se pinta en rojo con el motivo que dejó el servicio, sin tener que abrir el histórico ni la ficha. Con un servicio de API propia se dice que su prueba es mandar un correo, en vez de fingir una comprobación que no existe.
+- **Correo:** El servicio de envío admite ya **Gmail (Google)** y **Ethereal (pruebas)** además de los que tienen API propia: los dos salen por el relevo HTTP, con su servidor (puesto en el catálogo) y su cuenta guardados en los ajustes del taller, así que sirven para mandar desde una cuenta de Google —con contraseña de aplicación— y para probar el correo de punta a punta sin que llegue a nadie. El relevo acepta el servidor SMTP en el propio sobre, no guarda esas credenciales y avisa si la dirección del puente no va cifrada.
+- **Ajustes del taller:** El correo admite una **copia oculta fija** —todos los envíos se copian al archivo del taller sin que los destinatarios lo vean— y un **histórico de los últimos 200 envíos** con destinatarios, asunto, servicio y resultado, también cuando el envío falla.
+
+---
+
 ## [1.1.0] - 2026-10-16
 
 ### Novedades

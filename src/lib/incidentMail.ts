@@ -95,14 +95,11 @@ export function normalizeReporterEmail(value: string): string {
 }
 
 /**
- * ¿Tiene forma de correo? Solo comprueba que se pueda escribir a esa dirección:
- * que exista lo dice el envío, no una expresión regular. Lo que deja fuera son
- * los erratas de dedo —un correo sin arroba o sin dominio—, que es lo que de
- * verdad se cuela cuando alguien rellena un formulario con prisa.
+ * ¿Tiene forma de correo? Vive en `lib/mail`, que es donde se comprueban todas
+ * las direcciones del taller; se reexporta aquí para que quien avisa de una
+ * incidencia no tenga que saber dónde se guarda la regla.
  */
-export function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
+export { looksLikeEmail } from "./mail";
 
 /**
  * Lo que pasa, contado para quien no es del taller: la frase que encabeza el
@@ -343,6 +340,173 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
         : `<p style="margin:0 0 16px">Entra en la aplicación y consulta ${escapeHtml(
             code,
           )}.</p>`,
+    `<p style="margin:0;color:#555;font-size:12px">Pulso Taller · Repuestos de equipo audiovisual<br>Este aviso es automático: no hace falta responder a este correo.</p>`,
+  ].join("\n");
+
+  return { subject, text, html };
+}
+
+/**
+ * Los avisos que el taller recibe de sus propias incidencias: cuando entra, cuando
+ * se asigna y cuando se cierra. Son los mismos cuatro momentos que se le cuentan
+ * a quien notificó —menos la retirada, que es cosa de la papelera— vistos desde
+ * dentro.
+ */
+export const INCIDENT_STAFF_NOTICES = [
+  "reported",
+  "assigned",
+  "resolved",
+  "unresolved",
+] as const;
+
+export type IncidentStaffNotice = (typeof INCIDENT_STAFF_NOTICES)[number];
+
+/**
+ * ¿Merece este estado un aviso interno? Ni la verificación ni los pasos de taller
+ * se reparten al equipo: el aviso es de las tres cosas que cambian el caso de
+ * manos —entra, se asigna, se cierra—, y de las demás ya se entera quien trabaja
+ * en él.
+ */
+export function staffMailNotice(value: string): IncidentStaffNotice | null {
+  return (INCIDENT_STAFF_NOTICES as readonly string[]).includes(value)
+    ? (value as IncidentStaffNotice)
+    : null;
+}
+
+/** Lo que se dice en cada momento, en una frase. */
+const STAFF_NOTICE_COPY: Record<
+  IncidentStaffNotice,
+  { title: string; intro: string; action: string }
+> = {
+  reported: {
+    title: "Nueva incidencia",
+    intro: "Ha entrado un aviso que el taller todavía no ha asignado.",
+    action: "Ábrela en el panel para asignarla.",
+  },
+  assigned: {
+    title: "Incidencia asignada",
+    intro: "El caso ya tiene técnico: sale de la cola de asignación.",
+    action: "Ábrela en el panel para ver el parte.",
+  },
+  resolved: {
+    title: "Incidencia resuelta",
+    intro: "El caso se ha cerrado como resuelto.",
+    action: "Ábrela en el panel para ver lo que se hizo.",
+  },
+  unresolved: {
+    title: "Incidencia cerrada sin resolución",
+    intro: "El caso se ha cerrado sin resolución.",
+    action: "Ábrela en el panel para ver por qué.",
+  },
+};
+
+/**
+ * Lo que hace falta para el aviso interno: la incidencia contada al taller y no a
+ * quien la notificó.
+ */
+export interface IncidentStaffMailInput {
+  /** Qué ha pasado: el alta, la asignación o el cierre. */
+  notice: IncidentStaffNotice;
+  /** La referencia interna: la que el taller se cita («la INC-0004»). */
+  reference: string;
+  reporterName: string;
+  equipmentKind?: string | null;
+  model?: string | null;
+  location?: string | null;
+  description: string;
+  reportedAt: number;
+  /** Quién la lleva: el técnico de la calle o, en taller, el de la orden. */
+  assigneeName?: string | null;
+  workshopAssigneeName?: string | null;
+  /** La dirección pública de la app (`SITE_URL`), para el enlace al panel. */
+  appUrl?: string | null;
+}
+
+/** Lo que se enseña de la descripción: un correo no es la ficha entera. */
+export const MAX_STAFF_MAIL_DESCRIPTION = 600;
+
+/**
+ * El aviso interno de una incidencia, para los roles que lo piden.
+ *
+ * No es el correo de quien notificó: aquel lleva su código y le habla de tú a tú
+ * a alguien de fuera. Este es para el taller —referencia interna, equipo, dónde,
+ * quién la lleva y el enlace al panel—, y no lleva el código a propósito: el
+ * código es la llave de seguimiento del invitado y no pinta nada repartiéndolo
+ * por correo entre las cuentas del taller.
+ *
+ * La descripción solo viaja en el alta, y recortada: es cuando de verdad hace
+ * falta decidir si hay que entrar ahora. En la asignación y el cierre, lo que se
+ * quiere saber es quién la lleva y cómo acabó, y eso cabe en dos líneas.
+ */
+export function renderIncidentStaffMail(
+  input: IncidentStaffMailInput,
+): IncidentEmail {
+  const copy = STAFF_NOTICE_COPY[input.notice];
+  const equipment = [input.equipmentKind, input.model]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+  const description = input.description.replace(/\s+/g, " ").trim();
+  const what =
+    description.length > MAX_STAFF_MAIL_DESCRIPTION
+      ? `${description.slice(0, MAX_STAFF_MAIL_DESCRIPTION).trimEnd()}…`
+      : description;
+  const onIt = input.workshopAssigneeName ?? input.assigneeName ?? null;
+  const base = appBase(input.appUrl);
+  const panel = base === null ? null : `${base}/dashboard`;
+  const subject = `${copy.title} · ${input.reference}${
+    equipment ? ` · ${equipment}` : ""
+  }`;
+
+  const facts: [string, string][] = [
+    ...(equipment ? [["Equipo", equipment] as [string, string]] : []),
+    ...(input.location
+      ? [["Dónde", input.location.trim()] as [string, string]]
+      : []),
+    ...(onIt ? [["Lo lleva", onIt.trim()] as [string, string]] : []),
+    ["La notificó", input.reporterName.trim()],
+    // La fecha es la del aviso, no la del correo: en la asignación y el cierre
+    // sigue siendo la misma, y «notificada el» no se confunde con el cierre.
+    ["Notificada el", formatDate(input.reportedAt)],
+  ];
+
+  const text = [
+    copy.intro,
+    "",
+    `REFERENCIA: ${input.reference}`,
+    ...facts.map(([label, value]) => `${label}: ${value}`),
+    ...(input.notice === "reported" && what !== ""
+      ? ["", "Lo que cuenta:", what]
+      : []),
+    "",
+    panel ? `${copy.action} ${panel}` : copy.action,
+    "",
+    "Pulso Taller · Repuestos de equipo audiovisual",
+    "Este aviso es automático: no hace falta responder a este correo.",
+  ].join("\n");
+
+  const html = [
+    `<h1 style="font-size:18px;margin:0 0 4px">${escapeHtml(
+      copy.title,
+    )} ${escapeHtml(input.reference)}</h1>`,
+    `<p style="margin:0 0 16px;color:#555">${escapeHtml(copy.intro)}</p>`,
+    `<ul style="margin:0 0 16px;padding-left:18px">`,
+    ...facts.map(
+      ([label, value]) =>
+        `<li style="margin:2px 0">${escapeHtml(label)}: ${escapeHtml(value)}</li>`,
+    ),
+    `</ul>`,
+    ...(input.notice === "reported" && what !== ""
+      ? [
+          `<p style="margin:0 0 4px"><strong>Lo que cuenta</strong></p>`,
+          `<p style="margin:0 0 16px">${escapeHtml(what)}</p>`,
+        ]
+      : []),
+    panel
+      ? `<p style="margin:0 0 16px"><a href="${escapeHtml(
+          panel,
+        )}">Abrir el panel del taller</a></p>`
+      : `<p style="margin:0 0 16px">${escapeHtml(copy.action)}</p>`,
     `<p style="margin:0;color:#555;font-size:12px">Pulso Taller · Repuestos de equipo audiovisual<br>Este aviso es automático: no hace falta responder a este correo.</p>`,
   ].join("\n");
 

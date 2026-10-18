@@ -27,7 +27,8 @@
     "convex:admin-key": "docker compose -f docker/convex/docker-compose.yml exec -T backend ./generate_admin_key.sh",
     "convex:dev": "convex dev",
     "convex:push": "convex dev --once",
-    "auth:keys": "node scripts/generate-keys.mjs --set"
+    "auth:keys": "node scripts/generate-keys.mjs --set",
+    "mail:relay": "node scripts/mail-relay.mjs"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.96",

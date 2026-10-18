@@ -297,6 +297,7 @@ export function DashboardContent({
           canManageAudit={adminOk && can("viewAudit")}
           canPurgeUploads={can("manageIncidents") || can("decideRequests")}
           canManageData={adminOk}
+          canManageMail={adminOk}
         />
       ) : activeTab === "audit" && adminOk ? (
         <AuditView onOpenIncident={onOpenIncident} />

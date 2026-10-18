@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { MutationCtx } from "./_generated/server";
-import { scheduleReporterEmail } from "./incidentMail";
+import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { notifyUsers } from "./notify";
 import { moderatorIds } from "./permissions";
 import { freePublicCode } from "./publicCodes";
@@ -14,6 +14,7 @@ import {
   readIncidentIntake,
   type IncidentIntakeInput,
 } from "../lib/incidentIntake";
+import { INCIDENT_INTAKE_NOTICE } from "../lib/incidentMail";
 
 /**
  * La mitad que habla con la base del alta de una incidencia: el camino por el que
@@ -102,9 +103,20 @@ export async function registerIncidentIntake(
   // no dejó correo— y la pregunta de si hay algo que contar la contesta el caso de
   // uso, que es quien sabe qué se cuenta por correo.
   const reporterNotice = incidentIntakeReporterNotice();
-  if (reporterNotice !== null) {
-    const incident = await ctx.db.get(incidentId);
-    if (incident) await scheduleReporterEmail(ctx, incident, reporterNotice);
+  const incident = await ctx.db.get(incidentId);
+  if (reporterNotice !== null && incident) {
+    await scheduleReporterEmail(ctx, incident, reporterNotice);
+  }
+
+  // Y el aviso interno al taller, por correo y a los roles que lo tengan marcado
+  // en los ajustes. Va aparte del de quien notificó porque no cuenta lo mismo ni
+  // se dirige a quien lo mismo: uno lleva el código del invitado, el otro la
+  // referencia con la que el taller se cita. Aquí se manda el del alta; el de la
+  // asignación y el del cierre salen de donde cambian esas cosas
+  // (`convex/incidents`). Si no hay roles marcados, la acción lo deja pasar sin
+  // componer nada.
+  if (incident) {
+    await scheduleStaffEmail(ctx, incident, INCIDENT_INTAKE_NOTICE);
   }
 
   return { reference, code: publicCode };

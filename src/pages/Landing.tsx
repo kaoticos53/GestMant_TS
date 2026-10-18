@@ -42,6 +42,17 @@ import {
  * separan 96 px en móvil, 112 en tableta y 160 en escritorio, y las dos puertas
  * del taller cuentan como uno solo: son una tarjeta con dos mitades.
  *
+ * **En móvil la portada es la versión corta**, y a propósito: quien entra desde
+ * el teléfono viene a una de dos cosas —avisar de un equipo averiado o mirar
+ * cómo va su aviso—, no a leer la presentación del taller. Quedan la cabecera con
+ * el acceso de los técnicos, el titular con una línea, los dos botones y las dos
+ * puertas con su formulario; la banda de cifras, la consola de supervisión, el
+ * párrafo largo, las ventajas y los tres pasos se esconden por debajo de `sm` o
+ * `lg` con utilidades de `display`, sin desmontarlos: la portada se decide en
+ * CSS, así que se pinta igual sin hidratar y no da un salto al cambiar de ancho.
+ * Por eso el recuento de incidencias abiertas del titular también se fue: era la
+ * banda de cifras contada dos veces.
+ *
  * Las cifras del taller son las de verdad, pero no se cuentan desde aquí: quien
  * abre la portada no tiene sesión y no debe poder recorrer las tablas del
  * taller. Lee la foto que el backend toma cada cuarto de hora
@@ -221,7 +232,19 @@ export default function Landing() {
                 Mantenimiento <span className="text-signal">TV</span>.
               </h1>
 
-              <p className={`mt-5 max-w-xl ${TEXTO} sm:text-lg`}>
+              {/* En móvil, una línea: la portada simplificada solo promete lo
+                  que ofrece —avisar y seguir—, y el párrafo largo se queda para
+                  cuando hay ancho donde leerlo. */}
+              <p
+                data-testid="hero-corto"
+                className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:hidden"
+              >
+                Avisa de una incidencia y sigue su estado. Sin cuenta.
+              </p>
+              <p
+                data-testid="hero-largo"
+                className={`mt-5 hidden max-w-xl sm:block sm:text-lg ${TEXTO}`}
+              >
                 Incidencias, equipos, peticiones de repuesto y partes de trabajo
                 en un mismo panel. Del aviso del plató al parte cerrado, sin
                 hojas de cálculo.
@@ -249,37 +272,6 @@ export default function Landing() {
                     Seguimiento de incidencia
                   </a>
                 </Button>
-              </div>
-
-              {/* Lo que la consola de al lado enseña de cerca, en una línea: en
-                  un móvil la maqueta no cabe junto al titular. Va con las
-                  cifras de verdad, no con una muestra: al lado de la banda de
-                  abajo, un número inventado aquí se leería como el del taller. */}
-              <div
-                data-testid="resumen-movil"
-                className={`mt-8 flex flex-col gap-1.5 px-4 py-3 text-xs lg:hidden ${TARJETA}`}
-              >
-                {cifras ? (
-                  <>
-                    <span className="flex items-center gap-2">
-                      <span className="size-2 shrink-0 rounded-full bg-signal" />
-                      <span className="font-semibold text-foreground">
-                        {formatCount(cifras.openIncidents)} incidencias abiertas
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                      <span>
-                        {formatCount(cifras.equipment)} equipos en servicio
-                      </span>
-                    </span>
-                  </>
-                ) : (
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <span className="size-2 shrink-0 animate-pulse rounded-full bg-muted-foreground/50" />
-                    Consultando el taller…
-                  </span>
-                )}
               </div>
             </motion.div>
 
@@ -384,9 +376,14 @@ export default function Landing() {
       {/* ---------------------------------------------------------------- */}
       {/* El taller en cifras: un mes de trabajo, resumido                  */}
       {/* ---------------------------------------------------------------- */}
+      {/* Solo en escritorio. En un móvil, quien llega aquí no viene a mirar el
+          parte del mes: viene a avisar o a ver cómo va su aviso, y una banda de
+          cuatro números entre las dos cosas solo alarga el camino. Se esconde
+          con `hidden`, no desmontándola, para que la portada se decida en CSS y
+          no dé un salto al hidratar. */}
       <section
         id="taller"
-        className={`scroll-mt-20 border-y border-border/60 bg-muted/20 ${SECCION}`}
+        className={`hidden scroll-mt-20 border-y border-border/60 bg-muted/20 lg:block ${SECCION}`}
       >
         <div className={CONTENEDOR}>
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -455,37 +452,50 @@ export default function Landing() {
                         Notifica una incidencia al instante
                       </h2>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Sin credenciales de técnico, en un minuto.
+                        Sin cuenta, en un minuto.
                       </p>
                     </div>
                   </div>
 
-                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                    Si un equipo de plató, cámara, intercom o sala de sonido
-                    presenta anomalías, avisa al taller y el equipo de
-                    ingeniería recibirá la notificación de inmediato.
-                  </p>
+                  {/* El porqué y sus tres ventajas: en móvil sobran. Ahí la
+                      tarjeta solo tiene que decir qué se hace y ofrecer el
+                      botón, así que esta mitad se estrecha a eso. */}
+                  <div
+                    data-testid="aviso-detalle"
+                    className="mt-4 hidden space-y-4 sm:block"
+                  >
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      Si un equipo de plató, cámara, intercom o sala de sonido
+                      presenta anomalías, avisa al taller y el equipo de
+                      ingeniería recibirá la notificación de inmediato.
+                    </p>
 
-                  <ul className="mt-4 space-y-2">
-                    {[
-                      "Sin registro previo ni contraseña",
-                      "Código de seguimiento automático",
-                      "Adjunta fotografías y detalles técnicos del equipo",
-                    ].map((ventaja) => (
-                      <li
-                        key={ventaja}
-                        className="flex items-start gap-2 text-xs text-foreground"
-                      >
-                        <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-signal" />
-                        <span>{ventaja}</span>
-                      </li>
-                    ))}
-                  </ul>
+                    <ul className="space-y-2">
+                      {[
+                        "Sin registro previo ni contraseña",
+                        "Código de seguimiento automático",
+                        "Adjunta fotografías y detalles técnicos del equipo",
+                      ].map((ventaja) => (
+                        <li
+                          key={ventaja}
+                          className="flex items-start gap-2 text-xs text-foreground"
+                        >
+                          <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-signal" />
+                          <span>{ventaja}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
 
                 <div className="lg:col-span-7">
-                  {/* Los tres pasos, en el mismo orden en que ocurren */}
-                  <ol className="space-y-3">
+                  {/* Los tres pasos, en el mismo orden en que ocurren. En
+                      móvil no se cuentan: el botón está justo debajo y los
+                      pasos, sin ancho, son tres párrafos más que leer. */}
+                  <ol
+                    data-testid="aviso-pasos"
+                    className="hidden space-y-3 sm:block"
+                  >
                     {PASOS.map((paso) => (
                       <li key={paso.numero} className="flex gap-3">
                         <span className="mt-0.5 font-mono text-[11px] font-bold tracking-wider text-signal">
@@ -537,7 +547,13 @@ export default function Landing() {
                       </p>
                     </div>
                   </div>
-                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                  {/* La línea de arriba ya dice lo que hace falta; este párrafo
+                      repite sin cuenta ni contraseña, y en móvil no cabe dos
+                      veces la misma promesa. */}
+                  <p
+                    data-testid="seguimiento-intro"
+                    className="mt-4 hidden text-sm leading-relaxed text-muted-foreground sm:block"
+                  >
                     Sin cuenta ni contraseña. Solo necesitas el código que te
                     dieron al crear una incidencia.
                   </p>
@@ -563,7 +579,11 @@ export default function Landing() {
               className="cursor-pointer text-left transition-colors hover:text-foreground"
               title={`${DETAILED_VERSION} · Ver bitácora de cambios entre versiones`}
             >
-              {FULL_VERSION} · Sistema de Gestión de Mantenimiento Broadcast
+              {FULL_VERSION}
+              <span className="hidden sm:inline">
+                {" "}
+                · Sistema de Gestión de Mantenimiento Broadcast
+              </span>
             </button>
             <p>
               © {new Date().getFullYear()} RGLara. Todos los derechos

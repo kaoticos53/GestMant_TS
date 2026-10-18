@@ -28,6 +28,13 @@ y [maquinas.test.ts](./tests/maquinas.test.ts) avisa si el dibujo se queda atrá
 app pinta esas mismas tablas —generadas del código— en la pantalla **«Máquinas del
 taller»**, para no tener que abrir ningún fichero para saber dónde está un caso.
 
+Y si el taller manda el correo por su propio servidor —o desde una cuenta de
+**Gmail** o un buzón de pruebas de **Ethereal**—, el repositorio trae el puente
+que hace falta: el backend de Convex no abre conexiones TCP, así que el **relevo
+de correo** recibe el sobre por HTTP y lo entrega por SMTP. Se arranca con
+`npm run mail:relay` y la guía —local, en el NAS, con Gmail paso a paso, con sus
+comprobaciones y sus tropiezos— está en **[RELEVO.md](./RELEVO.md)**.
+
 Y las dos fronteras que el código cruza a diario —los módulos puros de `src/lib`,
 que se prueban solos y no arrastran Convex, y los callbacks de `src/convex`, que
 escriben lo que la máquina dijo en vez de redecidir sus reglas— las vigila

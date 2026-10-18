@@ -265,5 +265,42 @@ services:
       backend:
         condition: service_healthy
 
+  relevo:
+    # El puente de correo del taller, opcional: recibe el sobre por HTTP y lo
+    # entrega por SMTP. Es lo que se configura en Ajustes del taller con la
+    # opción «Relevo propio», porque el backend de Convex no abre conexiones
+    # TCP. Solo arranca cuando se pide, con el perfil «correo»: un taller que
+    # mande por Resend o por la pasarela no lo necesita.
+    #
+    # No publica ningún puerto: quien le manda los correos es el backend, por la
+    # red del propio proyecto, con la dirección http://relevo:8788/enviar.
+    # La receta está en `scripts/mail-relay.mjs`, montada desde el código.
+    image: node:22-alpine
+    profiles: ["correo"]
+    restart: unless-stopped
+    command: ["node", "/app/mail-relay.mjs"]
+    volumes:
+      - ./codigo/scripts/mail-relay.mjs:/app/mail-relay.mjs:ro
+      - ./codigo/scripts/mail-relay-lib.mjs:/app/mail-relay-lib.mjs:ro
+    environment:
+      - MAIL_RELAY_PORT=8788
+      - MAIL_RELAY_HOST=0.0.0.0
+      - MAIL_RELAY_TOKEN=${MAIL_RELAY_TOKEN:-}
+      # Sin SMTP_HOST el contenedor arranca y se para diciendo qué falta; no se
+      # exige aquí para que el perfil siga siendo opcional en el `.env`.
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_TLS=${SMTP_TLS:-auto}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_HELO=${SMTP_HELO:-pulso-taller.local}
+      - SMTP_REJECT_UNAUTHORIZED=${SMTP_REJECT_UNAUTHORIZED:-true}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8788/salud"]
+      interval: 30s
+      start_period: 5s
+      retries: 5
+
 volumes:
   datos:

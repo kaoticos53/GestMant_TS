@@ -721,7 +721,7 @@ export default function Dashboard() {
                     : activeTab === "permissions"
                       ? "Crea los roles del taller y configura qué ve y qué puede modificar cada uno. Solo el administrador tiene acceso a esta pantalla."
                       : activeTab === "settings"
-                        ? "Las reglas de fondo del taller: qué se archiva solo cada noche, a quién le avisa el panel del trabajo que avanza sin dejar rastro en el cuaderno y a quién le llegan los avisos del expediente."
+                        ? "Las reglas de fondo del taller: por dónde sale el correo y qué avisos recibe cada rol, qué se archiva solo cada noche, a quién le avisa el panel del trabajo que avanza sin dejar rastro en el cuaderno y a quién le llegan los avisos del expediente."
                         : activeTab === "archive"
                           ? "El archivo del taller: incidencias cerradas y peticiones ya decididas que ya no están en el día a día. Búscalas aquí o recupera las que vuelvan a hacer falta."
                           : activeTab === "manuals"
@@ -754,7 +754,7 @@ export default function Dashboard() {
                   size="sm"
                   className="gap-2 text-muted-foreground"
                   onClick={() => goToTab("settings")}
-                  title="Archivado automático, aviso de trabajo sin constancia y avisos del expediente, en un solo sitio"
+                  title="Correo, archivado automático, aviso de trabajo sin constancia y avisos del expediente, en un solo sitio"
                 >
                   <SlidersHorizontal className="size-4" />
                   Ajustes del taller

@@ -1,4 +1,3 @@
-import { createVlyIntegrations } from "@vly-ai/integrations";
 import { v } from "convex/values";
 import {
   INCIDENT_WITHDRAWN_NOTICE,
@@ -6,11 +5,16 @@ import {
   mailNotice,
   mailableStatus,
   renderIncidentMail,
+  renderIncidentStaffMail,
+  staffMailNotice,
   type IncidentMailNotice,
+  type IncidentStaffNotice,
 } from "../lib/incidentMail";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { deliverMailLogged } from "./_mail/deliver";
 import { ensurePublicCode } from "./publicCodes";
+import { INCIDENT_STATUSES } from "./schema";
 import {
   internalAction,
   internalMutation,
@@ -157,6 +161,147 @@ export interface NotifyResult {
 }
 
 /**
+ * Lo que hace falta de una incidencia para el aviso interno: la referencia, el
+ * equipo, quién la lleva y lo que se contó, sin el correo de nadie ni el código
+ * de seguimiento. Un aviso ya retirado no se reparte: el taller la saca de su
+ * lista a la vez que se manda esto, y llegar tarde con «hay una incidencia nueva»
+ * sería mentir.
+ */
+export const staffContext = internalQuery({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident || incident.deletedAt !== undefined) return null;
+    return {
+      reference: incident.reference,
+      reporterName: incident.reporterName,
+      equipmentKind: incident.equipmentKind ?? null,
+      model: incident.model ?? null,
+      location: incident.location ?? null,
+      description: incident.description,
+      reportedAt: incident.reportedAt,
+      assigneeName: incident.assigneeName ?? null,
+      workshopAssigneeName: incident.workshopAssigneeName ?? null,
+      // Lo último que se repartió, para no repetirlo si dos toques de la ficha
+      // programaron el mismo aviso antes de que el primero se apuntara.
+      staffNotifiedStatus: incident.staffNotifiedStatus ?? null,
+    };
+  },
+});
+
+/** Lo que se está contando, para el motivo de un fallo y para el histórico. */
+function staffNoticeWhat(notice: IncidentStaffNotice): string {
+  if (notice === INCIDENT_STATUSES.ASSIGNED)
+    return "el aviso interno de la asignación";
+  if (notice === INCIDENT_STATUSES.REPORTED)
+    return "el aviso interno de la incidencia";
+  return "el aviso interno del cierre";
+}
+
+/**
+ * El aviso interno de una incidencia, a los roles que lo tengan marcado en los
+ * ajustes del correo: cuando entra, cuando se asigna y cuando se cierra.
+ *
+ * Es otro correo que el de quien notificó, y no una copia: aquel habla de «tu
+ * incidencia» y lleva el código de seguimiento, que es del invitado. Este lleva la
+ * referencia interna, quién la lleva y el enlace al panel, que es lo que el taller
+ * necesita para trabajar.
+ *
+ * Sin roles marcados no se compone nada. Si el correo sale mal, el motivo queda en
+ * el histórico de envíos y no se apunta en la ficha: la incidencia no tiene la
+ * culpa de que el servicio de correo esté de mal humor. Lo que sí se apunta es el
+ * aviso dado, para no repetirlo con el siguiente toque de la ficha.
+ */
+export const notifyStaff = internalAction({
+  args: {
+    incidentId: v.id("incidents"),
+    notice: v.union(
+      v.literal(INCIDENT_STATUSES.REPORTED),
+      v.literal(INCIDENT_STATUSES.ASSIGNED),
+      v.literal(INCIDENT_STATUSES.RESOLVED),
+      v.literal(INCIDENT_STATUSES.UNRESOLVED),
+    ),
+  },
+  handler: async (ctx, args): Promise<NotifyResult> => {
+    const recipients = await ctx.runQuery(
+      internal.mailSettings.incidentRecipients,
+      {},
+    );
+    if (recipients.length === 0) return { status: "skipped" };
+    const incident = await ctx.runQuery(internal.incidentMail.staffContext, {
+      incidentId: args.incidentId,
+    });
+    if (incident === null) return { status: "skipped" };
+    if (incident.staffNotifiedStatus === args.notice)
+      return { status: "skipped" };
+
+    const email = renderIncidentStaffMail({
+      ...incident,
+      notice: args.notice,
+      appUrl: process.env.SITE_URL,
+    });
+    const config = await ctx.runQuery(internal.mailSettings.delivery, {});
+    const delivery = await deliverMailLogged(
+      ctx,
+      config,
+      {
+        to: recipients,
+        subject: email.subject,
+        text: email.text,
+        html: email.html,
+      },
+      staffNoticeWhat(args.notice),
+      "equipo",
+      args.incidentId,
+    );
+    await ctx.runMutation(internal.incidentMail.recordStaffNotice, {
+      incidentId: args.incidentId,
+      notice: args.notice,
+    });
+    return delivery.ok
+      ? { status: "sent" }
+      : { status: "failed", error: delivery.error };
+  },
+});
+
+/**
+ * Apunta el aviso interno dado. Se guarda aunque el envío falle —como el de quien
+ * notificó—: reintentarlo en cada cambio de la ficha no arregla un correo caído, y
+ * el motivo ya está en el histórico.
+ */
+export const recordStaffNotice = internalMutation({
+  args: { incidentId: v.id("incidents"), notice: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.incidentId, {
+      staffNotifiedStatus: args.notice,
+    });
+  },
+});
+
+/**
+ * Programa el aviso interno de lo que acaba de pasarle a la incidencia. Se
+ * programa por lo mismo que el de quien notificó —mandar correo es cosa de una
+ * acción— y no se repite el mismo aviso dos veces: reasignar a otra persona no
+ * vuelve a mandar «asignada» a todo el taller.
+ *
+ * La decisión de qué estados se reparten vive en `lib/incidentMail`
+ * (`staffMailNotice`), no aquí.
+ */
+export async function scheduleStaffEmail(
+  ctx: MutationCtx,
+  incident: Doc<"incidents">,
+  notice: IncidentMailNotice,
+): Promise<void> {
+  const staffNotice = staffMailNotice(notice);
+  if (staffNotice === null) return;
+  if (incident.staffNotifiedStatus === staffNotice) return;
+  await ctx.scheduler.runAfter(0, internal.incidentMail.notifyStaff, {
+    incidentId: incident._id,
+    notice: staffNotice,
+  });
+}
+
+/**
  * Avisa a quien notificó de que su caso ha cambiado de estado. Programada desde
  * las mutaciones que cambian el estado, corre una vez por cambio y no repite el
  * mismo estado dos veces.
@@ -205,41 +350,31 @@ export const notifyReporter = internalAction({
       appUrl: process.env.SITE_URL,
     });
 
-    const key = process.env.VLY_INTEGRATION_KEY;
-    if (!key) {
-      const error =
-        "El deployment no tiene VLY_INTEGRATION_KEY: el aviso a quien notificó no se puede enviar todavía.";
-      await ctx.runMutation(internal.incidentMail.record, {
-        incidentId: args.incidentId,
-        status: notice,
-        error,
-      });
-      return { status: "failed", error };
-    }
-
-    let failure: string | null = null;
-    try {
-      const vly = createVlyIntegrations({ deploymentToken: key });
-      const result = await vly.email.send({
+    // Por dónde sale lo decide el taller en sus ajustes: la pasarela de la
+    // plataforma o el servicio que haya configurado. Aquí no se sabe cuál es, y
+    // no hace falta: la entrega lo resuelve y devuelve el motivo si no pudo.
+    const config = await ctx.runQuery(internal.mailSettings.delivery, {});
+    const delivery = await deliverMailLogged(
+      ctx,
+      config,
+      {
         to: [incident.reporterEmail],
         subject: email.subject,
         text: email.text,
         html: email.html,
-      });
-      if (!result.success) {
-        failure = result.error ?? "La pasarela rechazó el envío.";
-      }
-    } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
-    }
+      },
+      "el aviso a quien notificó",
+      "incidencia",
+      args.incidentId,
+    );
 
     await ctx.runMutation(internal.incidentMail.record, {
       incidentId: args.incidentId,
       status: notice,
-      ...(failure === null ? { sentAt: Date.now() } : { error: failure }),
+      ...(delivery.ok ? { sentAt: Date.now() } : { error: delivery.error }),
     });
-    return failure === null
+    return delivery.ok
       ? { status: "sent" }
-      : { status: "failed", error: failure };
+      : { status: "failed", error: delivery.error };
   },
 });

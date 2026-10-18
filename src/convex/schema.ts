@@ -525,6 +525,11 @@ const schema = defineSchema({
     emailedStatus: v.optional(v.string()),
     emailedAt: v.optional(v.number()),
     emailError: v.optional(v.string()),
+    // Último aviso interno —el que reciben los roles marcados en los ajustes del
+    // correo— que se dio de esta incidencia: el alta, la asignación o el cierre.
+    // Va aparte del aviso a quien notificó porque son dos correos distintos y a
+    // públicos distintos; guardarlo evita repetir el mismo aviso del taller.
+    staffNotifiedStatus: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1150,6 +1155,58 @@ const schema = defineSchema({
     updatedAt: v.number(),
     updatedBy: v.optional(v.string()),
   }).index("by_key", ["key"]),
+
+  // Ajustes del correo saliente: una sola fila (`key` = "default"). Guarda por
+  // qué servicio sale el correo del taller y con qué remitente; sin fila
+  // guardada valen los de partida de `lib/mail` (la pasarela de la plataforma).
+  // La clave del servicio vive aquí y no sale nunca al navegador: la consulta
+  // de los ajustes la enmascara y la entrega —que la lee— es interna. El
+  // `provider` es una clave de `lib/mail`, como el rol de un usuario: la valida
+  // el reparto, no el esquema, para no tener el catálogo escrito dos veces.
+  mailSettings: defineTable({
+    key: v.string(),
+    provider: v.string(),
+    enabled: v.boolean(), // false = no se manda ningún correo del taller
+    fromName: v.string(),
+    fromEmail: v.string(),
+    replyTo: v.optional(v.string()),
+    bcc: v.optional(v.string()), // copia oculta fija del taller (una dirección)
+    // Roles que reciben por correo el aviso interno de cada incidencia nueva.
+    // Vacío = no se avisa a nadie por correo (quien la notificó sigue recibiendo
+    // el suyo). Se valida contra la tabla de roles, no aquí.
+    incidentRoles: v.optional(v.array(v.string())),
+    domain: v.optional(v.string()), // dominio verificado (Mailgun)
+    relayUrl: v.optional(v.string()), // puente HTTP del relevo propio
+    smtpUser: v.optional(v.string()), // cuenta SMTP (Gmail, buzón de pruebas)
+    apiKey: v.optional(v.string()), // secreto del servicio, nunca en una lectura
+    relayToken: v.optional(v.string()), // testigo del relevo, idem
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.string()),
+    // La última prueba de envío, para que la pantalla pueda enseñar si el
+    // servicio contesta o qué dijo al no hacerlo.
+    lastTestAt: v.optional(v.number()),
+    lastTestTo: v.optional(v.string()),
+    lastTestOk: v.optional(v.boolean()),
+    lastTestError: v.optional(v.string()),
+  }).index("by_key", ["key"]),
+
+  // Histórico de correos salientes: qué salió, a quién y qué contestó el
+  // servicio. Guarda el sobre —destinatarios, copia oculta, asunto y resultado—
+  // y nunca el cuerpo, que ya vive en la ficha de la incidencia o en el resumen.
+  // Es de auditoría, no trabajo del taller: el vaciado no lo toca, y se poda solo
+  // al apuntar (los últimos `MAIL_LOG_LIMIT`), porque crece con cada aviso.
+  mailLog: defineTable({
+    at: v.number(),
+    what: v.string(), // «el aviso a quien notificó», en minúsculas
+    origin: v.string(), // "incidencia" | "resumen" | "prueba"
+    provider: v.string(),
+    to: v.array(v.string()),
+    bcc: v.array(v.string()),
+    subject: v.string(),
+    ok: v.boolean(),
+    error: v.optional(v.string()),
+    relatedId: v.optional(v.string()), // la incidencia, cuando la hay
+  }).index("by_at", ["at"]),
 
   // Registro inmutable de auditoría de seguridad: registra cambios de roles,
   // activación/baja de cuentas, vaciado de taller e intentos de acceso no autorizados.

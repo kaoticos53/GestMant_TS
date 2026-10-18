@@ -20,6 +20,11 @@ services:
     ports:
       - "127.0.0.1:3210:3210"
       - "127.0.0.1:3211:3211"
+    extra_hosts:
+      # El relevo de correo (`npm run mail:relay`) corre en el ordenador, no en
+      # este contenedor: con esto el backend lo alcanza como
+      # `http://host.docker.internal:8788/enviar` también en Linux.
+      - "host.docker.internal:host-gateway"
     volumes:
       - data:/convex/data
     environment:

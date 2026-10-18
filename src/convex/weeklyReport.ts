@@ -1,4 +1,3 @@
-import { createVlyIntegrations } from "@vly-ai/integrations";
 import { ConvexError, v } from "convex/values";
 import {
   DEFAULT_WEEKLY_REPORT_ROLES,
@@ -17,6 +16,7 @@ import {
 } from "../lib/weeklyReport";
 import { DEFAULT_WORK_WITHOUT_TRACE_DAYS } from "../lib/workshop";
 import { internal } from "./_generated/api";
+import { deliverMailLogged } from "./_mail/deliver";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
   action,
@@ -347,33 +347,28 @@ interface DeliveryResult {
 }
 
 /**
- * Manda el correo por la pasarela de la plataforma (la misma que los códigos de
- * acceso), que conoce el proyecto por su clave de integraciones. Sin clave no se
- * intenta nada: se devuelve el motivo para que quede escrito en el histórico.
+ * Manda el correo por el servicio que el taller tenga configurado en sus ajustes
+ * —la pasarela de la plataforma si no ha cambiado nada—. Sin clave no se intenta
+ * nada: se devuelve el motivo para que quede escrito en el histórico, que es
+ * donde se lee por qué una semana no salió.
  */
-async function deliver(email: {
-  to: string[];
-  subject: string;
-  text: string;
-  html: string;
-}): Promise<DeliveryResult> {
-  const key = process.env.VLY_INTEGRATION_KEY;
-  if (!key) {
-    return {
-      ok: false,
-      error:
-        "El deployment no tiene VLY_INTEGRATION_KEY: el correo del resumen no se puede enviar todavía.",
-    };
-  }
-  const vly = createVlyIntegrations({ deploymentToken: key });
-  const result = await vly.email.send({
-    to: email.to,
-    subject: email.subject,
-    text: email.text,
-    html: email.html,
-  });
-  if (result.success) return { ok: true };
-  return { ok: false, error: result.error ?? "La pasarela rechazó el envío." };
+async function deliver(
+  ctx: ActionCtx,
+  email: {
+    to: string[];
+    subject: string;
+    text: string;
+    html: string;
+  },
+): Promise<DeliveryResult> {
+  const config = await ctx.runQuery(internal.mailSettings.delivery, {});
+  return await deliverMailLogged(
+    ctx,
+    config,
+    email,
+    "el correo del resumen",
+    "resumen",
+  );
 }
 
 /** Compone, envía y anota. Es el camino que comparten el cron y «enviar ahora». */
@@ -389,7 +384,7 @@ async function sendReport(ctx: ActionCtx): Promise<{
   const blocker = weeklyDeliveryBlocker(report.recipients);
   const delivery =
     blocker === null
-      ? await deliver({
+      ? await deliver(ctx, {
           to: report.recipients,
           subject: report.subject,
           text: report.text,

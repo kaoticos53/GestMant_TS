@@ -18,19 +18,24 @@ import { MemoryRouter } from "react-router";
  * Dos cosas se fijan aquí, y las dos son de maquetación, no de contenido:
  *
  * 1. **La consola de supervisión no se pinta por debajo de `lg`.** Es una maqueta
- *    del panel, no el panel; en un móvil no cabe junto al titular y estorba. En su
- *    lugar queda la línea de resumen con lo que de verdad se mira de un vistazo.
+ *    del panel, no el panel; en un móvil no cabe junto al titular y estorba.
  *    Como la portada no usa JavaScript para decidirlo —sería un salto al cargar,
  *    y el HTML se pinta igual sin él— la decisión está en las clases: la consola
- *    nace `hidden` y solo aparece en `lg`, y el resumen nace visible y se esconde
- *    en `lg`. Eso es lo que se comprueba, resolviendo la cascada de breakpoints
- *    como la resolvería el navegador.
+ *    nace `hidden` y solo aparece en `lg`.
  *
- * 2. **El hueco entre el hero y el aviso se mantiene.** Lo que separa dos bloques
- *    es el relleno de abajo de uno más el de arriba del siguiente: 3rem + 3rem en
- *    móvil, 96 px, el mismo aire que separa el resto de secciones. Si alguien
- *    toca uno de los dos lados —o se le olvida el `sm:` que lo acompaña— el test
- *    lo dice, con los tres anchos medidos de una vez.
+ * 2. **La portada de móvil es la corta.** La banda del taller en cifras, el
+ *    párrafo largo del titular, las ventajas del aviso y los tres pasos solo se
+ *    pintan con ancho de sobra; en un teléfono quedan el acceso de los técnicos,
+ *    el aviso y el seguimiento con su formulario. Eso también se decide en
+ *    clases, y se comprueba con la misma cascada de breakpoints.
+ *
+ * 3. **El hueco entre bloques se mantiene.** Lo que separa dos bloques es el
+ *    relleno de abajo de uno más el de arriba del siguiente: 3rem + 3rem en
+ *    móvil, 96 px, el mismo aire que separa el resto de secciones. Con la banda
+ *    escondida, el hero y las puertas pasan a ser vecinos y el hueco tiene que
+ *    seguir siendo el mismo. Si alguien toca uno de los lados —o se le olvida el
+ *    `sm:` que lo acompaña— el test lo dice, con los tres anchos medidos de una
+ *    vez.
  * Ninguna de las dos se apoya en JavaScript a propósito: la portada se decide en
  * CSS, así que se pinta igual sin hidratar y no da un salto al cargar.
  *
@@ -293,13 +298,14 @@ function buscar(selector: string, que: string): HTMLElement {
 /**
  * El hueco que se espera entre cada par de bloques, en píxeles.
  *
- * Los bloques de contenido se separan con el aire de una sección a cada lado;
- * página: hero, cifras, la tarjeta de las dos puertas y pie.
+ * Los bloques de contenido se separan con el aire de una sección a cada lado; y
+ * en cada ancho entran los que de verdad se pintan: la banda del taller solo en
+ * escritorio, así que en móvil el hero y las puertas quedan seguidos.
  */
-const ESCALERA: Record<Ancho, number[]> = {
-  base: [96, 96, 96],
-  sm: [112, 112, 112],
-  lg: [160, 160, 160],
+const ESCALERA: Record<Ancho, number> = {
+  base: 96,
+  sm: 112,
+  lg: 160,
 };
 
 /**
@@ -336,6 +342,11 @@ function escalera(): { nombre: string; elemento: HTMLElement }[] {
   return bloques as { nombre: string; elemento: HTMLElement }[];
 }
 
+/** Los bloques que se pintan en un ancho dado, en el orden del documento. */
+function pintados(ancho: Ancho) {
+  return escalera().filter((bloque) => sePinta(bloque.elemento, ancho));
+}
+
 describe("la portada en móvil", () => {
   test("la consola de supervisión no se pinta por debajo de lg", () => {
     const consola = buscar(
@@ -351,20 +362,69 @@ describe("la portada en móvil", () => {
     expect(sePinta(consola, "lg")).toBe(true);
   });
 
-  test("en su lugar queda la línea de resumen, visible solo hasta lg", () => {
-    const resumen = buscar(
-      '[data-testid="resumen-movil"]',
-      "el resumen del móvil",
+  test("la banda del taller en cifras solo se pinta en escritorio", () => {
+    const banda = buscar("#taller", "la banda de cifras");
+
+    // Quien entra desde el teléfono viene a avisar o a mirar cómo va su aviso,
+    // no a leer el parte del mes: la banda se queda fuera de la portada corta.
+    expect(sePinta(banda, "base")).toBe(false);
+    expect(sePinta(banda, "sm")).toBe(false);
+    expect(sePinta(banda, "lg")).toBe(true);
+  });
+
+  test("en el móvil no se repiten los recuentos del taller", () => {
+    const hero = buscar("h1", "el titular").closest("section");
+    if (!hero) throw new Error("El titular ya no está dentro de una sección.");
+
+    // El recuento del titular se fue con la banda: era el mismo dato dos veces,
+    // y en la portada corta sobraba el primero.
+    expect(hero.querySelector('[data-testid="resumen-movil"]')).toBeNull();
+    expect(hero.textContent).not.toContain("incidencias abiertas");
+    expect(hero.textContent).not.toContain("equipos en servicio");
+  });
+
+  test("el titular se queda en una línea en el móvil", () => {
+    const corto = buscar(
+      '[data-testid="hero-corto"]',
+      "la línea corta del titular",
+    );
+    const largo = buscar(
+      '[data-testid="hero-largo"]',
+      "el párrafo largo del titular",
     );
 
-    expect(sePinta(resumen, "base")).toBe(true);
-    expect(sePinta(resumen, "sm")).toBe(true);
-    // Con la consola delante, la línea sobra: es el mismo dato dos veces.
-    expect(sePinta(resumen, "lg")).toBe(false);
-    // Y lleva las cifras del taller, no una muestra: al lado de la banda de
-    // abajo, un número inventado aquí se leería como el del taller.
-    expect(resumen.textContent).toContain("69 incidencias abiertas");
-    expect(resumen.textContent).toContain("24 equipos en servicio");
+    expect(sePinta(corto, "base")).toBe(true);
+    expect(sePinta(largo, "base")).toBe(false);
+    // Con ancho de sobra vuelve el párrafo de siempre, y la línea corta se va.
+    expect(sePinta(largo, "sm")).toBe(true);
+    expect(sePinta(corto, "sm")).toBe(false);
+  });
+
+  test("el aviso y el seguimiento pierden su letra pequeña en el móvil", () => {
+    // El porqué del aviso, sus ventajas, los tres pasos y la explicación del
+    // seguimiento: cuatro bloques de texto que en un teléfono solo alargan el
+    // camino hasta el botón y el formulario.
+    for (const id of ["aviso-detalle", "aviso-pasos", "seguimiento-intro"]) {
+      const bloque = buscar(`[data-testid="${id}"]`, `el bloque «${id}»`);
+      expect(sePinta(bloque, "base"), id).toBe(false);
+      expect(sePinta(bloque, "sm"), id).toBe(true);
+    }
+  });
+
+  test("en el móvil quedan las tres puertas: acceso, aviso y seguimiento", () => {
+    // Lo único que la portada corta promete, y lo que sigue estando entero.
+    expect(
+      container.querySelector('a[href="/auth"]'),
+      "el acceso de los técnicos",
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll('a[href="/reportar"]').length,
+      "el aviso de incidencia",
+    ).toBeGreaterThan(0);
+    expect(
+      buscar("#seguimiento", "el seguimiento").querySelector("input"),
+      "el campo del código de seguimiento",
+    ).not.toBeNull();
   });
 
   test("la banda de cifras enseña la foto del taller, no una muestra", () => {
@@ -382,49 +442,62 @@ describe("la portada en móvil", () => {
     expect(banda.textContent).not.toContain("ejemplo");
   });
 
-  test("entre el hero y el aviso se mantiene el hueco, ya con las cifras en medio", () => {
+  test("con la banda escondida, el hero y el aviso siguen separados igual", () => {
     const hero = buscar("h1", "el titular").closest("section");
     if (!hero) throw new Error("El titular ya no está dentro de una sección.");
-    const cifras = buscar("#taller", "la banda de cifras");
+    const puertas = buscar("#avisar", "el centro de aviso").closest("section");
+    if (!puertas) throw new Error("El aviso ya no está dentro de una sección.");
 
-    // El aire entre dos bloques es el relleno de abajo de uno más el de arriba del
-    // siguiente. En móvil, 3rem + 3rem: los mismos 96 px que separan los demás
-    // bloques de contenido.
-    const hueco = (ancho: Ancho) =>
-      relleno(hero, "bottom", ancho) + relleno(cifras, "top", ancho);
-
-    expect(hueco("base")).toBe(96);
-    expect(hueco("sm")).toBe(112);
-    expect(hueco("lg")).toBe(160);
+    // `display: none` quita la caja entera, así que en móvil lo que separa el
+    // hero del aviso es el relleno de los dos: los mismos 96 px de siempre, sin
+    // contar la banda que hay escondida en medio.
+    for (const ancho of ["base", "sm"] as const) {
+      expect(
+        relleno(hero, "bottom", ancho) + relleno(puertas, "top", ancho),
+        `hero → puertas en ${ancho}`,
+      ).toBe(ESCALERA[ancho]);
+    }
   });
 
-  test("hasta tableta, el hero y las cifras ponen el mismo aire", () => {
+  test("hasta tableta, el hero y el aviso ponen el mismo aire", () => {
     const hero = buscar("h1", "el titular").closest("section");
     if (!hero) throw new Error("El titular ya no está dentro de una sección.");
-    const cifras = buscar("#taller", "la banda de cifras");
+    const puertas = buscar("#avisar", "el centro de aviso").closest("section");
+    if (!puertas) throw new Error("El aviso ya no está dentro de una sección.");
 
     // 3rem y 3.5rem a cada lado: el hueco no lo pone un solo bloque.
     for (const ancho of ["base", "sm"] as const) {
-      expect(relleno(hero, "bottom", ancho), `hero/cifras en ${ancho}`).toBe(
-        relleno(cifras, "top", ancho),
+      expect(relleno(hero, "bottom", ancho), `hero/puertas en ${ancho}`).toBe(
+        relleno(puertas, "top", ancho),
       );
     }
   });
 
-  test("la escalera entera: 96 entre bloques", () => {
-    const bloques = escalera();
-
+  test("la escalera: los bloques visibles se separan igual en cada ancho", () => {
     // La página se lee como una sola pieza porque los bloques se separan todos
-    // igual. Las dos puertas del taller cuentan como un bloque —son una sola
-    // tarjeta—, así que la escalera tiene un tramo menos que bloques hay.
-    for (const [indice, esperado] of ESCALERA.base.entries()) {
-      const desde = bloques[indice];
-      const hasta = bloques[indice + 1];
+    // igual. En móvil y tableta la banda del taller no se pinta, así que la
+    // escalera tiene un tramo menos que en escritorio; las dos puertas cuentan
+    // como un bloque —son una sola tarjeta—.
+    for (const ancho of CASCADA) {
+      const visibles = pintados(ancho);
       expect(
-        relleno(desde.elemento, "bottom", "base") +
-          relleno(hasta.elemento, "top", "base"),
-        `${desde.nombre} → ${hasta.nombre} en móvil`,
-      ).toBe(esperado);
+        visibles.map((bloque) => bloque.nombre),
+        `bloques visibles en ${ancho}`,
+      ).toEqual(
+        ancho === "lg"
+          ? ["hero", "cifras", "puertas", "pie"]
+          : ["hero", "puertas", "pie"],
+      );
+
+      for (let indice = 0; indice < visibles.length - 1; indice += 1) {
+        const desde = visibles[indice];
+        const hasta = visibles[indice + 1];
+        expect(
+          relleno(desde.elemento, "bottom", ancho) +
+            relleno(hasta.elemento, "top", ancho),
+          `${desde.nombre} → ${hasta.nombre} en ${ancho}`,
+        ).toBe(ESCALERA[ancho]);
+      }
     }
   });
 
@@ -449,22 +522,6 @@ describe("la portada en móvil", () => {
       ).toBeTruthy();
     }
   });
-
-  test("la escalera sube con el ancho: 112 en tableta y 160 en escritorio", () => {
-    const bloques = escalera();
-
-    for (const ancho of ["sm", "lg"] as const) {
-      for (const [indice, esperado] of ESCALERA[ancho].entries()) {
-        const desde = bloques[indice];
-        const hasta = bloques[indice + 1];
-        expect(
-          relleno(desde.elemento, "bottom", ancho) +
-            relleno(hasta.elemento, "top", ancho),
-          `${desde.nombre} → ${hasta.nombre} en ${ancho}`,
-        ).toBe(esperado);
-      }
-    }
-  });
 });
 
 describe("cuando el taller aún no tiene cifras", () => {
@@ -484,7 +541,6 @@ describe("cuando el taller aún no tiene cifras", () => {
     expect(container.textContent).toContain(
       "Consultando las cifras del taller",
     );
-    expect(container.textContent).toContain("Consultando el taller");
   });
 
   test("sin muestra bastante, la media va a guion y dice por qué", async () => {

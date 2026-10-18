@@ -6,7 +6,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { scheduleReporterEmail } from "./incidentMail";
+import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { registerIncidentIntake } from "./incidentIntake";
 import { notifyUsers } from "./notify";
 import { admitPublicLookup } from "./publicLookupLimits";
@@ -339,6 +339,7 @@ export const assign = mutation({
       ],
     });
     await scheduleReporterEmail(ctx, incident, assigned);
+    await scheduleStaffEmail(ctx, incident, assigned);
     await notifyUsers(
       ctx,
       [assignee._id],
@@ -389,6 +390,7 @@ export const selfAssign = mutation({
       ],
     });
     await scheduleReporterEmail(ctx, incident, assigned);
+    await scheduleStaffEmail(ctx, incident, assigned);
     await notifyUsers(
       ctx,
       await moderatorIds(ctx),
@@ -553,6 +555,7 @@ export const verify = mutation({
       actor._id,
     );
     await scheduleReporterEmail(ctx, incident, status);
+    await scheduleStaffEmail(ctx, incident, status);
   },
 });
 
@@ -721,6 +724,7 @@ export const close = mutation({
       actor._id,
     );
     await scheduleReporterEmail(ctx, incident, status);
+    await scheduleStaffEmail(ctx, incident, status);
   },
 });
 

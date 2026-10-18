@@ -7,6 +7,7 @@ import { formatPublicCode } from "../src/lib/publicCode";
 import {
   INCIDENT_MAIL_STATUSES,
   INCIDENT_WITHDRAWN_NOTICE,
+  MAX_STAFF_MAIL_DESCRIPTION,
   incidentTrackingLink,
   isWithdrawnNotice,
   looksLikeEmail,
@@ -14,8 +15,10 @@ import {
   mailableStatus,
   normalizeReporterEmail,
   renderIncidentMail,
+  renderIncidentStaffMail,
   reporterFirstName,
   reporterNoticeText,
+  staffMailNotice,
 } from "../src/lib/incidentMail";
 
 type Test = ReturnType<typeof convexTest>;
@@ -70,7 +73,9 @@ describe("el texto del aviso a quien notificó", () => {
     // aviso que se cuenta: es lo que deja el código sin funcionar.
     expect(mailableStatus(INCIDENT_WITHDRAWN_NOTICE)).toBe(null);
     expect(isWithdrawnNotice(INCIDENT_WITHDRAWN_NOTICE)).toBe(true);
-    expect(mailNotice(INCIDENT_WITHDRAWN_NOTICE)).toBe(INCIDENT_WITHDRAWN_NOTICE);
+    expect(mailNotice(INCIDENT_WITHDRAWN_NOTICE)).toBe(
+      INCIDENT_WITHDRAWN_NOTICE,
+    );
     expect(mailNotice("assigned")).toBe("assigned");
     // Y el alta también se cuenta: es el correo que lleva el código a quien
     // avisó, que si no se queda solo con la pantalla que va a cerrar.
@@ -188,9 +193,7 @@ describe("el texto del aviso a quien notificó", () => {
         reporterEmail: "sandra.ruiz@taller.es",
         emailError: "El deployment no tiene VLY_INTEGRATION_KEY.",
       }),
-    ).toBe(
-      "No se pudo enviar: El deployment no tiene VLY_INTEGRATION_KEY.",
-    );
+    ).toBe("No se pudo enviar: El deployment no tiene VLY_INTEGRATION_KEY.");
   });
 
   test("el correo de quien avisa se guarda en minúsculas y se comprueba antes", () => {
@@ -310,6 +313,116 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
 afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.VLY_INTEGRATION_KEY;
+});
+
+describe("el aviso interno de una incidencia", () => {
+  const staffInput = {
+    notice: "reported" as const,
+    reference: "INC-0004",
+    reporterName: "Sandra Ruiz",
+    equipmentKind: "Cámara de estudio",
+    model: "HDC-3500",
+    location: "Plató 2",
+    description: "Se apaga sola en directo cuando se mueve el cable de vídeo.",
+    reportedAt: Date.UTC(2026, 0, 2, 9, 30),
+    appUrl: "https://taller.example/",
+  };
+
+  test("habla del taller, no de quien notificó, y no reparte el código", () => {
+    const mail = renderIncidentStaffMail(staffInput);
+    // La referencia interna es lo que el taller se cita entre sí.
+    expect(mail.subject).toContain("INC-0004");
+    expect(mail.subject).toContain("Cámara de estudio HDC-3500");
+    expect(mail.text).toContain("REFERENCIA: INC-0004");
+    expect(mail.text).toContain("La notificó: Sandra Ruiz");
+    expect(mail.text).toContain("Dónde: Plató 2");
+    expect(mail.text).toContain(staffInput.description);
+    // El código de seguimiento es del invitado: no se reparte por el taller.
+    expect(mail.text).not.toContain("Tu aviso");
+    expect(mail.text).not.toContain("/seguimiento");
+    // Y el enlace lleva al panel, que es donde se asigna.
+    expect(mail.text).toContain("https://taller.example/dashboard");
+  });
+
+  test("la descripción larga se recorta: el correo no es la ficha entera", () => {
+    const mail = renderIncidentStaffMail({
+      ...staffInput,
+      description: "a".repeat(MAX_STAFF_MAIL_DESCRIPTION + 200),
+    });
+    expect(mail.text).toContain("…");
+    expect(mail.text.length).toBeLessThan(MAX_STAFF_MAIL_DESCRIPTION + 800);
+  });
+
+  test("sin dirección pública se dice que se abra el panel", () => {
+    const mail = renderIncidentStaffMail({ ...staffInput, appUrl: null });
+    expect(mail.text).toContain("Ábrela en el panel para asignarla");
+    expect(mail.text).not.toContain("http");
+    expect(mail.html).not.toContain("http");
+  });
+
+  test("la asignación cuenta quién la lleva, sin repetir la descripción", () => {
+    const mail = renderIncidentStaffMail({
+      ...staffInput,
+      notice: "assigned",
+      assigneeName: "Iván Torres",
+    });
+    expect(mail.subject).toContain("Incidencia asignada");
+    expect(mail.subject).toContain("INC-0004");
+    expect(mail.text).toContain("Lo lleva: Iván Torres");
+    expect(mail.text).toContain("sale de la cola de asignación");
+    // En la asignación sobra el texto largo: ya lo leyó el taller al entrar.
+    expect(mail.text).not.toContain(staffInput.description);
+    expect(mail.text).toContain("https://taller.example/dashboard");
+  });
+
+  test("en taller, quien la lleva es el técnico de la orden", () => {
+    const mail = renderIncidentStaffMail({
+      ...staffInput,
+      notice: "assigned",
+      assigneeName: "Iván Torres",
+      workshopAssigneeName: "Paula Iglesias",
+    });
+    expect(mail.text).toContain("Lo lleva: Paula Iglesias");
+    expect(mail.text).not.toContain("Lo lleva: Iván Torres");
+  });
+
+  test("el cierre se cuenta como resuelto o sin resolución", () => {
+    const resolved = renderIncidentStaffMail({
+      ...staffInput,
+      notice: "resolved",
+      assigneeName: "Iván Torres",
+    });
+    expect(resolved.subject).toContain("Incidencia resuelta");
+    expect(resolved.text).toContain("El caso se ha cerrado como resuelto.");
+    // La fecha es la del aviso y no la del cierre, que es lo que no se sabe aquí.
+    expect(resolved.text).toContain("Notificada el");
+    expect(resolved.text).not.toContain("Cuándo");
+    // Y no vuelve a contar la avería: ya la leyó el taller al entrar.
+    expect(resolved.text).not.toContain(staffInput.description);
+
+    const unresolved = renderIncidentStaffMail({
+      ...staffInput,
+      notice: "unresolved",
+    });
+    expect(unresolved.subject).toContain("sin resolución");
+    expect(unresolved.text).toContain("se ha cerrado sin resolución");
+  });
+
+  test("solo el alta, la asignación y el cierre se reparten al taller", () => {
+    expect(staffMailNotice("reported")).toBe("reported");
+    expect(staffMailNotice("assigned")).toBe("assigned");
+    expect(staffMailNotice("resolved")).toBe("resolved");
+    expect(staffMailNotice("unresolved")).toBe("unresolved");
+    // Verificación, taller y pasos intermedios no son noticia para el equipo.
+    for (const status of [
+      "verified",
+      "workshop",
+      "waitingParts",
+      "repairing",
+    ]) {
+      expect(staffMailNotice(status)).toBe(null);
+    }
+  });
 });
 
 describe("el aviso por correo a quien notificó", () => {
@@ -707,6 +820,8 @@ describe("el aviso por correo a quien notificó", () => {
     expect(updated.emailedAt).toBeUndefined();
     // Y en la papelera se lee por qué no se le pudo avisar.
     const papelera = await coordinator.query(api.incidents.trash, {});
-    expect(reporterNoticeText(papelera.items[0])).toContain("No se pudo enviar");
+    expect(reporterNoticeText(papelera.items[0])).toContain(
+      "No se pudo enviar",
+    );
   });
 });

@@ -314,13 +314,18 @@ export async function coordinatorIds(ctx: Ctx): Promise<Id<"users">[]> {
   return ids;
 }
 
-/** Solo el administrador puede consultar o cambiar roles y permisos. */
-async function requireAdmin(ctx: Ctx): Promise<Doc<"users">> {
+/**
+ * Solo el administrador pasa por aquí. `what` completa la frase del error —«Solo
+ * el administrador puede ${what}»—, para que quien se topa con ella sepa qué le
+ * falta: gestionar roles, o configurar el correo del taller.
+ */
+export async function requireAdmin(
+  ctx: Ctx,
+  what = "gestionar roles y permisos",
+): Promise<Doc<"users">> {
   const user = await requireActor(ctx);
   if (user.role !== ROLES.ADMIN) {
-    throw new ConvexError(
-      "Solo el administrador puede gestionar roles y permisos.",
-    );
+    throw new ConvexError(`Solo el administrador puede ${what}.`);
   }
   return user;
 }
