@@ -2,7 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
+import { MAIL_ORIGIN_LABELS, type MailOrigin } from "@/lib/mail";
 import { roleBadgeClassName } from "@/lib/roles";
+import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
 import { Users } from "lucide-react";
@@ -12,23 +14,85 @@ import { toast } from "sonner";
 /**
  * Qué correos del taller recibe cada rol.
  *
- * Son dos avisos que no se parecen: el **aviso interno de una incidencia**, que
- * sale cuando entra el aviso, cuando se asigna y cuando se cierra, y el
- * **resumen semanal**. Antes cada uno se configuraba por su cuenta —el resumen en
- * su diálogo y el aviso interno no existía—, así que aquí están los dos juntos,
- * con una columna cada uno, para decidir de una vez quién recibe qué.
+ * La matriz tiene una columna por cada **origen del correo del taller**, los
+ * mismos cuatro de `MAIL_ORIGINS` (`lib/mail`) que apunta el histórico de envíos:
+ * el **aviso a quien notificó**, el **aviso interno de una incidencia**, el
+ * **resumen semanal** y la **prueba de envío**. Antes solo estaban los dos que se
+ * reparten por rol, así que la tarjeta contaba media historia: quien venía a
+ * decidir quién recibe qué no veía los dos correos que no se deciden por rol y
+ * tenía que deducirlos de la letra pequeña.
  *
- * Dos cosas que esta tarjeta no toca:
+ * Las cuatro se enseñan, pero solo dos se tocan:
  *
- * - **El correo a quien notificó** una incidencia: ese sale siempre a la
- *   dirección que dejó en el formulario y no depende de ningún rol.
- * - **El servidor y la clave**: eso es la tarjeta de al lado.
+ * - **El aviso interno de una incidencia** (`mailSettings.incidentRoles`): sale
+ *   cuando entra el aviso, cuando se asigna y cuando se cierra.
+ * - **El resumen semanal** (`reportSettings.roleKeys`): el mismo ajuste que el
+ *   diálogo «Resumen semanal», no una copia; cambiar aquí es cambiar allí.
+ * - **El aviso a quien notificó** y la **prueba de envío** tienen destinatario
+ *   fijo —la dirección que dejó quien notificó, y la que se escribe en el
+ *   servidor de correo— y no se reparten por rol. Van con su destino escrito en
+ *   la celda para que la matriz no deje ningún correo fuera, y sin interruptor:
+ *   apagarlas no es una decisión de este panel.
  *
- * La columna del resumen escribe el mismo ajuste que el diálogo «Resumen
- * semanal» (`reportSettings.roleKeys`), no una copia: cambiar aquí es cambiar
- * allí. Se guarda con un solo botón y dos escrituras, porque una lista sin la otra
+ * La cabecera y las filas comparten la misma rejilla (`LA_MATRIZ`), y por eso
+ * cada interruptor cae debajo de su encabezado. Antes la cabecera era un `flex`
+ * con dos etiquetas de texto y cada fila otra pareja de interruptores, así que el
+ * encabezado se quedaba donde le dejaba el ancho de su propia palabra y no
+ * apuntaba a nada. En pantallas estrechas no cabe la cabecera, y cada celda lleva
+ * su nombre corto debajo.
+ *
+ * Se guarda con un solo botón y dos escrituras, porque una lista sin la otra
  * dejaría a un rol recibiendo lo que se acaba de quitar.
  */
+
+/** Una columna de la matriz: un origen del correo y quién lo recibe. */
+interface MailColumn {
+  /** El origen del catálogo: de ahí sale el nombre, para no tenerlo dos veces. */
+  origin: MailOrigin;
+  /** Qué lista escribe la columna, o `null` si su destinatario no va por rol. */
+  list: "incident" | "weekly" | null;
+  /** Nombre corto, para cuando la cabecera no cabe (pantallas estrechas). */
+  short: string;
+  /** Lo que se lee en la celda cuando no hay nada que repartir. */
+  fixed?: string;
+}
+
+/**
+ * Las cuatro columnas, en el orden del catálogo: primero las dos que no se
+ * reparten, en medio las dos que sí.
+ */
+const COLUMNAS: readonly MailColumn[] = [
+  {
+    origin: "incidencia",
+    list: null,
+    short: "A quien notificó",
+    fixed: "Siempre",
+  },
+  { origin: "equipo", list: "incident", short: "Aviso interno" },
+  { origin: "resumen", list: "weekly", short: "Resumen" },
+  { origin: "prueba", list: null, short: "Prueba", fixed: "A demanda" },
+];
+
+/**
+ * La rejilla de la matriz, en una sola cadena: la usan la cabecera y todas las
+ * filas, y es lo que mantiene cada interruptor debajo de su encabezado. La
+ * primera pista es el rol, que se lleva lo que sobre; las otras cuatro, una por
+ * correo, con el ancho de su interruptor.
+ */
+const LA_MATRIZ = "md:grid-cols-[minmax(0,1fr)_repeat(4,6.5rem)]";
+
+/**
+ * Por qué una columna no se toca. Va en el `title` de la celda y en su etiqueta
+ * accesible: un «Siempre» repetido en toda la columna dice que no se configura,
+ * pero no dice a quién va.
+ */
+const DESTINO_FIJO: Partial<Record<MailOrigin, string>> = {
+  incidencia:
+    "Sale siempre a la dirección que dejó quien notificó: no se reparte por rol.",
+  prueba:
+    "Solo va a la dirección que se escribe en «Servidor de correo», cuando se pulsa «Enviar prueba».",
+};
+
 export function MailAudienceCard() {
   const settings = useQuery(api.mailSettings.settings);
   const roleOptions = useQuery(api.mailSettings.roleOptions);
@@ -106,6 +170,42 @@ export function MailAudienceCard() {
   const roleLabel = (key: string) =>
     roleOptions?.find((option) => option.key === key)?.label ?? key;
 
+  /** La celda de un rol en una columna: su interruptor, o su destino fijo. */
+  const cell = (column: MailColumn, option: { key: string; label: string }) => {
+    const list = column.list;
+    const hint = DESTINO_FIJO[column.origin];
+    return (
+      <div
+        key={column.origin}
+        className="flex min-w-0 flex-1 flex-col items-center gap-1 md:w-full md:flex-none"
+      >
+        {list === null ? (
+          <span
+            title={hint}
+            className="whitespace-nowrap rounded-full border border-border/70 px-2 py-0.5 text-[10px] leading-4 text-muted-foreground"
+          >
+            <span className="sr-only">{`${MAIL_ORIGIN_LABELS[column.origin]}: ${hint ?? ""} `}</span>
+            {column.fixed}
+          </span>
+        ) : (
+          <Switch
+            checked={(list === "incident" ? incidentKeys : weeklyKeys).includes(
+              option.key,
+            )}
+            disabled={saving}
+            aria-label={`${MAIL_ORIGIN_LABELS[column.origin]} a ${option.label}`}
+            onCheckedChange={(checked) => toggle(list, option.key, checked)}
+          />
+        )}
+        {/* El alto es el de dos líneas: «A quien notificó» no cabe en una, y
+            sin él las demás etiquetas suben y la fila queda torcida. */}
+        <span className="min-h-7 text-center text-[10px] leading-tight text-muted-foreground md:hidden">
+          {column.short}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -117,12 +217,14 @@ export function MailAudienceCard() {
             Avisos por correo por rol
           </p>
           <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            Quién recibe cada correo del taller. Son dos avisos distintos: el
-            <strong>aviso de incidencia</strong> —cuando entra, cuando se
-            asigna, también si alguien se la lleva, y cuando se cierra— y el
-            <strong>resumen semanal</strong>. El correo a quien notificó una
-            incidencia no se toca desde aquí: sale siempre a la dirección que
-            dejó.
+            Quién recibe cada correo del taller, con los cuatro tipos que salen
+            de aquí: el <strong>aviso a quien notificó</strong>, el{" "}
+            <strong>aviso interno de incidencia</strong> —cuando entra, cuando
+            se asigna, también si alguien se la lleva, y cuando se cierra—, el{" "}
+            <strong>resumen semanal</strong> y la{" "}
+            <strong>prueba de envío</strong>. Los dos del medio se reparten por
+            rol; los otros dos tienen destinatario fijo y se enseñan aquí para
+            que la matriz no deje ningún correo fuera.
           </p>
         </div>
       </div>
@@ -135,18 +237,38 @@ export function MailAudienceCard() {
         </div>
       ) : (
         <>
-          <div className="mt-4 hidden items-center justify-between gap-3 px-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:flex">
+          <div
+            className={cn(
+              // El borde de las filas se repite aquí, transparente: la rejilla se
+              // mide sobre el contenido, y sin él la cabecera cae un píxel a la
+              // derecha de sus interruptores.
+              "mt-4 hidden items-end gap-x-2 border border-transparent px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid",
+              LA_MATRIZ,
+            )}
+          >
             <span>Rol</span>
-            <span className="flex gap-8 pr-1">
-              <span>Incidencias</span>
-              <span>Resumen semanal</span>
-            </span>
+            {COLUMNAS.map((column) => (
+              <span
+                key={column.origin}
+                className="text-center text-[10px] leading-4"
+              >
+                {MAIL_ORIGIN_LABELS[column.origin]}
+                {column.list === null && (
+                  <span className="mt-0.5 block font-normal normal-case tracking-normal">
+                    fijo
+                  </span>
+                )}
+              </span>
+            ))}
           </div>
           <ul className="mt-1 grid gap-1.5">
             {(roleOptions ?? []).map((option) => (
               <li
                 key={option.key}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2"
+                className={cn(
+                  "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2 md:grid md:items-center md:gap-x-2 md:gap-y-0",
+                  LA_MATRIZ,
+                )}
               >
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
@@ -161,23 +283,8 @@ export function MailAudienceCard() {
                     {option.description}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-4">
-                  <Switch
-                    checked={incidentKeys.includes(option.key)}
-                    disabled={saving}
-                    aria-label={`Avisos de incidencia a ${option.label}`}
-                    onCheckedChange={(checked) =>
-                      toggle("incident", option.key, checked)
-                    }
-                  />
-                  <Switch
-                    checked={weeklyKeys.includes(option.key)}
-                    disabled={saving}
-                    aria-label={`Resumen semanal a ${option.label}`}
-                    onCheckedChange={(checked) =>
-                      toggle("weekly", option.key, checked)
-                    }
-                  />
+                <div className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-2 md:contents">
+                  {COLUMNAS.map((column) => cell(column, option))}
                 </div>
               </li>
             ))}
@@ -185,9 +292,13 @@ export function MailAudienceCard() {
 
           <div className="mt-3 grid gap-1">
             <p className="text-xs leading-5 text-muted-foreground">
+              Aviso a quien notificó: sale siempre a la dirección que se dejó en
+              el formulario, en cada paso del caso. No depende de ningún rol.
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
               {incidentKeys.length === 0
-                ? "Avisos de incidencia: nadie por correo. Quien notificó sigue recibiendo el suyo, y la campana del panel no cambia."
-                : `Avisos de incidencia (alta, asignación y cierre): le llegan a ${
+                ? "Aviso interno de incidencia: nadie por correo. Quien notificó sigue recibiendo el suyo, y la campana del panel no cambia."
+                : `Aviso interno de incidencia (alta, asignación y cierre): le llega a ${
                     incidentKeys.length === 1
                       ? "un rol"
                       : `${incidentKeys.length} roles`
@@ -201,6 +312,10 @@ export function MailAudienceCard() {
                       ? "un rol"
                       : `${weeklyKeys.length} roles`
                   } (${weeklyKeys.map(roleLabel).join(", ")}). Es el mismo ajuste que el del diálogo «Resumen semanal».`}
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Prueba de envío: solo a la dirección que se escribe en «Servidor
+              de correo», y solo cuando se pulsa «Enviar prueba».
             </p>
           </div>
 
