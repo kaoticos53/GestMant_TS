@@ -1,11 +1,15 @@
 # Pulso Taller en un NAS Synology (Container Manager).
 #
-# Cuatro contenedores se quedan y uno pasa:
+# Cinco contenedores se quedan y uno pasa:
 #
 #   app        la aplicación: se construye aquí dentro desde el código de
 #              `./codigo` (mismo Dockerfile) y nginx sirve el resultado
 #   backend    la API de Convex, la base de datos y el almacén de archivos
 #   dashboard  el panel de administración de Convex (para el taller, no para quien usa la app)
+#   relevo     el puente de correo: el backend de Convex no abre conexiones TCP,
+#              así que lo que sale por Gmail, por el buzón de pruebas o por un
+#              servidor SMTP propio pasa por aquí. Arranca con el resto: un
+#              relevo que falta no se nota hasta que un aviso no sale
 #   vigilante  mira `src/convex` y vuelve a subir las funciones cuando cambian,
 #              así que un cambio llega sin reiniciar ni reconstruir el proyecto
 #   funciones  sube el esquema y las funciones al arrancar y se va
@@ -266,17 +270,24 @@ services:
         condition: service_healthy
 
   relevo:
-    # El puente de correo del taller, opcional: recibe el sobre por HTTP y lo
-    # entrega por SMTP. Es lo que se configura en Ajustes del taller con la
-    # opción «Relevo propio», porque el backend de Convex no abre conexiones
-    # TCP. Solo arranca cuando se pide, con el perfil «correo»: un taller que
-    # mande por Resend o por la pasarela no lo necesita.
+    # El puente de correo del taller: recibe el sobre por HTTP y lo entrega por
+    # SMTP. Es lo que hay detrás de «Relevo propio» —y de Gmail y del buzón de
+    # pruebas— en Ajustes del taller, porque el backend de Convex no abre
+    # conexiones TCP.
+    #
+    # Arranca siempre, y no en un perfil que hay que acordarse de encender: un
+    # taller que manda correo por Gmail lo busca en `http://relevo:8788/enviar`
+    # y, si el contenedor no existe, los avisos de incidencia se quedan sin
+    # salir sin que nada lo diga. Sin `SMTP_HOST` no estorba: entrega los sobres
+    # que traen su servidor —Gmail, Ethereal— y rechaza con un 400 el que no lo
+    # trae, diciendo qué falta. Quien mande por Resend, SendGrid, Mailgun, Brevo
+    # o la pasarela no lo usa, pero le cuesta un contenedor parado en la red
+    # interna.
     #
     # No publica ningún puerto: quien le manda los correos es el backend, por la
     # red del propio proyecto, con la dirección http://relevo:8788/enviar.
     # La receta está en `scripts/mail-relay.mjs`, montada desde el código.
     image: node:22-alpine
-    profiles: ["correo"]
     restart: unless-stopped
     command: ["node", "/app/mail-relay.mjs"]
     volumes:
@@ -286,8 +297,9 @@ services:
       - MAIL_RELAY_PORT=8788
       - MAIL_RELAY_HOST=0.0.0.0
       - MAIL_RELAY_TOKEN=${MAIL_RELAY_TOKEN:-}
-      # Sin SMTP_HOST el contenedor arranca y se para diciendo qué falta; no se
-      # exige aquí para que el perfil siga siendo opcional en el `.env`.
+      # Sin SMTP_HOST el contenedor arranca igual —entrega los sobres que traen
+      # el suyo—, así que no se exige aquí: lo que sí hace falta es que el
+      # taller no se quede sin puente por no haber rellenado el `.env`.
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_TLS=${SMTP_TLS:-auto}

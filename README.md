@@ -32,7 +32,8 @@ Y si el taller manda el correo por su propio servidor —o desde una cuenta de
 **Gmail** o un buzón de pruebas de **Ethereal**—, el repositorio trae el puente
 que hace falta: el backend de Convex no abre conexiones TCP, así que el **relevo
 de correo** recibe el sobre por HTTP y lo entrega por SMTP. Se arranca con
-`npm run mail:relay` y la guía —local, en el NAS, con Gmail paso a paso, con sus
+`npm run mail:relay` —en el NAS va con el resto de los contenedores, sin perfiles
+que encender— y la guía —local, en el NAS, con Gmail paso a paso, con sus
 comprobaciones y sus tropiezos— está en **[RELEVO.md](./RELEVO.md)**.
 
 Y las dos fronteras que el código cruza a diario —los módulos puros de `src/lib`,

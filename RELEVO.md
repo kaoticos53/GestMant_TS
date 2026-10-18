@@ -101,7 +101,7 @@ En **Ajustes del taller → Servidor de correo**:
    | --------------------------------- | ----------------------------------------- |
    | En el ordenador, nativo           | `http://127.0.0.1:8788/enviar`            |
    | En Docker (el de `npm start`)     | `http://host.docker.internal:8788/enviar` |
-   | En el NAS, con el perfil «correo» | `http://relevo:8788/enviar`               |
+   | En el NAS, junto al backend       | `http://relevo:8788/enviar`               |
 
 3. Como _Testigo del relevo_, el mismo `MAIL_RELAY_TOKEN` que le hayas dado.
 4. Guarda y pulsa **Enviar prueba** a tu propio correo. Si llega, el camino está
@@ -267,14 +267,20 @@ venía en el cuerpo). **Nunca el cuerpo, el testigo ni la contraseña.**
 
 ## 6. En el NAS, junto al backend
 
-El `docker/synology/docker-compose.yml` trae el servicio `relevo`, apagado por
-defecto. Se enciende con su perfil:
+El `docker/synology/docker-compose.yml` trae el servicio `relevo` como uno más: la
+puesta en marcha lo arranca con el resto de los contenedores, sin ningún perfil
+que haya que encender.
 
 ```bash
 # en la carpeta del proyecto del NAS
-docker compose --profile correo up -d
+docker compose up -d
 docker compose logs -f relevo
 ```
+
+Se arranca a propósito aunque el taller no vaya a mandar por él: el fallo del
+perfil —un contenedor que no existe, que la app solo descubre cuando un aviso no
+sale— se paga más caro que un contenedor parado en la red interna, que no publica
+ningún puerto. Si no lo quieres, `docker compose stop relevo`.
 
 Antes, rellena en el `.env` del proyecto:
 
@@ -289,9 +295,11 @@ MAIL_RELAY_TOKEN=un-testigo-largo
 
 Si en vez de un servidor propio vas a usar **Gmail** o el buzón de pruebas, no hay
 nada que añadir aquí: esas credenciales se guardan en _Ajustes del taller_ y viajan
-en el sobre de cada envío. `SMTP_HOST` sigue haciendo falta como reserva —pon el
-del servicio que uses, por ejemplo `smtp.gmail.com`—, pero los envíos de Gmail no
-lo usan.
+en el sobre de cada envío, así que el relevo arranca y entrega sin `SMTP_HOST` ni
+`SMTP_USER`. Con un servidor propio, en cambio, esas líneas son las que hacen que
+un sobre sin servidor —el de la prueba desde Ajustes, por ejemplo— tenga a dónde
+ir; sin ellas, un sobre que no trae el suyo se rechaza con un `400` que dice qué
+falta.
 
 El servicio **no publica ningún puerto**: quien le manda el correo es el backend,
 por la red interna del proyecto, en `http://relevo:8788/enviar`. Si el servidor de
@@ -299,9 +307,11 @@ correo es el propio NAS y usa un certificado que el contenedor no conoce, pon
 `SMTP_REJECT_UNAUTHORIZED=false`; si puedes, mejor instala la CA y déjalo en
 `true`.
 
-Para verlo en marcha: `docker compose ps` (con `--profile correo`) y
-`docker compose logs relevo`. Y para apagarlo:
-`docker compose --profile correo stop relevo`.
+Para verlo en marcha: `docker compose ps` —aparece como
+`pulso-taller-relevo-1`, y su salud es la de `/salud`— y `docker compose logs
+relevo`. La puesta en marcha (`npm run nas`) deja su estado en el panel: «Correo
+relevo en pie · «Relevo propio»: http://relevo:8788/enviar», o el aviso de que no
+está. Y para apagarlo: `docker compose stop relevo`.
 
 ---
 

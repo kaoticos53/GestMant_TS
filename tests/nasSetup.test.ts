@@ -398,11 +398,67 @@ describe("el panel final", () => {
         result,
       }).join("\n");
 
-    // Con el compose del repositorio, que es el que trae el servicio, se dice.
-    expect(panel({ compose: "colocado" })).toContain("y el vigilante en pie");
+    // Con el compose del repositorio, que es el que trae los servicios, se dice.
+    expect(panel({ compose: "colocado" })).toContain(
+      "el vigilante y el relevo de correo en pie",
+    );
     // Con el del NAS conservado no se puede saber: no se afirma nada y se avisa.
     expect(panel({ compose: "conservado" })).not.toContain("vigilante en pie");
     expect(panel({ compose: "conservado" })).toContain("«vigilante»");
+    expect(panel({ compose: "conservado" })).toContain("«relevo»");
+  });
+
+  test("el panel del correo dice dónde está el relevo y avisa si no está", () => {
+    const panel = (result: Record<string, unknown>) =>
+      panelLines({
+        appUrl: "https://taller.mi-taller.es",
+        apiUrl: "https://api.mi-taller.es",
+        host: "192.168.1.20",
+        user: "admin",
+        result: { compose: "colocado", ...result },
+      }).join("\n");
+
+    // En pie: la dirección, que es la que se copia en Ajustes del taller.
+    const enPie = panel({ relevo: "en-pie" });
+    expect(enPie).toContain("Correo");
+    expect(enPie).toContain("http://relevo:8788/enviar");
+
+    // Parado o sin pasar su comprobación: se dice y se manda a su registro.
+    expect(panel({ relevo: "parado" })).toContain(
+      "el relevo de correo está parado",
+    );
+    expect(panel({ relevo: "enfermo" })).toContain("logs relevo");
+
+    // Y sin contenedor: qué se pierde y cómo se recupera.
+    const sinRelevo = panel({ relevo: "falta" });
+    expect(sinRelevo).toContain("no hay contenedor de relevo");
+    expect(sinRelevo).toContain("--force-compose");
+
+    // Con el compose conservado no se afirma nada, ni para bien ni para mal.
+    const conservado = panel({ compose: "conservado", relevo: "en-pie" });
+    expect(conservado).not.toContain("http://relevo:8788/enviar");
+  });
+});
+
+describe("el compose del NAS", () => {
+  test("el relevo de correo arranca con el resto, no en un perfil", () => {
+    // Un perfil hay que encenderlo a mano, y el día que se olvida el contenedor
+    // no existe: la app solo dice «conexión rechazada» cuando una incidencia
+    // espera su aviso. Por eso el relevo es uno más.
+    const lineas = readFileSync(
+      join(root, "docker", "synology", "docker-compose.yml"),
+      "utf8",
+    ).split(/\r?\n/);
+    const inicio = lineas.findIndex((linea) => /^ {2}relevo:\s*$/.test(linea));
+    expect(inicio).toBeGreaterThan(-1);
+    const bloque: string[] = [];
+    for (const linea of lineas.slice(inicio + 1)) {
+      // Hasta el servicio siguiente; los comentarios de dentro no cortan.
+      if (/^ {2}[a-zA-Z0-9_-]+:/.test(linea)) break;
+      bloque.push(linea);
+    }
+    expect(bloque.join("\n")).not.toContain("profiles:");
+    expect(bloque.join("\n")).toContain("http://relevo:8788");
   });
 });
 
@@ -698,6 +754,41 @@ describe("la comprobación del taller (--check)", () => {
     });
   });
 
+  test("un relevo de correo parado se cuenta, porque los avisos no salen", () => {
+    const report = checkReport(
+      sano({
+        relevo_declarado: "si",
+        contenedores:
+          "app:running,backend:running,dashboard:running,vigilante:running,relevo:parado",
+      }),
+    );
+    expect(report[0].ok).toBe(false);
+    expect(report[0].detail).toContain("el relevo de correo parado");
+    expect(report[0]).toMatchObject({
+      fix: expect.stringContaining("docker compose up -d relevo"),
+    });
+  });
+
+  test("con el relevo en pie, la comprobación lo dice y no se queja de nada", () => {
+    const report = checkReport(
+      sano({
+        relevo_declarado: "si",
+        contenedores:
+          "app:running,backend:running,dashboard:running,vigilante:running,relevo:running",
+      }),
+    );
+    expect(report[0].ok).toBe(true);
+    expect(report[0].detail).toContain("el relevo de correo en pie");
+  });
+
+  test("un compose de antes, sin el servicio del relevo, no se echa en falta", () => {
+    // El contenedor no aparece y el compose tampoco lo declara: no hay nada que
+    // reprochar a una instalación en la que el relevo nunca se pidió.
+    const report = checkReport(sano({ relevo_declarado: "no" }));
+    expect(report[0].ok).toBe(true);
+    expect(report[0].detail).not.toContain("relevo");
+  });
+
   test("una instalación de antes, sin vigilante, no se echa en falta", () => {
     const report = checkReport(
       sano({ contenedores: "app:running,backend:running,dashboard:running" }),
@@ -848,9 +939,13 @@ describe.skipIf(!shListo)("el guion del NAS, de verdad", DE_VERDAD, () => {
       compose: "colocado",
       funciones: "al-dia",
       construido: "si",
+      relevo: "en-pie",
       api: "https://api.mi-taller.es",
       app: "https://taller.mi-taller.es",
     });
+    // El relevo de correo no se queda en un perfil que hay que encender: se
+    // arranca con el resto, y el guion deja dicho cómo ha quedado.
+    expect(run.stdout).toContain("correo: el relevo esta en pie");
 
     const env = nas.env();
     expect(valor(env, "CONVEX_CLOUD_ORIGIN")).toBe("https://api.mi-taller.es");

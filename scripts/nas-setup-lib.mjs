@@ -691,6 +691,7 @@ secreto_nuevo="no"
 clave_estado="conservada"
 compose_estado="igual"
 funciones_estado="desconocido"
+relevo_estado="desconocido"
 
 log() { printf 'nas: %s\\n' "$*"; }
 fail() { printf 'nas: %s\\n' "$*" >&2; exit 1; }
@@ -922,6 +923,39 @@ fi
 # nada.
 compose up -d
 
+# --- El relevo de correo -------------------------------------------------------
+# El puente por el que salen los avisos cuando el taller manda por Gmail, por el
+# buzon de pruebas o por su propio servidor SMTP: el backend de Convex no abre
+# conexiones TCP. Antes vivia en un perfil que habia que encender a mano, y el
+# resultado era el peor de los posibles: el contenedor no existia, la app decia
+# «conexion rechazada» y los avisos de incidencia se quedaban sin salir. Ahora
+# arranca con el resto; aqui solo se mira como ha quedado, que es lo primero que
+# se pregunta cuando un correo no llega.
+relevo_estado="falta"
+id=$(compose ps -a -q relevo 2>/dev/null || true)
+if [ -n "$id" ]; then
+  estado=$($SUDO $DOCKER inspect -f '{{.State.Status}}' "$id" 2>/dev/null || printf 'desconocido')
+  if [ "$estado" = "running" ]; then
+    saludo_relevo=$($SUDO $DOCKER inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$id" 2>/dev/null || printf '')
+    if [ "$saludo_relevo" = "unhealthy" ]; then
+      relevo_estado="enfermo"
+    else
+      relevo_estado="en-pie"
+    fi
+  else
+    relevo_estado="parado"
+  fi
+fi
+case "$relevo_estado" in
+  en-pie) log "correo: el relevo esta en pie en http://relevo:8788/enviar" ;;
+  parado) log "correo: el relevo esta parado y los avisos no salen: mira «$COMPOSE_CMD logs relevo»" ;;
+  enfermo) log "correo: el relevo esta en pie pero no pasa su comprobacion: mira «$COMPOSE_CMD logs relevo»" ;;
+  *)
+    log "correo: no hay contenedor de relevo: los avisos por Gmail o por un servidor propio no salen"
+    log "  (si el docker-compose.yml del NAS es de antes de que existiera, vuelve a lanzar con --force-compose)"
+    ;;
+esac
+
 # Y ahora se espera a que el contenedor de las funciones acabe: sube el esquema y
 # las funciones, termina y se para. Su salida limpia es la senal de que el paso 5
 # esta hecho; si sale con error, lo dice y se ensenan sus ultimas lineas.
@@ -970,9 +1004,9 @@ log "los contenedores estan en pie; queda el paso 6 de la guia: el HTTPS del pro
 # script del ordenador para armar el panel final (y para saber que se ha llegado
 # al final de verdad). Las direcciones van aqui para que el panel las ensene tal
 # como han quedado, y no como se pidieron.
-printf 'PULSO_SETUP env=%s secreto=%s clave=%s compose=%s funciones=%s construido=%s api=%s app=%s\\n' \\
+printf 'PULSO_SETUP env=%s secreto=%s clave=%s compose=%s funciones=%s construido=%s relevo=%s api=%s app=%s\\n' \\
   "$creado_env" "$secreto_nuevo" "$clave_estado" "$compose_estado" "$funciones_estado" "$CONSTRUIR" \\
-  "$api" "$sitio"
+  "$relevo_estado" "$api" "$sitio"
 `;
 }
 
@@ -1090,8 +1124,9 @@ if [ "$docker_estado" = "si" ]; then
   # Los que se quedan, uno a uno y con -a: un contenedor parado sigue siendo
   # parte de la respuesta (parado no es lo mismo que no estar). El del vigilante
   # de las funciones va el ultimo: si la instalacion es de antes de que existiera,
-  # no aparece y no pasa nada (quien lo mira lo tiene en cuenta).
-  for servicio in app backend dashboard vigilante; do
+  # no aparece y no pasa nada (quien lo mira lo tiene en cuenta). El del relevo de
+  # correo va detras, y su ausencia se interpreta mas abajo, contra el compose.
+  for servicio in app backend dashboard vigilante relevo; do
     id=$($SUDO $COMPOSE_CMD ps -a -q "$servicio" 2>/dev/null || true)
     estado="falta"
     if [ -n "$id" ]; then
@@ -1105,6 +1140,18 @@ if [ "$docker_estado" = "si" ]; then
     fi
   done
   log "contenedores: $contenedores"
+
+  # Y si el compose del NAS trae el relevo de correo. Sin ese servicio no hay
+  # puente, y un taller que manda por Gmail o por su servidor SMTP se queda sin
+  # avisos sin que nada lo diga. Se mira en el compose y no en el contenedor
+  # porque las dos cosas no son lo mismo: que falte el contenedor es un fallo
+  # —se arregla arrancandolo— y que falte el servicio es un compose de antes
+  # —se arregla refrescandolo—.
+  relevo_declarado="no"
+  if [ -f "$COMPOSE" ] && grep -qE '^[[:space:]]+relevo:' "$COMPOSE" 2>/dev/null; then
+    relevo_declarado="si"
+  fi
+  log "relevo de correo en el compose: $relevo_declarado"
 
   # Y el que pasa: sube el esquema y las funciones, termina y se para. Su salida
   # limpia es la senal de que el ultimo envio entro; su fecha, la de cuando.
@@ -1170,9 +1217,9 @@ fi
 if [ -z "$faltan" ]; then
   faltan="ninguno"
 fi
-printf 'PULSO_CHECK raiz=%s docker=%s salud=%s contenedores=%s env=%s faltan=%s plantilla=%s api=%s sitio=%s funciones=%s salida=%s fin=%s\\n' \\
+printf 'PULSO_CHECK raiz=%s docker=%s salud=%s contenedores=%s env=%s faltan=%s plantilla=%s api=%s sitio=%s funciones=%s salida=%s fin=%s relevo_declarado=%s\\n' \\
   "$raiz" "$docker_estado" "$salud" "$contenedores" "$env_estado" "$faltan" "$plantilla" \\
-  "$api" "$sitio" "$funciones" "$salida" "$fin"
+  "$api" "$sitio" "$funciones" "$salida" "$fin" "$relevo_declarado"
 `;
 }
 
@@ -1239,8 +1286,38 @@ export function panelLines(
     // aviso de abajo lo dice sin afirmar nada—.
     result.compose === "conservado"
       ? "  Contenedores     app · backend · dashboard en pie · funciones terminado (exited 0)"
-      : "  Contenedores     app · backend · dashboard y el vigilante en pie · funciones terminado (exited 0)",
+      : "  Contenedores     app · backend · dashboard, el vigilante y el relevo de correo en pie · funciones terminado (exited 0)",
   ];
+
+  // El correo, con su dirección a la vista: es la que hay que dejar en Ajustes
+  // del taller, y la que se busca cuando un aviso no sale. Cuando el compose se
+  // conservó no se puede afirmar que la instalación lo tenga —lo dice el aviso de
+  // abajo—, así que aquí no se miente.
+  if (result.compose !== "conservado") {
+    if (result.relevo === "en-pie") {
+      lines.push(
+        `  Correo           relevo en pie · «Relevo propio»: ${color.bold("http://relevo:8788/enviar")}`,
+      );
+    } else if (result.relevo === "parado" || result.relevo === "enfermo") {
+      lines.push(
+        color.red(
+          `  !                el relevo de correo está ${
+            result.relevo === "parado" ? "parado" : "en pie pero no pasa su comprobación"
+          }: los avisos no salen`,
+        ),
+        color.dim("                   míralo con «docker compose logs relevo» en el NAS"),
+      );
+    } else if (result.relevo === "falta") {
+      lines.push(
+        color.yellow(
+          "  !                no hay contenedor de relevo de correo: los avisos por Gmail o por",
+        ),
+        color.dim(
+          "                   un servidor propio no salen · vuelve a lanzar con --force-compose",
+        ),
+      );
+    }
+  }
 
   if (result.env === "si") {
     lines.push(
@@ -1275,6 +1352,12 @@ export function panelLines(
       ),
       color.dim(
         "                   no se suben solos: mira «docker compose ps -a» y SYNOLOGY.md",
+      ),
+      color.dim(
+        "                   si no trae el servicio «relevo», los avisos de correo no salen:",
+      ),
+      color.dim(
+        "                   vuelve a lanzar con --force-compose para tenerlo",
       ),
     );
   }
@@ -1347,9 +1430,10 @@ export function stateWords(state) {
 /**
  * Los contenedores del taller. Los tres que se quedan tienen que estar en pie
  * —la app, el backend y el panel de Convex— y el backend, además, tiene que
- * contestar en su puerto: es el que sostiene todo lo demás. El cuarto, el de las
- * funciones, es un recado que pasa y se va; de él se ocupa la comprobación del
- * esquema.
+ * contestar en su puerto: es el que sostiene todo lo demás. El de las funciones
+ * es un recado que pasa y se va; de él se ocupa la comprobación del esquema. El
+ * del relevo de correo se suma a los que tienen que estar: si el compose lo trae
+ * y no está en pie, los avisos de incidencia no salen.
  */
 export function containerVerdict(result = {}) {
   const base = { id: "containers", label: "Contenedores" };
@@ -1409,13 +1493,37 @@ export function containerVerdict(result = {}) {
     };
   }
 
+  // El relevo de correo: el puente por el que salen los avisos cuando el taller
+  // manda por Gmail, por el buzón de pruebas o por su servidor SMTP. Se nombra
+  // solo si el compose del NAS lo trae: en una instalación de antes del relevo no
+  // falta nada, porque nunca se pidió. Si lo trae y no está en pie, los avisos no
+  // salen —y nadie se entera hasta que hay una incidencia esperando el suyo—, así
+  // que ahí sí se avisa.
+  const relevo = states.get("relevo");
+  if (result.relevo_declarado === "si" && relevo !== "running") {
+    return {
+      ...base,
+      ok: false,
+      detail: `app · backend · dashboard en pie, pero el relevo de correo ${stateWords(
+        relevo,
+      )}`,
+      fix: "levántalo en el NAS con «docker compose up -d relevo», o vuelve a lanzar la puesta en marcha: npm run nas -- --host …",
+    };
+  }
+
   return {
     ...base,
     ok: true,
-    detail:
+    detail: [
+      "app · backend · dashboard en pie",
       vigilante === "running"
-        ? "app · backend · dashboard en pie · el vigilante de las funciones en marcha · la API responde en su puerto"
-        : "app · backend · dashboard en pie · la API responde en su puerto",
+        ? "el vigilante de las funciones en marcha"
+        : null,
+      relevo === "running" ? "el relevo de correo en pie" : null,
+      "la API responde en su puerto",
+    ]
+      .filter(Boolean)
+      .join(" · "),
   };
 }
 

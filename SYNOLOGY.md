@@ -9,7 +9,7 @@ viven en el NAS.
 > contado en **[PROXMOX.md](./PROXMOX.md)**: cambia lo de delante — una **VM**
 > con Docker y **Caddy** en lugar del proxy inverso de DSM —.
 
-Son **cuatro contenedores** que se quedan y **uno que pasa**: el que sube el
+Son **cinco contenedores** que se quedan y **uno que pasa**: el que sube el
 esquema y las funciones al backend al arrancar. El backend es un Convex
 autoalojado —el mismo que usa el entorno local del repositorio
 (`docker/convex/`)—, así que aquí no hay cuentas en la nube ni servicios de
@@ -23,6 +23,7 @@ terceros:
 | Panel de administración      | `http://IP-del-NAS:6791` — solo desde la red local | `dashboard`                           |
 | El esquema y las funciones   | dentro del backend, subidos desde el propio NAS    | `funciones` (arranca, sube y se para) |
 | Volver a subirlos al cambiar | mira `./codigo/src/convex` del NAS montado dentro  | `vigilante` (se queda)                |
+| El correo que sale del taller | `http://relevo:8788/enviar` — solo en la red del proyecto | `relevo` (se queda)                   |
 | Los datos                    | volumen Docker `pulso-taller_datos`                | `backend`                             |
 
 Y las funciones las sube el propio NAS, no tu ordenador: el contenedor `funciones`
@@ -107,7 +108,8 @@ npm run nas:check -- --host IP-del-NAS
 ```
 
 Mira desde dentro del NAS los contenedores (los que se quedan, el `vigilante`
-entre ellos, y cómo acabó el último envío), si al `.env` le falta alguna clave y si el esquema está al día
+y el relevo de correo entre ellos, y cómo acabó el último envío), si al `.env` le
+falta alguna clave y si el esquema está al día
 —comparando la fecha del código de este ordenador con la del último envío—, lo
 cuenta en un panel y **no escribe ni una línea**: se puede lanzar con el taller en
 marcha y con gente dentro. Del `.env` solo salen **nombres**, nunca valores, así
@@ -791,6 +793,37 @@ sudo docker compose build funciones && sudo docker compose up -d
 
 Y se comprueba de un vistazo con `npm run nas:doctor -- --host IP-del-NAS`, que
 dice cómo terminó cada contenedor: un 127 ahí es justo esto.
+
+**Da error al enviar correo, y no hay contenedor `relevo`.**
+El correo que sale por Gmail, por el buzón de pruebas o por un servidor SMTP
+propio no lo manda el backend: lo manda el `relevo`, el puente HTTP → SMTP que
+viene con el proyecto. El backend de Convex no abre conexiones TCP, así que sin
+ese contenedor el envío acaba en «conexión rechazada» y el aviso de la incidencia
+se queda sin salir —sin que nada más lo diga—.
+
+En las instalaciones con un `docker-compose.yml` de antes, el `relevo` venía en
+un perfil que había que encender a mano, y por eso no existía. Ahora arranca con
+el resto; si tu compose es de los de antes, se refresca con:
+
+```bash
+npm run nas -- --host IP-del-NAS --force-compose
+```
+
+Y se comprueba de un vistazo:
+
+```bash
+sudo docker compose ps -a                # pulso-taller-relevo-1, en pie
+sudo docker compose logs relevo          # escuchando en el 8788
+npm run nas:check -- --host IP-del-NAS   # «el relevo de correo en pie»
+```
+
+En _Ajustes del taller → Servidor de correo_, la dirección —cuando el backend va
+en el NAS— es `http://relevo:8788/enviar`, no `localhost`: dentro del contenedor
+del backend, `localhost` es el propio contenedor. Si el envío contesta `401`, el
+testigo: el `MAIL_RELAY_TOKEN` del `.env` y el de los ajustes tienen que ser el
+mismo. Y si contesta `400`, el relevo dice qué le falta: con un servidor propio,
+`SMTP_HOST` y su cuenta en el `.env`; con Gmail o Ethereal, la cuenta y la
+contraseña de aplicación en los ajustes del taller, que viajan en el sobre.
 
 **He cambiado una función y no se ha subido.**
 El que las sube solo es el `vigilante`: mira `sudo docker compose logs vigilante`.

@@ -644,7 +644,10 @@ export function mailRelayAddressHint(relayUrl: string): string | null {
  * Lo que hay que mirar cuando un envío no llega ni a hablar con el relevo.
  *
  * «Connection refused» no dice dónde se arregla: aquí se añade que el relevo
- * tiene que estar arrancado y cuál es su dirección de siempre. `null` cuando el
+ * tiene que estar arrancado y cuál es su dirección de siempre, con las dos
+ * instalaciones que hay —el ordenador, donde lo arranca `npm run mail:relay`, y
+ * el NAS, donde es un contenedor más del proyecto—, porque mandar a un taller a
+ * un comando que allí no existe deja el problema donde estaba. `null` cuando el
  * fallo no es de conexión —un 401 del servicio, un rechazo del buzón— o cuando el
  * servicio ni siquiera pasa por el relevo.
  */
@@ -658,7 +661,7 @@ export function mailRelayFailureHint(
       error,
     );
   if (!unreachable) return null;
-  return "El relevo no está escuchando en esa dirección: arráncalo con `npm run mail:relay` y comprueba que la URL guardada es la suya (por defecto http://host.docker.internal:8788/enviar si el backend va en Docker).";
+  return "El relevo no está escuchando en esa dirección: en el ordenador se arranca con `npm run mail:relay`; en el NAS es el contenedor `relevo`, que va con el resto (`docker compose up -d relevo`). Comprueba también que la URL guardada es la suya: http://host.docker.internal:8788/enviar si el relevo corre en tu equipo, y http://relevo:8788/enviar si va en el mismo Docker que el backend.";
 }
 
 /**
