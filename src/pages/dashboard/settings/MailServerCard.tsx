@@ -10,6 +10,7 @@ import {
   MAIL_PROVIDER_META,
   MAIL_PROVIDER_OPTIONS,
   mailCredentialsWarning,
+  mailRelayAddressHint,
   usesMailRelay,
   validateMailSettings,
   type MailOrigin,
@@ -127,6 +128,9 @@ export function MailServerCard() {
     smtpUser,
   });
   const insecureRelay = mailCredentialsWarning({ provider, relayUrl });
+  // Se mira lo que hay escrito, no lo guardado: el aviso sirve para corregir
+  // antes de guardar, que es cuando se puede arreglar sin buscar el fallo luego.
+  const relayHint = mailRelayAddressHint(relayUrl);
 
   /**
    * Lo que hay que saber antes de rellenar: ni Gmail ni Ethereal se explican
@@ -537,13 +541,22 @@ export function MailServerCard() {
                       maxLength={300}
                       disabled={saving}
                       onChange={(event) => setRelayUrl(event.target.value)}
-                      placeholder="https://correo.taller.local/enviar"
+                      placeholder={
+                        smtp === null
+                          ? "https://correo.taller.local/enviar"
+                          : "http://host.docker.internal:8788/enviar"
+                      }
                     />
                     <p className="text-xs leading-5 text-muted-foreground">
                       {smtp === null
                         ? "El puente HTTP que habla con tu servidor de correo. El repositorio incluye uno listo para usar con `npm run mail:relay`."
                         : `El puente HTTP que habla por ti con ${smtp.host}:${smtp.port}: el backend del taller no abre conexiones TCP. El repositorio incluye uno listo para usar con \`npm run mail:relay\`.`}
                     </p>
+                    {relayHint !== null && (
+                      <p className="text-xs leading-5 text-amber-600 dark:text-amber-400">
+                        {relayHint}
+                      </p>
+                    )}
                   </div>
                   {needsToken && (
                     <div className="grid gap-1.5 sm:max-w-md">

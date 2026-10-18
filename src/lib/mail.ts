@@ -582,6 +582,85 @@ export function mailCredentialsWarning(settings: {
     : null;
 }
 
+/** El puerto donde escucha el relevo del repositorio (`scripts/mail-relay.mjs`). */
+export const MAIL_RELAY_DEFAULT_PORT = 8788;
+
+/** ¿La dirección apunta al propio ordenador, tal como la ve quien la escribe? */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host.endsWith(".localhost")
+  );
+}
+
+/**
+ * Qué tiene de raro la dirección del relevo, o `null` si no hay nada que decir.
+ *
+ * Tres confusiones se llevan casi todos los intentos que fallan: poner la
+ * dirección del visor de mensajes de Ethereal —el 8025, que solo enseña correos y
+ * no entrega ninguno—, poner `https://` a un puente que habla HTTP sin cifrar, y
+ * poner `localhost` cuando el backend va en su propio contenedor, donde
+ * `localhost` es el contenedor y no el ordenador. Se dice al escribir la
+ * dirección, no cuando ya se ha perdido un envío.
+ *
+ * No bloquea el guardado: un taller puede tener su relevo detrás de un proxy en
+ * el 8788 con certificado, o escuchando en la misma máquina del backend. Es un
+ * aviso, y por eso devuelve texto y no un error.
+ */
+export function mailRelayAddressHint(relayUrl: string): string | null {
+  const value = relayUrl.trim();
+  if (value === "") return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "La dirección del relevo no se entiende: escribe la URL completa, con http:// o https:// delante.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "La dirección del relevo tiene que empezar por http:// o https://.";
+  }
+  const port =
+    url.port === "" ? (url.protocol === "https:" ? "443" : "80") : url.port;
+  if (port === "8025") {
+    return "El puerto 8025 es el visor de mensajes de Ethereal, no el relevo: ahí no se entrega ningún correo. Deja la cuenta del buzón en los ajustes y pon la dirección del relevo, que escucha en el 8788 —por ejemplo http://host.docker.internal:8788/enviar—.";
+  }
+  if (url.protocol === "https:" && port === String(MAIL_RELAY_DEFAULT_PORT)) {
+    return "El relevo del repositorio habla HTTP sin cifrar: con https:// en el 8788 no habrá conexión. Usa http://, o ponlo detrás de un proxy con certificado y entonces sí https://.";
+  }
+  if (isLoopbackHost(url.hostname)) {
+    return "Si el backend va en su propio contenedor —como en la instalación de este repositorio—, localhost es el contenedor y no tu ordenador: usa host.docker.internal para llegar al relevo que corre en tu equipo, o el nombre del servicio si está en la misma red de Docker.";
+  }
+  return null;
+}
+
+/**
+ * Lo que hay que mirar cuando un envío no llega ni a hablar con el relevo.
+ *
+ * «Connection refused» no dice dónde se arregla: aquí se añade que el relevo
+ * tiene que estar arrancado y cuál es su dirección de siempre. `null` cuando el
+ * fallo no es de conexión —un 401 del servicio, un rechazo del buzón— o cuando el
+ * servicio ni siquiera pasa por el relevo.
+ */
+export function mailRelayFailureHint(
+  provider: MailProvider,
+  error: string,
+): string | null {
+  if (!usesMailRelay(provider)) return null;
+  const unreachable =
+    /connection refused|econnrefused|tcp connect|failed to fetch|network ?error|timed? ?out|etimedout|getaddrinfo|no such host|enotfound/i.test(
+      error,
+    );
+  if (!unreachable) return null;
+  return "El relevo no está escuchando en esa dirección: arráncalo con `npm run mail:relay` y comprueba que la URL guardada es la suya (por defecto http://host.docker.internal:8788/enviar si el backend va en Docker).";
+}
+
 /**
  * Cuántos envíos guarda el histórico del correo. Es un registro para auditar
  * «qué salió y a quién», no un archivo: crece con cada aviso y cada semana, así

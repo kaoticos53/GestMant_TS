@@ -367,6 +367,42 @@ export function applySmtpOverride(base, override) {
   };
 }
 
+/**
+ * Lo que el relevo pone de su parte cuando no tiene servidor propio: un saludo,
+ * un plazo y una validación de certificado razonables. El servidor y sus
+ * credenciales llegan en el sobre y los pone el servicio que lo manda.
+ */
+const SMTP_DEFAULTS = {
+  host: "",
+  port: 587,
+  tls: "auto",
+  secure: false,
+  user: "",
+  pass: "",
+  from: "",
+  helo: "pulso-taller.local",
+  rejectUnauthorized: true,
+  timeoutMs: 20000,
+};
+
+/**
+ * El servidor con el que se entrega de verdad: el del sobre si lo trae, el del
+ * entorno si no.
+ *
+ * Un relevo arrancado sin `SMTP_HOST` —el caso de un taller que solo prueba con
+ * Gmail o con el buzón de Ethereal— no puede entregar un sobre que tampoco traiga
+ * servidor. Eso se dice con un 400 y una frase que explica qué falta, en vez de
+ * intentar conectar con un servidor vacío y devolver un error de red opaco.
+ */
+export function resolveSmtp(base, override) {
+  if (base === null && override === null) {
+    throw new RelayRequestError(
+      "Este relevo no tiene servidor SMTP propio y el sobre no trae el suyo: define SMTP_HOST en el relevo o elige en los ajustes un servicio que mande su servidor.",
+    );
+  }
+  return applySmtpOverride(base ?? SMTP_DEFAULTS, override);
+}
+
 /** ¿Hay que codificar esta cabecera? Solo si lleva algo que no es ASCII imprimible. */
 function needsEncoding(value) {
   return /[^\x20-\x7E]/.test(value) || value.includes("=?");
@@ -835,10 +871,36 @@ export function readRelayConfig(env = process.env) {
 
   const smtpHost = (env.SMTP_HOST ?? "").trim();
   if (smtpHost === "") {
-    throw new RelayConfigError(
-      "Falta SMTP_HOST: el relevo necesita saber a qué servidor de correo entregar.",
+    // Sin servidor de siempre también se puede arrancar: Gmail y los buzones de
+    // pruebas mandan el suyo, con sus credenciales, dentro de cada sobre. Lo que
+    // no vale es dejar credenciales sueltas sin servidor al que entregar: se
+    // ignorarían en silencio y el fallo se buscaría en el sitio equivocado.
+    const stray = ["SMTP_USER", "SMTP_PASS", "SMTP_FROM"].filter(
+      (name) => (env[name] ?? "").trim() !== "",
     );
+    if (stray.length > 0) {
+      throw new RelayConfigError(
+        `Falta SMTP_HOST: hay ${stray.join(", ")} pero el relevo no sabe a qué servidor de correo entregar.`,
+      );
+    }
   }
+
+  return {
+    port,
+    host,
+    path,
+    token,
+    maxBodyBytes,
+    smtp: smtpHost === "" ? null : readDefaultSmtp(env, smtpHost),
+  };
+}
+
+/**
+ * El servidor de correo del relevo, tal como se configura en el entorno. Es el de
+ * siempre: se usa cuando el sobre no trae el suyo, y sus tiempos, su saludo y su
+ * validación de certificado también acompañan a los servidores que sí trae.
+ */
+function readDefaultSmtp(env, smtpHost) {
   const smtpPort = readNumber(env.SMTP_PORT, 587, "SMTP_PORT", {
     min: 1,
     max: 65535,
@@ -869,30 +931,23 @@ export function readRelayConfig(env = process.env) {
   }
 
   return {
-    port,
-    host,
-    path,
-    token,
-    maxBodyBytes,
-    smtp: {
-      host: smtpHost,
-      port: smtpPort,
-      tls,
-      secure: tls === "ssl",
-      user,
-      pass,
-      from,
-      helo,
-      rejectUnauthorized: readBoolean(
-        env.SMTP_REJECT_UNAUTHORIZED,
-        true,
-        "SMTP_REJECT_UNAUTHORIZED",
-      ),
-      timeoutMs: readNumber(env.SMTP_TIMEOUT_MS, 20000, "SMTP_TIMEOUT_MS", {
-        min: 1000,
-        max: 120000,
-      }),
-    },
+    host: smtpHost,
+    port: smtpPort,
+    tls,
+    secure: tls === "ssl",
+    user,
+    pass,
+    from,
+    helo,
+    rejectUnauthorized: readBoolean(
+      env.SMTP_REJECT_UNAUTHORIZED,
+      true,
+      "SMTP_REJECT_UNAUTHORIZED",
+    ),
+    timeoutMs: readNumber(env.SMTP_TIMEOUT_MS, 20000, "SMTP_TIMEOUT_MS", {
+      min: 1000,
+      max: 120000,
+    }),
   };
 }
 

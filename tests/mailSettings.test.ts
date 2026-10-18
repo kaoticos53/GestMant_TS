@@ -13,6 +13,8 @@ import {
   mailCheckSummary,
   mailConfigBlocker,
   mailCredentialsWarning,
+  mailRelayAddressHint,
+  mailRelayFailureHint,
   normalizeRecipients,
   usesMailRelay,
   validateMailSettings,
@@ -657,6 +659,52 @@ describe("el correo del taller — la comprobación previa", () => {
     );
     expect(sinRelevo.ok).toBe(false);
     if (!sinRelevo.ok) expect(sinRelevo.error).toContain("relevo");
+  });
+
+  test("la dirección del relevo se revisa mientras se escribe", () => {
+    // El error que veía el taller: el 8025 es el visor de Ethereal, no el puente.
+    expect(mailRelayAddressHint("https://localhost:8025/enviar")).toContain(
+      "8025",
+    );
+    expect(mailRelayAddressHint("https://localhost:8025/enviar")).toContain(
+      "8788",
+    );
+    // `localhost` no es el ordenador del taller cuando el backend va en Docker.
+    expect(mailRelayAddressHint("http://localhost:8788/enviar")).toContain(
+      "host.docker.internal",
+    );
+    // El relevo del repositorio habla HTTP: con https:// en su puerto no hay
+    // conexión, aunque el puerto sea el bueno.
+    expect(
+      mailRelayAddressHint("https://correo.taller.es:8788/enviar"),
+    ).toContain("https://");
+    expect(mailRelayAddressHint("correo.taller.es/enviar")).toContain(
+      "http://",
+    );
+    // Lo que está bien no lleva aviso: un relevo en otra máquina por HTTP, o el
+    // del repositorio alcanzado como lo alcanza el contenedor.
+    expect(
+      mailRelayAddressHint("http://host.docker.internal:8788/enviar"),
+    ).toBe(null);
+    expect(mailRelayAddressHint("https://correo.taller.local/enviar")).toBe(
+      null,
+    );
+    expect(mailRelayAddressHint("")).toBe(null);
+  });
+
+  test("un fallo de conexión dice qué mirar, y solo si iba por el relevo", () => {
+    const failure =
+      "error sending request: client error (Connect): tcp connect error: Connection refused (os error 111)";
+    expect(mailRelayFailureHint("ethereal", failure)).toContain(
+      "npm run mail:relay",
+    );
+    expect(mailRelayFailureHint("relay", failure)).toContain("8788");
+    // Un servicio con API propia no pasa por el relevo: no se le manda a mirarlo.
+    expect(mailRelayFailureHint("resend", failure)).toBe(null);
+    // Un rechazo del buzón no es un problema de conexión: que hable el servicio.
+    expect(
+      mailRelayFailureHint("ethereal", "SMTP 535 en AUTH PLAIN: usuario"),
+    ).toBe(null);
   });
 
   test("lo que contestó el relevo se cuenta en una frase", () => {

@@ -67,7 +67,7 @@ levantar, y eso no puede dejar al taller sin puente.
 
 | Variable                    | Por defecto          | Para qué                                                                                           |
 | --------------------------- | -------------------- | -------------------------------------------------------------------------------------------------- |
-| `SMTP_HOST`                 | — (obligatoria)      | Servidor de correo al que entregar.                                                                |
+| `SMTP_HOST`                 | — (opcional)         | Servidor de correo al que entregar. Sin él, solo se entregan los sobres que traen el suyo.         |
 | `SMTP_PORT`                 | `587`                | Su puerto. `465` activa TLS directo solo.                                                          |
 | `SMTP_TLS`                  | `auto`               | `auto` (STARTTLS si el servidor lo ofrece), `starttls` (obligatorio), `ssl` (TLS directo), `none`. |
 | `SMTP_USER` / `SMTP_PASS`   | vacías               | Credenciales, si el servidor las pide.                                                             |
@@ -81,9 +81,12 @@ levantar, y eso no puede dejar al taller sin puente.
 | `MAIL_RELAY_TOKEN`          | vacío                | Testigo que tendrá que mandar el backend. **Ponlo.**                                               |
 | `MAIL_RELAY_MAX_BODY_BYTES` | `1048576`            | Tope del sobre (1 MB).                                                                             |
 
-Si falta `SMTP_HOST`, el arranque falla con el motivo escrito en vez de descubrirlo
-en el primer aviso. Si no hay `MAIL_RELAY_TOKEN`, arranca igual, pero avisa: sin
-testigo, cualquiera que alcance el puerto puede mandar correo por él.
+Sin `SMTP_HOST` el relevo arranca igual: solo entrega los sobres que traen su
+propio servidor —Gmail y el buzón de pruebas— y rechaza los demás diciendo qué
+falta. Unas credenciales sueltas (`SMTP_USER`, `SMTP_PASS` o `SMTP_FROM`) sin
+`SMTP_HOST` sí paran el arranque: se ignorarían en silencio y el fallo se buscaría
+en el sitio equivocado. Si no hay `MAIL_RELAY_TOKEN`, arranca igual, pero avisa:
+sin testigo, cualquiera que alcance el puerto puede mandar correo por él.
 
 ---
 
@@ -149,10 +152,13 @@ hayas fijado `SMTP_FROM` a propósito. Lo que no cambia es lo demás: el saludo,
 tiempo de espera y la validación del certificado siguen siendo del relevo. Si el
 sobre **no** trae `smtp`, se entrega por el servidor del entorno, como siempre.
 
-`SMTP_HOST` sigue siendo obligatoria al arrancar: es el servidor de reserva. Si
-el taller no tiene servidor propio y solo va a usar Gmail, ponlo con el del
-servicio que uses (`SMTP_HOST=smtp.gmail.com`); no se usará en los envíos de
-Gmail, que traen el suyo.
+`SMTP_HOST` es solo el servidor de reserva: si el taller no tiene servidor propio
+y únicamente va a usar Gmail o Ethereal, no hace falta ponerlo. El relevo arranca
+sin él y entrega los sobres que traen el suyo.
+
+```bash
+MAIL_RELAY_TOKEN=un-testigo-largo npm run mail:relay
+```
 
 ### Gmail
 
@@ -337,14 +343,18 @@ Para verlo en marcha: `docker compose ps` (con `--profile correo`) y
 
 ## 9. Cuando algo no sale
 
-| Lo que ves                           | Qué mirar                                                                                                                          |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `401` en el histórico                | El testigo del ajuste y el `MAIL_RELAY_TOKEN` del relevo no son el mismo.                                                          |     | `502` con `535` | Usuario o contraseña del SMTP. En Gmail, casi siempre que se ha usado la contraseña de la cuenta en vez de una contraseña de aplicación. |
-| `501` al comprobar                   | Ese relevo es anterior a la comprobación previa (`/comprobar`): actualiza `scripts/mail-relay-lib.mjs` y `scripts/mail-relay.mjs`. |
-| `404` al comprobar                   | El relevo escucha en otro camino que no espera la comprobación: usa `/comprobar` a secas o revisa `MAIL_RELAY_PATH`.               |
-| `502` con `no se pudo` / `EAI_AGAIN` | El nombre del servidor SMTP del sobre no resuelve desde el relevo: revisa la cuenta y la red.                                      |
-| `502` con `no ofrece STARTTLS`       | El servidor no cifra: pon `SMTP_TLS=none` si es de la red del taller, o cambia de puerto/servidor.                                 |
-| `502` con `no contestó en 20 s`      | Cortafuegos del servidor de correo o puerto equivocado.                                                                            |
-| `EADDRINUSE` al arrancar             | Ya hay algo en el 8788: cambia `MAIL_RELAY_PORT` o para el otro proceso.                                                           |
-| El backend no lo alcanza             | Según dónde corra: `127.0.0.1`, `host.docker.internal` o `relevo` (ver la tabla del apartado 3).                                   |
-| `certificate ... self signed`        | `SMTP_REJECT_UNAUTHORIZED=false` (y entiende lo que implica).                                                                      |
+| Lo que ves                           | Qué mirar                                                                                                                                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `401` en el histórico                | El testigo del ajuste y el `MAIL_RELAY_TOKEN` del relevo no son el mismo.                                                                                                                  |
+| `502` con `535`                      | Usuario o contraseña del SMTP. En Gmail, casi siempre que se ha usado la contraseña de la cuenta en vez de una contraseña de aplicación.                                                   |
+| `Connection refused` al enviar       | El relevo no está arrancado (`npm run mail:relay`) o la dirección no es la suya. Si el ajuste apunta al `8025`, ese es el visor de Ethereal, no el puente: el relevo escucha en el `8788`. |
+| `Connection refused` con `localhost` | Con el backend en Docker, `localhost` es el contenedor. Usa `http://host.docker.internal:8788/enviar` (ver el apartado 3).                                                                 |
+| `400` en la comprobación             | El relevo arrancó sin `SMTP_HOST` y el sobre no traía servidor propio: elige Gmail o Ethereal en los ajustes, o pon `SMTP_HOST`.                                                           |
+| `501` al comprobar                   | Ese relevo es anterior a la comprobación previa (`/comprobar`): actualiza `scripts/mail-relay-lib.mjs` y `scripts/mail-relay.mjs`.                                                         |
+| `404` al comprobar                   | El relevo escucha en otro camino que no espera la comprobación: usa `/comprobar` a secas o revisa `MAIL_RELAY_PATH`.                                                                       |
+| `502` con `no se pudo` / `EAI_AGAIN` | El nombre del servidor SMTP del sobre no resuelve desde el relevo: revisa la cuenta y la red.                                                                                              |
+| `502` con `no ofrece STARTTLS`       | El servidor no cifra: pon `SMTP_TLS=none` si es de la red del taller, o cambia de puerto/servidor.                                                                                         |
+| `502` con `no contestó en 20 s`      | Cortafuegos del servidor de correo o puerto equivocado.                                                                                                                                    |
+| `EADDRINUSE` al arrancar             | Ya hay algo en el 8788: cambia `MAIL_RELAY_PORT` o para el otro proceso.                                                                                                                   |
+| El backend no lo alcanza             | Según dónde corra: `127.0.0.1`, `host.docker.internal` o `relevo` (ver la tabla del apartado 3).                                                                                           |
+| `certificate ... self signed`        | `SMTP_REJECT_UNAUTHORIZED=false` (y entiende lo que implica).                                                                                                                              |

@@ -17,6 +17,7 @@ import {
   parseEnvelope,
   parseSmtpOverride,
   readRelayConfig,
+  resolveSmtp,
   sendSmtp,
   verifySmtp,
 } from "../scripts/mail-relay-lib.mjs";
@@ -69,9 +70,39 @@ const smtpOverride = {
 /* ------------------------------------------------------------------ */
 
 describe("el relevo — la configuración", () => {
-  test("sin servidor SMTP no arranca y dice qué falta", () => {
-    expect(() => readRelayConfig({})).toThrow(RelayConfigError);
-    expect(() => readRelayConfig({})).toThrow(/SMTP_HOST/);
+  test("sin servidor SMTP arranca igual: el sobre de Gmail o Ethereal trae el suyo", () => {
+    // El taller que solo prueba con Gmail o con el buzón de Ethereal no tiene un
+    // servidor de la casa que poner en SMTP_HOST: exigirlo le dejaba sin puente
+    // justo en el caso más fácil.
+    const config = readRelayConfig({});
+    expect(config.port).toBe(8788);
+    expect(config.smtp).toBeNull();
+  });
+
+  test("unas credenciales sueltas sin servidor no se ignoran en silencio", () => {
+    expect(() => readRelayConfig({ SMTP_USER: "taller" })).toThrow(
+      RelayConfigError,
+    );
+    expect(() => readRelayConfig({ SMTP_FROM: "avisos@taller.es" })).toThrow(
+      /SMTP_HOST/,
+    );
+  });
+
+  test("sin servidor ni en el entorno ni en el sobre se dice qué falta", () => {
+    // Con el relevo arrancado sin SMTP_HOST, un sobre que no trae servidor no
+    // tiene a dónde ir: se contesta con una frase, no con un error de red.
+    expect(() => resolveSmtp(null, null)).toThrow(RelayRequestError);
+    expect(() => resolveSmtp(null, null)).toThrow(/SMTP_HOST/);
+    // Y cuando el sobre sí lo trae, se entrega por él con los valores del relevo.
+    const smtp = resolveSmtp(null, smtpOverride);
+    expect(smtp).toMatchObject({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      user: "taller@gmail.com",
+      helo: "pulso-taller.local",
+      rejectUnauthorized: true,
+    });
   });
 
   test("los valores de partida son los del taller", () => {

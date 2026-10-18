@@ -338,6 +338,16 @@ de entorno de reserva:
   se apunta en `mailLog`, que es el registro de lo que salió. El relevo la hace
   sola al arrancar y deja el resultado en su registro; si falla **no** deja de
   escuchar: el servidor de correo puede tardar más en levantar que el puente.
+  Arranca sin `SMTP_HOST` —el caso de Gmail y Ethereal, que mandan su servidor en
+  el sobre—; un sobre sin servidor se rechaza con un 400 que dice qué falta, y
+  unas credenciales sueltas sin `SMTP_HOST` paran el arranque en vez de ignorarse.
+- **La dirección del relevo se revisa al escribirla** (`mailRelayAddressHint`):
+  avisa, sin bloquear el guardado, del puerto 8025 —el visor de mensajes de
+  Ethereal, que no entrega nada—, de `https://` contra el puerto del relevo, y de
+  `localhost` cuando el backend va en su contenedor (donde `localhost` es el
+  contenedor, no el ordenador). Un fallo de conexión añade además, por
+  `mailRelayFailureHint`, que el relevo tiene que estar arrancado y cuál es su
+  dirección; se aplica al motivo apuntado por `deliverMail` y al de `check`.
 - **La pantalla comprueba el camino sola.** Al abrir _Ajustes del taller_ —y otra
   vez al guardar, que es cuando cambia el camino— la tarjeta del servidor de
   correo llama a `check` con lo guardado. Solo lo hace con el correo encendido y

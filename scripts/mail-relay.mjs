@@ -16,9 +16,9 @@
  */
 
 import {
-  applySmtpOverride,
   createRelayServer,
   readRelayConfig,
+  resolveSmtp,
   sendSmtp,
   verifySmtp,
 } from "./mail-relay-lib.mjs";
@@ -36,7 +36,9 @@ Variables de entorno:
   MAIL_RELAY_TOKEN           testigo que debe traer el backend (recomendado)
   MAIL_RELAY_MAX_BODY_BYTES  tamaño máximo del sobre (por defecto 1 MB)
 
-  SMTP_HOST                  servidor de correo al que entregar (obligatorio)
+  SMTP_HOST                  servidor de correo al que entregar (opcional: sin él
+                             solo se entregan los sobres que traen el suyo, como
+                             Gmail o el buzón de pruebas)
   SMTP_PORT                  su puerto (por defecto 587)
   SMTP_TLS                   auto | starttls | ssl | none (por defecto auto; 465 usa ssl)
   SMTP_USER / SMTP_PASS      credenciales, si el servidor las pide
@@ -132,11 +134,14 @@ function main() {
     config,
     // El servidor del sobre manda sobre el del entorno, pero solo en lo que es
     // suyo: el saludo, los tiempos y el certificado siguen siendo del relevo.
+    // `resolveSmtp` decide qué servidor se usa y, si no hay ninguno —ni del
+    // entorno ni en el sobre—, contesta con una frase que se puede leer en la
+    // pantalla en vez de intentar conectar con un servidor vacío.
     send: (envelope, smtp) =>
-      sendSmtp(applySmtpOverride(config.smtp, smtp), envelope),
+      sendSmtp(resolveSmtp(config.smtp, smtp), envelope),
     // La comprobación usa el mismo servidor que la entrega: el del sobre si lo
     // trae, el del entorno si no. Es lo que se pide desde Ajustes del taller.
-    verify: (smtp) => verifySmtp(applySmtpOverride(config.smtp, smtp)),
+    verify: (smtp) => verifySmtp(resolveSmtp(config.smtp, smtp)),
     log: (line) => console.log(line),
   });
 
@@ -154,11 +159,17 @@ function main() {
   server.listen(config.port, config.host, () => {
     const url = `http://${displayHost(config.host)}:${config.port}${config.path}`;
     console.log(`Relevo de correo escuchando en ${url} (${config.host})`);
-    console.log(
-      `Entrega por SMTP en ${config.smtp.host}:${config.smtp.port} (${describeTls(
-        config.smtp,
-      )})${config.smtp.from ? `, remitente fijo ${config.smtp.from}` : ""}.`,
-    );
+    if (config.smtp === null) {
+      console.log(
+        "Sin servidor SMTP propio (falta SMTP_HOST): se entregan los sobres que traen el suyo, como Gmail y el buzón de pruebas. Un sobre sin servidor se rechaza diciendo qué falta.",
+      );
+    } else {
+      console.log(
+        `Entrega por SMTP en ${config.smtp.host}:${config.smtp.port} (${describeTls(
+          config.smtp,
+        )})${config.smtp.from ? `, remitente fijo ${config.smtp.from}` : ""}.`,
+      );
+    }
     if (config.token === "") {
       console.log(
         "Aviso: no hay MAIL_RELAY_TOKEN, así que cualquiera que alcance este puerto puede mandar correo por él, con el servidor SMTP que quiera en el sobre.",
@@ -171,7 +182,7 @@ function main() {
     console.log(
       "En Ajustes del taller → Servidor de correo → Relevo propio, pon esa dirección como URL.",
     );
-    void checkSmtpOnce(config);
+    if (config.smtp !== null) void checkSmtpOnce(config);
   });
 
   let closing = false;

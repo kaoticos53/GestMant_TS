@@ -10,6 +10,7 @@ import {
   looksLikeEmail,
   mailCheckSummary,
   mailProviderLabel,
+  mailRelayFailureHint,
   validateMailSettings,
   type MailCheckResult,
   type MailProvider,
@@ -510,10 +511,13 @@ export const check = action({
       };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
+      const hint = mailRelayFailureHint(provider, detail);
       return {
         ok: false,
         provider,
-        error: `No se pudo hablar con el relevo: ${detail}`,
+        error: `No se pudo hablar con el relevo: ${detail}${
+          hint === null ? "" : ` ${hint}`
+        }`,
       };
     }
   },

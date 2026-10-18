@@ -224,6 +224,19 @@ describe("el estado del camino de envío", () => {
     expect(texto()).toContain("smtp.taller.es:587 · STARTTLS · AUTH PLAIN");
   });
 
+  test("avisa si la dirección guardada no es la del relevo", async () => {
+    // El error que veía el taller: el puerto del visor de Ethereal en vez del
+    // puente. Se dice al abrir el panel, sin esperar a que falle un envío.
+    STATE.settings = relaySettings({
+      relayUrl: "https://localhost:8025/enviar",
+    });
+
+    await mount();
+
+    expect(texto()).toContain("El puerto 8025 es el visor de mensajes");
+    expect(texto()).toContain("8788");
+  });
+
   test("con el correo apagado no se molesta al relevo", async () => {
     STATE.settings = relaySettings({ enabled: false });
 

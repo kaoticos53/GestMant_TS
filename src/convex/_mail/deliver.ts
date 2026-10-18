@@ -2,6 +2,7 @@ import { createVlyIntegrations } from "@vly-ai/integrations";
 import {
   buildMailRequest,
   mailProviderLabel,
+  mailRelayFailureHint,
   normalizeRecipients,
   type MailMessage,
   type MailOrigin,
@@ -116,9 +117,14 @@ export async function deliverMail(
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
+    // Un fallo de conexión no dice dónde se arregla: se añade qué mirar, para
+    // que la ficha de la incidencia y el histórico no dejen al taller a ciegas.
+    const hint = mailRelayFailureHint(config.provider, detail);
     return {
       ok: false,
-      error: `No se pudo hablar con el servicio de correo (${label}): ${detail}`,
+      error: `No se pudo hablar con el servicio de correo (${label}): ${detail}${
+        hint === null ? "" : ` ${hint}`
+      }`,
     };
   }
 }
