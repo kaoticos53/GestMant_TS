@@ -5,10 +5,17 @@ import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 import {
+  buildPurchaseHistoryRows,
+  filterPurchaseHistoryRows,
   groupBySupplier,
   groupSummary,
+  historyRowsToCsv,
+  historyRowsToTsv,
   orderTotals,
+  parseNumericDate,
   requestsMissingStock,
+  selectedCellsToTsv,
+  sortPurchaseHistoryRows,
 } from "../src/lib/purchasing";
 
 type Test = ReturnType<typeof convexTest>;
@@ -865,3 +872,322 @@ describe("las cuentas del módulo de compras", () => {
     ).toEqual([]);
   });
 });
+
+describe("código de solicitud de compra externa e histórico Excel", () => {
+  test("se crea una orden con código de solicitud y se puede actualizar", async () => {
+    const t = await taller();
+    const part = await seedPart(t.t, { supplier: "Moncada" });
+    const req = await pedir(t, [{ sparePartId: part, quantity: 2 }]);
+    const authedResp = t.como(t.responsable);
+
+    // 1. Apartar para comprar
+    const apartar = await authedResp.mutation(api.purchasing.requestPurchase, {
+      requestId: req._id,
+    });
+    const prs = await t.t.run((ctx) =>
+      ctx.db
+        .query("purchaseRequests")
+        .withIndex("by_reference", (q) => q.eq("reference", apartar.references[0]))
+        .collect(),
+    );
+
+    // 2. Crear orden indicando código de solicitud externa (ej. 10034573)
+    const { orderId, reference } = await authedResp.mutation(
+      api.purchasing.createOrder,
+      {
+        purchaseRequestIds: [prs[0]._id],
+        solicitudeCode: "10034573",
+        notes: "Urgente para taller",
+      },
+    );
+
+    const orden = await t.t.run((ctx) => ctx.db.get(orderId));
+    expect(orden?.solicitudeCode).toBe("10034573");
+    expect(orden?.reference).toBe(reference);
+
+    // 3. Modificar código de solicitud mediante setSolicitudeCode
+    await authedResp.mutation(api.purchasing.setSolicitudeCode, {
+      orderId,
+      solicitudeCode: "10034574",
+    });
+
+    const ordenActualizada = await t.t.run((ctx) => ctx.db.get(orderId));
+    expect(ordenActualizada?.solicitudeCode).toBe("10034574");
+
+    // 4. Limpiar / vaciar el código
+    await authedResp.mutation(api.purchasing.setSolicitudeCode, {
+      orderId,
+      solicitudeCode: "",
+    });
+    const ordenSinCodigo = await t.t.run((ctx) => ctx.db.get(orderId));
+    expect(ordenSinCodigo?.solicitudeCode).toBeUndefined();
+  });
+
+  test("buildPurchaseHistoryRows y exportación a TSV y CSV", () => {
+    const orders = [
+      {
+        _id: "order-1",
+        reference: "OC-0001",
+        supplier: "Moncada",
+        status: "pending",
+        orderedAt: new Date(2026, 5, 18).getTime(),
+        orderedBy: "Rita",
+        solicitudeCode: "10034573",
+        requestRefs: [],
+        lines: [
+          {
+            purchaseRequestId: "pr-1" as never,
+            requestId: "req-1" as never,
+            requestReference: "PET-0001",
+            requestDate: Date.now(),
+            sparePartId: "sp-1" as never,
+            code: "S2150-1911",
+            name: "Pan bar Clamp Kit Ace",
+            unit: "ud",
+            quantity: 2,
+            receivedQuantity: 2,
+            note: "1 a Huelva.ok",
+          },
+          {
+            purchaseRequestId: "pr-2" as never,
+            requestId: "req-1" as never,
+            requestReference: "PET-0001",
+            requestDate: Date.now(),
+            sparePartId: "sp-2" as never,
+            code: "S2150-1903",
+            name: "Right Hand Side Plate",
+            unit: "ud",
+            quantity: 2,
+            receivedQuantity: 0,
+          },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ] as never[];
+
+    const receptions = [
+      {
+        _id: "rec-1",
+        orderId: "order-1",
+        orderReference: "OC-0001",
+        supplier: "Moncada",
+        receivedAt: new Date(2026, 5, 18).getTime(),
+        lines: [
+          {
+            sparePartId: "sp-1",
+            code: "S2150-1911",
+            name: "Pan bar Clamp Kit Ace",
+            quantity: 2,
+          },
+        ],
+      },
+    ] as never[];
+
+    const rows = buildPurchaseHistoryRows(orders, receptions);
+    expect(rows).toHaveLength(2);
+
+    // Primera línea: posición 10, recibida 2, pendiente 0, fecha recepción informada
+    expect(rows[0].orderReference).toBe("OC-0001");
+    expect(rows[0].solicitudeCode).toBe("10034573");
+    expect(rows[0].position).toBe(10);
+    expect(rows[0].description).toBe("S2150-1911 - Pan bar Clamp Kit Ace");
+    expect(rows[0].quantity).toBe(2);
+    expect(rows[0].receivedQuantity).toBe(2);
+    expect(rows[0].pendingQuantity).toBe(0);
+    expect(rows[0].supplier).toBe("Moncada");
+    expect(rows[0].observations).toBe("1 a Huelva.ok");
+    expect(rows[0].receivedDate).toBe("18/06/2026");
+
+    // Segunda línea: posición 20, pendiente 2, fecha recepción vacía
+    expect(rows[1].position).toBe(20);
+    expect(rows[1].quantity).toBe(2);
+    expect(rows[1].receivedQuantity).toBe(0);
+    expect(rows[1].pendingQuantity).toBe(2);
+    expect(rows[1].receivedDate).toBe("");
+
+    // Exportación TSV (para portapapeles de Excel)
+    const tsv = historyRowsToTsv(rows);
+    expect(tsv).toContain("PEDIDO\tSOLICITUD\tPOSICIÓN\tDESCRIPCIÓN\tUNIDADES\tRECIBIDO");
+    expect(tsv).toContain("OC-0001\t10034573\t10\tS2150-1911 - Pan bar Clamp Kit Ace\t2\t2");
+
+    // Exportación CSV
+    const csv = historyRowsToCsv(rows);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain("PEDIDO;SOLICITUD;POSICIÓN;DESCRIPCIÓN;UNIDADES;RECIBIDO");
+    expect(csv).toContain("OC-0001;10034573;10;S2150-1911 - Pan bar Clamp Kit Ace;2;2");
+  });
+
+  test("ordenación por columnas numéricas, fechas y texto", () => {
+    const rows = [
+      {
+        id: "r-1",
+        orderId: "o-1",
+        orderReference: "OC-0002",
+        solicitudeCode: "10034574",
+        position: 20,
+        description: "B - Cable HDMI",
+        quantity: 10,
+        receivedQuantity: 5,
+        supplier: "Panasonic",
+        observations: "Nota B",
+        pendingQuantity: 5,
+        orderedDate: "01/06/2026",
+        receivedDate: "05/06/2026",
+      },
+      {
+        id: "r-2",
+        orderId: "o-2",
+        orderReference: "OC-0001",
+        solicitudeCode: "10034573",
+        position: 10,
+        description: "A - Batería",
+        quantity: 2,
+        receivedQuantity: 2,
+        supplier: "Moncada",
+        observations: "Nota A",
+        pendingQuantity: 0,
+        orderedDate: "18/05/2026",
+        receivedDate: "18/06/2026",
+      },
+    ];
+
+    // Ordenar por posición ascendente (10, 20)
+    const porPosAsc = sortPurchaseHistoryRows(rows, {
+      column: "position",
+      direction: "asc",
+    });
+    expect(porPosAsc.map((r) => r.position)).toEqual([10, 20]);
+
+    // Ordenar por posición descendente (20, 10)
+    const porPosDesc = sortPurchaseHistoryRows(rows, {
+      column: "position",
+      direction: "desc",
+    });
+    expect(porPosDesc.map((r) => r.position)).toEqual([20, 10]);
+
+    // Ordenar por fecha de pedido cronológicamente
+    const porFechaAsc = sortPurchaseHistoryRows(rows, {
+      column: "orderedDate",
+      direction: "asc",
+    });
+    expect(porFechaAsc[0].orderedDate).toBe("18/05/2026");
+    expect(porFechaAsc[1].orderedDate).toBe("01/06/2026");
+
+    // Ordenar por proveedor texto ascendente
+    const porProv = sortPurchaseHistoryRows(rows, {
+      column: "supplier",
+      direction: "asc",
+    });
+    expect(porProv.map((r) => r.supplier)).toEqual(["Moncada", "Panasonic"]);
+  });
+
+  test("filtros avanzados y rango de fechas", () => {
+    const rows = [
+      {
+        id: "r-1",
+        orderId: "o-1",
+        orderReference: "OC-0001",
+        solicitudeCode: "10034573",
+        position: 10,
+        description: "Pan bar Clamp",
+        quantity: 2,
+        receivedQuantity: 2,
+        supplier: "Moncada",
+        observations: "1 a Huelva.ok",
+        pendingQuantity: 0,
+        orderedDate: "18/06/2026",
+        receivedDate: "18/06/2026",
+      },
+      {
+        id: "r-2",
+        orderId: "o-2",
+        orderReference: "OC-0002",
+        solicitudeCode: "10034574",
+        position: 20,
+        description: "Eye Cap Panasonic",
+        quantity: 10,
+        receivedQuantity: 5,
+        supplier: "Panasonic",
+        observations: "Para cámara 1",
+        pendingQuantity: 5,
+        orderedDate: "01/06/2026",
+        receivedDate: "05/06/2026",
+      },
+    ];
+
+    // Filtro por proveedor
+    const soloMoncada = filterPurchaseHistoryRows(rows, {
+      proveedor: "Moncada",
+    });
+    expect(soloMoncada).toHaveLength(1);
+    expect(soloMoncada[0].orderReference).toBe("OC-0001");
+
+    // Filtro por estado pendiente
+    const soloPendientes = filterPurchaseHistoryRows(rows, {
+      estado: "pendientes",
+    });
+    expect(soloPendientes).toHaveLength(1);
+    expect(soloPendientes[0].orderReference).toBe("OC-0002");
+
+    // Filtro por rango de fechas (Fecha de pedido entre 2026-06-15 y 2026-06-20)
+    const fechaFiltro = filterPurchaseHistoryRows(rows, {
+      fechaTipo: "pedido",
+      fechaDesde: "2026-06-15",
+      fechaHasta: "2026-06-20",
+    });
+    expect(fechaFiltro).toHaveLength(1);
+    expect(fechaFiltro[0].orderedDate).toBe("18/06/2026");
+  });
+
+  test("selectedCellsToTsv copia exactamente las celdas señaladas", () => {
+    const rows = [
+      {
+        id: "r-1",
+        orderId: "o-1",
+        orderReference: "OC-0001",
+        solicitudeCode: "10034573",
+        position: 10,
+        description: "Clamp Kit",
+        quantity: 2,
+        receivedQuantity: 2,
+        supplier: "Moncada",
+        observations: "Ok",
+        pendingQuantity: 0,
+        orderedDate: "18/06/2026",
+        receivedDate: "18/06/2026",
+      },
+      {
+        id: "r-2",
+        orderId: "o-2",
+        orderReference: "OC-0002",
+        solicitudeCode: "10034574",
+        position: 20,
+        description: "Eye Cap",
+        quantity: 10,
+        receivedQuantity: 5,
+        supplier: "Panasonic",
+        observations: "Para plató",
+        pendingQuantity: 5,
+        orderedDate: "01/06/2026",
+        receivedDate: "05/06/2026",
+      },
+    ];
+
+    // Señalar solo solicitud y descripción de ambas filas
+    const selected = new Set([
+      "r-1:solicitudeCode",
+      "r-1:description",
+      "r-2:solicitudeCode",
+      "r-2:description",
+    ]);
+
+    const tsv = selectedCellsToTsv(rows, selected);
+    const lineas = tsv.split("\n");
+    expect(lineas).toHaveLength(2);
+    expect(lineas[0]).toBe("10034573\tClamp Kit");
+    expect(lineas[1]).toBe("10034574\tEye Cap");
+  });
+});
+
+

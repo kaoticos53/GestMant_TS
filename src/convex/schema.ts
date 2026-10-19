@@ -827,6 +827,8 @@ const schema = defineSchema({
       }),
     ),
     lines: v.array(purchaseOrderLineValidator),
+    // Código de la solicitud de compra externa (por defecto vacío u opcional)
+    solicitudeCode: v.optional(v.string()),
     notes: v.optional(v.string()),
     completedAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
@@ -837,6 +839,7 @@ const schema = defineSchema({
     .index("by_status", ["status"])
     .index("by_supplier", ["supplier"])
     .index("by_orderedAt", ["orderedAt"])
+    .index("by_solicitudeCode", ["solicitudeCode"])
     // La referencia, para repartir el número siguiente sin leer la tabla
     // entera (`lib/references`).
     .index("by_reference", ["reference"]),

@@ -217,6 +217,7 @@ export const cancelPurchaseRequest = mutation({
 export const createOrder = mutation({
   args: {
     purchaseRequestIds: v.array(v.id("purchaseRequests")),
+    solicitudeCode: v.optional(v.string()),
     notes: v.optional(v.string()),
     /** Nota de cada artículo, por petición de compra. */
     lineNotes: v.optional(v.record(v.string(), v.string())),
@@ -288,6 +289,9 @@ export const createOrder = mutation({
             ? { note: row.notes.trim() }
             : {}),
       })),
+      ...(args.solicitudeCode?.trim()
+        ? { solicitudeCode: args.solicitudeCode.trim() }
+        : {}),
       ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
       createdAt: now,
       updatedAt: now,
@@ -304,6 +308,24 @@ export const createOrder = mutation({
     }
 
     return { reference, orderId, lines: rows.length };
+  },
+});
+
+/** Cambia el código de solicitud de compra externa de una orden. */
+export const setSolicitudeCode = mutation({
+  args: {
+    orderId: v.id("purchaseOrders"),
+    solicitudeCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requirePurchasing(ctx, "cambiar el código de la solicitud de compra");
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new ConvexError("La orden ya no existe.");
+    const code = args.solicitudeCode?.trim();
+    await ctx.db.patch(args.orderId, {
+      solicitudeCode: code ? code : undefined,
+      updatedAt: Date.now(),
+    });
   },
 });
 

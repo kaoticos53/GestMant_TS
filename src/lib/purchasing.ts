@@ -190,3 +190,440 @@ export function groupSummary(group: SupplierGroup): string {
     group.items.length === 1 ? "1 artículo" : `${group.items.length} artículos`;
   return `${peticiones} · ${articulos} · ${group.quantity} ud`;
 }
+
+/* ------------------------------------------------------------------ */
+/* Histórico en formato tabla tipo Excel / Hoja de cálculo            */
+/* ------------------------------------------------------------------ */
+
+/** Formatea una fecha como DD/MM/YYYY para la tabla de histórico. */
+export function formatNumericDate(timestamp?: number | null): string {
+  if (!timestamp) return "";
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+export interface PurchaseHistoryRow {
+  id: string;
+  orderId: string;
+  orderReference: string; // PEDIDO
+  solicitudeCode: string; // SOLICITUD
+  position: number; // POSICIÓN (10, 20, 30...)
+  description: string; // DESCRIPCIÓN
+  quantity: number; // UNIDADES
+  receivedQuantity: number; // RECIBIDO
+  supplier: string; // PROVEEDOR
+  observations: string; // OBSERVACIONES
+  pendingQuantity: number; // PENDIENTE
+  orderedDate: string; // F. PEDIDO (DD/MM/YYYY)
+  receivedDate: string; // F. RECEP. (DD/MM/YYYY)
+}
+
+/**
+ * Compone las filas para el histórico con el formato idéntico al documento Excel
+ * de compras: cada línea de orden con su posición, descripción, cantidades,
+ * proveedor, notas y fechas.
+ */
+export function buildPurchaseHistoryRows(
+  orders: PurchaseOrderDoc[],
+  receptions: Pick<Doc<"receptions">, "orderId" | "receivedAt" | "lines">[],
+): PurchaseHistoryRow[] {
+  const sortedOrders = [...orders].sort((a, b) => b.orderedAt - a.orderedAt);
+  const rows: PurchaseHistoryRow[] = [];
+
+  for (const order of sortedOrders) {
+    const orderReceptions = receptions.filter((r) => r.orderId === order._id);
+
+    order.lines.forEach((line, index) => {
+      const position = (index + 1) * 10;
+
+      let receivedDate = "";
+      if (line.receivedQuantity > 0) {
+        const matchingReceptions = orderReceptions.filter((r) =>
+          r.lines.some((rl) => rl.sparePartId === line.sparePartId),
+        );
+        if (matchingReceptions.length > 0) {
+          const latestAt = Math.max(
+            ...matchingReceptions.map((r) => r.receivedAt),
+          );
+          receivedDate = formatNumericDate(latestAt);
+        }
+      }
+
+      const pending = Math.max(0, line.quantity - line.receivedQuantity);
+      const observations = line.note?.trim() || order.notes?.trim() || "";
+      const description = `${line.code} - ${line.name}`;
+
+      rows.push({
+        id: `${order._id}-${line.purchaseRequestId}-${index}`,
+        orderId: order._id,
+        orderReference: order.reference,
+        solicitudeCode: order.solicitudeCode ?? "",
+        position,
+        description,
+        quantity: line.quantity,
+        receivedQuantity: line.receivedQuantity,
+        supplier: order.supplier,
+        observations,
+        pendingQuantity: pending,
+        orderedDate: formatNumericDate(order.orderedAt),
+        receivedDate,
+      });
+    });
+  }
+
+  return rows;
+}
+
+export const PURCHASE_HISTORY_HEADERS = [
+  "PEDIDO",
+  "SOLICITUD",
+  "POSICIÓN",
+  "DESCRIPCIÓN",
+  "UNIDADES",
+  "RECIBIDO",
+  "PROVEEDOR",
+  "OBSERVACIONES",
+  "PENDIENTE",
+  "F. PEDIDO",
+  "F. RECEP.",
+] as const;
+
+/**
+ * Convierte las filas a formato TSV (valores separados por tabulador)
+ * listo para copiar al portapapeles y pegar de forma nativa en celdas de Excel.
+ */
+export function historyRowsToTsv(
+  rows: PurchaseHistoryRow[],
+  includeHeaders: boolean = true,
+): string {
+  const lines: string[] = [];
+  if (includeHeaders) {
+    lines.push(PURCHASE_HISTORY_HEADERS.join("\t"));
+  }
+
+  for (const row of rows) {
+    lines.push(
+      [
+        row.orderReference,
+        row.solicitudeCode,
+        row.position,
+        row.description,
+        row.quantity,
+        row.receivedQuantity,
+        row.supplier,
+        row.observations,
+        row.pendingQuantity,
+        row.orderedDate,
+        row.receivedDate,
+      ]
+        .map((val) => String(val ?? "").replace(/[\t\r\n]/g, " "))
+        .join("\t"),
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Genera el contenido CSV con delimitador punto y coma y BOM UTF-8
+ * para máxima compatibilidad al abrir en Excel en español / Europa.
+ */
+export function historyRowsToCsv(rows: PurchaseHistoryRow[]): string {
+  const escapeCsv = (val: string | number) => {
+    const s = String(val ?? "");
+    if (
+      s.includes(";") ||
+      s.includes('"') ||
+      s.includes("\n") ||
+      s.includes("\r")
+    ) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const lines = [
+    PURCHASE_HISTORY_HEADERS.map(escapeCsv).join(";"),
+    ...rows.map((row) =>
+      [
+        row.orderReference,
+        row.solicitudeCode,
+        row.position,
+        row.description,
+        row.quantity,
+        row.receivedQuantity,
+        row.supplier,
+        row.observations,
+        row.pendingQuantity,
+        row.orderedDate,
+        row.receivedDate,
+      ]
+        .map(escapeCsv)
+        .join(";"),
+    ),
+  ];
+
+  return "\uFEFF" + lines.join("\r\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* Ordenación y filtros avanzados del Histórico                       */
+/* ------------------------------------------------------------------ */
+
+/** Parsea una fecha DD/MM/YYYY a timestamp unix para comparaciones. */
+export function parseNumericDate(dateStr?: string | null): number | null {
+  if (!dateStr || !dateStr.trim()) return null;
+  const parts = dateStr.trim().split("/");
+  if (parts.length !== 3) return null;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+  const date = new Date(year, month, day);
+  return isNaN(date.getTime()) ? null : date.getTime();
+}
+
+export type PurchaseHistoryColumn =
+  | "orderReference"
+  | "solicitudeCode"
+  | "position"
+  | "description"
+  | "quantity"
+  | "receivedQuantity"
+  | "supplier"
+  | "observations"
+  | "pendingQuantity"
+  | "orderedDate"
+  | "receivedDate";
+
+export const PURCHASE_HISTORY_COLUMNS: Record<
+  PurchaseHistoryColumn,
+  { label: string; align?: "left" | "right" }
+> = {
+  orderReference: { label: "PEDIDO" },
+  solicitudeCode: { label: "SOLICITUD" },
+  position: { label: "POSICIÓN", align: "right" },
+  description: { label: "DESCRIPCIÓN" },
+  quantity: { label: "UNIDADES", align: "right" },
+  receivedQuantity: { label: "RECIBIDO", align: "right" },
+  supplier: { label: "PROVEEDOR" },
+  observations: { label: "OBSERVACIONES" },
+  pendingQuantity: { label: "PENDIENTE", align: "right" },
+  orderedDate: { label: "F. PEDIDO" },
+  receivedDate: { label: "F. RECEP." },
+};
+
+export function sortPurchaseHistoryRows(
+  rows: PurchaseHistoryRow[],
+  sort: { column: PurchaseHistoryColumn; direction: "asc" | "desc" } | null,
+): PurchaseHistoryRow[] {
+  if (!sort) return [...rows];
+  const factor = sort.direction === "asc" ? 1 : -1;
+
+  return [...rows].sort((a, b) => {
+    switch (sort.column) {
+      case "position":
+      case "quantity":
+      case "receivedQuantity":
+      case "pendingQuantity":
+        return (a[sort.column] - b[sort.column]) * factor;
+
+      case "orderedDate":
+      case "receivedDate": {
+        const timeA =
+          parseNumericDate(a[sort.column]) ??
+          (sort.direction === "asc" ? Infinity : -Infinity);
+        const timeB =
+          parseNumericDate(b[sort.column]) ??
+          (sort.direction === "asc" ? Infinity : -Infinity);
+        return (timeA - timeB) * factor;
+      }
+
+      case "orderReference":
+      case "solicitudeCode":
+      case "description":
+      case "supplier":
+      case "observations":
+      default:
+        return (
+          a[sort.column].localeCompare(b[sort.column], "es", {
+            numeric: true,
+            sensitivity: "base",
+          }) * factor
+        );
+    }
+  });
+}
+
+export interface PurchaseHistoryFilters {
+  query?: string;
+  pedido?: string;
+  solicitud?: string;
+  proveedor?: string;
+  descripcion?: string;
+  observaciones?: string;
+  estado?: "todos" | "pendientes" | "recibidos" | "parciales";
+  fechaTipo?: "pedido" | "recepcion" | "ambas";
+  fechaDesde?: string; // YYYY-MM-DD
+  fechaHasta?: string; // YYYY-MM-DD
+}
+
+export function filterPurchaseHistoryRows(
+  rows: PurchaseHistoryRow[],
+  filters: PurchaseHistoryFilters,
+): PurchaseHistoryRow[] {
+  return rows.filter((row) => {
+    // Búsqueda general
+    if (filters.query?.trim()) {
+      const q = filters.query.toLowerCase().trim();
+      const match =
+        row.orderReference.toLowerCase().includes(q) ||
+        row.solicitudeCode.toLowerCase().includes(q) ||
+        row.description.toLowerCase().includes(q) ||
+        row.supplier.toLowerCase().includes(q) ||
+        row.observations.toLowerCase().includes(q) ||
+        String(row.position).includes(q);
+      if (!match) return false;
+    }
+
+    // Filtros por campo específico
+    if (
+      filters.pedido?.trim() &&
+      !row.orderReference
+        .toLowerCase()
+        .includes(filters.pedido.toLowerCase().trim())
+    ) {
+      return false;
+    }
+    if (
+      filters.solicitud?.trim() &&
+      !row.solicitudeCode
+        .toLowerCase()
+        .includes(filters.solicitud.toLowerCase().trim())
+    ) {
+      return false;
+    }
+    if (
+      filters.proveedor &&
+      filters.proveedor !== "todos" &&
+      row.supplier.toLowerCase() !== filters.proveedor.toLowerCase()
+    ) {
+      return false;
+    }
+    if (
+      filters.descripcion?.trim() &&
+      !row.description
+        .toLowerCase()
+        .includes(filters.descripcion.toLowerCase().trim())
+    ) {
+      return false;
+    }
+    if (
+      filters.observaciones?.trim() &&
+      !row.observations
+        .toLowerCase()
+        .includes(filters.observaciones.toLowerCase().trim())
+    ) {
+      return false;
+    }
+
+    // Filtro de estado
+    if (filters.estado === "pendientes" && row.pendingQuantity <= 0) {
+      return false;
+    }
+    if (filters.estado === "recibidos" && row.pendingQuantity > 0) {
+      return false;
+    }
+    if (
+      filters.estado === "parciales" &&
+      !(row.receivedQuantity > 0 && row.pendingQuantity > 0)
+    ) {
+      return false;
+    }
+
+    // Filtro por rango de fechas
+    if (filters.fechaDesde || filters.fechaHasta) {
+      const tipo = filters.fechaTipo ?? "pedido";
+      const desde = filters.fechaDesde
+        ? new Date(`${filters.fechaDesde}T00:00:00`).getTime()
+        : -Infinity;
+      const hasta = filters.fechaHasta
+        ? new Date(`${filters.fechaHasta}T23:59:59.999`).getTime()
+        : Infinity;
+
+      const timePedido = parseNumericDate(row.orderedDate);
+      const timeRecep = parseNumericDate(row.receivedDate);
+
+      if (tipo === "pedido") {
+        if (timePedido === null) return false;
+        if (timePedido < desde || timePedido > hasta) return false;
+      } else if (tipo === "recepcion") {
+        if (timeRecep === null) return false;
+        if (timeRecep < desde || timeRecep > hasta) return false;
+      } else {
+        // ambas
+        const pedidoOk =
+          timePedido !== null && timePedido >= desde && timePedido <= hasta;
+        const recepOk =
+          timeRecep !== null && timeRecep >= desde && timeRecep <= hasta;
+        if (!pedidoOk && !recepOk) return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Convierte exactamente las celdas seleccionadas a formato TSV (tabulado)
+ * listo para pegar en Excel, conservando la cuadrícula relativa seleccionada.
+ */
+export function selectedCellsToTsv(
+  rows: PurchaseHistoryRow[],
+  selectedCellKeys: Set<string>,
+): string {
+  if (selectedCellKeys.size === 0) return "";
+
+  const colKeys: PurchaseHistoryColumn[] = [
+    "orderReference",
+    "solicitudeCode",
+    "position",
+    "description",
+    "quantity",
+    "receivedQuantity",
+    "supplier",
+    "observations",
+    "pendingQuantity",
+    "orderedDate",
+    "receivedDate",
+  ];
+
+  // Identificar columnas involucradas en la selección
+  const activeCols = colKeys.filter((col) =>
+    rows.some((row) => selectedCellKeys.has(`${row.id}:${col}`)),
+  );
+
+  // Filas involucradas en la selección (en orden actual)
+  const activeRows = rows.filter((row) =>
+    activeCols.some((col) => selectedCellKeys.has(`${row.id}:${col}`)),
+  );
+
+  const lines: string[] = [];
+  for (const row of activeRows) {
+    const rowValues = activeCols.map((col) => {
+      if (selectedCellKeys.has(`${row.id}:${col}`)) {
+        return String(row[col] ?? "").replace(/[\t\r\n]/g, " ");
+      }
+      return "";
+    });
+    lines.push(rowValues.join("\t"));
+  }
+
+  return lines.join("\n");
+}
+
+
