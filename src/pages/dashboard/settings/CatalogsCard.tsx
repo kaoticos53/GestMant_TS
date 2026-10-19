@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -66,6 +66,11 @@ export function CatalogsCard() {
   const updateItem = useMutation(api.catalogs.update);
   const removeItem = useMutation(api.catalogs.remove);
   const mergeDuplicates = useMutation(api.catalogs.mergeDuplicates);
+  const migrateLegacy = useMutation(api.catalogs.migrateLegacyLocations);
+
+  useEffect(() => {
+    void migrateLegacy().catch(() => {});
+  }, [migrateLegacy]);
 
   const meta = CATALOG_KIND_LABELS[selectedKind];
 

@@ -128,14 +128,13 @@ export const ensureItem = mutation({
 });
 
 /**
-/**
  * Propaga un cambio de nombre o fusión de catálogo en caliente a todas las tablas del sistema
  * que citan ese valor literal (equipos, modelos, manuales, repuestos, compras, peticiones,
  * usuarios e incidencias).
  */
 async function propagateCatalogRename(
   ctx: MutationCtx,
-  kind: "brand" | "equipmentLocation" | "partLocation" | "supplier" | "position" | "partCategory",
+  kind: "brand" | "equipmentLocation" | "partLocation" | "supplier" | "position" | "partCategory" | "location",
   oldName: string,
   newName: string,
 ) {
@@ -164,7 +163,7 @@ async function propagateCatalogRename(
         await ctx.db.patch(man._id, { brand: newName });
       }
     }
-  } else if (kind === "equipmentLocation") {
+  } else if (kind === "equipmentLocation" || kind === "location") {
     // Ubicaciones de Equipos e Incidencias (plató, control, unidad móvil...)
     const equipment = await ctx.db.query("equipment").collect();
     for (const eq of equipment) {
@@ -373,3 +372,40 @@ export const mergeDuplicates = mutation({
     return { merged: true, oldName, newName };
   },
 });
+
+/**
+ * Migra cualquier registro legado con kind "location" a "equipmentLocation".
+ * Si ya existe una ubicación de equipo con el mismo nombre normalizado, elimina el registro legado para evitar duplicados.
+ */
+export const migrateLegacyLocations = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    const legados = await ctx.db
+      .query("catalogs")
+      .withIndex("by_kind", (q) => q.eq("kind", "location" as never))
+      .collect();
+
+    let migrated = 0;
+    for (const item of legados) {
+      const existing = await ctx.db
+        .query("catalogs")
+        .withIndex("by_kind_normalized", (q) =>
+          q.eq("kind", "equipmentLocation").eq("normalized", item.normalized),
+        )
+        .first();
+
+      if (existing) {
+        await ctx.db.delete(item._id);
+      } else {
+        await ctx.db.patch(item._id, {
+          kind: "equipmentLocation",
+          updatedAt: Date.now(),
+        });
+      }
+      migrated++;
+    }
+    return { migrated };
+  },
+});
+

@@ -1232,6 +1232,7 @@ const schema = defineSchema({
       v.literal("brand"),
       v.literal("equipmentLocation"),
       v.literal("partLocation"),
+      v.literal("location"), // Compatibilidad y migración de datos previos
       v.literal("supplier"),
       v.literal("position"),
       v.literal("partCategory"),
