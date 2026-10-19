@@ -1224,6 +1224,25 @@ const schema = defineSchema({
     .index("by_at", ["at"])
     .index("by_action", ["action"])
     .index("by_actor", ["actorId"]),
+
+  // Catálogos maestros normalizados (marca, ubicación de equipos, ubicación en almacén de repuestos,
+  // proveedor, puesto, categoría de repuesto) con autocompletado y prevención de erratas.
+  catalogs: defineTable({
+    kind: v.union(
+      v.literal("brand"),
+      v.literal("equipmentLocation"),
+      v.literal("partLocation"),
+      v.literal("supplier"),
+      v.literal("position"),
+      v.literal("partCategory"),
+    ),
+    name: v.string(), // Nombre oficial o canónico visible, ej. "Plató 1" o "Estantería A-01"
+    normalized: v.string(), // Minúsculas, sin acentos ni espacios sobrantes para deduplicación
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_kind", ["kind"])
+    .index("by_kind_normalized", ["kind", "normalized"]),
 });
 
 export default schema;

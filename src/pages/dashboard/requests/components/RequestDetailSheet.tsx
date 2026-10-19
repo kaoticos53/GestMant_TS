@@ -174,7 +174,7 @@ export function RequestDetailSheet({
 
   const details: { label: string; value: string }[] = [
     { label: "Solicitante", value: request.requesterName },
-    { label: "Área o equipo de trabajo", value: request.requesterTeam ?? "—" },
+    { label: "Puesto", value: request.requesterTeam ?? "—" },
     { label: "Equipo afectado", value: request.equipment ?? "—" },
     { label: "Creada", value: formatDateTime(request.createdAt) },
     {

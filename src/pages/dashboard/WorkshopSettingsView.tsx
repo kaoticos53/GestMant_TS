@@ -1,5 +1,6 @@
 import { AuditAlertSettingsCard } from "./settings/AuditAlertSettingsCard";
 import { AutomaticArchiveCard } from "./settings/AutomaticArchiveCard";
+import { CatalogsCard } from "./settings/CatalogsCard";
 import { MailAudienceCard } from "./settings/MailAudienceCard";
 import { MailServerCard } from "./settings/MailServerCard";
 import { StorageCleanupCard } from "./settings/StorageCleanupCard";
@@ -61,6 +62,7 @@ export function WorkshopSettingsView({
       {canManageAlert && <WorkAlertSettingsCard />}
       {canManageAudit && <AuditAlertSettingsCard />}
       {canManageData && <WorkshopDataCard />}
+      <CatalogsCard />
       <p className="text-xs leading-5 text-muted-foreground">
         Estas son las reglas de fondo del taller. El día a día —buscar en el
         archivo, recuperar lo archivado, trabajar las incidencias— sigue en sus

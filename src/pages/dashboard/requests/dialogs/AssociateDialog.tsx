@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
 
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -45,6 +46,10 @@ export function AssociateDialog({
 }) {
   const associateExisting = useMutation(api.partRequests.associateExisting);
   const associateNew = useMutation(api.partRequests.associateNew);
+  const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
+  const catalogLocations = useQuery(api.catalogs.list, { kind: "partLocation" }) ?? [];
+  const catalogCategories = useQuery(api.catalogs.list, { kind: "partCategory" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
   const [mode, setMode] = useState<"existing" | "new">(
     parts.length > 0 ? "existing" : "new",
@@ -149,6 +154,18 @@ export function AssociateDialog({
         },
       });
       toast.success(message);
+
+      // Registro transparente en catálogos
+      if (supplier.trim()) {
+        void ensureCatalogItem({ kind: "supplier", name: supplier.trim() }).catch(() => {});
+      }
+      if (location.trim()) {
+        void ensureCatalogItem({ kind: "partLocation", name: location.trim() }).catch(() => {});
+      }
+      if (category.trim()) {
+        void ensureCatalogItem({ kind: "partCategory", name: category.trim() }).catch(() => {});
+      }
+
       onClose();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -284,10 +301,12 @@ export function AssociateDialog({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="new-supplier">Proveedor</Label>
-                <Input
+                <AutocompleteInput
                   id="new-supplier"
                   value={supplier}
-                  onChange={(event) => setSupplier(event.target.value)}
+                  onChange={setSupplier}
+                  items={catalogSuppliers}
+                  kind="supplier"
                   placeholder="SmallHD"
                   disabled={busy}
                 />
@@ -327,22 +346,18 @@ export function AssociateDialog({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="new-category">Categoría</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger
-                    id="new-category"
-                    className="w-full"
-                    disabled={busy}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PART_CATEGORIES.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AutocompleteInput
+                  id="new-category"
+                  value={category}
+                  onChange={setCategory}
+                  items={[
+                    ...PART_CATEGORIES.map((cat) => ({ name: cat })),
+                    ...catalogCategories,
+                  ]}
+                  kind="partCategory"
+                  placeholder="p. ej. Electrónica, Conectividad..."
+                  disabled={busy}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="new-unit">Unidad</Label>
@@ -380,10 +395,12 @@ export function AssociateDialog({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="new-location">Ubicación</Label>
-                <Input
+                <AutocompleteInput
                   id="new-location"
                   value={location}
-                  onChange={(event) => setLocation(event.target.value)}
+                  onChange={setLocation}
+                  items={catalogLocations}
+                  kind="location"
                   placeholder="D-09"
                   className="font-mono"
                   disabled={busy}

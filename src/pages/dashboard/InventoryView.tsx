@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -658,6 +659,10 @@ function PartFormDialog({
 }) {
   const create = useMutation(api.spareParts.create);
   const update = useMutation(api.spareParts.update);
+  const catalogLocations = useQuery(api.catalogs.list, { kind: "partLocation" }) ?? [];
+  const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
+  const catalogCategories = useQuery(api.catalogs.list, { kind: "partCategory" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
   const isEdit = part !== null;
   const [code, setCode] = useState(part?.code ?? "");
@@ -787,6 +792,18 @@ function PartFormDialog({
         });
         toast.success(`${code.trim().toUpperCase()} añadido al catálogo`);
       }
+
+      // Registro transparente en catálogos maestros
+      if (location.trim()) {
+        void ensureCatalogItem({ kind: "partLocation", name: location.trim() }).catch(() => {});
+      }
+      if (supplier.trim()) {
+        void ensureCatalogItem({ kind: "supplier", name: supplier.trim() }).catch(() => {});
+      }
+      if (category.trim()) {
+        void ensureCatalogItem({ kind: "partCategory", name: category.trim() }).catch(() => {});
+      }
+
       onClose();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -833,22 +850,18 @@ function PartFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="part-category">Categoría</Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger
-                id="part-category"
-                className="w-full"
-                disabled={busy}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PART_CATEGORIES.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AutocompleteInput
+              id="part-category"
+              value={category}
+              onChange={setCategory}
+              items={[
+                ...PART_CATEGORIES.map((cat) => ({ name: cat })),
+                ...catalogCategories,
+              ]}
+              kind="partCategory"
+              placeholder="p. ej. Electrónica, Conectividad..."
+              disabled={busy}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="part-unit">Unidad</Label>
@@ -886,10 +899,12 @@ function PartFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="part-location">Ubicación</Label>
-            <Input
+            <AutocompleteInput
               id="part-location"
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={setLocation}
+              items={catalogLocations}
+              kind="location"
               placeholder="B-03"
               className="font-mono"
               disabled={busy}
@@ -897,10 +912,12 @@ function PartFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="part-supplier">Proveedor</Label>
-            <Input
+            <AutocompleteInput
               id="part-supplier"
               value={supplier}
-              onChange={(event) => setSupplier(event.target.value)}
+              onChange={setSupplier}
+              items={catalogSuppliers}
+              kind="supplier"
               placeholder="Mean Well"
               disabled={busy}
             />

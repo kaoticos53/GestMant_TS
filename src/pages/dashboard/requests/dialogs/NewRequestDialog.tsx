@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 import {
   ArrowRight,
   FileText,
@@ -20,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -68,9 +70,22 @@ export function NewRequestDialog({
 }) {
   const create = useMutation(api.partRequests.create);
   const generateUploadUrl = useMutation(api.partRequests.generateUploadUrl);
+  const { user } = useAuth();
+  const catalogPositions = useQuery(api.catalogs.list, { kind: "position" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
-  const [requesterName, setRequesterName] = useState("");
-  const [requesterTeam, setRequesterTeam] = useState("");
+  const [requesterName, setRequesterName] = useState(user?.name ?? "");
+  const [requesterTeam, setRequesterTeam] = useState(user?.position ?? "");
+
+  // Si los datos de usuario cargan de forma asíncrona tras el primer render
+  useEffect(() => {
+    if (user?.name && !requesterName) {
+      setRequesterName(user.name);
+    }
+    if (user?.position && !requesterTeam) {
+      setRequesterTeam(user.position);
+    }
+  }, [user]);
   const [equipmentChoice, setEquipmentChoice] = useState("");
   const [equipmentManual, setEquipmentManual] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
@@ -271,6 +286,15 @@ export function NewRequestDialog({
         lines,
       });
       toast.success(`Petición ${reference} creada`);
+
+      // Registro transparente en catálogo maestro de puestos
+      if (requesterTeam.trim()) {
+        void ensureCatalogItem({
+          kind: "position",
+          name: requesterTeam.trim(),
+        }).catch(() => {});
+      }
+
       reset();
       onClose();
     } catch (err) {
@@ -303,12 +327,14 @@ export function NewRequestDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="team">Área o turno</Label>
-            <Input
+            <Label htmlFor="team">Puesto</Label>
+            <AutocompleteInput
               id="team"
               value={requesterTeam}
-              onChange={(event) => setRequesterTeam(event.target.value)}
-              placeholder="p. ej. Cámara"
+              onChange={setRequesterTeam}
+              items={catalogPositions}
+              kind="position"
+              placeholder="p. ej. Realización, Audio, Cámaras..."
               disabled={busy}
             />
           </div>

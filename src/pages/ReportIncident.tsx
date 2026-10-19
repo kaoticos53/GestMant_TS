@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
@@ -41,6 +42,8 @@ export default function ReportIncident() {
   const { user, isAuthenticated } = useAuth();
   const report = useMutation(api.incidents.report);
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
+  const catalogPositions = useQuery(api.catalogs.listPublic, { kind: "position" }) ?? [];
+  const catalogLocations = useQuery(api.catalogs.listPublic, { kind: "equipmentLocation" }) ?? [];
 
   // Lo que la persona ha escrito en cada campo de contacto (`null` = sin tocar).
   // Su perfil llega después de pintar la página, así que lo que enseña el campo
@@ -271,20 +274,24 @@ export default function ReportIncident() {
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-role">Puesto</Label>
-                    <Input
+                    <AutocompleteInput
                       id="inc-role"
                       value={roleValue}
-                      onChange={(event) => setRole(event.target.value)}
+                      onChange={setRole}
+                      items={catalogPositions}
+                      kind="position"
                       placeholder="p. ej. Realización"
                       disabled={busy}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="inc-location">Ubicación</Label>
-                    <Input
+                    <AutocompleteInput
                       id="inc-location"
                       value={locationValue}
-                      onChange={(event) => setLocation(event.target.value)}
+                      onChange={setLocation}
+                      items={catalogLocations}
+                      kind="location"
                       placeholder="p. ej. Plató 2"
                       disabled={busy}
                     />

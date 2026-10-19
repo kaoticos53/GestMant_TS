@@ -60,6 +60,7 @@ const RESET_TABLES: TableNames[] = [
   "reportUploadPurges",
   "trashFiles",
   "weeklyReports",
+  "catalogs",
   // El freno de la consulta pública no es trabajo del taller, pero se cuenta por
   // código de incidencia: tras vaciar, un código nuevo no debería heredar el
   // cupo gastado del que tenía antes.

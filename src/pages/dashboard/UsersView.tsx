@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -572,6 +573,9 @@ function EditUserDialog({
   onClose: () => void;
 }) {
   const updateUser = useMutation(api.members.updateUser);
+  const catalogPositions = useQuery(api.catalogs.list, { kind: "position" }) ?? [];
+  const catalogLocations = useQuery(api.catalogs.list, { kind: "equipmentLocation" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
   const [name, setName] = useState(member.name ?? "");
   const [position, setPosition] = useState(member.position ?? "");
   const [location, setLocation] = useState(member.location ?? "");
@@ -596,6 +600,15 @@ function EditUserDialog({
         location,
         phone,
       });
+
+      // Registro transparente en catálogos
+      if (position.trim()) {
+        void ensureCatalogItem({ kind: "position", name: position.trim() }).catch(() => {});
+      }
+      if (location.trim()) {
+        void ensureCatalogItem({ kind: "equipmentLocation", name: location.trim() }).catch(() => {});
+      }
+
       toast.success("Perfil actualizado");
       onClose();
     } catch (err) {
@@ -629,20 +642,24 @@ function EditUserDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="edit-position">Puesto</Label>
-            <Input
+            <AutocompleteInput
               id="edit-position"
               value={position}
-              onChange={(event) => setPosition(event.target.value)}
+              onChange={setPosition}
+              items={catalogPositions}
+              kind="position"
               placeholder="p. ej. Audio"
               disabled={busy}
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="edit-location">Ubicación</Label>
-            <Input
+            <AutocompleteInput
               id="edit-location"
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={setLocation}
+              items={catalogLocations}
+              kind="location"
               placeholder="p. ej. Plató 2"
               disabled={busy}
             />

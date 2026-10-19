@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
@@ -93,6 +94,10 @@ export function EquipmentFormDialog({
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
   const allEquipment = useQuery(api.equipment.list, {}) ?? [];
   const autoCode = useQuery(api.equipment.nextCode);
+  const catalogBrands = useQuery(api.catalogs.list, { kind: "brand" }) ?? [];
+  const catalogLocations = useQuery(api.catalogs.list, { kind: "equipmentLocation" }) ?? [];
+  const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
   const isEdit = item !== null;
   // La plantilla del modelo con el que se abre la ficha, si ya se conoce: los
@@ -295,6 +300,18 @@ export function EquipmentFormDialog({
           onSuccess(createdId);
         }
       }
+
+      // Registro transparente en los catálogos maestros para futuros autocompletados
+      if (brand.trim()) {
+        void ensureCatalogItem({ kind: "brand", name: brand.trim() }).catch(() => {});
+      }
+      if (location.trim()) {
+        void ensureCatalogItem({ kind: "equipmentLocation", name: location.trim() }).catch(() => {});
+      }
+      if (supplier.trim()) {
+        void ensureCatalogItem({ kind: "supplier", name: supplier.trim() }).catch(() => {});
+      }
+
       onClose();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -336,10 +353,12 @@ export function EquipmentFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="eq-brand">Marca</Label>
-            <Input
+            <AutocompleteInput
               id="eq-brand"
               value={brand}
-              onChange={(event) => setBrand(event.target.value)}
+              onChange={setBrand}
+              items={catalogBrands}
+              kind="brand"
               placeholder="Sony"
               disabled={busy}
             />
@@ -395,10 +414,12 @@ export function EquipmentFormDialog({
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="eq-location">Ubicación</Label>
-            <Input
+            <AutocompleteInput
               id="eq-location"
               value={location}
-              onChange={(event) => setLocation(event.target.value)}
+              onChange={setLocation}
+              items={catalogLocations}
+              kind="location"
               placeholder="Plató 1"
               disabled={busy}
             />
@@ -416,10 +437,12 @@ export function EquipmentFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="eq-supplier">Proveedor</Label>
-            <Input
+            <AutocompleteInput
               id="eq-supplier"
               value={supplier}
-              onChange={(event) => setSupplier(event.target.value)}
+              onChange={setSupplier}
+              items={catalogSuppliers}
+              kind="supplier"
               placeholder="Farnell"
               disabled={busy}
             />
