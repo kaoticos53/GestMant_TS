@@ -8,8 +8,13 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Correcciones
+
+- **Repuestos:** Los modelos compatibles de una ficha se nombran ya por su **código de modelo** —«Sony HDC-3500»— y no por la designación de la familia («Cámara de estudio»), que no distinguía un modelo de otro. La designación sigue a la vista como segunda línea al buscar el modelo, y la columna de la tabla y el CSV usan el código.
+
 ### Novedades
 
+- **Ajustes del taller:** Los dos catálogos maestros van cada uno en su pestaña —«Catálogos y autocompletado», con las listas con las que se rellenan los formularios, y «Modelos de equipos»— y el de modelos se lee ya en una **tabla paginada**, acotada al alto de la pantalla con su cabecera fija: dice marca, modelo, categoría, intervalo preventivo y cuántos equipos, repuestos y manuales usan cada modelo, y deja de ser una lista interminable de fichas.
 - **Datos de ejemplo:** La muestra da de alta también al **equipo del taller** —una responsable de coordinación y siete técnicos, cada uno con su puesto y su ubicación—, para que el reparto de trabajo, la charla de taller, la lista de Usuarios y los filtros por persona tengan a quién apuntar desde el primer día. Son fichas de directorio **sin credenciales**: sirven para repartir trabajo, no para entrar en la aplicación, y llevan un correo en un dominio de ejemplo para no ocupar la dirección real de nadie. La cuenta de cada persona la crea el administrador desde Usuarios, con su correo de verdad.
 - **Datos de ejemplo:** La muestra llena ya los **catálogos maestros** con los que autocompletan los formularios —marcas, ubicaciones de equipos y de almacén, proveedores, puestos y categorías de repuestos— y levanta el **catálogo de modelos** a partir del inventario: cada marca y nombre comercial distintos son un modelo, cada unidad del taller cuelga del suyo, los repuestos declaran su compatibilidad por modelo y los manuales de la muestra se enganchan a su modelo. Vaciar el taller se lleva también los modelos, para que volver a cargar la muestra no deje los de la anterior.
 - **Correo:** El repositorio incluye el **relevo de correo** (`npm run mail:relay`), el puente HTTP → SMTP que hace falta para usar un servidor propio desde la opción «Relevo propio»: sin dependencias nuevas, con testigo, direcciones comprobadas, copia oculta que no aparece en las cabeceras y el motivo del SMTP en un 502. Se arranca junto al backend y, en el NAS, como un contenedor más del proyecto. La guía está en `RELEVO.md`.

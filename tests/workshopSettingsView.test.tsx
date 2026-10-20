@@ -75,17 +75,24 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     container.remove();
   });
 
-  it("muestra solo Catálogos cuando no se tienen permisos especiales", async () => {
+  it("muestra solo Catálogos y Modelos cuando no se tienen permisos especiales", async () => {
     await act(async () => {
       root.render(<WorkshopSettingsView />);
     });
     await settle();
 
-    const tabButtons = container.querySelectorAll("[role='tab']");
-    expect(tabButtons.length).toBe(1);
-    expect(tabButtons[0]?.textContent).toContain("Catálogos");
+    // Los dos catálogos maestros van en pestañas distintas: las listas de
+    // autocompletado y los modelos de equipos.
+    const tabButtons = Array.from(container.querySelectorAll("[role='tab']"));
+    expect(tabButtons.map((btn) => btn.textContent?.trim())).toEqual([
+      "Catálogos y autocompletado",
+      "Modelos de equipos",
+    ]);
 
     expect(container.querySelector("[data-testid='card-catalogs']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-equipment-models']"),
+    ).toBeNull();
     expect(container.querySelector("[data-testid='card-mail-server']")).toBeNull();
     expect(container.querySelector("[data-testid='card-archive']")).toBeNull();
     expect(container.querySelector("[data-testid='card-work-alert']")).toBeNull();
@@ -109,7 +116,8 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     const tabButtons = Array.from(container.querySelectorAll("[role='tab']"));
     const labels = tabButtons.map((btn) => btn.textContent?.trim());
 
-    expect(labels).toContain("Catálogos");
+    expect(labels).toContain("Catálogos y autocompletado");
+    expect(labels).toContain("Modelos de equipos");
     expect(labels).toContain("Avisos");
     expect(labels).toContain("Almacén y archivo");
     expect(labels).toContain("Correo");
@@ -159,6 +167,18 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
 
     expect(container.querySelector("[data-testid='card-mail-server']")).not.toBeNull();
     expect(container.querySelector("[data-testid='card-mail-audience']")).not.toBeNull();
+  });
+
+  it("abre la pestaña de modelos de equipos con su tarjeta", async () => {
+    await act(async () => {
+      root.render(<WorkshopSettingsView defaultTab="models" />);
+    });
+    await settle();
+
+    expect(
+      container.querySelector("[data-testid='card-equipment-models']"),
+    ).not.toBeNull();
+    expect(container.querySelector("[data-testid='card-catalogs']")).toBeNull();
   });
 
   it("respeta la prop defaultTab si está disponible", async () => {

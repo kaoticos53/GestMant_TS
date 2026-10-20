@@ -12,6 +12,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ListArea } from "@/components/ListArea";
+import { TablePagination } from "@/components/TablePagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
+import { useTablePagination } from "@/hooks/use-table-pagination";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -101,6 +113,18 @@ export function EquipmentModelsCard() {
     });
   }, [models, search]);
 
+  // La tabla va acotada al alto de la pantalla y partida en páginas con las
+  // filas que caben en ese alto: un catálogo de modelos crece con el taller y no
+  // puede empujar su pie a dos pantallas de la primera fila. La búsqueda forma
+  // parte de la firma, así que afinar el filtro vuelve a la primera página.
+  const { areaRef, rowsFit } = useRowsThatFit();
+  const paging = useTablePagination({
+    total: filteredModels.length,
+    rowsFit,
+    resetKey: search,
+  });
+  const visible = filteredModels.slice(paging.from - 1, paging.to);
+
   const handleOpenCreate = () => {
     setEditingModel(null);
     setDialogSession((session) => session + 1);
@@ -178,7 +202,7 @@ export function EquipmentModelsCard() {
             />
           </div>
           <span className="text-xs text-muted-foreground">
-            {models.length} modelos registrados
+            {models.length} modelo(s) registrado(s)
           </span>
         </div>
 
@@ -197,112 +221,154 @@ export function EquipmentModelsCard() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredModels.map((item) => {
-              const eqCount = usageStats.equipCount.get(item._id) ?? 0;
-              const spCount = usageStats.partsCount.get(item._id) ?? 0;
-              const manCount = usageStats.manualsCount.get(item._id) ?? 0;
+          <div className="overflow-hidden rounded-lg border border-border/70">
+            {/* El tope es más bajo que el de una ficha de módulo: esta tabla vive
+                dentro de una pestaña de ajustes, con la cabecera del módulo y las
+                pestañas por encima, y su pie tiene que quedar a la vista. */}
+            <ListArea
+              ref={areaRef}
+              resetKey={paging.page}
+              maxHeightClass="max-h-[calc(100dvh_-_48rem)]"
+            >
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow>
+                    <TableHead>Marca</TableHead>
+                    <TableHead>Modelo</TableHead>
+                    <TableHead className="hidden md:table-cell">Categoría</TableHead>
+                    <TableHead className="hidden lg:table-cell">Preventivo</TableHead>
+                    <TableHead>Uso</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visible.map((item) => {
+                    const eqCount = usageStats.equipCount.get(item._id) ?? 0;
+                    const spCount = usageStats.partsCount.get(item._id) ?? 0;
+                    const manCount = usageStats.manualsCount.get(item._id) ?? 0;
 
-              return (
-                <div
-                  key={item._id}
-                  className="flex flex-col justify-between rounded-lg border border-border/70 bg-card p-3.5 hover:border-primary/40 hover:shadow-xs transition-all gap-3"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        {item.brand && (
-                          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            {item.brand}
+                    return (
+                      <TableRow key={item._id} className="hover:bg-muted/40">
+                        <TableCell className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {item.brand || "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[20rem]">
+                          <span className="block truncate font-semibold text-foreground">
+                            {item.model}
                           </span>
-                        )}
-                        <h4 className="font-bold text-sm text-foreground truncate">
-                          {item.model}
-                        </h4>
-                      </div>
-                      {item.category && (
-                        <Badge variant="secondary" className="text-[10px] shrink-0 font-normal">
-                          {item.category}
-                        </Badge>
-                      )}
-                    </div>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {item.name}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {item.category ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-normal"
+                            >
+                              {item.category}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                          {item.defaultMaintenanceIntervalDays !== undefined ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Wrench className="size-3 text-signal" />
+                              <span>
+                                cada {item.defaultMaintenanceIntervalDays} días
+                              </span>
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {/* Insignias de uso: equipos, repuestos y manuales */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge
+                              variant="outline"
+                              title={`${eqCount} equipo(s) físico(s) en taller`}
+                              className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
+                                eqCount > 0
+                                  ? "border-primary/40 text-primary"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              <Cpu className="size-3" />
+                              <span>{eqCount}</span>
+                            </Badge>
 
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {item.name}
-                    </p>
+                            <Badge
+                              variant="outline"
+                              title={`${spCount} repuesto(s) compatible(s)`}
+                              className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
+                                spCount > 0
+                                  ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              <Package className="size-3" />
+                              <span>{spCount}</span>
+                            </Badge>
 
-                    {item.defaultMaintenanceIntervalDays !== undefined && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground pt-0.5">
-                        <Wrench className="size-3 text-signal" />
-                        <span>Prev. cada {item.defaultMaintenanceIntervalDays} días</span>
-                      </div>
-                    )}
-                  </div>
+                            <Badge
+                              variant="outline"
+                              title={`${manCount} manual(es) vinculado(s)`}
+                              className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
+                                manCount > 0
+                                  ? "border-blue-500/40 text-blue-600 dark:text-blue-400"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              <BookOpen className="size-3" />
+                              <span>{manCount}</span>
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => handleOpenEdit(item)}
+                              aria-label={`Editar modelo ${item.model}`}
+                              title={`Editar modelo ${item.model}`}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
 
-                  {/* Insignias de uso y acciones */}
-                  <div className="flex items-center justify-between border-t border-border/50 pt-2.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge
-                        variant="outline"
-                        title={`${eqCount} equipo(s) físico(s) en taller`}
-                        className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
-                          eqCount > 0 ? "border-primary/40 text-primary" : "text-muted-foreground"
-                        }`}
-                      >
-                        <Cpu className="size-3" />
-                        <span>{eqCount}</span>
-                      </Badge>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => setDeletingModel(item)}
+                              aria-label={`Eliminar modelo ${item.model}`}
+                              title={`Eliminar modelo ${item.model}`}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ListArea>
 
-                      <Badge
-                        variant="outline"
-                        title={`${spCount} repuesto(s) compatible(s)`}
-                        className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
-                          spCount > 0 ? "border-amber-500/40 text-amber-600 dark:text-amber-400" : "text-muted-foreground"
-                        }`}
-                      >
-                        <Package className="size-3" />
-                        <span>{spCount}</span>
-                      </Badge>
-
-                      <Badge
-                        variant="outline"
-                        title={`${manCount} manual(es) vinculado(s)`}
-                        className={`text-[10px] px-1.5 py-0.5 gap-1 font-mono ${
-                          manCount > 0 ? "border-blue-500/40 text-blue-600 dark:text-blue-400" : "text-muted-foreground"
-                        }`}
-                      >
-                        <BookOpen className="size-3" />
-                        <span>{manCount}</span>
-                      </Badge>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleOpenEdit(item)}
-                        title={`Editar modelo ${item.model}`}
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeletingModel(item)}
-                        title={`Eliminar modelo ${item.model}`}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            <TablePagination
+              paging={paging}
+              singular="modelo"
+              plural="modelos"
+              detail={
+                search.trim() ? `${models.length} en el catálogo` : undefined
+              }
+            />
           </div>
         )}
       </CardContent>

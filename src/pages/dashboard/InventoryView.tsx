@@ -86,6 +86,16 @@ type EquipmentModelDoc = Doc<"equipmentModels">;
  */
 const COMPATIBLE_RESULTS = 6;
 
+/**
+ * Cómo se nombra un modelo en las listas: su marca y su código —«Sony
+ * HDC-3500»—, que es lo que distingue un modelo de otro. La designación («Cámara
+ * de estudio») describe la familia entera y sirve para buscar, pero no dice qué
+ * modelo es: al lado de un repuesto lo que hace falta saber es el código.
+ */
+function modelLabel(model: EquipmentModelDoc): string {
+  return model.brand ? `${model.brand} ${model.model}` : model.model;
+}
+
 export function InventoryView({
   canManage = false,
   currentUserId = null,
@@ -231,8 +241,7 @@ export function InventoryView({
       (part.compatibleModels ?? [])
         .map((id) => {
           const model = catalogModels.find((m) => m._id === id);
-          if (!model) return null;
-          return model.brand ? `${model.brand} ${model.name}` : model.name;
+          return model ? modelLabel(model) : null;
         })
         .filter(Boolean)
         .join(" | ");
@@ -499,10 +508,7 @@ export function InventoryView({
                                   const model = catalogModels.find(
                                     (m) => m._id === id,
                                   );
-                                  if (!model) return null;
-                                  return model.brand
-                                    ? `${model.brand} ${model.name}`
-                                    : model.name;
+                                  return model ? modelLabel(model) : null;
                                 })
                                 .filter(Boolean)
                                 .join(", ")}
@@ -715,8 +721,6 @@ function PartFormDialog({
 
   // La marca del modelo es el nombre del catálogo maestro guardado en el propio
   // modelo ("Sony", "Panasonic"...): no hay tabla de marcas que consultar.
-  const modelDisplay = (m: EquipmentModelDoc) =>
-    m.brand ? `${m.brand} ${m.name}` : m.name;
 
   /** Modelos ya añadidos */
   const compatiblesModels = compatibleModelIds
@@ -730,7 +734,10 @@ function PartFormDialog({
     ? catalogModels.filter(
         (m) =>
           !compatibleModelIds.includes(m._id) &&
-          matchesQuery([modelDisplay(m), m.model, m.name, m.brand, m.category], trimmedModelQuery),
+          matchesQuery(
+            [modelLabel(m), m.model, m.name, m.brand, m.category],
+            trimmedModelQuery,
+          ),
       )
     : [];
   const coincidenciasModelos = modelosEncontrados.slice(0, COMPATIBLE_RESULTS);
@@ -738,7 +745,7 @@ function PartFormDialog({
   const hasExactMatch = catalogModels.some(
     (m) =>
       m.model.toLowerCase() === trimmedModelQuery.toLowerCase() ||
-      modelDisplay(m).toLowerCase() === trimmedModelQuery.toLowerCase(),
+      modelLabel(m).toLowerCase() === trimmedModelQuery.toLowerCase(),
   );
 
   const addCompatibleModel = (id: Id<"equipmentModels">) => {
@@ -1027,8 +1034,16 @@ function PartFormDialog({
                         disabled={busy || isCreatingModel}
                         className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/60"
                       >
-                        <span className="truncate text-foreground font-medium">
-                          {modelDisplay(item)}
+                        <span className="min-w-0">
+                          <span className="block truncate text-foreground font-medium">
+                            {modelLabel(item)}
+                          </span>
+                          {/* La designación acompaña debajo: ayuda a reconocer el
+                              modelo sin ocupar el sitio del código, que es lo que
+                              lo identifica. */}
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {item.name}
+                          </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
                           {item.category && <span>{item.category}</span>}
@@ -1068,10 +1083,10 @@ function PartFormDialog({
                       onClick={() => removeCompatibleModel(item._id)}
                       disabled={busy}
                       title="Quitar modelo compatible"
-                      aria-label={`Quitar ${modelDisplay(item)}`}
+                      aria-label={`Quitar ${modelLabel(item)}`}
                       className="inline-flex items-center gap-1.5 rounded-full border border-signal bg-signal/10 px-3 py-1 text-xs font-medium text-signal transition-colors hover:border-destructive/40 hover:text-destructive"
                     >
-                      {modelDisplay(item)}
+                      {modelLabel(item)}
                       <X className="size-3.5" />
                     </button>
                   ))}

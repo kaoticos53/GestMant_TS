@@ -55,6 +55,14 @@ function installMissingDomApis() {
 
 let roots: Root[] = [];
 
+/**
+ * Lo que sonner tarda en purgar un aviso cerrado (`TIME_BEFORE_UNMOUNT`, en su
+ * código). Al despedirlo deja ese temporizador suelto, sin limpieza: si el
+ * archivo de pruebas termina antes de que cumpla, dispara con la ventana ya
+ * desmontada y el proceso lo apunta como un error suelto que tumba la suite.
+ */
+const PURGE_DELAY = 250;
+
 /** Lanza un aviso y espera a tenerlo a la vista. */
 async function showNotice(fire: () => void) {
   await act(async () => {
@@ -216,6 +224,10 @@ afterEach(async () => {
   });
   roots = [];
   document.body.innerHTML = "";
+  // Que la purga del aviso cumpla antes de que el entorno se vaya.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, PURGE_DELAY));
+  });
 });
 
 describe("los avisos del cuaderno con la ficha abierta", () => {

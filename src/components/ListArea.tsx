@@ -35,6 +35,7 @@ export function ListArea({
   resetKey,
   children,
   ref,
+  maxHeightClass = "max-h-[calc(100dvh_-_18rem)]",
 }: {
   /**
    * La tanda que se está viendo —la página, con lo que se busca y cómo se
@@ -47,6 +48,12 @@ export function ListArea({
    * se cuentan las filas.
    */
   ref?: Ref<HTMLDivElement>;
+  /**
+   * El tope de alto del área. Por defecto descuenta el marco de una ficha de
+   * módulo; una lista que vive más abajo —dentro de una pestaña de ajustes—
+   * necesita descontar más para que su pie quede a la vista.
+   */
+  maxHeightClass?: string;
 }) {
   const area = useRef<HTMLDivElement | null>(null);
 
@@ -83,7 +90,7 @@ export function ListArea({
       // la tabla lleva su `sticky top-0` y se queda a la vista al recorrer las
       // filas; en las colas de fichas, lo que va dentro no se desplaza por su
       // cuenta y el cambio no se nota.
-      className="max-h-[calc(100dvh_-_18rem)] min-h-[12rem] overflow-auto [scrollbar-gutter:stable] [&>div]:overflow-visible"
+      className={`${maxHeightClass} min-h-[12rem] overflow-auto [scrollbar-gutter:stable] [&>div]:overflow-visible`}
     >
       {children}
     </div>

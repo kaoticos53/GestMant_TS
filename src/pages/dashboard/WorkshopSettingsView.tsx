@@ -1,5 +1,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Archive, Bell, Database, FolderTree, Mail, type LucideIcon } from "lucide-react";
+import {
+  Archive,
+  Bell,
+  Database,
+  FolderTree,
+  Layers,
+  Mail,
+  type LucideIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { AuditAlertSettingsCard } from "./settings/AuditAlertSettingsCard";
 import { AutomaticArchiveCard } from "./settings/AutomaticArchiveCard";
@@ -19,7 +27,9 @@ import { WorkshopDataCard } from "./settings/WorkshopDataCard";
  *
  * Cada pestaña agrupa tarjetas afines y se muestra solo a quien tiene
  * permisos para configurar los elementos correspondientes:
- * - Catálogos: clasificaciones, listas y tipos del taller.
+ * - Catálogos y autocompletado: las listas normalizadas con las que se rellenan
+ *   los formularios del taller.
+ * - Modelos de equipos: la ficha técnica de cada modelo, en una tabla paginada.
  * - Avisos: aviso de trabajo sin constancia y alertas del expediente.
  * - Almacén y archivo: archivado automático, papelera y limpieza de almacén.
  * - Correo: configuración del servidor de salida y audiencia de notificaciones.
@@ -74,7 +84,14 @@ export function WorkshopSettingsView({
       id: string;
       label: string;
       icon: LucideIcon;
-    }> = [{ id: "catalogs", label: "Catálogos", icon: FolderTree }];
+    }> = [
+      {
+        id: "catalogs",
+        label: "Catálogos y autocompletado",
+        icon: FolderTree,
+      },
+      { id: "models", label: "Modelos de equipos", icon: Layers },
+    ];
 
     if (canManageAlert || canManageAudit) {
       list.push({ id: "alerts", label: "Avisos", icon: Bell });
@@ -140,8 +157,14 @@ export function WorkshopSettingsView({
           value="catalogs"
           className="space-y-6 focus-visible:outline-none"
         >
-          <EquipmentModelsCard />
           <CatalogsCard />
+        </TabsContent>
+
+        <TabsContent
+          value="models"
+          className="space-y-6 focus-visible:outline-none"
+        >
+          <EquipmentModelsCard />
         </TabsContent>
 
         {(canManageAlert || canManageAudit) && (

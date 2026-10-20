@@ -234,11 +234,16 @@ describe("la ficha de un repuesto — Compatible con modelos", () => {
     escribir(campoBusqueda(), "Sony");
     expect(resultados()).toHaveLength(1);
 
+    // La sugerencia nombra el modelo por su código —lo que lo distingue— y deja
+    // la designación debajo, como ayuda para reconocerlo.
+    expect(resultados()[0].textContent).toContain("Sony HDC-3500");
+    expect(resultados()[0].textContent).toContain("Cámara de estudio");
+
     // Se añade el modelo encontrado
     await pulsar(resultados()[0]);
     expect(
       compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual(["Quitar Sony Cámara de estudio"]);
+    ).toEqual(["Quitar Sony HDC-3500"]);
 
     // Escribir datos obligatorios y guardar
     escribir(
@@ -266,9 +271,10 @@ describe("la ficha de un repuesto — Compatible con modelos", () => {
       )!,
     );
 
-    // El modelo asignado aparece en sus compatibles
+    // El modelo asignado aparece en sus compatibles, por su código: la
+    // designación («Cámara de estudio») no dice qué modelo es.
     expect(
       compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual(["Quitar Sony Cámara de estudio"]);
+    ).toEqual(["Quitar Sony HDC-3500"]);
   });
 });

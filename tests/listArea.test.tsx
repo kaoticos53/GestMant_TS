@@ -33,6 +33,8 @@ async function mountArea(
   moved: number | string = initial,
   /** La referencia de fuera: la que usaría `useRowsThatFit` para medir. */
   outsideRef?: RefObject<HTMLDivElement | null>,
+  /** Un tope de alto propio, para una lista que vive más abajo en la página. */
+  maxHeightClass?: string,
 ) {
   function Harness() {
     const [tanda, setTanda] = useState<number | string>(initial);
@@ -41,7 +43,11 @@ async function mountArea(
         <button type="button" onClick={() => setTanda(moved)}>
           Siguiente
         </button>
-        <ListArea ref={outsideRef} resetKey={tanda}>
+        <ListArea
+          ref={outsideRef}
+          resetKey={tanda}
+          maxHeightClass={maxHeightClass}
+        >
           <table>
             <tbody>
               <tr>
@@ -121,6 +127,24 @@ describe("el área de la lista", () => {
     // El único que desplaza es el área: al contenedor que trae la tabla de la
     // biblioteca se le quita el suyo, que si no se queda con la cabecera pegada.
     expect(classes).toContain("[&>div]:overflow-visible");
+  });
+
+  test("acepta un tope de alto propio para listas que viven más abajo", async () => {
+    // Una tabla dentro de una pestaña de ajustes lleva mucha cabecera por encima:
+    // con el tope de una ficha de módulo su pie quedaría por debajo del pliegue.
+    const { container } = await mountArea(
+      1,
+      1,
+      undefined,
+      "max-h-[calc(100dvh_-_48rem)]",
+    );
+    const classes = areaOf(container).className;
+
+    expect(classes).toContain("max-h-[calc(100dvh_-_48rem)]");
+    expect(classes).not.toContain("max-h-[calc(100dvh_-_18rem)]");
+    // Y el resto de la caja sigue igual: mínimo legible y un solo desplazamiento.
+    expect(classes).toContain("min-h-[12rem]");
+    expect(classes).toContain("overflow-auto");
   });
 
   test("deja su caja a quien tenga que medirla", async () => {
