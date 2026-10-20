@@ -12,6 +12,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ListArea } from "@/components/ListArea";
+import { TablePagination } from "@/components/TablePagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
+import { useTablePagination } from "@/hooks/use-table-pagination";
 import {
   Dialog,
   DialogContent,
@@ -79,6 +91,18 @@ export function CatalogsCard() {
       normalizeCatalogString(item.name).includes(q),
     );
   }, [rawItems, search]);
+
+  // La lista se lee como una tabla acotada al alto de la pantalla y partida en
+  // páginas: un catálogo de marcas o de ubicaciones crece con el taller y no
+  // puede empujar su pie a dos pantallas de la primera fila. Cambiar de catálogo
+  // o afinar la búsqueda vuelve a la primera página, que es otra lista.
+  const { areaRef, rowsFit } = useRowsThatFit();
+  const paging = useTablePagination({
+    total: filteredItems.length,
+    rowsFit,
+    resetKey: `${selectedKind}|${search}`,
+  });
+  const visibleItems = filteredItems.slice(paging.from - 1, paging.to);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,8 +220,10 @@ export function CatalogsCard() {
               className="pl-8 text-xs h-9"
             />
           </div>
+          {/* Sin «registradas»: el sustantivo cambia de género con el catálogo
+              —marcas, proveedores, puestos— y la concordancia fija sonaba mal. */}
           <span className="text-xs text-muted-foreground">
-            {rawItems.length} {meta.label.toLowerCase()} registradas
+            {rawItems.length} {meta.label.toLowerCase()} en el catálogo
           </span>
         </div>
 
@@ -207,54 +233,88 @@ export function CatalogsCard() {
             {search ? "No se encontraron coincidencias." : `No hay ${meta.label.toLowerCase()} todavía.`}
           </div>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredItems.map((item) => (
-              <div
-                key={item._id}
-                className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-2.5 hover:bg-muted/40 transition-colors"
-              >
-                <div className="min-w-0 pr-2">
-                  <p className="truncate text-xs font-semibold text-foreground">
-                    {item.name}
-                  </p>
-                  <p className="truncate font-mono text-[10px] text-muted-foreground">
-                    {item.normalized}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    title="Editar nombre"
-                    onClick={() => setEditingItem({ id: item._id, name: item.name })}
-                  >
-                    <Pencil className="size-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7"
-                    title="Fusionar duplicado"
-                    onClick={() => setMergingItem({ id: item._id, name: item.name })}
-                  >
-                    <GitMerge className="size-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 text-destructive hover:text-destructive"
-                    title="Eliminar"
-                    onClick={() => setDeletingId(item._id)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-hidden rounded-lg border border-border/70">
+            <ListArea
+              ref={areaRef}
+              resetKey={`${selectedKind}|${paging.page}`}
+              maxHeightClass="max-h-[calc(100dvh_-_52rem)]"
+            >
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow>
+                    <TableHead>{meta.singular}</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Normalizado
+                    </TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleItems.map((item) => (
+                    <TableRow key={item._id} className="hover:bg-muted/40">
+                      <TableCell className="max-w-[24rem]">
+                        <span className="block truncate text-xs font-semibold text-foreground">
+                          {item.name}
+                        </span>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell font-mono text-[11px] text-muted-foreground">
+                        {item.normalized}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`Editar ${item.name}`}
+                            title="Editar nombre"
+                            onClick={() =>
+                              setEditingItem({ id: item._id, name: item.name })
+                            }
+                          >
+                            <Pencil className="size-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`Fusionar ${item.name}`}
+                            title="Fusionar duplicado"
+                            onClick={() =>
+                              setMergingItem({ id: item._id, name: item.name })
+                            }
+                          >
+                            <GitMerge className="size-4 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive"
+                            aria-label={`Eliminar ${item.name}`}
+                            title="Eliminar"
+                            onClick={() => setDeletingId(item._id)}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ListArea>
+
+            <TablePagination
+              paging={paging}
+              singular={meta.singular.toLowerCase()}
+              plural={meta.label.toLowerCase()}
+              detail={
+                search.trim() ? `${rawItems.length} en el catálogo` : undefined
+              }
+            />
           </div>
         )}
       </CardContent>

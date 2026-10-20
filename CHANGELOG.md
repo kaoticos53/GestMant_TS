@@ -8,6 +8,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Mejoras
+
+- **Ajustes del taller:** Los catálogos maestros y de autocompletado —marcas, ubicaciones de equipos y de almacén, proveedores, puestos y categorías de repuestos— se leen ya como la tabla de modelos: valor canónico, su forma normalizada y las acciones de editar, fusionar y eliminar, con el alto acotado a la pantalla y el pie de páginas a la vista. Cambiar de catálogo o afinar la búsqueda vuelve a la primera página, y el recuento de arriba deja de decir «registradas» cuando el catálogo es masculino.
+
 ### Correcciones
 
 - **Repuestos:** Los modelos compatibles de una ficha se nombran ya por su **código de modelo** —«Sony HDC-3500»— y no por la designación de la familia («Cámara de estudio»), que no distinguía un modelo de otro. La designación sigue a la vista como segunda línea al buscar el modelo, y la columna de la tabla y el CSV usan el código.
