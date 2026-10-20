@@ -59,7 +59,6 @@ import {
   sortPurchaseHistoryRows,
   type PurchaseHistoryColumn,
   type PurchaseHistoryFilters,
-  type PurchaseHistoryRow,
   type PurchaseOrderDoc,
   type PurchaseOrderLine,
   type PurchaseRequestDoc,
@@ -76,7 +75,6 @@ import {
 import { formatDate, formatDateTime, getErrorMessage } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
 import {
-  Calendar,
   Check,
   CheckSquare,
   ClipboardList,

@@ -502,7 +502,7 @@ function EditProfileDialog({
               value={location}
               onChange={setLocation}
               items={catalogLocations}
-              kind="location"
+              kind="equipmentLocation"
               placeholder="p. ej. Plató 2 · Sala de realización"
               disabled={busy}
             />

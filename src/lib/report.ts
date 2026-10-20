@@ -42,7 +42,6 @@ import { describeDiff, type DiffPart } from "./textDiff";
 import { lineDelivered } from "./requestFlow";
 import {
   INCIDENT_STATUS_META,
-  PRIORITY_META,
   SEVERITY_META,
   STATUS_META,
   documentTrailLabel,

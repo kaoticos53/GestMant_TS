@@ -408,7 +408,7 @@ export function AssociateDialog({
                   value={location}
                   onChange={setLocation}
                   items={catalogLocations}
-                  kind="location"
+                  kind="partLocation"
                   placeholder="D-09"
                   className="font-mono"
                   disabled={busy}

@@ -291,7 +291,7 @@ export default function ReportIncident() {
                       value={locationValue}
                       onChange={setLocation}
                       items={catalogLocations}
-                      kind="location"
+                      kind="equipmentLocation"
                       placeholder="p. ej. Plató 2"
                       disabled={busy}
                     />

@@ -250,8 +250,10 @@ export function TrashCard({
         <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
           <AttachmentImage
             url={item.url}
-            className="size-full object-cover"
-            alt=""
+            name=""
+            layout="row"
+            frameClassName="size-full"
+            imageClassName="size-full object-cover"
           />
         </span>
       ) : (

@@ -77,9 +77,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 type PartDoc = Doc<"spareParts">;
-type EquipmentDoc = Doc<"equipment">;
 type EquipmentModelDoc = Doc<"equipmentModels">;
-type EquipmentBrandDoc = Doc<"equipmentBrands">;
 
 /**
  * Cuántos equipos enseña a la vez la búsqueda de compatibles. El taller puede
@@ -110,7 +108,6 @@ export function InventoryView({
   const parts = useQuery(api.spareParts.list) ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
-  const catalogBrands = useQuery(api.equipmentBrands.list) ?? [];
   const adjustStock = useMutation(api.spareParts.adjustStock);
   const removePart = useMutation(api.spareParts.remove);
 
@@ -235,8 +232,7 @@ export function InventoryView({
         .map((id) => {
           const model = catalogModels.find((m) => m._id === id);
           if (!model) return null;
-          const brand = catalogBrands.find((b) => b._id === model.brandId);
-          return brand ? `${brand.name} ${model.name}` : model.name;
+          return model.brand ? `${model.brand} ${model.name}` : model.name;
         })
         .filter(Boolean)
         .join(" | ");
@@ -504,11 +500,8 @@ export function InventoryView({
                                     (m) => m._id === id,
                                   );
                                   if (!model) return null;
-                                  const brand = catalogBrands.find(
-                                    (b) => b._id === model.brandId,
-                                  );
-                                  return brand
-                                    ? `${brand.name} ${model.name}`
+                                  return model.brand
+                                    ? `${model.brand} ${model.name}`
                                     : model.name;
                                 })
                                 .filter(Boolean)
@@ -631,9 +624,7 @@ export function InventoryView({
         <PartFormDialog
           key={formTarget.part?._id ?? "new"}
           part={formTarget.part}
-          equipment={equipment}
           catalogModels={catalogModels}
-          catalogBrands={catalogBrands}
           onClose={() => setFormTarget(null)}
         />
       )}
@@ -677,15 +668,11 @@ export function InventoryView({
 
 function PartFormDialog({
   part,
-  equipment,
   catalogModels,
-  catalogBrands,
   onClose,
 }: {
   part: PartDoc | null;
-  equipment: EquipmentDoc[];
   catalogModels: EquipmentModelDoc[];
-  catalogBrands: EquipmentBrandDoc[];
   onClose: () => void;
 }) {
   const create = useMutation(api.spareParts.create);
@@ -726,13 +713,10 @@ function PartFormDialog({
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
-  const modelDisplay = (m: EquipmentModelDoc) => {
-    const brandName =
-      (m as { brandId?: string }).brandId
-        ? catalogBrands.find((b) => b._id === (m as { brandId?: string }).brandId)?.name
-        : m.brand;
-    return brandName ? `${brandName} ${m.name}` : m.name;
-  };
+  // La marca del modelo es el nombre del catálogo maestro guardado en el propio
+  // modelo ("Sony", "Panasonic"...): no hay tabla de marcas que consultar.
+  const modelDisplay = (m: EquipmentModelDoc) =>
+    m.brand ? `${m.brand} ${m.name}` : m.name;
 
   /** Modelos ya añadidos */
   const compatiblesModels = compatibleModelIds
@@ -959,7 +943,7 @@ function PartFormDialog({
               value={location}
               onChange={setLocation}
               items={catalogLocations}
-              kind="location"
+              kind="partLocation"
               placeholder="B-03"
               className="font-mono"
               disabled={busy}

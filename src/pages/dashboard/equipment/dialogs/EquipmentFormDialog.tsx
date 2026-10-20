@@ -419,7 +419,7 @@ export function EquipmentFormDialog({
               value={location}
               onChange={setLocation}
               items={catalogLocations}
-              kind="location"
+              kind="equipmentLocation"
               placeholder="Plató 1"
               disabled={busy}
             />

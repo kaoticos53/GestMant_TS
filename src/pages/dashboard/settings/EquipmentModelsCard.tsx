@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Doc, Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@/convex/_generated/dataModel";
 import {
   Card,
   CardContent,
@@ -30,7 +30,6 @@ import {
   Pencil,
   Plus,
   Search,
-  Sparkles,
   Trash2,
   Wrench,
 } from "lucide-react";
