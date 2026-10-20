@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { DEFAULT_AFTER_MONTHS } from "../lib/archive";
 import { monthsAgo } from "../lib/browse";
+import { normalizeCatalogString } from "../lib/catalogs";
 import {
   PART_CATEGORIES,
   type IncidentStatus,
@@ -2309,11 +2310,15 @@ async function requireSeeder(ctx: MutationCtx) {
  * Inserta lo que falte del catálogo de ejemplo (equipos y repuestos) sin
  * duplicar códigos: sirve tanto para la primera carga como para completar una
  * instalación que ya tenía una muestra más corta.
+ *
+ * Además deja al día lo que se deduce de ese catálogo: los catálogos maestros
+ * con los que autocompletan los formularios y los modelos de equipo a los que
+ * se enganchan las unidades, los manuales y los repuestos compatibles.
  */
 async function ensureCatalog(
   ctx: MutationCtx,
   now: number,
-): Promise<{ equipment: number; parts: number }> {
+): Promise<{ equipment: number; parts: number; catalogs: number; models: number }> {
   const existingEquipment = await ctx.db.query("equipment").collect();
   const equipmentIds: Record<string, Id<"equipment">> = {};
   for (const item of existingEquipment) {
@@ -2375,7 +2380,220 @@ async function ensureCatalog(
     insertedParts += 1;
   }
 
-  return { equipment: insertedEquipment, parts: insertedParts };
+  const master = await ensureMasterData(ctx, now);
+
+  return {
+    equipment: insertedEquipment,
+    parts: insertedParts,
+    catalogs: master.catalogs,
+    models: master.models,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Catálogos maestros y modelos de equipo                              */
+/* ------------------------------------------------------------------ */
+
+/** Cómo se llama en el catálogo cada familia de equipo de la muestra. */
+const EQUIPMENT_KIND_CATEGORIES: Record<EquipmentKind, string> = {
+  camara: "Cámara",
+  audio: "Audio",
+  video: "Vídeo",
+  red: "Red",
+  energia: "Energía",
+  iluminacion: "Iluminación",
+  informatica: "Informática",
+  mecanica: "Mecánica",
+};
+
+/** La clave con la que se agrupan las unidades de un mismo modelo. */
+function modelKey(brand: string | undefined, model: string): string {
+  return `${(brand ?? "").trim().toLowerCase()}|${model.trim().toLowerCase()}`;
+}
+
+/**
+ * Añade a un catálogo maestro los valores que aún no estén.
+ *
+ * Es lo que hace la aplicación al guardar un formulario con un valor nuevo
+ * (`catalogs.ensureItem`), pero de una vez y sin sesión de por medio: así el
+ * autocompletado de toda la app tiene desde el primer día lo que ya dicen los
+ * datos, en vez de ir aprendiéndolo a medida que alguien teclea.
+ */
+async function ensureCatalogValues(
+  ctx: MutationCtx,
+  kind: Doc<"catalogs">["kind"],
+  names: readonly (string | undefined)[],
+  now: number,
+): Promise<number> {
+  const rows = await ctx.db
+    .query("catalogs")
+    .withIndex("by_kind", (q) => q.eq("kind", kind))
+    .collect();
+  const taken = new Set(rows.map((row) => row.normalized));
+
+  let inserted = 0;
+  for (const name of names) {
+    const clean = name?.trim() ?? "";
+    if (clean === "") continue;
+    const normalized = normalizeCatalogString(clean);
+    if (taken.has(normalized)) continue;
+    await ctx.db.insert("catalogs", {
+      kind,
+      name: clean,
+      normalized,
+      createdAt: now,
+      updatedAt: now,
+    });
+    taken.add(normalized);
+    inserted += 1;
+  }
+  return inserted;
+}
+
+/**
+ * Deja al día los catálogos maestros y el catálogo de modelos a partir de lo
+ * que ya hay en el inventario, sin duplicar nada ni pisar lo que haya escrito
+ * el taller.
+ *
+ * Los modelos no se traen de fuera: salen de los equipos. Cada marca y nombre
+ * comercial distintos son un modelo, y las unidades del inventario son los
+ * equipos físicos de ese modelo —así los repuestos se declaran compatibles con
+ * el modelo y no con cada unidad, y un manual sirve para todas—. De ahí salen
+ * también las tres listas que quedaban vacías: `modelId` en cada equipo, los
+ * `compatibleModels` de los repuestos y la marca y el modelo en el catálogo
+ * maestro.
+ */
+async function ensureMasterData(
+  ctx: MutationCtx,
+  now: number,
+): Promise<{ catalogs: number; models: number }> {
+  const equipmentDocs = await ctx.db.query("equipment").collect();
+  const partDocs = await ctx.db.query("spareParts").collect();
+  const seedByCode = new Map(
+    ALL_EQUIPMENT.map((item) => [item.code, item] as const),
+  );
+
+  // 1. Los catálogos maestros: las mismas palabras que ya usan los datos.
+  const catalogs =
+    (await ensureCatalogValues(
+      ctx,
+      "brand",
+      [...equipmentDocs.map((item) => item.brand), ...ALL_EQUIPMENT.map((item) => item.brand)],
+      now,
+    )) +
+    (await ensureCatalogValues(
+      ctx,
+      "equipmentLocation",
+      [...equipmentDocs.map((item) => item.location), ...ALL_EQUIPMENT.map((item) => item.location)],
+      now,
+    )) +
+    (await ensureCatalogValues(
+      ctx,
+      "partLocation",
+      [...partDocs.map((item) => item.location), ...ALL_PARTS.map((item) => item.location)],
+      now,
+    )) +
+    (await ensureCatalogValues(
+      ctx,
+      "supplier",
+      [
+        ...equipmentDocs.map((item) => item.supplier),
+        ...partDocs.map((item) => item.supplier),
+        ...ALL_EQUIPMENT.map((item) => item.supplier),
+        ...ALL_PARTS.map((item) => item.supplier),
+      ],
+      now,
+    )) +
+    (await ensureCatalogValues(
+      ctx,
+      "position",
+      [
+        ...REPORTERS.map((item) => item.role),
+        ...REQUESTERS.map((item) => item.team),
+      ],
+      now,
+    )) +
+    (await ensureCatalogValues(ctx, "partCategory", PART_CATEGORIES, now));
+
+  // 2. Un modelo por marca y nombre comercial, sacado de las unidades que hay.
+  const existingModels = await ctx.db.query("equipmentModels").collect();
+  const modelIdByModelName = new Map(
+    existingModels.map((item) => [item.model.trim().toLowerCase(), item._id]),
+  );
+  const modelIdByKey = new Map<string, Id<"equipmentModels">>();
+
+  let models = 0;
+  for (const doc of equipmentDocs) {
+    const model = doc.model.trim();
+    if (model === "") continue;
+    const key = modelKey(doc.brand, model);
+    if (modelIdByKey.has(key)) continue;
+
+    const existing = modelIdByModelName.get(model.toLowerCase());
+    if (existing) {
+      modelIdByKey.set(key, existing);
+      // Un modelo que ya estaba y no decía su marca: se le pone la del equipo.
+      const stored = existingModels.find((item) => item._id === existing);
+      if (stored && !stored.brand && doc.brand) {
+        await ctx.db.patch(existing, { brand: doc.brand, updatedAt: now });
+      }
+      continue;
+    }
+
+    const seed = doc.code ? seedByCode.get(doc.code) : undefined;
+    const modelId = await ctx.db.insert("equipmentModels", {
+      ...(doc.brand ? { brand: doc.brand } : {}),
+      model,
+      name: doc.name.trim() || model,
+      ...(seed ? { category: EQUIPMENT_KIND_CATEGORIES[seed.kind] } : {}),
+      ...(doc.maintenanceIntervalDays !== undefined
+        ? { defaultMaintenanceIntervalDays: doc.maintenanceIntervalDays }
+        : {}),
+      ...(doc.supplier ? { defaultSupplier: doc.supplier } : {}),
+      ...(doc.description ? { description: doc.description } : {}),
+      createdAt: now,
+      updatedAt: now,
+    });
+    modelIdByModelName.set(model.toLowerCase(), modelId);
+    modelIdByKey.set(key, modelId);
+    models += 1;
+  }
+
+  // 3. Cada unidad enganchada a su modelo.
+  const modelIdByEquipment = new Map<Id<"equipment">, Id<"equipmentModels">>();
+  for (const doc of equipmentDocs) {
+    const modelId =
+      doc.modelId ?? modelIdByKey.get(modelKey(doc.brand, doc.model));
+    if (!modelId) continue;
+    modelIdByEquipment.set(doc._id, modelId);
+    if (!doc.modelId) {
+      await ctx.db.patch(doc._id, { modelId, updatedAt: now });
+    }
+  }
+
+  // 4. Los repuestos que ya decían con qué equipos son compatibles pasan a
+  //    decirlo por modelo, que es lo que compara el filtro del almacén.
+  for (const part of partDocs) {
+    const modelIds = [
+      ...new Set(
+        (part.compatibleWith ?? [])
+          .map((id) => modelIdByEquipment.get(id))
+          .filter((id): id is Id<"equipmentModels"> => id !== undefined),
+      ),
+    ];
+    if (modelIds.length === 0) continue;
+    const current = part.compatibleModels ?? [];
+    const same =
+      current.length === modelIds.length &&
+      current.every((id) => modelIds.includes(id));
+    if (same) continue;
+    await ctx.db.patch(part._id, {
+      compatibleModels: modelIds,
+      updatedAt: now,
+    });
+  }
+
+  return { catalogs, models };
 }
 
 /** Equipos (sin los dados de baja) y repuestos que usan los generadores. */
@@ -3141,9 +3359,19 @@ export const recordSampleManuals = internalMutation({
 
     const equipmentDocs = await ctx.db.query("equipment").collect();
     const equipmentIds: Record<string, Id<"equipment">> = {};
+    const modelIdsByCode: Record<string, Id<"equipmentModels">> = {};
     for (const doc of equipmentDocs) {
-      if (doc.code) equipmentIds[doc.code] = doc._id;
+      if (!doc.code) continue;
+      equipmentIds[doc.code] = doc._id;
+      if (doc.modelId) modelIdsByCode[doc.code] = doc.modelId;
     }
+    // Un manual del modelo —sin equipo asignado— también se engancha a su
+    // modelo: es lo que lo comparte entre todas las unidades de ese modelo.
+    const modelIdByModelName = new Map(
+      (await ctx.db.query("equipmentModels").collect()).map(
+        (item) => [item.model.trim().toLowerCase(), item._id] as const,
+      ),
+    );
 
     const rows = await ctx.db.query("manuals").collect();
     const titles = new Set(rows.map((row) => row.title));
@@ -3156,6 +3384,11 @@ export const recordSampleManuals = internalMutation({
       const equipmentId = sample.equipmentCode
         ? equipmentIds[sample.equipmentCode]
         : undefined;
+      const modelId = sample.equipmentCode
+        ? modelIdsByCode[sample.equipmentCode]
+        : sample.model
+          ? modelIdByModelName.get(sample.model.trim().toLowerCase())
+          : undefined;
       const notes = richDocToStore(sample.notes);
       const file = entry.storageId
         ? await sampleFile(ctx, entry.storageId)
@@ -3186,6 +3419,7 @@ export const recordSampleManuals = internalMutation({
         type: sample.type,
         ...(sample.brand ? { brand: sample.brand } : {}),
         ...(sample.model ? { model: sample.model } : {}),
+        ...(modelId ? { modelId } : {}),
         ...(equipmentId ? { equipmentId } : {}),
         ...(file && entry.storageId
           ? {

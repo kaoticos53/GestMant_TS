@@ -8,6 +8,10 @@ import type { TableNames } from "../src/convex/_generated/dataModel";
 const WORKSHOP_TABLES: TableNames[] = [
   "spareParts",
   "equipment",
+  // Los catálogos maestros y el de modelos son del taller: se vacían con él y
+  // la muestra los vuelve a levantar desde el inventario.
+  "equipmentModels",
+  "catalogs",
   "incidents",
   "incidentDocuments",
   "incidentDocumentLog",

@@ -43,6 +43,9 @@ const BATCH_PER_TABLE = 32;
 const RESET_TABLES: TableNames[] = [
   "spareParts",
   "equipment",
+  // El catálogo de modelos es del taller, no del catálogo de repuestos: si no se
+  // vacía, volver a cargar la muestra se encuentra los modelos de la anterior.
+  "equipmentModels",
   "incidents",
   "incidentDocuments",
   "incidentDocumentLog",

@@ -11,6 +11,7 @@ import {
   manualsForEquipment,
 } from "../src/lib/manuals";
 import { PART_CATEGORIES } from "../src/lib/workshop";
+import { normalizeCatalogString } from "../src/lib/catalogs";
 
 /** La firma de un PNG: es lo que distingue una foto de un puñado de bytes. */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -369,6 +370,111 @@ describe("datos de ejemplo (cadena de televisión)", () => {
 });
 
 describe("ampliar la muestra", () => {
+  test("la muestra llena los catálogos maestros y los modelos de equipo", async () => {
+    const authed = await authedTest("manager");
+    await authed.mutation(api.seed.seedDemoData, {});
+
+    const equipment = await authed.query(api.equipment.list, {});
+    const parts = await authed.query(api.spareParts.list, {});
+
+    // Los seis catálogos con los que autocompletan los formularios: sin ellos,
+    // la app arranca con las listas vacías y hay que teclearlo todo.
+    const catalogs = await authed.query(api.catalogs.listAll, {});
+    const kinds = new Set(catalogs.map((item) => item.kind));
+    for (const kind of [
+      "brand",
+      "equipmentLocation",
+      "partLocation",
+      "supplier",
+      "position",
+      "partCategory",
+    ]) {
+      expect(kinds.has(kind)).toBe(true);
+    }
+    // Un valor una sola vez por catálogo, y normalizado como lo compara la app.
+    expect(
+      new Set(catalogs.map((item) => `${item.kind}|${item.normalized}`)).size,
+    ).toBe(catalogs.length);
+    for (const item of catalogs) {
+      expect(item.normalized).toBe(normalizeCatalogString(item.name));
+    }
+
+    // Un modelo por marca y nombre comercial, y ninguna fila repetida.
+    const models = await authed.query(api.equipmentModels.list, {});
+    expect(models.length).toBeGreaterThanOrEqual(15);
+    expect(new Set(models.map((item) => item.model.toLowerCase())).size).toBe(
+      models.length,
+    );
+    for (const model of models) {
+      expect(model.name).not.toBe("");
+      expect(model.brand).toBeTruthy();
+      expect(model.defaultMaintenanceIntervalDays).toBeGreaterThan(0);
+    }
+
+    // Cada unidad del inventario cuelga de su modelo, y ese modelo dice lo mismo.
+    const modelById = new Map(models.map((item) => [item._id, item]));
+    for (const item of equipment) {
+      expect(item.modelId).toBeDefined();
+      const model = modelById.get(item.modelId!);
+      expect(model).toBeDefined();
+      expect(model!.model).toBe(item.model);
+      if (item.brand) expect(model!.brand).toBe(item.brand);
+    }
+
+    // Las palabras que usan los datos están en los catálogos: la marca del
+    // equipo, su ubicación y el proveedor del repuesto.
+    const names = (kind: string) =>
+      new Set(
+        catalogs
+          .filter((item) => item.kind === kind)
+          .map((item) => item.normalized),
+      );
+    const brands = names("brand");
+    const equipmentLocations = names("equipmentLocation");
+    const partLocations = names("partLocation");
+    const suppliers = names("supplier");
+    for (const item of equipment) {
+      if (item.brand) expect(brands.has(normalizeCatalogString(item.brand))).toBe(true);
+      if (item.location) {
+        expect(equipmentLocations.has(normalizeCatalogString(item.location))).toBe(
+          true,
+        );
+      }
+      if (item.supplier) {
+        expect(suppliers.has(normalizeCatalogString(item.supplier))).toBe(true);
+      }
+    }
+    for (const part of parts) {
+      if (part.location) {
+        expect(partLocations.has(normalizeCatalogString(part.location))).toBe(
+          true,
+        );
+      }
+      if (part.supplier) {
+        expect(suppliers.has(normalizeCatalogString(part.supplier))).toBe(true);
+      }
+      if (part.category) {
+        expect(names("partCategory").has(normalizeCatalogString(part.category))).toBe(
+          true,
+        );
+      }
+    }
+
+    // Lo compatible se dice por modelo (que es lo que compara el almacén) y ese
+    // modelo existe; lo que ya decía equipos concretos sigue diciéndolo.
+    expect(parts.some((part) => (part.compatibleModels ?? []).length > 0)).toBe(
+      true,
+    );
+    for (const part of parts) {
+      for (const id of part.compatibleModels ?? []) {
+        expect(modelById.has(id)).toBe(true);
+      }
+      if ((part.compatibleWith ?? []).length > 0) {
+        expect((part.compatibleModels ?? []).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
   test("seedMoreDemoData añade tandas nuevas sin repetir referencias", async () => {
     const authed = await authedTest("manager");
     await authed.mutation(api.seed.seedDemoData, {});
@@ -383,9 +489,12 @@ describe("ampliar la muestra", () => {
     const first = await authed.mutation(api.seed.seedMoreDemoData, {});
     expect(first.incidents).toBeGreaterThanOrEqual(20);
     expect(first.requests).toBeGreaterThanOrEqual(20);
-    // La primera carga ya traía el catálogo completo
+    // La primera carga ya traía el catálogo completo, con sus catálogos
+    // maestros y sus modelos: la segunda tanda no duplica nada de eso.
     expect(first.equipment).toBe(0);
     expect(first.parts).toBe(0);
+    expect(first.models).toBe(0);
+    expect(first.catalogs).toBe(0);
 
     const second = await authed.mutation(api.seed.seedMoreDemoData, {
       incidents: 5,
@@ -879,6 +988,15 @@ describe("los manuales de la muestra", () => {
         )
         .map((item) => item.code),
     ).toEqual([]);
+
+    // Todos cuelgan de su modelo: es lo que los comparte entre las unidades de
+    // ese mismo modelo, y lo que el filtro de la ficha usa.
+    const models = await manager.query(api.equipmentModels.list, {});
+    const modelIds = new Set(models.map((model) => model._id));
+    for (const manual of manuals) {
+      expect(manual.modelId).toBeDefined();
+      expect(modelIds.has(manual.modelId!)).toBe(true);
+    }
 
     // Y junto a los expedientes sigue el otro caso del módulo: el manual del
     // modelo, que cuelga de una ficha sin estar asignado a su equipo.
