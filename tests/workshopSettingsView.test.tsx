@@ -9,6 +9,11 @@ import { settle } from "./settle";
 vi.mock("@/pages/dashboard/settings/CatalogsCard", () => ({
   CatalogsCard: () => <div data-testid="card-catalogs">CatalogsCard</div>,
 }));
+vi.mock("@/pages/dashboard/settings/EquipmentModelsCard", () => ({
+  EquipmentModelsCard: () => (
+    <div data-testid="card-equipment-models">EquipmentModelsCard</div>
+  ),
+}));
 vi.mock("@/pages/dashboard/settings/WorkAlertSettingsCard", () => ({
   WorkAlertSettingsCard: () => (
     <div data-testid="card-work-alert">WorkAlertSettingsCard</div>

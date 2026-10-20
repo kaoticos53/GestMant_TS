@@ -15,7 +15,7 @@ import {
   vi,
 } from "vitest";
 
-const { EQUIPOS, MODELOS, BRANDS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
+const { EQUIPOS, MODELOS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
   EQUIPOS: Array.from({ length: 120 }, (_, index) => ({
     _id: `eq-${index}`,
     _creationTime: 1,
@@ -30,7 +30,9 @@ const { EQUIPOS, MODELOS, BRANDS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
       _creationTime: 1,
       model: "HDC-3500",
       name: "Cámara de estudio",
-      brandId: "brand-sony",
+      // La marca es el nombre del catálogo maestro guardado en el modelo: no hay
+      // tabla de marcas que consultar aparte.
+      brand: "Sony",
     },
     ...Array.from({ length: 20 }, (_, i) => ({
       _id: `mod-${i}`,
@@ -38,9 +40,6 @@ const { EQUIPOS, MODELOS, BRANDS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
       model: `MOD-${i}`,
       name: `Equipo Modelo ${i}`,
     })),
-  ],
-  BRANDS: [
-    { _id: "brand-sony", _creationTime: 1, name: "Sony" },
   ],
   /** El catálogo que sirve el backend de mentira: lo pone cada prueba. */
   CATALOGO: [] as unknown[],
@@ -57,7 +56,6 @@ vi.mock("convex/react", async () => {
       const nombre = getFunctionName(query as never);
       if (nombre === "equipment:list") return EQUIPOS;
       if (nombre === "equipmentModels:list") return MODELOS;
-      if (nombre === "equipmentBrands:list") return BRANDS;
       if (nombre === "spareParts:list") return CATALOGO;
       return undefined;
     },
