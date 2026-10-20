@@ -327,6 +327,8 @@ const schema = defineSchema({
     purchaseUrl: v.optional(v.string()), // ficha del proveedor
     // Equipos con los que es compatible (para filtrar por modelo)
     compatibleWith: v.optional(v.array(v.id("equipment"))),
+    // Modelos de equipo con los que es compatible (catálogo de modelos)
+    compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

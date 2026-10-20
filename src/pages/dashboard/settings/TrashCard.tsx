@@ -1,5 +1,6 @@
 import { AttachmentGroup } from "@/components/AttachmentGroup";
 import { AttachmentImage } from "@/components/AttachmentImage";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,8 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
+import type { WithdrawnIncidentItem } from "@/convex/_incidents/trash";
+import type { WithdrawnRequestItem } from "@/convex/_partRequests/trash";
 import type { TrashItem } from "@/convex/trash";
-import { CLEANUP_PASS_META } from "@/lib/cleanupLog";
+import { reporterNoticeText } from "@/lib/incidentMail";
 import {
   DEFAULT_TRASH_RETENTION_DAYS,
   MAX_TRASH_RETENTION_DAYS,
@@ -22,49 +25,107 @@ import {
   trashRemainingLabel,
 } from "@/lib/trash";
 import {
+  INCIDENT_STATUS_META,
+  STATUS_META,
   formatDateTime,
   formatFileSize,
-  formatRelativeTime,
   getErrorMessage,
 } from "@/lib/workshop";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery } from "convex/react";
-import { ExternalLink, File, Trash2, Undo2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  ArchiveRestore,
+  ExternalLink,
+  File,
+  Trash2,
+  Undo2,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+type DeletingEntity =
+  | { type: "storage"; item: TrashItem }
+  | { type: "incident"; item: WithdrawnIncidentItem }
+  | { type: "request"; item: WithdrawnRequestItem };
+
 /**
- * La papelera del almacén: lo que retira la limpieza no se borra en el acto.
- *
- * Cada archivo retirado se queda aquí unos días —sigue en el almacén; lo que
- * cambia es que ya no lo cita ninguna ficha— con su dirección para abrirlo o
- * descargarlo. Desde aquí se recupera: un archivo del formulario público vuelve
- * a su vale, con la ventana nueva, y uno de los que ya no citaba nadie se queda
- * rescatado, que es lo que impide que caduque. Pasado el plazo lo borra la
- * tercera pasada de la limpieza, y hasta entonces se puede adelantar a mano.
- *
- * Se enseña solo lo que el almacén sabe del archivo —su tipo y su tamaño—: por
- * un archivo retirado ya no responde ninguna ficha, así que no hay nombre que
- * enseñar. Lo que sí se dice es de dónde salió y qué pasada se lo llevó, que es
- * lo que permite juzgar si se retiró por error.
+ * Un contenedor con scroll acotado para un grupo de elementos en la papelera.
  */
-export function TrashCard() {
+function TrashSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-4">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-1.5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h3>
+        <span className="text-xs font-medium tabular-nums text-muted-foreground">
+          {count} {count === 1 ? "elemento" : "elementos"}
+        </span>
+      </div>
+      <div className="mt-2.5 grid max-h-80 gap-2.5 overflow-y-auto pr-1">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Papelera del taller: lo que se retira —incidencias, peticiones y archivos—
+ * no se borra en el acto, sino que espera aquí el plazo configurado con opción
+ * de recuperarse tal y como estaba o adelantarse su borrado definitivo.
+ */
+export function TrashCard({
+  canManageIncidents = true,
+  canDecideRequests = true,
+}: {
+  /** Quien coordina las incidencias puede verlas y recuperarlas en la papelera. */
+  canManageIncidents?: boolean;
+  /** Quien decide las peticiones de repuesto puede verlas y recuperarlas. */
+  canDecideRequests?: boolean;
+}) {
+  // Papelera de archivos del almacén
   const trash = useQuery(api.trash.list);
-  const restore = useMutation(api.trash.restore);
-  const deleteNow = useMutation(api.trash.deleteNow);
-  // El plazo de la papelera: lo que se retire a partir de ahora se guardará esos
-  // días. Es un ajuste guardado (`storageSettings`), como los demás del taller.
+  const restoreStorage = useMutation(api.trash.restore);
+  const deleteStorageNow = useMutation(api.trash.deleteNow);
+
+  // Papelera de incidencias retiradas
+  const incidentTrash = useQuery(
+    api.incidents.trash,
+    canManageIncidents ? {} : "skip",
+  );
+  const restoreIncident = useMutation(api.incidents.restore);
+  const deleteIncidentNow = useMutation(api.incidents.deleteNow);
+
+  // Papelera de peticiones de repuestos retiradas
+  const requestTrash = useQuery(
+    api.partRequests.trash,
+    canDecideRequests ? {} : "skip",
+  );
+  const restoreRequest = useMutation(api.partRequests.restore);
+  const deleteRequestNow = useMutation(api.partRequests.deleteNow);
+
+  // Plazo vigente para toda la papelera del taller
   const settings = useQuery(api.trash.settings);
   const saveSettings = useMutation(api.trash.setSettings);
+
   const [days, setDays] = useState(String(DEFAULT_TRASH_RETENTION_DAYS));
   const [savingDays, setSavingDays] = useState(false);
-  // El archivo con algo en marcha (recuperarlo o borrarlo) y el que espera
-  // confirmación para borrarse del todo.
-  const [busy, setBusy] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<TrashItem | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [deletingEntity, setDeletingEntity] = useState<DeletingEntity | null>(
+    null,
+  );
+  const [filter, setFilter] = useState<
+    "all" | "incidents" | "requests" | "storage"
+  >("all");
 
-  // El formulario se rellena con lo guardado en cuanto llega, una sola vez:
-  // mientras se edita no se pisa (la consulta sigue viva y puede refrescarse
-  // por detrás).
   const seeded = useRef(false);
   useEffect(() => {
     if (seeded.current || settings === undefined) return;
@@ -72,12 +133,15 @@ export function TrashCard() {
     seeded.current = true;
   }, [settings]);
 
-  const pending = trash?.pending ?? [];
-  const kept = trash?.kept ?? [];
-  const total = pending.length + kept.length;
-  // El plazo vigente para lo que se retire de ahora en adelante; mientras carga
-  // vale el de partida. Lo que ya está en la papelera cumple el plazo con el que
-  // entró, y su propia fila dice cuándo se va.
+  const trashedIncidents = incidentTrash?.items ?? [];
+  const trashedRequests = requestTrash?.items ?? [];
+  const storagePending = trash?.pending ?? [];
+  const storageKept = trash?.kept ?? [];
+  const storageTotal = storagePending.length + storageKept.length;
+
+  const totalItems =
+    trashedIncidents.length + trashedRequests.length + storageTotal;
+
   const retentionDays = settings?.days ?? DEFAULT_TRASH_RETENTION_DAYS;
   const daysValue = Number(days);
   const daysValid =
@@ -99,11 +163,41 @@ export function TrashCard() {
     }
   };
 
-  /** Recuperar: de vuelta a su vale, o rescatado para que no caduque. */
-  const handleRestore = async (item: TrashItem) => {
-    setBusy(item.id);
+  /** Recuperar una incidencia de la papelera. */
+  const handleRestoreIncident = async (item: WithdrawnIncidentItem) => {
+    setBusyId(item.id);
     try {
-      const result = await restore({ id: item.id });
+      await restoreIncident({ incidentId: item.id });
+      toast.success(
+        `Incidencia ${item.reference} recuperada de la papelera`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** Recuperar una petición de la papelera. */
+  const handleRestoreRequest = async (item: WithdrawnRequestItem) => {
+    setBusyId(item.id);
+    try {
+      await restoreRequest({ requestId: item.id });
+      toast.success(
+        `Petición ${item.reference} recuperada de la papelera`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** Recuperar o conservar un archivo del almacén. */
+  const handleRestoreStorage = async (item: TrashItem) => {
+    setBusyId(item.id);
+    try {
+      const result = await restoreStorage({ id: item.id });
       toast.success(
         result.kept
           ? "Rescatado: se queda en la papelera y ya no se borra solo"
@@ -112,70 +206,77 @@ export function TrashCard() {
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setBusy(null);
+      setBusyId(null);
     }
   };
 
-  /** Borrarlo ya, sin esperar a que cumpla su plazo. */
-  const handleDelete = async (item: TrashItem) => {
-    setBusy(item.id);
+  /** Ejecutar el borrado definitivo de la entidad confirmada. */
+  const handleConfirmDelete = async () => {
+    if (!deletingEntity) return;
+    const target = deletingEntity;
+    setBusyId(target.item.id);
     try {
-      const result = await deleteNow({ id: item.id });
-      toast.success(`Borrado para siempre · ${formatFileSize(result.bytes)}`);
-      setDeleting(null);
+      if (target.type === "incident") {
+        await deleteIncidentNow({ incidentId: target.item.id });
+        toast.success(
+          `Incidencia ${target.item.reference} borrada para siempre`,
+        );
+      } else if (target.type === "request") {
+        await deleteRequestNow({ requestId: target.item.id });
+        toast.success(
+          `Petición ${target.item.reference} borrada para siempre`,
+        );
+      } else {
+        const result = await deleteStorageNow({ id: target.item.id });
+        toast.success(
+          `Archivo borrado para siempre · ${formatFileSize(result.bytes)}`,
+        );
+      }
+      setDeletingEntity(null);
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setBusy(null);
+      setBusyId(null);
     }
   };
 
-  /** Una fila de la papelera: lo que se sabe del archivo y qué se puede hacer. */
-  const row = (item: TrashItem) => (
+  /** Renderiza una fila de archivo del almacén. */
+  const renderStorageRow = (item: TrashItem) => (
     <li
       key={item.id}
-      className="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 p-2"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-border/70 bg-background/60 p-2.5"
     >
       {item.kind === "image" ? (
-        // La foto, con el aviso de siempre dentro: si su archivo ya no está en
-        // el almacén, o su dirección no llega, la fila lo dice en lugar de
-        // quedarse el icono de respaldo.
-        <AttachmentImage
-          url={item.url}
-          name=""
-          layout="row"
-          frameClassName="size-10 shrink-0 overflow-hidden rounded-md border border-border/70"
-          imageClassName="size-full object-cover"
-        />
+        <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+          <AttachmentImage
+            url={item.url}
+            className="size-full object-cover"
+            alt=""
+          />
+        </span>
       ) : (
-        // Un PDF no tiene miniatura que enseñar: su icono es el que le toca.
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted text-muted-foreground">
-          <File className="size-4" />
+        <span className="flex size-10 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+          <File className="size-5" />
         </span>
       )}
 
-      <div className="min-w-[10rem] flex-1">
-        <p className="text-sm">
+      <div className="flex min-w-[10rem] flex-1 flex-col">
+        <span className="text-xs font-semibold leading-4">
+          {item.contentType}
+        </span>
+        <span className="text-xs text-muted-foreground">
           {formatFileSize(item.size)}
-          {item.contentType ? ` · ${item.contentType}` : ""}
-        </p>
-        <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-          {CLEANUP_PASS_META[item.pass].label} · retirado{" "}
-          {formatRelativeTime(item.removedAt)} ({formatDateTime(item.removedAt)}
-          )
+          {item.fromForm ? " · del formulario público" : " · huérfano"}
           {item.kept
-            ? item.keptAt === null
-              ? ""
-              : ` · rescatado ${formatRelativeTime(item.keptAt)}`
-            : ` · ${trashRemainingLabel(item.purgeAt)}`}
-        </p>
+            ? " · rescatado"
+            : ` · caduca el ${formatDateTime(item.purgeAt)}`}
+        </span>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1.5">
         {item.url && (
           <Button
             asChild
-            type="button"
             variant="ghost"
             size="sm"
             className="gap-1.5"
@@ -192,13 +293,13 @@ export function TrashCard() {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            disabled={busy === item.id}
+            disabled={busyId === item.id}
+            onClick={() => void handleRestoreStorage(item)}
             title={
               item.fromForm
                 ? `Devolverle su vale del formulario, con ${retentionDays} días de ventana nueva`
                 : "Que se quede: deja de caducar y solo se borra a mano"
             }
-            onClick={() => void handleRestore(item)}
           >
             <Undo2 className="size-4" />
             {item.fromForm ? "Recuperar" : "Conservar"}
@@ -208,9 +309,9 @@ export function TrashCard() {
           type="button"
           variant="ghost"
           size="sm"
-          className="gap-1.5"
-          disabled={busy === item.id}
-          onClick={() => setDeleting(item)}
+          className="gap-1.5 text-destructive hover:text-destructive"
+          disabled={busyId === item.id}
+          onClick={() => setDeletingEntity({ type: "storage", item })}
         >
           <Trash2 className="size-4" />
           Borrar
@@ -219,25 +320,27 @@ export function TrashCard() {
     </li>
   );
 
+  const isLoading =
+    trash === undefined ||
+    (canManageIncidents && incidentTrash === undefined) ||
+    (canDecideRequests && requestTrash === undefined);
+
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
       <div className="flex items-start gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Undo2 className="size-4" />
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+          <Trash2 className="size-4" />
         </span>
         <div className="max-w-2xl">
           <p className="text-sm font-semibold tracking-tight">
-            Papelera del almacén
+            Papelera del taller
           </p>
           <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            Lo que la limpieza retira no se borra en el acto: se queda aquí{" "}
-            {retentionDays} días, con el archivo todavía en el almacén, por si
-            hay que recuperarlo. Mientras esté puedes abrirlo, devolverle su
-            sitio si vino del formulario público o rescatarlo; pasado el plazo,
-            la pasada de la papelera lo borra de verdad. El mismo plazo vale
-            para las incidencias retiradas desde su ficha: esas esperan esos días
-            en la papelera del módulo Archivo, con su expediente y sus notas
-            intactos.
+            Las incidencias retiradas desde su ficha, las peticiones y los
+            archivos retirados del almacén se guardan aquí {retentionDays} días
+            antes de borrarse de verdad. Durante este plazo se pueden recuperar
+            con su expediente, notas y repuestos intactos, o borrarlos para
+            siempre sin esperar.
           </p>
         </div>
       </div>
@@ -276,71 +379,341 @@ export function TrashCard() {
         </p>
       </div>
 
-      {trash === undefined ? (
-        <div className="mt-4 grid gap-2">
+      {isLoading ? (
+        <div className="mt-5 grid gap-2">
           <Skeleton className="h-14 rounded-lg" />
           <Skeleton className="h-14 rounded-lg" />
         </div>
-      ) : total === 0 ? (
-        <p className="mt-4 rounded-lg border border-dashed border-border px-3 py-2 text-xs leading-5 text-muted-foreground">
-          La papelera está vacía: lo que retiren la limpieza de la madrugada o
-          una purga a mano aparecerá aquí, con su plazo, antes de borrarse.
+      ) : totalItems === 0 ? (
+        <p className="mt-5 rounded-lg border border-dashed border-border px-3.5 py-4 text-xs leading-5 text-muted-foreground text-center">
+          La papelera está vacía: las incidencias o peticiones retiradas y los
+          archivos purgados aparecerán aquí durante su plazo de retención antes
+          de borrarse.
         </p>
       ) : (
-        <>
-          {pending.length > 0 && (
-            <p className="mt-4 text-xs leading-5 text-muted-foreground">
-              {`${pending.length} ${
-                pending.length === 1 ? "archivo" : "archivos"
-              } · ${formatFileSize(trash?.pendingBytes ?? 0)} · ${
-                // Lo que le queda al primero: es el mismo texto que lleva su fila,
-                // y con uno caducado dice que le toca la próxima pasada en vez de
-                // enseñar una fecha que ya pasó.
-                trash?.nextPurgeAt === null || trash?.nextPurgeAt === undefined
-                  ? "se borran al cumplir su plazo"
-                  : `el primero ${trashRemainingLabel(trash.nextPurgeAt)}`
-              }`}
-            </p>
-          )}
+        <div className="mt-5 flex flex-col gap-4">
+          {/* Píldoras de filtro rápido si hay varias categorías con elementos */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 pb-3">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                filter === "all"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Todo
+              <span className="ml-1 opacity-75 tabular-nums">({totalItems})</span>
+            </button>
+            {canManageIncidents && trashedIncidents.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter("incidents")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  filter === "incidents"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Incidencias
+                <span className="ml-1 opacity-75 tabular-nums">
+                  ({trashedIncidents.length})
+                </span>
+              </button>
+            )}
+            {canDecideRequests && trashedRequests.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter("requests")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  filter === "requests"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Peticiones
+                <span className="ml-1 opacity-75 tabular-nums">
+                  ({trashedRequests.length})
+                </span>
+              </button>
+            )}
+            {storageTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter("storage")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  filter === "storage"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Archivos del almacén
+                <span className="ml-1 opacity-75 tabular-nums">
+                  ({storageTotal})
+                </span>
+              </button>
+            )}
+          </div>
 
-          {pending.length > 0 && (
-            // Los archivos de la papelera, como grupo: si lo que falla es la
-            // dirección pública, el porqué se dice una vez sobre la lista en
-            // lugar de en cada fila que se cae.
-            <AttachmentGroup>
-              <ul className="mt-3 grid gap-2">{pending.map(row)}</ul>
-            </AttachmentGroup>
-          )}
+          {/* Sección de Incidencias Retiradas */}
+          {canManageIncidents &&
+            (filter === "all" || filter === "incidents") &&
+            trashedIncidents.length > 0 && (
+              <TrashSection
+                title="Incidencias retiradas"
+                count={trashedIncidents.length}
+              >
+                {trashedIncidents.map((item) => {
+                  const meta =
+                    INCIDENT_STATUS_META[item.status] ??
+                    INCIDENT_STATUS_META.reported;
+                  return (
+                    <article
+                      key={item.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/60 p-3"
+                    >
+                      <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-muted-foreground">
+                            {item.reference}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={meta.badgeClassName}
+                          >
+                            {meta.label}
+                          </Badge>
+                          <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
+                            {trashRemainingLabel(item.purgeAt)}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium leading-5">
+                          {[item.equipmentKind, item.model]
+                            .filter(Boolean)
+                            .join(" ") || "Incidencia sin equipo"}
+                        </p>
+                        {item.description !== "" && (
+                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                            {item.description}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Retirada el {formatDateTime(item.deletedAt)}
+                          {item.deletedBy ? ` por ${item.deletedBy}` : ""}
+                          {item.deletedReason
+                            ? ` · ${item.deletedReason}`
+                            : ""}
+                          {item.archived
+                            ? " · saldrá del archivo al recuperarla"
+                            : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Aviso a quien notificó: {reporterNoticeText(item)}
+                        </p>
+                      </div>
 
-          {kept.length > 0 && (
-            <>
-              <p className="mt-4 text-xs leading-5 text-muted-foreground">
-                {`Rescatados (${kept.length}): no se borran solos, solo si los borras tú.`}
-              </p>
-              <AttachmentGroup>
-                <ul className="mt-3 grid gap-2">{kept.map(row)}</ul>
-              </AttachmentGroup>
-            </>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={busyId === item.id}
+                          onClick={() => void handleRestoreIncident(item)}
+                        >
+                          <ArchiveRestore className="size-4" />
+                          Recuperar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                          disabled={busyId === item.id}
+                          onClick={() =>
+                            setDeletingEntity({ type: "incident", item })
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                          Borrar ya
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </TrashSection>
+            )}
+
+          {/* Sección de Peticiones Retiradas */}
+          {canDecideRequests &&
+            (filter === "all" || filter === "requests") &&
+            trashedRequests.length > 0 && (
+              <TrashSection
+                title="Peticiones retiradas"
+                count={trashedRequests.length}
+              >
+                {trashedRequests.map((item) => {
+                  const meta =
+                    STATUS_META[item.status] ?? STATUS_META.pending;
+                  const context = [
+                    item.requesterName,
+                    item.requesterTeam,
+                    item.equipment,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <article
+                      key={item.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/70 bg-background/60 p-3"
+                    >
+                      <div className="flex min-w-[12rem] flex-1 flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-muted-foreground">
+                            {item.reference}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={meta.badgeClassName}
+                          >
+                            {meta.label}
+                          </Badge>
+                          <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
+                            {trashRemainingLabel(item.purgeAt)}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium leading-5">
+                          {item.summary || "Petición sin repuesto"}
+                        </p>
+                        {context !== "" && (
+                          <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                            {context}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Retirada el {formatDateTime(item.deletedAt)}
+                          {item.deletedBy ? ` por ${item.deletedBy}` : ""}
+                          {item.deletedReason
+                            ? ` · ${item.deletedReason}`
+                            : ""}
+                          {item.archived
+                            ? " · saldrá del archivo al recuperarla"
+                            : ""}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={busyId === item.id}
+                          onClick={() => void handleRestoreRequest(item)}
+                        >
+                          <ArchiveRestore className="size-4" />
+                          Recuperar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                          disabled={busyId === item.id}
+                          onClick={() =>
+                            setDeletingEntity({ type: "request", item })
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                          Borrar ya
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </TrashSection>
+            )}
+
+          {/* Sección de Archivos del Almacén */}
+          {(filter === "all" || filter === "storage") && storageTotal > 0 && (
+            <TrashSection
+              title="Archivos del almacén"
+              count={storageTotal}
+            >
+              {storagePending.length > 0 && (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    {`${storagePending.length} ${
+                      storagePending.length === 1 ? "archivo" : "archivos"
+                    } · ${formatFileSize(trash?.pendingBytes ?? 0)} · ${
+                      trash?.nextPurgeAt === null ||
+                      trash?.nextPurgeAt === undefined
+                        ? "se borran al cumplir su plazo"
+                        : `el primero ${trashRemainingLabel(trash.nextPurgeAt)}`
+                    }`}
+                  </p>
+                  <AttachmentGroup>
+                    <ul className="mt-2 grid gap-2">
+                      {storagePending.map(renderStorageRow)}
+                    </ul>
+                  </AttachmentGroup>
+                </>
+              )}
+
+              {storageKept.length > 0 && (
+                <>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Rescatados ({storageKept.length}): no se borran solos, solo
+                    si los borras tú.
+                  </p>
+                  <AttachmentGroup>
+                    <ul className="mt-2 grid gap-2">
+                      {storageKept.map(renderStorageRow)}
+                    </ul>
+                  </AttachmentGroup>
+                </>
+              )}
+            </TrashSection>
           )}
-        </>
+        </div>
       )}
 
-      {deleting && (
-        <Dialog open onOpenChange={(open) => !open && setDeleting(null)}>
+      {/* Diálogo unificado de confirmación de borrado definitivo */}
+      {deletingEntity && (
+        <Dialog
+          open
+          onOpenChange={(open) => !open && setDeletingEntity(null)}
+        >
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Borrar de la papelera</DialogTitle>
+              <DialogTitle>
+                {deletingEntity.type === "incident"
+                  ? `¿Borrar incidencia ${deletingEntity.item.reference} definitivamente?`
+                  : deletingEntity.type === "request"
+                    ? `¿Borrar petición ${deletingEntity.item.reference} definitivamente?`
+                    : "Borrar archivo de la papelera"}
+              </DialogTitle>
               <DialogDescription>
-                {`Se borrará del almacén ese archivo (${formatFileSize(
-                  deleting.size,
-                )}) sin esperar a su plazo. Después ya no se puede recuperar.`}
+                {deletingEntity.type === "incident"
+                  ? "Se borrará ahora, sin esperar el plazo de la papelera, y con ella su expediente: sus documentos, sus notas y los avisos que la señalaban. Esta acción no se puede deshacer."
+                  : deletingEntity.type === "request"
+                    ? "Se borrará ahora, sin esperar el plazo de la papelera: la petición y los archivos que adjuntaba. Las compras que se pidieron por ella se quedan en su módulo. Esta acción no se puede deshacer."
+                    : `Se borrará del almacén este archivo (${formatFileSize(
+                        deletingEntity.item.size,
+                      )}) sin esperar a su plazo. Después ya no se puede recuperar.`}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setDeleting(null)}
+                onClick={() => setDeletingEntity(null)}
+                disabled={busyId === deletingEntity.item.id}
               >
                 Cancelar
               </Button>
@@ -348,11 +721,13 @@ export function TrashCard() {
                 type="button"
                 variant="destructive"
                 className="gap-2"
-                disabled={busy === deleting.id}
-                onClick={() => void handleDelete(deleting)}
+                disabled={busyId === deletingEntity.item.id}
+                onClick={() => void handleConfirmDelete()}
               >
                 <Trash2 className="size-4" />
-                {busy === deleting.id ? "Borrando..." : "Borrar"}
+                {busyId === deletingEntity.item.id
+                  ? "Borrando..."
+                  : "Borrar definitivamente"}
               </Button>
             </DialogFooter>
           </DialogContent>

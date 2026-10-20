@@ -49,6 +49,7 @@ async function seedPart(
     supplier: string;
     partNumber: string;
     compatibleWith: Id<"equipment">[];
+    compatibleModels: Id<"equipmentModels">[];
   }> = {},
 ) {
   return await t.run((ctx) =>
@@ -63,6 +64,9 @@ async function seedPart(
       ...(overrides.partNumber ? { partNumber: overrides.partNumber } : {}),
       ...(overrides.compatibleWith
         ? { compatibleWith: overrides.compatibleWith }
+        : {}),
+      ...(overrides.compatibleModels
+        ? { compatibleModels: overrides.compatibleModels }
         : {}),
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -861,15 +865,48 @@ describe("inventario de equipos", () => {
     expect(equipment[0].model).toBe("FX-888D");
   });
 
-  test("no se borra un equipo con repuestos compatibles", async () => {
+  test("al borrar un equipo se desvincula de los repuestos compatibles sin bloquear", async () => {
     const { t, authed } = await authedTest();
     const equipmentId = await seedEquipment(t);
-    await seedPart(t, { compatibleWith: [equipmentId] });
+    const partId = await seedPart(t, { compatibleWith: [equipmentId] });
 
-    await expectConvexError(
-      authed.mutation(api.equipment.remove, { id: equipmentId }),
-      "repuesto del catálogo es compatible",
-    );
+    await authed.mutation(api.equipment.remove, { id: equipmentId });
+
+    // El equipo se ha borrado físicamente
+    const deletedEq = await t.run((ctx) => ctx.db.get(equipmentId));
+    expect(deletedEq).toBeNull();
+
+    // El repuesto desvincula el equipo de compatibleWith
+    const updatedPart = await t.run((ctx) => ctx.db.get(partId));
+    expect(updatedPart?.compatibleWith).toEqual([]);
+  });
+
+  test("los repuestos pueden ligarse a modelos de equipo y se desvinculan al borrar el modelo", async () => {
+    const { t, authed } = await authedTest();
+    const modelId = await authed.mutation(api.equipmentModels.create, {
+      model: "FX-888D",
+      name: "Estación de soldadura digital",
+      brand: "Hakko",
+      category: "Soldadura",
+    });
+
+    const partId = await authed.mutation(api.spareParts.create, {
+      code: "PUN-001",
+      name: "Punta soldador T18",
+      category: "Soldadura",
+      unit: "ud",
+      stock: 5,
+      minStock: 1,
+      compatibleModels: [modelId],
+    });
+
+    const part = await t.run((ctx) => ctx.db.get(partId));
+    expect(part?.compatibleModels).toEqual([modelId]);
+
+    // Al eliminar el modelo de equipo, se desvincula del repuesto
+    await authed.mutation(api.equipmentModels.remove, { id: modelId });
+    const updatedPart = await t.run((ctx) => ctx.db.get(partId));
+    expect(updatedPart?.compatibleModels).toEqual([]);
   });
 
   test("al eliminar se desvinculan las peticiones y conservan el texto", async () => {

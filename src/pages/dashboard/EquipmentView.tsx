@@ -127,7 +127,11 @@ export function EquipmentView({
   });
 
   const compatibleCount = (item: EquipmentDoc) =>
-    parts.filter((part) => part.compatibleWith?.includes(item._id)).length;
+    parts.filter(
+      (part) =>
+        part.compatibleWith?.includes(item._id) ||
+        (item.modelId && part.compatibleModels?.includes(item.modelId)),
+    ).length;
 
   const reviewOf = (item: EquipmentDoc) =>
     nextReview(

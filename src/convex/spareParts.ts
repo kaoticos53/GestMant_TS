@@ -53,13 +53,38 @@ async function compatibleIds(
   return unique;
 }
 
+/** Valida que los modelos de equipo existan y devuelve sus ids. */
+async function compatibleModelIds(
+  ctx: QueryCtx,
+  ids: Id<"equipmentModels">[],
+): Promise<Id<"equipmentModels">[]> {
+  const unique = [...new Set(ids)];
+  for (const id of unique) {
+    const item = await ctx.db.get(id);
+    if (!item) {
+      throw new ConvexError("Uno de los modelos seleccionados ya no existe en el catálogo.");
+    }
+  }
+  return unique;
+}
+
 /** Igual que `compatibleIds`, listo para esparcir en un insert. */
 async function compatibleDocs(
   ctx: QueryCtx,
-  ids: Id<"equipment">[] | undefined,
+  equipmentIds: Id<"equipment">[] | undefined,
+  modelIds: Id<"equipmentModels">[] | undefined,
 ) {
-  if (!ids) return {};
-  return { compatibleWith: await compatibleIds(ctx, ids) };
+  const result: {
+    compatibleWith?: Id<"equipment">[];
+    compatibleModels?: Id<"equipmentModels">[];
+  } = {};
+  if (equipmentIds) {
+    result.compatibleWith = await compatibleIds(ctx, equipmentIds);
+  }
+  if (modelIds) {
+    result.compatibleModels = await compatibleModelIds(ctx, modelIds);
+  }
+  return result;
 }
 
 /**
@@ -107,6 +132,7 @@ export const create = mutation({
     unitPrice: v.optional(v.number()),
     purchaseUrl: v.optional(v.string()),
     compatibleWith: v.optional(v.array(v.id("equipment"))),
+    compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
   },
   handler: async (ctx, args) => {
     await requireManager(ctx);
@@ -129,7 +155,7 @@ export const create = mutation({
     // plano —de las de antes— se guarda tal cual se escribió.
     const description = richDocToStore(args.description);
     const now = Date.now();
-    await ctx.db.insert("spareParts", {
+    return await ctx.db.insert("spareParts", {
       code,
       name,
       ...(description ? { description } : {}),
@@ -144,7 +170,7 @@ export const create = mutation({
         ? { unitPrice: args.unitPrice }
         : {}),
       ...(args.purchaseUrl?.trim() ? { purchaseUrl: args.purchaseUrl.trim() } : {}),
-      ...(await compatibleDocs(ctx, args.compatibleWith)),
+      ...(await compatibleDocs(ctx, args.compatibleWith, args.compatibleModels)),
       createdAt: now,
       updatedAt: now,
     });
@@ -167,6 +193,7 @@ export const update = mutation({
     unitPrice: v.optional(v.number()),
     purchaseUrl: v.optional(v.string()),
     compatibleWith: v.optional(v.array(v.id("equipment"))),
+    compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
   },
   handler: async (ctx, args) => {
     await requireManager(ctx);
@@ -206,6 +233,9 @@ export const update = mutation({
     if (args.purchaseUrl !== undefined) patch.purchaseUrl = args.purchaseUrl.trim();
     if (args.compatibleWith !== undefined) {
       patch.compatibleWith = await compatibleIds(ctx, args.compatibleWith);
+    }
+    if (args.compatibleModels !== undefined) {
+      patch.compatibleModels = await compatibleModelIds(ctx, args.compatibleModels);
     }
     if (args.unitPrice !== undefined) {
       if (args.unitPrice < 0) throw new ConvexError("El precio no puede ser negativo.");

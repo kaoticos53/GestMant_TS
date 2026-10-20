@@ -240,10 +240,15 @@ export const remove = mutation({
       .withIndex("by_modelId", (q) => q.eq("modelId", args.id))
       .first();
 
-    if (linkedManual) {
-      throw new ConvexError(
-        "No se puede eliminar el modelo porque tiene manuales técnicos vinculados.",
-      );
+    // Desvincular de repuestos que citaran este modelo en compatibleModels
+    const parts = await ctx.db.query("spareParts").collect();
+    for (const part of parts) {
+      if (part.compatibleModels?.includes(args.id)) {
+        await ctx.db.patch(part._id, {
+          compatibleModels: part.compatibleModels.filter((id) => id !== args.id),
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     await ctx.db.delete(args.id);

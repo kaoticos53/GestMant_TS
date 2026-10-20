@@ -343,18 +343,17 @@ export const remove = mutation({
     const item = await ctx.db.get(args.id);
     if (!item) throw new ConvexError("El equipo ya no existe.");
 
+    // Los repuestos compatibles no impiden borrar el equipo: los repuestos son
+    // compatibles con el modelo, no con un ejemplar físico individual. Se retira
+    // la referencia a este ejemplar en los repuestos que lo tuvieran en compatibleWith.
     const parts = await ctx.db.query("spareParts").collect();
-    const referencing = parts.filter((part) =>
-      part.compatibleWith?.includes(args.id),
-    );
-    if (referencing.length > 0) {
-      const compatibles =
-        referencing.length === 1
-          ? "1 repuesto del catálogo es compatible"
-          : `${referencing.length} repuestos del catálogo son compatibles`;
-      throw new ConvexError(
-        `${compatibles} con ${item.model}. Quita esa relación antes de borrar el equipo.`,
-      );
+    for (const part of parts) {
+      if (part.compatibleWith?.includes(args.id)) {
+        await ctx.db.patch(part._id, {
+          compatibleWith: part.compatibleWith.filter((id) => id !== args.id),
+          updatedAt: Date.now(),
+        });
+      }
     }
 
     const requests = await ctx.db.query("partRequests").collect();

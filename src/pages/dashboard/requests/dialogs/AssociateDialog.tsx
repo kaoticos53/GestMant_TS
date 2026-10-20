@@ -65,8 +65,11 @@ export function AssociateDialog({
     (item) => item._id === request.equipmentId,
   );
   const compatibleParts = requestEquipment
-    ? parts.filter((part) =>
-        part.compatibleWith?.includes(requestEquipment._id),
+    ? parts.filter(
+        (part) =>
+          part.compatibleWith?.includes(requestEquipment._id) ||
+          (requestEquipment.modelId &&
+            part.compatibleModels?.includes(requestEquipment.modelId)),
       )
     : parts;
   const showOnly =

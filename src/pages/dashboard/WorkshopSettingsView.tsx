@@ -33,6 +33,8 @@ export function WorkshopSettingsView({
   canPurgeUploads = false,
   canManageData = false,
   canManageMail = false,
+  canManageIncidents,
+  canDecideRequests,
   defaultTab,
 }: {
   /** Quien coordina incidencias o decide peticiones ajusta el archivo. */
@@ -56,9 +58,16 @@ export function WorkshopSettingsView({
    * llave del deployment y un remitente los dos, no una preferencia de cada rol.
    */
   canManageMail?: boolean;
+  /** Capacidad para gestionar incidencias y verlas en la papelera. */
+  canManageIncidents?: boolean;
+  /** Capacidad para decidir peticiones y verlas en la papelera. */
+  canDecideRequests?: boolean;
   /** Pestaña inicial a mostrar si está disponible para el usuario. */
   defaultTab?: string;
 }) {
+  const hasManageIncidents =
+    canManageIncidents ?? (canManageAlert || canManageArchive);
+  const hasDecideRequests = canDecideRequests ?? canManageArchive;
   const availableTabs = useMemo(() => {
     const list: Array<{
       id: string;
@@ -149,7 +158,12 @@ export function WorkshopSettingsView({
             className="space-y-5 focus-visible:outline-none"
           >
             {canManageArchive && <AutomaticArchiveCard />}
-            {canPurgeUploads && <TrashCard />}
+            {canPurgeUploads && (
+              <TrashCard
+                canManageIncidents={hasManageIncidents}
+                canDecideRequests={hasDecideRequests}
+              />
+            )}
             {canPurgeUploads && <UnusedUploadsCard />}
             {canPurgeUploads && <StorageCleanupCard />}
           </TabsContent>

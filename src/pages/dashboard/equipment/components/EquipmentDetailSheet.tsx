@@ -133,8 +133,10 @@ export function EquipmentDetailSheet({
     }
   };
 
-  const compatible = parts.filter((part) =>
-    part.compatibleWith?.includes(item._id),
+  const compatible = parts.filter(
+    (part) =>
+      part.compatibleWith?.includes(item._id) ||
+      (item.modelId && part.compatibleModels?.includes(item.modelId)),
   );
   const shownRequests = related.slice(0, 6);
   const review = nextReview(

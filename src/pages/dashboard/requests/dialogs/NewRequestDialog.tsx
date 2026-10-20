@@ -109,8 +109,11 @@ export function NewRequestDialog({
     (item) => item._id === equipmentChoice,
   );
   const compatibleParts = selectedEquipment
-    ? parts.filter((part) =>
-        part.compatibleWith?.includes(selectedEquipment._id),
+    ? parts.filter(
+        (part) =>
+          part.compatibleWith?.includes(selectedEquipment._id) ||
+          (selectedEquipment.modelId &&
+            part.compatibleModels?.includes(selectedEquipment.modelId)),
       )
     : parts;
   const showOnly =
