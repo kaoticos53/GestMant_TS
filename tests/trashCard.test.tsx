@@ -8,9 +8,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { STATE } = vi.hoisted(() => ({
   STATE: {
-    trash: { pending: [] as any[], kept: [] as any[], pendingBytes: 0, nextPurgeAt: null as number | null },
-    incidentsTrash: { items: [] as any[], nextPurgeAt: null as number | null, retentionDays: 30 },
-    requestsTrash: { items: [] as any[], nextPurgeAt: null as number | null, retentionDays: 30 },
+    trash: {
+      pending: [] as Record<string, unknown>[],
+      kept: [] as Record<string, unknown>[],
+      pendingBytes: 0,
+      nextPurgeAt: null as number | null,
+    },
+    incidentsTrash: {
+      items: [] as Record<string, unknown>[],
+      nextPurgeAt: null as number | null,
+      retentionDays: 30,
+    },
+    requestsTrash: {
+      items: [] as Record<string, unknown>[],
+      nextPurgeAt: null as number | null,
+      retentionDays: 30,
+    },
     settings: { days: 30 },
     calls: [] as { name: string; args: unknown }[],
   },

@@ -12,7 +12,6 @@ import {
   historyRowsToCsv,
   historyRowsToTsv,
   orderTotals,
-  parseNumericDate,
   requestsMissingStock,
   selectedCellsToTsv,
   sortPurchaseHistoryRows,

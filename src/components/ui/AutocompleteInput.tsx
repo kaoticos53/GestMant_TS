@@ -9,6 +9,7 @@ import {
   PopoverAnchor,
 } from "@/components/ui/popover";
 import {
+  CATALOG_KIND_LABELS,
   analyzeInputMatches,
   CatalogItemLike,
   CatalogKind,
@@ -182,7 +183,15 @@ export function AutocompleteInput<T extends CatalogItemLike = CatalogItemLike>({
                 className="w-full justify-start gap-1.5 px-2 py-1.5 text-xs font-medium text-signal hover:text-signal hover:bg-signal/10 h-auto"
               >
                 <Plus className="size-3.5" />
-                <span className="truncate">Añadir &quot;{value.trim()}&quot;</span>
+                {/* El tipo de catálogo se nombra: «Añadir marca «Sony»» dice
+                    mejor lo que va a pasar que un «Añadir «Sony»» a secas. */}
+                <span className="truncate">
+                  Añadir
+                  {kind
+                    ? ` ${CATALOG_KIND_LABELS[kind].singular.toLowerCase()}`
+                    : ""}{" "}
+                  &quot;{value.trim()}&quot;
+                </span>
               </Button>
             </div>
           )}

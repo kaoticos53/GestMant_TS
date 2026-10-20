@@ -1,11 +1,7 @@
 import { backend } from "./backend";
 import { ConvexError } from "convex/values";
-import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
-import type { Id } from "../src/convex/_generated/dataModel";
-
-type Test = ReturnType<typeof convexTest>;
 
 async function authedTest() {
   const t = backend();

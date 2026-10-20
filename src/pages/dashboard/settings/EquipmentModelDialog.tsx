@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
@@ -38,42 +38,24 @@ export function EquipmentModelDialog({
   const catalogBrands = useQuery(api.catalogs.list, { kind: "brand" }) ?? [];
   const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
 
-  const [modelCode, setModelCode] = useState("");
-  const [name, setName] = useState("");
-  const [brand, setBrand] = useState("");
-  const [category, setCategory] = useState("");
-  const [defaultSupplier, setDefaultSupplier] = useState("");
-  const [maintenanceInterval, setMaintenanceInterval] = useState("");
-  const [description, setDescription] = useState("");
+  // El formulario nace relleno con el modelo que se va a editar: quien abre la
+  // ficha vuelve a montar el diálogo —lo hace la tarjeta con una `key`—, así que
+  // no hace falta un efecto que lo reinicie después del primer pintado.
+  const [modelCode, setModelCode] = useState(model?.model ?? "");
+  const [name, setName] = useState(model?.name ?? "");
+  const [brand, setBrand] = useState(model?.brand ?? "");
+  const [category, setCategory] = useState(model?.category ?? "");
+  const [defaultSupplier, setDefaultSupplier] = useState(
+    model?.defaultSupplier ?? "",
+  );
+  const [maintenanceInterval, setMaintenanceInterval] = useState(
+    model?.defaultMaintenanceIntervalDays !== undefined
+      ? String(model.defaultMaintenanceIntervalDays)
+      : "",
+  );
+  const [description, setDescription] = useState(model?.description ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      if (model) {
-        setModelCode(model.model);
-        setName(model.name);
-        setBrand(model.brand ?? "");
-        setCategory(model.category ?? "");
-        setDefaultSupplier(model.defaultSupplier ?? "");
-        setMaintenanceInterval(
-          model.defaultMaintenanceIntervalDays !== undefined
-            ? String(model.defaultMaintenanceIntervalDays)
-            : "",
-        );
-        setDescription(model.description ?? "");
-      } else {
-        setModelCode("");
-        setName("");
-        setBrand("");
-        setCategory("");
-        setDefaultSupplier("");
-        setMaintenanceInterval("");
-        setDescription("");
-      }
-      setError(null);
-    }
-  }, [open, model]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

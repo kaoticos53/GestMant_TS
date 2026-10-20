@@ -50,6 +50,10 @@ export function EquipmentModelsCard() {
 
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Cada apertura estrena diálogo (la `key` de abajo): el formulario se rellena
+  // al montarse con el modelo que toca, sin quedar con lo que se escribió la
+  // vez anterior.
+  const [dialogSession, setDialogSession] = useState(0);
   const [editingModel, setEditingModel] = useState<EquipmentModelDoc | null>(null);
   const [deletingModel, setDeletingModel] = useState<EquipmentModelDoc | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -99,11 +103,13 @@ export function EquipmentModelsCard() {
 
   const handleOpenCreate = () => {
     setEditingModel(null);
+    setDialogSession((session) => session + 1);
     setDialogOpen(true);
   };
 
   const handleOpenEdit = (m: EquipmentModelDoc) => {
     setEditingModel(m);
+    setDialogSession((session) => session + 1);
     setDialogOpen(true);
   };
 
@@ -303,6 +309,7 @@ export function EquipmentModelsCard() {
 
       {/* Diálogo de alta / edición */}
       <EquipmentModelDialog
+        key={dialogSession}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         model={editingModel}

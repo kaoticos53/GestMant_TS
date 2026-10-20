@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -74,18 +74,13 @@ export function NewRequestDialog({
   const catalogPositions = useQuery(api.catalogs.list, { kind: "position" }) ?? [];
   const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
-  const [requesterName, setRequesterName] = useState(user?.name ?? "");
-  const [requesterTeam, setRequesterTeam] = useState(user?.position ?? "");
-
-  // Si los datos de usuario cargan de forma asíncrona tras el primer render
-  useEffect(() => {
-    if (user?.name && !requesterName) {
-      setRequesterName(user.name);
-    }
-    if (user?.position && !requesterTeam) {
-      setRequesterTeam(user.position);
-    }
-  }, [user]);
+  // Nada escrito todavía: se enseña lo que el taller sabe del usuario en cuanto
+  // llega, que el perfil puede cargar después del primer pintado. En cuanto se
+  // teclea algo, manda lo tecleado.
+  const [requesterName, setRequesterName] = useState<string | null>(null);
+  const [requesterTeam, setRequesterTeam] = useState<string | null>(null);
+  const requesterNameValue = requesterName ?? user?.name ?? "";
+  const requesterTeamValue = requesterTeam ?? user?.position ?? "";
   const [equipmentChoice, setEquipmentChoice] = useState("");
   const [equipmentManual, setEquipmentManual] = useState("");
   const [priority, setPriority] = useState<Priority>("normal");
@@ -229,7 +224,7 @@ export function NewRequestDialog({
 
   const handleSubmit = async () => {
     setError(null);
-    if (!requesterName.trim()) {
+    if (!requesterNameValue.trim()) {
       setError("Indica quién solicita el repuesto.");
       return;
     }
@@ -281,9 +276,9 @@ export function NewRequestDialog({
         }));
 
       const reference = await create({
-        requesterName: requesterName.trim(),
-        ...(requesterTeam.trim()
-          ? { requesterTeam: requesterTeam.trim() }
+        requesterName: requesterNameValue.trim(),
+        ...(requesterTeamValue.trim()
+          ? { requesterTeam: requesterTeamValue.trim() }
           : {}),
         ...(equipmentText ? { equipment: equipmentText } : {}),
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
@@ -296,10 +291,10 @@ export function NewRequestDialog({
       toast.success(`Petición ${reference} creada`);
 
       // Registro transparente en catálogo maestro de puestos
-      if (requesterTeam.trim()) {
+      if (requesterTeamValue.trim()) {
         void ensureCatalogItem({
           kind: "position",
-          name: requesterTeam.trim(),
+          name: requesterTeamValue.trim(),
         }).catch(() => {});
       }
 
@@ -328,7 +323,7 @@ export function NewRequestDialog({
             <Label htmlFor="requester">Solicitante *</Label>
             <Input
               id="requester"
-              value={requesterName}
+              value={requesterNameValue}
               onChange={(event) => setRequesterName(event.target.value)}
               placeholder="Nombre y apellido"
               disabled={busy}
@@ -338,7 +333,7 @@ export function NewRequestDialog({
             <Label htmlFor="team">Puesto</Label>
             <AutocompleteInput
               id="team"
-              value={requesterTeam}
+              value={requesterTeamValue}
               onChange={setRequesterTeam}
               items={catalogPositions}
               kind="position"
