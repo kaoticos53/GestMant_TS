@@ -37,7 +37,6 @@ export function EquipmentModelDialog({
 
   const catalogBrands = useQuery(api.catalogs.list, { kind: "brand" }) ?? [];
   const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
-  const catalogCategories = useQuery(api.catalogs.list, { kind: "equipmentCategory" }) ?? [];
 
   const [modelCode, setModelCode] = useState("");
   const [name, setName] = useState("");
@@ -203,13 +202,11 @@ export function EquipmentModelDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="model-category">Categoría de equipo</Label>
-              <AutocompleteInput
+              <Input
                 id="model-category"
                 value={category}
-                onChange={setCategory}
-                items={catalogCategories}
-                kind="equipmentCategory"
-                placeholder="ej. Elevación, Mecanizado..."
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="ej. Elevación, Mecanizado, Audiovisual..."
                 disabled={busy}
               />
             </div>
