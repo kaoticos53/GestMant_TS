@@ -213,13 +213,19 @@ describe("datos de ejemplo (cadena de televisión)", () => {
       }
     }
 
-    // Los documentos adjuntos nacen firmados por quien coordina el taller. En
-    // esta muestra solo hay un miembro, así que firma él; con más
-    // coordinadores el rastro reparte las firmas entre todos.
+    // Los documentos adjuntos nacen firmados por quien coordina el taller: se
+    // reparten entre los coordinadores —quien carga la muestra y el responsable
+    // que la muestra trae—, nunca un técnico.
+    const team = await authed.run((ctx) => ctx.db.query("users").collect());
+    const coordinatorNames = new Set(
+      team
+        .filter((user) => user.role === "admin" || user.role === "manager")
+        .map((user) => user.name?.trim() ?? ""),
+    );
     const attached = incidents.flatMap((item) => item.documents ?? []);
     expect(attached.length).toBeGreaterThan(0);
     for (const document of attached) {
-      expect(document.author).toBe("Usuario de prueba");
+      expect(coordinatorNames.has(document.author)).toBe(true);
       expect(document.name).toBeTruthy();
     }
 
@@ -246,11 +252,16 @@ describe("datos de ejemplo (cadena de televisión)", () => {
     expect(notifications.length).toBeGreaterThanOrEqual(5);
     expect(notifications.some((item) => !item.read)).toBe(true);
 
-    // Sin otros miembros no hay conversación de ejemplo
+    // La charla de taller se abre con el equipo que trae la muestra: en cuanto
+    // hay alguien más con quien hablar, queda la conversación.
     const messages = await authed.run((ctx) =>
       ctx.db.query("messages").collect(),
     );
-    expect(messages).toHaveLength(0);
+    expect(messages.length).toBeGreaterThanOrEqual(5);
+    for (const message of messages) {
+      expect(message.senderName).not.toBe(message.recipientName);
+      expect(message.text).not.toBe("");
+    }
 
     // Idempotente: la segunda carga no vuelve a insertar nada
     expect(await authed.mutation(api.seed.seedDemoData, {})).toBe(false);
@@ -596,17 +607,94 @@ describe("ampliar la muestra", () => {
     }
 
     expect(withDocuments).toBeGreaterThan(0);
-    // En este taller solo coordina quien carga la muestra, así que firma él
-    // todo el rastro —nunca un técnico—: nombre visible y usuario. Cuando hay
-    // más de un coordinador las firmas se reparten, y eso lo comprueba la
-    // prueba de los miembros reales.
-    expect([...firmas]).toEqual(["Usuario de prueba"]);
-    expect(firmantes.size).toBe(1);
+    // El rastro lo firma quien coordina el taller —la muestra trae su
+    // responsable, así que hay más de uno—, nunca un técnico: ni el nombre
+    // visible ni el usuario. Se comprueba contra los roles de la base y no
+    // contra una pareja de nombres escrita a mano.
+    const users = await authed.run((ctx) => ctx.db.query("users").collect());
+    const coordinators = users.filter(
+      (user) => user.role === "admin" || user.role === "manager",
+    );
+    const coordinatorIds = new Set<string>(
+      coordinators.map((user) => user._id),
+    );
+    const coordinatorNames = new Set(
+      coordinators.map((user) => user.name?.trim() ?? ""),
+    );
+    expect(firmas.size).toBeGreaterThan(0);
+    expect(firmantes.size).toBeGreaterThan(0);
+    for (const id of firmantes) expect(coordinatorIds.has(id)).toBe(true);
+    for (const firma of firmas) expect(coordinatorNames.has(firma)).toBe(true);
+    // Y firma también quien carga la muestra, que es el administrador.
+    expect(firmas.has("Usuario de prueba")).toBe(true);
     // El expediente de la muestra no es solo altas: también hay correcciones y
     // algún adjunto retirado que únicamente vive en su traza.
     expect(attached).toBeGreaterThan(0);
     expect(edited).toBeGreaterThan(0);
     expect(removed).toBeGreaterThan(0);
+  });
+
+  test("la muestra da de alta al equipo del taller y lo deja en Usuarios", async () => {
+    const t = backend();
+    const adminId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Ada Admin",
+        email: "admin@taller.es",
+        role: "admin",
+        active: true,
+      }),
+    );
+    const admin = t.withIdentity({ subject: `${adminId}|session1` });
+    expect(await admin.mutation(api.seed.seedDemoData, {})).toBe(true);
+
+    // La vista de Usuarios se llena con el equipo: personas con su rol, su
+    // puesto y su ubicación, no una lista vacía.
+    const members = await admin.query(api.members.list, {});
+    const team = members.filter((member) => member._id !== adminId);
+    expect(team.length).toBeGreaterThanOrEqual(8);
+    for (const member of team) {
+      expect(member.active).toBe(true);
+      expect(member.role).toBeTruthy();
+      // Nadie entra como administrador por un dato de ejemplo.
+      expect(member.role).not.toBe("admin");
+      expect(member.position).toBeTruthy();
+      expect(member.location).toBeTruthy();
+      // Dominio de ejemplo: no puede ser la dirección real de nadie, así que no
+      // bloquea que esa persona se dé de alta más adelante.
+      expect(member.email).toMatch(/@ejemplo\.es$/);
+    }
+    // Uno coordina y el resto está en el día a día.
+    expect(team.filter((member) => member.role === "manager")).toHaveLength(1);
+    expect(
+      team.filter((member) => member.role === "technician").length,
+    ).toBeGreaterThanOrEqual(5);
+
+    // Sus puestos y ubicaciones están en los catálogos: al editar su ficha, el
+    // autocompletado los reconoce en vez de tratarlos como nuevos.
+    const catalogs = await admin.query(api.catalogs.listAll, {});
+    const positions = new Set(
+      catalogs
+        .filter((item) => item.kind === "position")
+        .map((item) => item.normalized),
+    );
+    const locations = new Set(
+      catalogs
+        .filter((item) => item.kind === "equipmentLocation")
+        .map((item) => item.normalized),
+    );
+    for (const member of team) {
+      expect(positions.has(normalizeCatalogString(member.position!))).toBe(true);
+      expect(locations.has(normalizeCatalogString(member.location!))).toBe(true);
+    }
+
+    // Otra tanda no vuelve a darlos de alta ni pisa lo que haya escrito el
+    // taller sobre ellos.
+    const more = await admin.mutation(api.seed.seedMoreDemoData, {
+      incidents: 1,
+      requests: 1,
+    });
+    expect(more.team).toBe(0);
+    expect(await admin.query(api.members.list, {})).toHaveLength(members.length);
   });
 });
 
@@ -702,7 +790,12 @@ describe("datos de ejemplo con miembros reales", () => {
     const incidents = await admin.query(api.incidents.list, {
       includeArchived: true,
     });
-    const members = new Set(["Elena Vidal", "Iván Torres"]);
+    // El reparto es entre las personas que tiene el taller: las de la prueba y
+    // las que trae la propia muestra, que también son miembros de verdad.
+    const users = await t.run((ctx) => ctx.db.query("users").collect());
+    const members = new Set(
+      users.map((user) => user.name?.trim() ?? ""),
+    );
     // La muestra curada (INC-0001 a INC-0003) firma con sus propios nombres;
     // lo generado se reparte entre los miembros que ya tiene el taller.
     const assigned = incidents.filter(
@@ -724,7 +817,7 @@ describe("datos de ejemplo con miembros reales", () => {
   });
 
   test("el rastro de los documentos lo firma quien coordina el taller", async () => {
-    const { admin, adminId, managerId } = await taller();
+    const { admin, t, adminId, managerId } = await taller();
     expect(await admin.mutation(api.seed.seedDemoData, {})).toBe(true);
 
     const incidents = await admin.query(api.incidents.list, {
@@ -749,15 +842,23 @@ describe("datos de ejemplo con miembros reales", () => {
     // La auditoría enseña ese mismo reparto, que es entre quién se elige al
     // filtrar por persona.
     const audit = await admin.query(api.incidents.documentAudit, {});
-    expect(audit.authors.map((item) => item.name).sort()).toEqual([
-      "Ada Admin",
-      "Elena Vidal",
-    ]);
-    expect(audit.authors.map((item) => item.id).sort()).toEqual(
-      [adminId, managerId].sort(),
+    // Solo firma quien coordina —administrador o responsable—, contando a los
+    // coordinadores que trae la muestra además de los del taller de la prueba.
+    const users = await t.run((ctx) => ctx.db.query("users").collect());
+    const coordinatorIds = new Set<string>(
+      users
+        .filter((user) => user.role === "admin" || user.role === "manager")
+        .map((user) => user._id),
+    );
+    expect(audit.authors.length).toBeGreaterThan(0);
+    for (const author of audit.authors) {
+      expect(coordinatorIds.has(author.id)).toBe(true);
+    }
+    expect(audit.authors.map((item) => item.id)).toEqual(
+      expect.arrayContaining([adminId, managerId]),
     );
     expect(audit.summary.total).toBe(audit.unfilteredTotal);
-    expect(audit.summary.people).toBe(2);
+    expect(audit.summary.people).toBe(audit.authors.length);
     expect(audit.summary.incidents).toBeGreaterThan(10);
   });
 });

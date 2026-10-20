@@ -1305,6 +1305,89 @@ const REPORTERS: { name: string; role: string }[] = [
   { name: "Elena Vidal", role: "Coordinación" },
 ];
 
+/**
+ * El equipo del taller que trae la muestra: quién coordina y quién está en el
+ * día a día.
+ *
+ * Son fichas del directorio, no cuentas: entran como miembros para que el
+ * reparto de trabajo, los filtros por persona y la lista de Usuarios tengan a
+ * quién apuntar desde el primer día, pero **no traen credenciales** —nadie
+ * puede entrar con ellas—. Quien se dé de alta de verdad lo hace con su propio
+ * correo, y el administrador le crea su cuenta desde Usuarios.
+ *
+ * El correo va en un dominio de ejemplo a propósito: así no coincide con la
+ * dirección real de nadie y no bloquea el alta de esa persona más adelante —un
+ * correo solo se puede ocupar una vez—.
+ */
+const SAMPLE_TEAM: {
+  name: string;
+  email: string;
+  /** Quien coordina el taller; el resto, técnicos. Nunca un administrador. */
+  role: "manager" | "technician";
+  position: string;
+  location: string;
+  phone?: string;
+}[] = [
+  {
+    name: "Elena Vidal",
+    email: "elena.vidal@ejemplo.es",
+    role: "manager",
+    position: "Coordinación",
+    location: "Sala de realización",
+    phone: "+34 600 118 240",
+  },
+  {
+    name: "Nuria Cano",
+    email: "nuria.cano@ejemplo.es",
+    role: "technician",
+    position: "Servicios técnicos",
+    location: "Rack central",
+  },
+  {
+    name: "Iván Torres",
+    email: "ivan.torres@ejemplo.es",
+    role: "technician",
+    position: "Iluminación",
+    location: "Plató 2",
+  },
+  {
+    name: "Sergio Bravo",
+    email: "sergio.bravo@ejemplo.es",
+    role: "technician",
+    position: "Mantenimiento",
+    location: "Almacén",
+  },
+  {
+    name: "Diego Herrera",
+    email: "diego.herrera@ejemplo.es",
+    role: "technician",
+    position: "Sonido",
+    location: "Sala de audio",
+  },
+  {
+    name: "Sandra Ruiz",
+    email: "sandra.ruiz@ejemplo.es",
+    role: "technician",
+    position: "Cámara",
+    location: "Plató 1",
+  },
+  {
+    name: "Marcos Vega",
+    email: "marcos.vega@ejemplo.es",
+    role: "technician",
+    position: "Realización",
+    location: "Sala de control",
+  },
+  {
+    name: "Raúl Nieto",
+    email: "raul.nieto@ejemplo.es",
+    role: "technician",
+    position: "Postproducción",
+    location: "Postproducción 1",
+    phone: "+34 600 118 265",
+  },
+];
+
 /** Técnicos de ejemplo; se usan si el taller aún no tiene usuarios propios. */
 const MOCK_TECHS = [
   "Iván Torres",
@@ -2307,6 +2390,41 @@ async function requireSeeder(ctx: MutationCtx) {
 }
 
 /**
+ * Da de alta al equipo de ejemplo que falte, sin duplicar a quien ya esté (por
+ * su correo). Son fichas de directorio sin credenciales: sirven para repartir
+ * trabajo y para los filtros por persona, no para entrar en la aplicación.
+ *
+ * Nunca crea administradores: el administrador del taller es quien carga la
+ * muestra, y nadie más puede llegar a serlo por un dato de ejemplo.
+ */
+async function ensureSampleTeam(ctx: MutationCtx): Promise<number> {
+  const users = await ctx.db.query("users").collect();
+  const takenEmails = new Set(
+    users
+      .map((user) => user.email?.trim().toLowerCase())
+      .filter((email): email is string => Boolean(email)),
+  );
+
+  let inserted = 0;
+  for (const member of SAMPLE_TEAM) {
+    const email = member.email.toLowerCase();
+    if (takenEmails.has(email)) continue;
+    await ctx.db.insert("users", {
+      name: member.name,
+      email,
+      role: member.role,
+      position: member.position,
+      location: member.location,
+      ...(member.phone ? { phone: member.phone } : {}),
+      active: true,
+    });
+    takenEmails.add(email);
+    inserted += 1;
+  }
+  return inserted;
+}
+
+/**
  * Inserta lo que falte del catálogo de ejemplo (equipos y repuestos) sin
  * duplicar códigos: sirve tanto para la primera carga como para completar una
  * instalación que ya tenía una muestra más corta.
@@ -2484,7 +2602,14 @@ async function ensureMasterData(
     (await ensureCatalogValues(
       ctx,
       "equipmentLocation",
-      [...equipmentDocs.map((item) => item.location), ...ALL_EQUIPMENT.map((item) => item.location)],
+      [
+        ...equipmentDocs.map((item) => item.location),
+        ...ALL_EQUIPMENT.map((item) => item.location),
+        // El puesto de cada persona es una ubicación más del taller: sin ella en
+        // el catálogo, al editar su ficha el autocompletado la trataría como
+        // nueva.
+        ...SAMPLE_TEAM.map((member) => member.location),
+      ],
       now,
     )) +
     (await ensureCatalogValues(
@@ -2510,6 +2635,7 @@ async function ensureMasterData(
       [
         ...REPORTERS.map((item) => item.role),
         ...REQUESTERS.map((item) => item.team),
+        ...SAMPLE_TEAM.map((member) => member.position),
       ],
       now,
     )) +
@@ -3537,6 +3663,9 @@ export const seedDemoData = mutation({
 
     const now = Date.now();
     await ensureCatalog(ctx, now);
+    // El equipo entra antes del reparto: las asignaciones, las firmas de los
+    // documentos y la charla del taller salen ya con sus nombres.
+    await ensureSampleTeam(ctx);
 
     const equipmentDocs = await ctx.db.query("equipment").collect();
     const equipmentIds: Record<string, Id<"equipment">> = {};
@@ -3596,6 +3725,9 @@ export const seedMoreDemoData = mutation({
       Math.max(0, Math.min(200, Math.round(value ?? fallback)));
 
     const catalog = await ensureCatalog(ctx, now);
+    // Una instalación que ya tenía la muestra se queda también con el equipo:
+    // es lo que faltaba para poder repartir trabajo entre personas reales.
+    const team = await ensureSampleTeam(ctx);
     const { equipment, parts } = await catalogRefs(ctx);
     const technicians = await technicianNames(ctx, user);
     const workload = await insertWorkload(ctx, {
@@ -3614,6 +3746,6 @@ export const seedMoreDemoData = mutation({
       ALL_EQUIPMENT.map((item) => item.code),
     );
 
-    return { ...catalog, ...workload, preventive };
+    return { ...catalog, ...workload, preventive, team };
   },
 });

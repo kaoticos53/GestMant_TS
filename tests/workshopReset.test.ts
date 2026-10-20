@@ -90,13 +90,17 @@ describe("vaciar el taller", () => {
       enabled: true,
       afterMonths: 9,
     });
+    const before = await authed.run((ctx) => ctx.db.query("users").collect());
 
     await authed.action(api.workshopReset.resetWorkshop, {});
 
-    // La persona que vacía el taller sigue con su sesión y su rol.
+    // Las cuentas son lo que no se toca: ni quien vacía el taller —que sigue
+    // con su sesión y su rol— ni el equipo que trajo la muestra.
     const users = await authed.run((ctx) => ctx.db.query("users").collect());
-    expect(users).toHaveLength(1);
-    expect(users[0]?.role).toBe("admin");
+    expect(users.map((user) => user._id).sort()).toEqual(
+      before.map((user) => user._id).sort(),
+    );
+    expect(users.filter((user) => user.role === "admin")).toHaveLength(1);
 
     // Y el archivado automático conserva lo que se ajustó.
     const archive = await authed.query(api.archive.settings, {});

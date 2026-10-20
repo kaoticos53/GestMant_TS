@@ -434,11 +434,13 @@ export default function Dashboard() {
         result.requests +
         result.equipment +
         result.parts +
+        result.team +
         manuals.inserted;
       toast.success(
         added === 0
           ? "No había nada nuevo que añadir"
           : `${result.incidents} incidencias y ${result.requests} peticiones nuevas · ${result.maintenance} fichas de mantenimiento` +
+              (result.team > 0 ? ` · ${result.team} personas en el equipo` : "") +
               (manuals.inserted > 0 ? ` · ${manuals.inserted} manuales` : ""),
       );
     } catch (error) {
