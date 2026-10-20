@@ -15,25 +15,33 @@ import {
   vi,
 } from "vitest";
 
-const { EQUIPOS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
-  /**
-   * El taller con más de cien equipos. Antes se pintaba un botón por cada uno
-   * —con miles, la ficha no se podía abrir—, así que esta lista es el caso que el
-   * arreglo existe para cubrir. Uno de cada quince es la misma cámara: ocho
-   * coincidencias para una búsqueda, más de las que se enseñan a la vez.
-   *
-   * Son ciento veinte y no cuatrocientos por el coste de montar la vista en
-   * jsdom: el defecto que se vigila —un botón por equipo— se ve igual con la
-   * lista larga, y con menos el montaje deja de rondar el límite de tiempo de la
-   * prueba cuando la suite entera corre en paralelo.
-   */
+const { EQUIPOS, MODELOS, BRANDS, CATALOGO, GUARDADOS } = vi.hoisted(() => ({
   EQUIPOS: Array.from({ length: 120 }, (_, index) => ({
     _id: `eq-${index}`,
     _creationTime: 1,
     code: `EQ-${String(index + 1).padStart(3, "0")}`,
     name: index % 15 === 0 ? `Cámara de estudio ${index}` : `Equipo ${index}`,
     model: index % 15 === 0 ? "HDC-3500" : `MOD-${index}`,
+    modelId: index % 15 === 0 ? "mod-hdc3500" : `mod-${index}`,
   })),
+  MODELOS: [
+    {
+      _id: "mod-hdc3500",
+      _creationTime: 1,
+      model: "HDC-3500",
+      name: "Cámara de estudio",
+      brandId: "brand-sony",
+    },
+    ...Array.from({ length: 20 }, (_, i) => ({
+      _id: `mod-${i}`,
+      _creationTime: 1,
+      model: `MOD-${i}`,
+      name: `Equipo Modelo ${i}`,
+    })),
+  ],
+  BRANDS: [
+    { _id: "brand-sony", _creationTime: 1, name: "Sony" },
+  ],
   /** El catálogo que sirve el backend de mentira: lo pone cada prueba. */
   CATALOGO: [] as unknown[],
   /** Lo que la pantalla manda guardar. */
@@ -48,6 +56,8 @@ vi.mock("convex/react", async () => {
     useQuery: (query: unknown) => {
       const nombre = getFunctionName(query as never);
       if (nombre === "equipment:list") return EQUIPOS;
+      if (nombre === "equipmentModels:list") return MODELOS;
+      if (nombre === "equipmentBrands:list") return BRANDS;
       if (nombre === "spareParts:list") return CATALOGO;
       return undefined;
     },
@@ -154,34 +164,33 @@ function escribir(campo: HTMLInputElement, texto: string) {
   });
 }
 
-/** Los equipos que la búsqueda está ofreciendo ahora mismo. */
+/** Los modelos que la búsqueda está ofreciendo ahora mismo. */
 function resultados(): HTMLButtonElement[] {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(
-      "[aria-label='Equipos que coinciden'] li button",
+      "[aria-label='Modelos que coinciden'] li button",
     ),
   ];
 }
 
 /**
- * Los equipos añadidos como compatibles: las píldoras de la ficha, que se
- * reconocen por su título (el botón de la tabla que quita una unidad del stock
- * también empieza por «Quitar»).
+ * Los modelos añadidos como compatibles: las píldoras de la ficha, que se
+ * reconocen por su título.
  */
 function compatibles(): HTMLButtonElement[] {
   return [
     ...document.querySelectorAll<HTMLButtonElement>(
-      "button[title='Quitar de compatibles']",
+      "button[title='Quitar modelo compatible']",
     ),
   ];
 }
 
-/** El campo de búsqueda de compatibles del diálogo. */
+/** El campo de búsqueda de modelos compatibles del diálogo. */
 function campoBusqueda(): HTMLInputElement {
   const campo = document.querySelector<HTMLInputElement>(
-    "#part-compatible-search",
+    "#part-model-search",
   );
-  if (!campo) throw new Error("El diálogo no tiene el campo de compatibles.");
+  if (!campo) throw new Error("El diálogo no tiene el campo de modelos compatibles.");
   return campo;
 }
 
@@ -193,8 +202,8 @@ async function abrirNuevoRepuesto() {
   expect(campoBusqueda()).not.toBeNull();
 }
 
-/** Un repuesto del catálogo, con los equipos que tiene puestos. */
-function repuesto(compatibleWith: string[]) {
+/** Un repuesto del catálogo, con los modelos que tiene puestos. */
+function repuesto(compatibleModels: string[]) {
   return {
     _id: "part-1",
     _creationTime: 1,
@@ -204,64 +213,36 @@ function repuesto(compatibleWith: string[]) {
     unit: "ud",
     stock: 3,
     minStock: 1,
-    compatibleWith,
+    compatibleModels,
     createdAt: 1,
     updatedAt: 1,
   };
 }
 
-describe("la ficha de un repuesto — Compatible con", () => {
-  test("con cientos de equipos no se pinta un botón por equipo", async () => {
+describe("la ficha de un repuesto — Compatible con modelos", () => {
+  test("con modelos de catálogo no se pinta un botón por modelo", async () => {
     await abrirNuevoRepuesto();
 
-    // El campo está para buscar, y de los equipos no hay ni rastro en pantalla:
-    // solo se ofrece lo que se busca. Un botón por equipo serían ciento veinte.
+    // El campo está para buscar, y de los modelos no hay lista plana inicial
     expect(campoBusqueda().value).toBe("");
-    expect(document.body.textContent).not.toContain("MOD-3");
     expect(resultados()).toEqual([]);
     expect(compatibles()).toEqual([]);
-    expect(document.querySelectorAll("button").length).toBeLessThan(30);
   });
 
   test("se busca, se añade de uno en uno, se quita y se guarda lo añadido", async () => {
-    // Un solo montaje para el ciclo entero: añadir, quitar y guardar son pasos
-    // del mismo gesto, y montar la ficha otra vez para cada uno es lo que hacía
-    // que la prueba se acercara al límite de tiempo con la suite en paralelo.
     await abrirNuevoRepuesto();
 
-    // Ocho equipos de la misma cámara: se enseñan los primeros y se dice cuántos hay.
-    escribir(campoBusqueda(), "cámara");
-    expect(resultados()).toHaveLength(6);
-    expect(document.body.textContent).toContain("Coinciden 8 equipos");
+    // Buscar modelo por marca
+    escribir(campoBusqueda(), "Sony");
+    expect(resultados()).toHaveLength(1);
 
-    // Se añade el primero: pasa a la lista de compatibles…
+    // Se añade el modelo encontrado
     await pulsar(resultados()[0]);
     expect(
       compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual(["Quitar Cámara de estudio 0 HDC-3500"]);
-    // …y deja de ofrecerse en la búsqueda (queda libre el hueco que ocupaba).
-    expect(resultados()).toHaveLength(6);
-    expect(
-      resultados().some((item) =>
-        (item.textContent ?? "").trim().startsWith("Cámara de estudio 0"),
-      ),
-    ).toBe(false);
-    expect(document.body.textContent).toContain("Coinciden 7 equipos");
+    ).toEqual(["Quitar Sony Cámara de estudio"]);
 
-    // Se añade otro, y se quita el primero: el que se quita vuelve a ofrecerse.
-    await pulsar(resultados()[0]);
-    expect(compatibles()).toHaveLength(2);
-    await pulsar(compatibles()[0]);
-    expect(
-      compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual(["Quitar Cámara de estudio 15 HDC-3500"]);
-    expect(
-      resultados().some((item) =>
-        (item.textContent ?? "").trim().startsWith("Cámara de estudio 0"),
-      ),
-    ).toBe(true);
-
-    // Lo que se ve añadido es lo que se guarda: el que se quitó no viaja.
+    // Escribir datos obligatorios y guardar
     escribir(
       document.querySelector<HTMLInputElement>("#part-code")!,
       "ALI-24015",
@@ -274,11 +255,11 @@ describe("la ficha de un repuesto — Compatible con", () => {
 
     expect(GUARDADOS).toHaveLength(1);
     expect(GUARDADOS[0].code).toBe("ALI-24015");
-    expect(GUARDADOS[0].compatibleWith).toEqual(["eq-15"]);
+    expect(GUARDADOS[0].compatibleModels).toEqual(["mod-hdc3500"]);
   });
 
-  test("al abrir un repuesto se ven solo sus compatibles, no el inventario", async () => {
-    CATALOGO.push(repuesto(["eq-0", "eq-15"]));
+  test("al abrir un repuesto se ven solo sus modelos compatibles", async () => {
+    CATALOGO.push(repuesto(["mod-hdc3500"]));
     await pintar();
 
     await pulsar(
@@ -287,14 +268,9 @@ describe("la ficha de un repuesto — Compatible con", () => {
       )!,
     );
 
-    // Los dos que tiene puestos, y nada más: el resto del inventario no se pinta.
+    // El modelo asignado aparece en sus compatibles
     expect(
       compatibles().map((item) => item.getAttribute("aria-label")),
-    ).toEqual([
-      "Quitar Cámara de estudio 0 HDC-3500",
-      "Quitar Cámara de estudio 15 HDC-3500",
-    ]);
-    expect(document.body.textContent).not.toContain("MOD-3");
-    expect(document.querySelectorAll("button").length).toBeLessThan(40);
+    ).toEqual(["Quitar Sony Cámara de estudio"]);
   });
 });

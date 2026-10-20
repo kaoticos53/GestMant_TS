@@ -865,23 +865,68 @@ describe("inventario de equipos", () => {
     expect(equipment[0].model).toBe("FX-888D");
   });
 
-  test("al borrar un equipo se desvincula de los repuestos compatibles sin bloquear", async () => {
+  test("al borrar un equipo físico los repuestos compatibles con su modelo no se alteran ni se pierden", async () => {
     const { t, authed } = await authedTest();
-    const equipmentId = await seedEquipment(t);
-    const partId = await seedPart(t, { compatibleWith: [equipmentId] });
+    // 1. Crear modelo técnico independiente
+    const modelId = await authed.mutation(api.equipmentModels.create, {
+      model: "FX-888D",
+      name: "Estación de soldadura digital",
+      brand: "Hakko",
+      category: "Soldadura",
+    });
 
-    await authed.mutation(api.equipment.remove, { id: equipmentId });
+    // 2. Crear dos unidades físicas del mismo modelo
+    const eq1 = await authed.mutation(api.equipment.create, {
+      code: "EQ-001",
+      name: "Estación de soldadura 1",
+      model: "FX-888D",
+      modelId,
+    });
+    const eq2 = await authed.mutation(api.equipment.create, {
+      code: "EQ-002",
+      name: "Estación de soldadura 2",
+      model: "FX-888D",
+      modelId,
+    });
 
-    // El equipo se ha borrado físicamente
-    const deletedEq = await t.run((ctx) => ctx.db.get(equipmentId));
-    expect(deletedEq).toBeNull();
+    // 3. Crear repuesto compatible con el modelo técnico
+    const partId = await authed.mutation(api.spareParts.create, {
+      code: "PUN-001",
+      name: "Punta soldador T18-D16",
+      category: "Soldadura",
+      unit: "ud",
+      stock: 10,
+      minStock: 2,
+      compatibleModels: [modelId],
+    });
 
-    // El repuesto desvincula el equipo de compatibleWith
-    const updatedPart = await t.run((ctx) => ctx.db.get(partId));
-    expect(updatedPart?.compatibleWith).toEqual([]);
+    // 4. Borrar la primera unidad física
+    await authed.mutation(api.equipment.remove, { id: eq1 });
+    expect(await t.run((ctx) => ctx.db.get(eq1))).toBeNull();
+
+    // El repuesto conserva intacta su compatibilidad con el modelo
+    let part = await t.run((ctx) => ctx.db.get(partId));
+    expect(part?.compatibleModels).toEqual([modelId]);
+
+    // 5. Borrar la segunda unidad física (ya no queda ningún equipo físico en el inventario)
+    await authed.mutation(api.equipment.remove, { id: eq2 });
+    expect(await t.run((ctx) => ctx.db.get(eq2))).toBeNull();
+
+    // El repuesto NO queda huérfano: sigue perteneciendo al modelo técnico
+    part = await t.run((ctx) => ctx.db.get(partId));
+    expect(part?.compatibleModels).toEqual([modelId]);
+
+    // 6. Si se compra y da de alta un nuevo equipo de ese modelo, hereda el modelId y la compatibilidad
+    const eq3 = await authed.mutation(api.equipment.create, {
+      code: "EQ-003",
+      name: "Estación de soldadura 3",
+      model: "FX-888D",
+    });
+    const savedEq3 = await t.run((ctx) => ctx.db.get(eq3));
+    expect(savedEq3?.modelId).toBe(modelId);
   });
 
-  test("los repuestos pueden ligarse a modelos de equipo y se desvinculan al borrar el modelo", async () => {
+  test("los repuestos pueden ligarse a modelos de equipo y se desvinculan solo al borrar el modelo técnico", async () => {
     const { t, authed } = await authedTest();
     const modelId = await authed.mutation(api.equipmentModels.create, {
       model: "FX-888D",
@@ -891,8 +936,8 @@ describe("inventario de equipos", () => {
     });
 
     const partId = await authed.mutation(api.spareParts.create, {
-      code: "PUN-001",
-      name: "Punta soldador T18",
+      code: "PUN-002",
+      name: "Punta soldador T18-B",
       category: "Soldadura",
       unit: "ud",
       stock: 5,
@@ -903,7 +948,7 @@ describe("inventario de equipos", () => {
     const part = await t.run((ctx) => ctx.db.get(partId));
     expect(part?.compatibleModels).toEqual([modelId]);
 
-    // Al eliminar el modelo de equipo, se desvincula del repuesto
+    // Al eliminar el modelo de equipo de catálogo, se desvincula del repuesto
     await authed.mutation(api.equipmentModels.remove, { id: modelId });
     const updatedPart = await t.run((ctx) => ctx.db.get(partId));
     expect(updatedPart?.compatibleModels).toEqual([]);

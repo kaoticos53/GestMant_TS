@@ -69,6 +69,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -131,12 +132,17 @@ export function InventoryView({
   ).length;
   const filtered = parts.filter((part) => {
     if (category !== "all" && part.category !== category) return false;
-    if (
-      filterModel &&
-      !part.compatibleWith?.includes(filterModel._id) &&
-      (!filterModel.modelId || !part.compatibleModels?.includes(filterModel.modelId))
-    )
-      return false;
+    if (filterModel) {
+      const resolvedModelId =
+        filterModel.modelId ??
+        catalogModels.find(
+          (m) =>
+            m.model.trim().toLowerCase() === filterModel.model.trim().toLowerCase(),
+        )?._id;
+      if (!resolvedModelId || !part.compatibleModels?.includes(resolvedModelId)) {
+        return false;
+      }
+    }
     if (lowStockOnly && stockState(part.stock, part.minStock) === "ok")
       return false;
     if (!query) return true;
@@ -224,21 +230,16 @@ export function InventoryView({
 
   /** Descarga en CSV exactamente lo que se ve filtrado en la tabla. */
   const handleExport = () => {
-    const compatibleLabels = (part: PartDoc) => {
-      const modelNames = (part.compatibleModels ?? [])
+    const compatibleLabels = (part: PartDoc) =>
+      (part.compatibleModels ?? [])
         .map((id) => {
           const model = catalogModels.find((m) => m._id === id);
           if (!model) return null;
           const brand = catalogBrands.find((b) => b._id === model.brandId);
           return brand ? `${brand.name} ${model.name}` : model.name;
         })
-        .filter(Boolean);
-      const equipmentNames = (part.compatibleWith ?? [])
-        .map((id) => equipment.find((item) => item._id === id))
-        .filter((item): item is EquipmentDoc => Boolean(item))
-        .map(equipmentLabel);
-      return [...modelNames, ...equipmentNames].join(" | ");
-    };
+        .filter(Boolean)
+        .join(" | ");
 
     const header = [
       "Código",
@@ -494,34 +495,24 @@ export function InventoryView({
                               className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground"
                             />
                           )}
-                          {((part.compatibleModels &&
-                            part.compatibleModels.length > 0) ||
-                            (part.compatibleWith &&
-                              part.compatibleWith.length > 0)) && (
+                          {part.compatibleModels &&
+                            part.compatibleModels.length > 0 && (
                             <span className="block truncate text-xs text-muted-foreground">
-                              {[
-                                ...(part.compatibleModels ?? [])
-                                  .map((id) => {
-                                    const model = catalogModels.find(
-                                      (m) => m._id === id,
-                                    );
-                                    if (!model) return null;
-                                    const brand = catalogBrands.find(
-                                      (b) => b._id === model.brandId,
-                                    );
-                                    return brand
-                                      ? `${brand.name} ${model.name}`
-                                      : model.name;
-                                  })
-                                  .filter(Boolean),
-                                ...(part.compatibleWith ?? [])
-                                  .map(
-                                    (id) =>
-                                      equipment.find((item) => item._id === id)
-                                        ?.model,
-                                  )
-                                  .filter(Boolean),
-                              ].join(", ")}
+                              {part.compatibleModels
+                                .map((id) => {
+                                  const model = catalogModels.find(
+                                    (m) => m._id === id,
+                                  );
+                                  if (!model) return null;
+                                  const brand = catalogBrands.find(
+                                    (b) => b._id === model.brandId,
+                                  );
+                                  return brand
+                                    ? `${brand.name} ${model.name}`
+                                    : model.name;
+                                })
+                                .filter(Boolean)
+                                .join(", ")}
                             </span>
                           )}
                           {part.location && (
@@ -703,6 +694,7 @@ function PartFormDialog({
   const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
   const catalogCategories = useQuery(api.catalogs.list, { kind: "partCategory" }) ?? [];
   const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
+  const ensureModel = useMutation(api.equipmentModels.ensureModel);
 
   const isEdit = part !== null;
   const [code, setCode] = useState(part?.code ?? "");
@@ -724,12 +716,9 @@ function PartFormDialog({
   const [compatibleModelIds, setCompatibleModelIds] = useState<Id<"equipmentModels">[]>(
     part?.compatibleModels ?? [],
   );
-  const [compatibleIds, setCompatibleIds] = useState<string[]>(
-    part?.compatibleWith ?? [],
-  );
   const [modelQuery, setModelQuery] = useState("");
-  const [equipmentQuery, setEquipmentQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isCreatingModel, setIsCreatingModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const parseNumber = (value: string, fallback: number) => {
@@ -738,8 +727,11 @@ function PartFormDialog({
   };
 
   const modelDisplay = (m: EquipmentModelDoc) => {
-    const brand = catalogBrands.find((b) => b._id === m.brandId);
-    return brand ? `${brand.name} ${m.name}` : m.name;
+    const brandName =
+      (m as { brandId?: string }).brandId
+        ? catalogBrands.find((b) => b._id === (m as { brandId?: string }).brandId)?.name
+        : m.brand;
+    return brandName ? `${brandName} ${m.name}` : m.name;
   };
 
   /** Modelos ya añadidos */
@@ -748,15 +740,22 @@ function PartFormDialog({
     .filter((m): m is EquipmentModelDoc => m !== undefined);
 
   /** Coincidencias de búsqueda de modelos */
-  const buscandoModelos = modelQuery.trim() !== "";
+  const trimmedModelQuery = modelQuery.trim();
+  const buscandoModelos = trimmedModelQuery !== "";
   const modelosEncontrados = buscandoModelos
     ? catalogModels.filter(
         (m) =>
           !compatibleModelIds.includes(m._id) &&
-          matchesQuery([modelDisplay(m), m.name, m.type], modelQuery),
+          matchesQuery([modelDisplay(m), m.model, m.name, m.brand, m.category], trimmedModelQuery),
       )
     : [];
   const coincidenciasModelos = modelosEncontrados.slice(0, COMPATIBLE_RESULTS);
+
+  const hasExactMatch = catalogModels.some(
+    (m) =>
+      m.model.toLowerCase() === trimmedModelQuery.toLowerCase() ||
+      modelDisplay(m).toLowerCase() === trimmedModelQuery.toLowerCase(),
+  );
 
   const addCompatibleModel = (id: Id<"equipmentModels">) => {
     setCompatibleModelIds((curr) => (curr.includes(id) ? curr : [...curr, id]));
@@ -766,35 +765,21 @@ function PartFormDialog({
     setCompatibleModelIds((curr) => curr.filter((item) => item !== id));
   };
 
-  /** Los equipos ya añadidos, en el orden en que se añadieron. */
-  const compatibles = compatibleIds
-    .map((id) => equipment.find((item) => item._id === id))
-    .filter((item): item is EquipmentDoc => item !== undefined);
-
-  /** Lo que coincide con la búsqueda y todavía no está añadido. */
-  const buscando = equipmentQuery.trim() !== "";
-  const encontrados = buscando
-    ? equipment.filter(
-        (item) =>
-          !compatibleIds.includes(item._id) &&
-          matchesQuery(
-            [equipmentLabel(item), item.code, item.model],
-            equipmentQuery,
-          ),
-      )
-    : [];
-  const coincidencias = encontrados.slice(0, COMPATIBLE_RESULTS);
-
-  /** Añade un equipo: pasa de la búsqueda a la lista de compatibles. */
-  const addCompatible = (id: string) => {
-    setCompatibleIds((current) =>
-      current.includes(id) ? current : [...current, id],
-    );
-  };
-
-  /** Quita un equipo: vuelve a ofrecerse en la búsqueda. */
-  const removeCompatible = (id: string) => {
-    setCompatibleIds((current) => current.filter((item) => item !== id));
+  const handleCreateAndAddModel = async () => {
+    if (!trimmedModelQuery) return;
+    setIsCreatingModel(true);
+    try {
+      const modelId = await ensureModel({
+        model: trimmedModelQuery,
+      });
+      addCompatibleModel(modelId);
+      setModelQuery("");
+      toast.success(`Modelo «${trimmedModelQuery}» registrado en el catálogo y asociado`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setIsCreatingModel(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -821,8 +806,6 @@ function PartFormDialog({
 
     setBusy(true);
     try {
-      // Lo que se ve añadido es lo que se guarda.
-      const compatibleWith = compatibles.map((item) => item._id);
       // El editor entrega ya el documento en bloques; al editar, vaciarlo deja
       // la ficha sin descripción, como hasta ahora.
       const descriptionToSend = richDocToStore(description);
@@ -842,7 +825,7 @@ function PartFormDialog({
           unitPrice: price,
           purchaseUrl: purchaseUrl.trim(),
           compatibleModels: compatibleModelIds,
-          compatibleWith,
+          compatibleWith: [],
         });
         toast.success(`${code.trim().toUpperCase()} actualizado`);
       } else {
@@ -860,7 +843,7 @@ function PartFormDialog({
           unitPrice: price,
           purchaseUrl: purchaseUrl.trim(),
           compatibleModels: compatibleModelIds,
-          compatibleWith,
+          compatibleWith: [],
         });
         toast.success(`${code.trim().toUpperCase()} añadido al catálogo`);
       }
@@ -1035,154 +1018,84 @@ function PartFormDialog({
               Asocia el repuesto al modelo técnico para que sea compatible con
               todos los equipos físicos de ese modelo.
             </p>
-            {catalogModels.length === 0 ? (
-              <p className="text-xs leading-5 text-muted-foreground">
-                No hay modelos de equipo registrados en el catálogo de modelos.
-              </p>
-            ) : (
-              <div className="grid gap-2">
-                <Input
-                  id="part-model-search"
-                  value={modelQuery}
-                  onChange={(event) => setModelQuery(event.target.value)}
-                  placeholder="Buscar modelo por marca o nombre (ej. Toyota, Rexroth...)"
-                  autoComplete="off"
-                  disabled={busy}
-                />
-                {coincidenciasModelos.length > 0 && (
-                  <ul
-                    aria-label="Modelos que coinciden"
-                    className="rounded-lg border border-border/70 bg-card"
-                  >
-                    {coincidenciasModelos.map((item) => (
-                      <li key={item._id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            addCompatibleModel(item._id);
-                            setModelQuery("");
-                          }}
-                          disabled={busy}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/60"
-                        >
-                          <span className="truncate text-foreground font-medium">
-                            {modelDisplay(item)}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                            <span>{item.type}</span>
-                            <Plus className="size-3.5" />
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {compatiblesModels.length === 0 ? (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Ningún modelo asociado todavía.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {compatiblesModels.map((item) => (
+            <div className="grid gap-2">
+              <Input
+                id="part-model-search"
+                value={modelQuery}
+                onChange={(event) => setModelQuery(event.target.value)}
+                placeholder="Buscar modelo por marca o nombre (ej. Toyota, Rexroth...)"
+                autoComplete="off"
+                disabled={busy || isCreatingModel}
+              />
+              {coincidenciasModelos.length > 0 && (
+                <ul
+                  aria-label="Modelos que coinciden"
+                  className="overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm"
+                >
+                  {coincidenciasModelos.map((item) => (
+                    <li key={item._id}>
                       <button
-                        key={item._id}
                         type="button"
-                        onClick={() => removeCompatibleModel(item._id)}
-                        disabled={busy}
-                        title="Quitar modelo compatible"
-                        aria-label={`Quitar ${modelDisplay(item)}`}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-signal bg-signal/10 px-3 py-1 text-xs font-medium text-signal transition-colors hover:border-destructive/40 hover:text-destructive"
+                        onClick={() => {
+                          addCompatibleModel(item._id);
+                          setModelQuery("");
+                        }}
+                        disabled={busy || isCreatingModel}
+                        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/60"
                       >
-                        {modelDisplay(item)}
-                        <X className="size-3.5" />
+                        <span className="truncate text-foreground font-medium">
+                          {modelDisplay(item)}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                          {item.category && <span>{item.category}</span>}
+                          <Plus className="size-3.5" />
+                        </span>
                       </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {buscandoModelos && !hasExactMatch && (
+                <button
+                  type="button"
+                  onClick={handleCreateAndAddModel}
+                  disabled={busy || isCreatingModel}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-left text-xs text-primary transition-colors hover:bg-primary/10 font-medium"
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <Sparkles className="size-3.5 shrink-0 text-amber-500" />
+                    <span>
+                      Registrar nuevo modelo «<strong>{trimmedModelQuery}</strong>» y asociar
+                    </span>
+                  </span>
+                  <Plus className="size-3.5 shrink-0" />
+                </button>
+              )}
+              {compatiblesModels.length === 0 ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Ningún modelo asociado todavía.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {compatiblesModels.map((item) => (
+                    <button
+                      key={item._id}
+                      type="button"
+                      onClick={() => removeCompatibleModel(item._id)}
+                      disabled={busy}
+                      title="Quitar modelo compatible"
+                      aria-label={`Quitar ${modelDisplay(item)}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-signal bg-signal/10 px-3 py-1 text-xs font-medium text-signal transition-colors hover:border-destructive/40 hover:text-destructive"
+                    >
+                      {modelDisplay(item)}
+                      <X className="size-3.5" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor="part-compatible-search">
-              Equipos específicos del taller (opcional)
-            </Label>
-            {equipment.length === 0 ? (
-              <p className="text-xs leading-5 text-muted-foreground">
-                Todavía no hay equipos en el inventario: da de alta los equipos
-                en la pestaña «Equipos» para poder filtrar por ellos.
-              </p>
-            ) : (
-              <div className="grid gap-2">
-                <Input
-                  id="part-compatible-search"
-                  value={equipmentQuery}
-                  onChange={(event) => setEquipmentQuery(event.target.value)}
-                  placeholder="Buscar equipo por nombre, modelo o código"
-                  autoComplete="off"
-                  disabled={busy}
-                />
-                {coincidencias.length > 0 && (
-                  <ul
-                    aria-label="Equipos que coinciden"
-                    className="rounded-lg border border-border/70 bg-card"
-                  >
-                    {coincidencias.map((item) => (
-                      <li key={item._id}>
-                        <button
-                          type="button"
-                          onClick={() => addCompatible(item._id)}
-                          disabled={busy}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-muted/60"
-                        >
-                          <span className="truncate text-foreground">
-                            {equipmentLabel(item)}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
-                            <span className="font-mono">{item.code}</span>
-                            <Plus className="size-3.5" />
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {encontrados.length > coincidencias.length && (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Coinciden {encontrados.length} equipos: afina la búsqueda
-                    para llegar a los que no salen aquí.
-                  </p>
-                )}
-                {buscando && encontrados.length === 0 && (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Ningún equipo coincide con «{equipmentQuery.trim()}».
-                  </p>
-                )}
-                {compatibles.length === 0 ? (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Ningún equipo compatible todavía: búscalo arriba y añádelo.
-                    Lo que añadas es lo que verás aquí, y lo que se guarde.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {compatibles.map((item) => (
-                      <button
-                        key={item._id}
-                        type="button"
-                        onClick={() => removeCompatible(item._id)}
-                        disabled={busy}
-                        title="Quitar de compatibles"
-                        aria-label={`Quitar ${equipmentLabel(item)}`}
-                        className="inline-flex items-center gap-1.5 rounded-full border border-signal bg-signal/10 px-3 py-1 text-xs font-medium text-signal transition-colors hover:border-destructive/40 hover:text-destructive"
-                      >
-                        {equipmentLabel(item)}
-                        <X className="size-3.5" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor="part-description">Descripción</Label>
             <RichTextEditor

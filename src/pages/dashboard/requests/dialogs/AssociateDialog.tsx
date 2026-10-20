@@ -60,17 +60,22 @@ export function AssociateDialog({
   const [error, setError] = useState<string | null>(null);
   const [onlyCompatible, setOnlyCompatible] = useState(true);
 
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+
   // Si la petición trae equipo del inventario, filtra el catálogo por modelo.
   const requestEquipment = equipment.find(
     (item) => item._id === request.equipmentId,
   );
-  const compatibleParts = requestEquipment
-    ? parts.filter(
-        (part) =>
-          part.compatibleWith?.includes(requestEquipment._id) ||
-          (requestEquipment.modelId &&
-            part.compatibleModels?.includes(requestEquipment.modelId)),
-      )
+  const requestModelId = requestEquipment
+    ? (requestEquipment.modelId ??
+      catalogModels.find(
+        (m) =>
+          m.model.trim().toLowerCase() ===
+          requestEquipment.model.trim().toLowerCase(),
+      )?._id)
+    : undefined;
+  const compatibleParts = requestModelId
+    ? parts.filter((part) => part.compatibleModels?.includes(requestModelId))
     : parts;
   const showOnly =
     Boolean(requestEquipment) && onlyCompatible && compatibleParts.length > 0;

@@ -41,7 +41,7 @@ import {
   requestMatchesEquipment,
   stockState,
 } from "@/lib/workshop";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   BookOpen,
   Boxes,
@@ -133,10 +133,15 @@ export function EquipmentDetailSheet({
     }
   };
 
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+  const resolvedModelId =
+    item.modelId ??
+    catalogModels.find(
+      (m) => m.model.trim().toLowerCase() === item.model.trim().toLowerCase(),
+    )?._id;
   const compatible = parts.filter(
     (part) =>
-      part.compatibleWith?.includes(item._id) ||
-      (item.modelId && part.compatibleModels?.includes(item.modelId)),
+      Boolean(resolvedModelId && part.compatibleModels?.includes(resolvedModelId)),
   );
   const shownRequests = related.slice(0, 6);
   const review = nextReview(

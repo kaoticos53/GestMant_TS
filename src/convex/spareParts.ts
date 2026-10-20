@@ -78,11 +78,21 @@ async function compatibleDocs(
     compatibleWith?: Id<"equipment">[];
     compatibleModels?: Id<"equipmentModels">[];
   } = {};
+  const modelsSet = new Set<Id<"equipmentModels">>();
+  if (modelIds) {
+    const validModelIds = await compatibleModelIds(ctx, modelIds);
+    for (const id of validModelIds) modelsSet.add(id);
+  }
   if (equipmentIds) {
     result.compatibleWith = await compatibleIds(ctx, equipmentIds);
+    // Derivar también sus modelos técnicos correspondientes
+    for (const eqId of result.compatibleWith) {
+      const eq = await ctx.db.get(eqId);
+      if (eq?.modelId) modelsSet.add(eq.modelId);
+    }
   }
-  if (modelIds) {
-    result.compatibleModels = await compatibleModelIds(ctx, modelIds);
+  if (modelsSet.size > 0) {
+    result.compatibleModels = Array.from(modelsSet);
   }
   return result;
 }
@@ -110,6 +120,48 @@ export const list = query({
       .query("spareParts")
       .withIndex("by_name")
       .collect();
+
+    // Normalización transparente: si existen registros antiguos con compatibleWith pero sin
+    // compatibleModels, resolvemos el modelId de los equipos para que no queden desvinculados.
+    const hasLegacy = parts.some(
+      (p) =>
+        (!p.compatibleModels || p.compatibleModels.length === 0) &&
+        p.compatibleWith &&
+        p.compatibleWith.length > 0,
+    );
+    if (hasLegacy) {
+      const allEquipment = await ctx.db.query("equipment").collect();
+      const eqMap = new Map(allEquipment.map((eq) => [eq._id, eq]));
+      return parts
+        .map((part) => {
+          if (
+            (!part.compatibleModels || part.compatibleModels.length === 0) &&
+            part.compatibleWith &&
+            part.compatibleWith.length > 0
+          ) {
+            const derivedModelIds = [
+              ...new Set(
+                part.compatibleWith
+                  .map((eqId) => eqMap.get(eqId)?.modelId)
+                  .filter((id): id is Id<"equipmentModels"> => Boolean(id)),
+              ),
+            ];
+            if (derivedModelIds.length > 0) {
+              return {
+                ...part,
+                compatibleModels: derivedModelIds,
+              };
+            }
+          }
+          return part;
+        })
+        .sort(
+          (a, b) =>
+            a.name.localeCompare(b.name, "es") ||
+            a.code.localeCompare(b.code, "es"),
+        );
+    }
+
     return parts.sort(
       (a, b) =>
         a.name.localeCompare(b.name, "es") || a.code.localeCompare(b.code, "es"),
@@ -236,6 +288,15 @@ export const update = mutation({
     }
     if (args.compatibleModels !== undefined) {
       patch.compatibleModels = await compatibleModelIds(ctx, args.compatibleModels);
+    } else if (args.compatibleWith !== undefined) {
+      const derived = new Set<Id<"equipmentModels">>();
+      for (const eqId of patch.compatibleWith ?? []) {
+        const eq = await ctx.db.get(eqId);
+        if (eq?.modelId) derived.add(eq.modelId);
+      }
+      if (derived.size > 0) {
+        patch.compatibleModels = Array.from(derived);
+      }
     }
     if (args.unitPrice !== undefined) {
       if (args.unitPrice < 0) throw new ConvexError("El precio no puede ser negativo.");

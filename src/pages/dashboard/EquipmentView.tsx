@@ -69,6 +69,7 @@ export function EquipmentView({
   // y de su modelo. Se pide al abrir la ficha, no al entrar al panel.
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const parts = useQuery(api.spareParts.list) ?? [];
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const requests =
     useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
   const maintenance = useQuery(api.maintenance.list) ?? [];
@@ -126,12 +127,17 @@ export function EquipmentView({
     ].some((value) => value.toLowerCase().includes(query));
   });
 
-  const compatibleCount = (item: EquipmentDoc) =>
-    parts.filter(
+  const compatibleCount = (item: EquipmentDoc) => {
+    const resolvedModelId =
+      item.modelId ??
+      catalogModels.find(
+        (m) => m.model.trim().toLowerCase() === item.model.trim().toLowerCase(),
+      )?._id;
+    return parts.filter(
       (part) =>
-        part.compatibleWith?.includes(item._id) ||
-        (item.modelId && part.compatibleModels?.includes(item.modelId)),
+        Boolean(resolvedModelId && part.compatibleModels?.includes(resolvedModelId)),
     ).length;
+  };
 
   const reviewOf = (item: EquipmentDoc) =>
     nextReview(

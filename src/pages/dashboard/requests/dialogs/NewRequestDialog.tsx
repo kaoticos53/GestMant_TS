@@ -104,17 +104,22 @@ export function NewRequestDialog({
   const partById = new Map(parts.map((part) => [part._id, part]));
   const uploading = files.some((file) => file.uploading);
 
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+
   // Equipo elegido: permite filtrar las referencias por modelo compatible.
   const selectedEquipment = equipment.find(
     (item) => item._id === equipmentChoice,
   );
-  const compatibleParts = selectedEquipment
-    ? parts.filter(
-        (part) =>
-          part.compatibleWith?.includes(selectedEquipment._id) ||
-          (selectedEquipment.modelId &&
-            part.compatibleModels?.includes(selectedEquipment.modelId)),
-      )
+  const selectedModelId = selectedEquipment
+    ? (selectedEquipment.modelId ??
+      catalogModels.find(
+        (m) =>
+          m.model.trim().toLowerCase() ===
+          selectedEquipment.model.trim().toLowerCase(),
+      )?._id)
+    : undefined;
+  const compatibleParts = selectedModelId
+    ? parts.filter((part) => part.compatibleModels?.includes(selectedModelId))
     : parts;
   const showOnly =
     Boolean(selectedEquipment) && onlyCompatible && compatibleParts.length > 0;

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { AuditAlertSettingsCard } from "./settings/AuditAlertSettingsCard";
 import { AutomaticArchiveCard } from "./settings/AutomaticArchiveCard";
 import { CatalogsCard } from "./settings/CatalogsCard";
+import { EquipmentModelsCard } from "./settings/EquipmentModelsCard";
 import { MailAudienceCard } from "./settings/MailAudienceCard";
 import { MailServerCard } from "./settings/MailServerCard";
 import { StorageCleanupCard } from "./settings/StorageCleanupCard";
@@ -137,8 +138,9 @@ export function WorkshopSettingsView({
 
         <TabsContent
           value="catalogs"
-          className="space-y-5 focus-visible:outline-none"
+          className="space-y-6 focus-visible:outline-none"
         >
+          <EquipmentModelsCard />
           <CatalogsCard />
         </TabsContent>
 

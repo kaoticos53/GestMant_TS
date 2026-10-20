@@ -228,7 +228,7 @@ export const create = mutation({
       throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
     }
 
-    // Resolver modelId si no vino explícito
+    // Resolver modelId si no vino explícito, asegurando su existencia en equipmentModels
     let modelId = args.modelId;
     if (!modelId) {
       const found = await ctx.db
@@ -237,6 +237,14 @@ export const create = mutation({
         .first();
       if (found) {
         modelId = found._id;
+      } else {
+        modelId = await ctx.db.insert("equipmentModels", {
+          model: args.model.trim(),
+          name: args.name.trim(),
+          ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
       }
     }
 
@@ -306,6 +314,14 @@ export const update = mutation({
         .first();
       if (found) {
         modelId = found._id;
+      } else {
+        modelId = await ctx.db.insert("equipmentModels", {
+          model: args.model.trim(),
+          name: args.name.trim(),
+          ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
       }
     }
 
@@ -332,9 +348,9 @@ export const update = mutation({
 });
 
 /**
- * Borrado protegido: no se elimina un equipo que sea compatible de
- * referencias del catálogo (para no romper los filtros); las peticiones que
- * lo mencionen conservan su texto y se desvinculan.
+ * Borrado de equipo físico: la compatibilidad de los repuestos pertenece al
+ * modelo técnico (equipmentModels) y no se altera al retirar ejemplares físicos
+ * del inventario. Las peticiones y manuales que lo mencionen se desvinculan.
  */
 export const remove = mutation({
   args: { id: v.id("equipment") },
@@ -342,19 +358,6 @@ export const remove = mutation({
     await requireManager(ctx);
     const item = await ctx.db.get(args.id);
     if (!item) throw new ConvexError("El equipo ya no existe.");
-
-    // Los repuestos compatibles no impiden borrar el equipo: los repuestos son
-    // compatibles con el modelo, no con un ejemplar físico individual. Se retira
-    // la referencia a este ejemplar en los repuestos que lo tuvieran en compatibleWith.
-    const parts = await ctx.db.query("spareParts").collect();
-    for (const part of parts) {
-      if (part.compatibleWith?.includes(args.id)) {
-        await ctx.db.patch(part._id, {
-          compatibleWith: part.compatibleWith.filter((id) => id !== args.id),
-          updatedAt: Date.now(),
-        });
-      }
-    }
 
     const requests = await ctx.db.query("partRequests").collect();
     for (const request of requests) {
