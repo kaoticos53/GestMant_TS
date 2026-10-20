@@ -1937,10 +1937,10 @@ function HistorySection({
       <Card className="overflow-hidden border-border/80 shadow-xs">
         <div className="max-h-[70vh] overflow-auto select-none">
           <Table className="border-collapse text-xs">
-            <TableHeader className="sticky top-0 z-10 bg-primary/95 text-primary-foreground backdrop-blur-xs">
+            <TableHeader className="sticky top-0 z-10 bg-primary/95 text-white backdrop-blur-xs">
               <TableRow className="border-b border-primary/20 hover:bg-transparent">
                 {/* Checkbox de selección global */}
-                <TableHead className="w-[40px] px-2 text-center text-primary-foreground">
+                <TableHead className="w-[40px] px-2 text-center text-white">
                   <button
                     type="button"
                     onClick={toggleTodas}
@@ -1949,12 +1949,12 @@ function HistorySection({
                         ? "Deseleccionar todas las celdas"
                         : "Seleccionar todas las celdas"
                     }
-                    className="flex size-full items-center justify-center text-primary-foreground hover:opacity-80"
+                    className="flex size-full items-center justify-center text-white hover:opacity-80"
                   >
                     {todasLasFilasSeleccionadas ? (
-                      <CheckSquare className="size-4" />
+                      <CheckSquare className="size-4 text-white" />
                     ) : (
-                      <Square className="size-4 opacity-70" />
+                      <Square className="size-4 text-white opacity-70" />
                     )}
                   </button>
                 </TableHead>
@@ -1964,14 +1964,16 @@ function HistorySection({
                   label={PURCHASE_HISTORY_COLUMNS.orderReference.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="w-[95px] font-bold text-primary-foreground"
+                  className="w-[95px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="solicitudeCode"
                   label={PURCHASE_HISTORY_COLUMNS.solicitudeCode.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="w-[115px] font-bold text-primary-foreground"
+                  className="w-[115px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="position"
@@ -1979,14 +1981,16 @@ function HistorySection({
                   sort={sort}
                   onSortChange={setSort}
                   align="right"
-                  className="w-[75px] font-bold text-primary-foreground"
+                  className="w-[75px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="description"
                   label={PURCHASE_HISTORY_COLUMNS.description.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="min-w-[220px] font-bold text-primary-foreground"
+                  className="min-w-[220px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="quantity"
@@ -1994,7 +1998,8 @@ function HistorySection({
                   sort={sort}
                   onSortChange={setSort}
                   align="right"
-                  className="w-[85px] font-bold text-primary-foreground"
+                  className="w-[85px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="receivedQuantity"
@@ -2002,21 +2007,24 @@ function HistorySection({
                   sort={sort}
                   onSortChange={setSort}
                   align="right"
-                  className="w-[85px] font-bold text-primary-foreground"
+                  className="w-[85px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="supplier"
                   label={PURCHASE_HISTORY_COLUMNS.supplier.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="w-[130px] font-bold text-primary-foreground"
+                  className="w-[130px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="observations"
                   label={PURCHASE_HISTORY_COLUMNS.observations.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="min-w-[150px] font-bold text-primary-foreground"
+                  className="min-w-[150px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="pendingQuantity"
@@ -2024,21 +2032,24 @@ function HistorySection({
                   sort={sort}
                   onSortChange={setSort}
                   align="right"
-                  className="w-[85px] font-bold text-primary-foreground"
+                  className="w-[85px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="orderedDate"
                   label={PURCHASE_HISTORY_COLUMNS.orderedDate.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="w-[100px] font-bold text-primary-foreground"
+                  className="w-[100px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
                 <SortableTableHead
                   column="receivedDate"
                   label={PURCHASE_HISTORY_COLUMNS.receivedDate.label}
                   sort={sort}
                   onSortChange={setSort}
-                  className="w-[100px] font-bold text-primary-foreground"
+                  className="w-[100px] text-white"
+                  buttonClassName="text-white hover:text-white font-bold"
                 />
               </TableRow>
             </TableHeader>

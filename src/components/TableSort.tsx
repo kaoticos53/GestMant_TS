@@ -151,6 +151,7 @@ export function SortableTableHead<Column extends string>({
   sort,
   onSortChange,
   className,
+  buttonClassName,
   align = "left",
 }: {
   /** Identificador de la columna, el mismo que lee `sortRows`. */
@@ -159,6 +160,7 @@ export function SortableTableHead<Column extends string>({
   sort: TableSort<Column> | null;
   onSortChange: (sort: TableSort<Column> | null) => void;
   className?: string;
+  buttonClassName?: string;
   /** Las columnas de números van a la derecha, como sus celdas. */
   align?: "left" | "right";
 }) {
@@ -190,6 +192,7 @@ export function SortableTableHead<Column extends string>({
           "flex w-full items-center gap-1.5 rounded-md py-1 text-left font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           align === "right" ? "justify-end" : "justify-start",
           direction === null ? "text-muted-foreground" : "text-foreground",
+          buttonClassName,
         )}
       >
         <span className="truncate">{label}</span>

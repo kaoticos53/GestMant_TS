@@ -39,9 +39,12 @@ import {
 } from "./richDoc";
 import { describeBlockCounts } from "./richDocDiff";
 import { describeDiff, type DiffPart } from "./textDiff";
+import { lineDelivered } from "./requestFlow";
 import {
   INCIDENT_STATUS_META,
+  PRIORITY_META,
   SEVERITY_META,
+  STATUS_META,
   documentTrailLabel,
   formatDate,
   formatDateTime,
@@ -51,6 +54,8 @@ import {
   type DocumentTrailAction,
   type IncidentSeverity,
   type IncidentStatus,
+  type Priority,
+  type RequestStatus,
 } from "./workshop";
 
 /** Lo que el informe necesita de una incidencia (no todo el documento). */
@@ -114,10 +119,30 @@ export interface ReportTrailEntry {
   at: number;
 }
 
+export interface ReportRequestLine {
+  code: string;
+  name: string;
+  quantity: number;
+  deliveredQuantity?: number;
+}
+
+export interface ReportRequest {
+  reference: string;
+  status: RequestStatus;
+  priority?: Priority;
+  requesterName?: string;
+  createdAt: number;
+  lines?: readonly ReportRequestLine[];
+  description?: string;
+  notes?: string;
+}
+
 export interface IncidentReportInput {
   incident: ReportIncident;
   /** Equipo del inventario al que está vinculada, con su nombre visible. */
   equipmentName?: string;
+  /** Peticiones de repuestos vinculadas a la incidencia. */
+  requests?: readonly ReportRequest[];
   /**
    * Rastro de auditoría de documentos. Se omite si quien exporta no puede
    * verlo (el expediente lo lee quien coordina la incidencia): el informe
@@ -424,12 +449,101 @@ function trailBlock(trail: readonly ReportTrailEntry[], level: number): string {
 }
 
 /**
+ * Repuestos utilizados y peticiones de material vinculadas a la incidencia:
+ * el listado de piezas pedidas y entregadas para la intervención, con su código,
+ * cantidad y estado, y las descripciones libres que complementan lo que no va por
+ * catálogo.
+ */
+function sparePartsBlock(
+  requests: readonly ReportRequest[],
+  level: number,
+): string {
+  if (requests.length === 0) {
+    return [
+      heading(level, "Repuestos utilizados"),
+      "",
+      "_No se han utilizado repuestos en esta incidencia._",
+    ].join("\n");
+  }
+
+  // Orden cronológico: las peticiones se leen en el orden en que se abrieron.
+  const ordered = [...requests].sort((a, b) => a.createdAt - b.createdAt);
+
+  const lines: {
+    requestRef: string;
+    code: string;
+    name: string;
+    quantity: number;
+    delivered: number;
+    statusLabel: string;
+  }[] = [];
+
+  for (const req of ordered) {
+    const statusLabel = STATUS_META[req.status]?.label ?? req.status;
+    for (const line of req.lines ?? []) {
+      lines.push({
+        requestRef: req.reference,
+        code: line.code,
+        name: line.name,
+        quantity: line.quantity,
+        delivered: lineDelivered(line, req.status),
+        statusLabel,
+      });
+    }
+  }
+
+  const blocks: string[] = [heading(level, "Repuestos utilizados"), ""];
+
+  if (lines.length > 0) {
+    blocks.push(
+      table(
+        ["Petición", "Repuesto", "Código", "Pedido", "Entregado", "Estado"],
+        lines.map((l) => [
+          l.requestRef,
+          l.name,
+          l.code,
+          String(l.quantity),
+          String(l.delivered),
+          l.statusLabel,
+        ]),
+      ),
+    );
+  }
+
+  // Si hay descripciones libres (material pedido sin pasar por catálogo)
+  const withDescriptions = ordered.filter((req) => {
+    const desc = richDocToPlainText(req.description)?.trim();
+    return desc !== undefined && desc !== "";
+  });
+
+  if (withDescriptions.length > 0) {
+    if (lines.length > 0) {
+      blocks.push("", heading(level + 1, "Detalle de las peticiones"));
+    }
+    for (const req of withDescriptions) {
+      const statusLabel = STATUS_META[req.status]?.label ?? req.status;
+      const desc = richDocToMarkdown(req.description)?.trim() ?? "";
+      blocks.push(
+        "",
+        `**${req.reference} · ${statusLabel}**${
+          req.requesterName ? ` — ${escapeMarkdown(req.requesterName)}` : ""
+        }`,
+        "",
+        desc,
+      );
+    }
+  }
+
+  return blocks.join("\n");
+}
+
+/**
  * Informe completo de una incidencia, listo para descargar. Se compone con las
  * piezas que ve quien lo exporta: con el rastro de auditoría si puede leer el
  * expediente, sin él si no.
  */
 export function incidentReport(input: IncidentReportInput): string {
-  const { incident, trail, exportedBy } = input;
+  const { incident, trail, requests, exportedBy } = input;
   const now = input.now ?? Date.now();
   // `level` es el del título; los apartados van uno por debajo, para que el
   // informe suelto empiece en «#» con sus secciones en «##» y el lote de un
@@ -464,6 +578,10 @@ export function incidentReport(input: IncidentReportInput): string {
         .filter(Boolean)
         .join("\n"),
     );
+  }
+
+  if (requests !== undefined) {
+    blocks.push(sparePartsBlock(requests, section));
   }
 
   blocks.push(
@@ -703,6 +821,8 @@ export interface BatchReportEntry {
   equipmentName?: string;
   /** Rastro de auditoría, si quien exporta puede leer el expediente. */
   trail?: readonly ReportTrailEntry[];
+  /** Peticiones de repuestos del caso. */
+  requests?: readonly ReportRequest[];
 }
 
 export interface IncidentsReportInput {
@@ -818,6 +938,7 @@ export function incidentsReport(input: IncidentsReportInput): string {
         incident: entry.incident,
         equipmentName: entry.equipmentName,
         trail: entry.trail,
+        requests: entry.requests,
         exportedBy: input.exportedBy,
         now,
         level: 2,

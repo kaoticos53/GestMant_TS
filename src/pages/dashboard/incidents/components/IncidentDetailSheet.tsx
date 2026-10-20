@@ -319,6 +319,7 @@ export function IncidentDetailSheet({
         ? equipmentLabel(linkedEquipment)
         : undefined,
       trail: trail ?? undefined,
+      requests: linkedRequests,
       exportedBy: currentUserName,
     });
 

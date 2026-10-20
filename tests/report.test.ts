@@ -13,6 +13,7 @@ import {
   reportRange,
   reportStatusCounts,
   type ReportIncident,
+  type ReportRequest,
   type ReportTrailEntry,
 } from "../src/lib/report";
 import { richDocToStore } from "../src/lib/richDoc";
@@ -517,6 +518,129 @@ describe("secciones del informe", () => {
     expect(texto).toContain("Acta\\_final\\*.pdf");
     expect(texto).toContain("Con **negrita** y *cursiva*.");
     expect(texto).toContain("- una línea");
+  });
+});
+
+describe("repuestos utilizados dentro del informe", () => {
+  test("sin peticiones la sección dice que no se han utilizado repuestos", () => {
+    const texto = informe({ requests: [] });
+    expect(texto).toContain("## Repuestos utilizados");
+    expect(texto).toContain("_No se han utilizado repuestos en esta incidencia._");
+  });
+
+  test("muestra los repuestos con código, cantidades pedidas y entregadas, y estado", () => {
+    const requests: ReportRequest[] = [
+      {
+        reference: "PET-0001",
+        status: "issued",
+        priority: "urgent",
+        requesterName: "Paula Iglesias",
+        createdAt: ahora - 6 * dia,
+        lines: [
+          {
+            code: "ALI-24015",
+            name: "Fuente de alimentación 24 V 15 A",
+            quantity: 1,
+            deliveredQuantity: 1,
+          },
+          {
+            code: "FUS-5X20-2A",
+            name: "Fusible 5x20mm 2A",
+            quantity: 2,
+            deliveredQuantity: 2,
+          },
+        ],
+      },
+    ];
+    const texto = informe({ requests });
+    expect(texto).toContain("## Repuestos utilizados");
+    expect(texto).toContain(
+      "| Petición | Repuesto | Código | Pedido | Entregado | Estado |",
+    );
+    expect(texto).toContain(
+      "| PET-0001 | Fuente de alimentación 24 V 15 A | ALI-24015 | 1 | 1 | Entregada |",
+    );
+    expect(texto).toContain(
+      "| PET-0001 | Fusible 5x20mm 2A | FUS-5X20-2A | 2 | 2 | Entregada |",
+    );
+  });
+
+  test("incluye el detalle de la petición si se describió material fuera de catálogo", () => {
+    const requests: ReportRequest[] = [
+      {
+        reference: "PET-0002",
+        status: "pending",
+        priority: "normal",
+        requesterName: "Iván Torres",
+        createdAt: ahora - 3 * dia,
+        description: "Cable bipolar de silicona 2x1.5mm para alta temperatura.",
+      },
+    ];
+    const texto = informe({ requests });
+    expect(texto).toContain("## Repuestos utilizados");
+    expect(texto).toContain("**PET-0002 · Pendiente** — Iván Torres");
+    expect(texto).toContain("Cable bipolar de silicona 2x1.5mm para alta temperatura.");
+  });
+
+  test("los repuestos van antes del historial de estados y del cuaderno de vida", () => {
+    const requests: ReportRequest[] = [
+      {
+        reference: "PET-0001",
+        status: "issued",
+        createdAt: ahora - 5 * dia,
+        lines: [
+          {
+            code: "ALI-24015",
+            name: "Fuente de alimentación",
+            quantity: 1,
+          },
+        ],
+      },
+    ];
+    const texto = informe({ requests });
+    const posRepuestos = texto.indexOf("## Repuestos utilizados");
+    const posHistorial = texto.indexOf("## Historial de estados");
+    const posCuaderno = texto.indexOf("## Notas del cuaderno de vida");
+    expect(posRepuestos).toBeGreaterThan(0);
+    expect(posRepuestos).toBeLessThan(posHistorial);
+    expect(posHistorial).toBeLessThan(posCuaderno);
+  });
+
+  test("omite la sección si no se pasan requests", () => {
+    const texto = informe();
+    expect(texto).not.toContain("Repuestos utilizados");
+  });
+
+  test("el lote del periodo incluye los repuestos de cada incidencia", () => {
+    const lote = incidentsReport({
+      entries: [
+        {
+          incident: incidencia,
+          requests: [
+            {
+              reference: "PET-0001",
+              status: "issued",
+              createdAt: ahora - 4 * dia,
+              lines: [
+                {
+                  code: "ALI-24015",
+                  name: "Fuente 24 V",
+                  quantity: 1,
+                  deliveredQuantity: 1,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      range: { from: ahora - 10 * dia, to: ahora },
+      basis: "reported",
+      exportedBy: "Administración",
+    });
+    expect(lote).toContain("### Repuestos utilizados");
+    expect(lote).toContain(
+      "| PET-0001 | Fuente 24 V | ALI-24015 | 1 | 1 | Entregada |",
+    );
   });
 });
 

@@ -44,6 +44,7 @@ import { toast } from "sonner";
 
 type IncidentDoc = Doc<"incidents">;
 type EquipmentDoc = Doc<"equipment">;
+type PartRequestDoc = Doc<"partRequests">;
 
 /** Cuántas referencias se enseñan en el resumen antes de decir «y N más». */
 const PREVIEW_LIMIT = 6;
@@ -67,6 +68,7 @@ export function IncidentReportsDialog({
   open,
   onOpenChange,
   equipment = [],
+  requests,
   canReadTrails = false,
   currentUserName,
 }: {
@@ -74,6 +76,8 @@ export function IncidentReportsDialog({
   onOpenChange: (open: boolean) => void;
   /** Equipos del inventario, para nombrar el equipo de cada informe. */
   equipment?: EquipmentDoc[];
+  /** Peticiones de repuestos del taller (si quien llama ya las consultó). */
+  requests?: PartRequestDoc[];
   /** Quien coordina el expediente puede exportar también su auditoría. */
   canReadTrails?: boolean;
   currentUserName: string;
@@ -88,6 +92,11 @@ export function IncidentReportsDialog({
   const [basis, setBasis] = useState<ReportPeriodBasis>("reported");
 
   const incidents = useQuery(api.incidents.list, { includeArchived: true });
+  const liveRequests = useQuery(
+    api.partRequests.list,
+    requests === undefined ? { includeArchived: true } : "skip",
+  );
+  const allRequests = requests ?? liveRequests ?? [];
 
   const range = reportRange(from, to);
   const activePreset = reportPeriodOf(range);
@@ -124,6 +133,16 @@ export function IncidentReportsDialog({
     }
   }
 
+  /** Peticiones de cada incidencia para desglosar sus repuestos. */
+  const requestsByIncident = new Map<string, PartRequestDoc[]>();
+  for (const req of allRequests) {
+    if (req.incidentId) {
+      const list = requestsByIncident.get(req.incidentId) ?? [];
+      list.push(req);
+      requestsByIncident.set(req.incidentId, list);
+    }
+  }
+
   const equipmentNameOf = (incident: IncidentDoc): string | undefined => {
     const linked = incident.equipmentId
       ? equipment.find((item) => item._id === incident.equipmentId)
@@ -140,6 +159,7 @@ export function IncidentReportsDialog({
           trail: canReadTrails
             ? (trailsByIncident.get(incident._id) ?? [])
             : undefined,
+          requests: requestsByIncident.get(incident._id) ?? [],
         })),
         range,
         basis,

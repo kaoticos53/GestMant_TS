@@ -142,6 +142,7 @@ export function IncidentsView({
           open={reportsOpen}
           onOpenChange={setReportsOpen}
           equipment={equipment}
+          requests={requests}
           canReadTrails={canAssign}
           currentUserName={currentUserName}
         />

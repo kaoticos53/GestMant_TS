@@ -6,22 +6,23 @@
 ---
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** [ej. INC-042-transicion-espera-repuesto]
-- **Objetivo:** [Descripción en una frase del objetivo]
-- **Módulo(s) Afectado(s):** [ej. `src/convex/incidents.ts`, `src/lib/incidentFlow.ts`, etc.]
+- **ID / Nombre de la Tarea:** [ej. REQ-crear-dialogo-asociar]
+- **Objetivo:** [Breve descripción en una línea del resultado esperado].
+- **Módulo(s) Afectado(s):** [ej. `src/pages/dashboard/requests/` y `src/lib/requestFlow.ts`].
 
 ---
 
 ## 2. Archivos a Modificar / Crear
-- [ ] `ruta/al/archivo.ts`: [qué se va a hacer]
+- [ ] `ruta/al/archivo-1.ts`: [Acción específica].
+- [ ] `ruta/al/archivo-2.tsx`: [Acción específica].
 
 ---
 
 ## 3. Comprobaciones de Invariantes Previas
-- [ ] ¿Afecta a `src/lib/`? Asegurar que NO importe React ni Convex.
-- [ ] ¿Modifica estados o transiciones? Usar máquinas de estado en `src/lib/`.
-- [ ] ¿Introduce términos nuevos? Comprobar con `GLOSARIO.md`.
-- [ ] ¿Seguridad en Convex? Verificar identidad y permisos con `requireUser`/`requireAdmin`/`requireManager`.
+- [ ] ¿Afecta a `src/lib/`? ¿Cumple con no importar React ni Convex?
+- [ ] ¿Modifica estados o transiciones? ¿Pasa por la máquina de estados de `src/lib/`?
+- [ ] ¿Introduce términos nuevos? ¿Están en `GLOSARIO.md`?
+- [ ] ¿Seguridad en Convex? ¿Verifica identidad o usa `INITIAL_ADMIN_EMAIL`?
 
 ---
 
@@ -32,9 +33,3 @@
 - [ ] **Paso 4:** Tests específicos del módulo (`npx vitest run <ruta-del-test>`).
 - [ ] **Paso 5:** Tests de arquitectura y seguridad (`tests/arquitectura.test.ts`, `tests/seguridad.test.ts`).
 - [ ] **Paso 6:** Handover registrado y limpieza de este archivo.
-
-
-
-
-
-
