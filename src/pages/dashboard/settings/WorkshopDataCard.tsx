@@ -13,16 +13,18 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useMutation } from "convex/react";
-import { Database, Sparkles, Trash2 } from "lucide-react";
+import { Database, ShoppingCart, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export function WorkshopDataCard() {
   const seedDemoData = useMutation(api.seed.seedDemoData);
   const seedDemoUploads = useAction(api.seed.seedDemoUploads);
   const seedDemoManuals = useAction(api.seed.seedDemoManuals);
+  const seedPurchasing = useAction(api.seedPurchasing.seedPurchasingDemoData);
   const resetWorkshop = useAction(api.workshopReset.resetWorkshop);
 
   const [seeding, setSeeding] = useState(false);
+  const [seedingPurchasing, setSeedingPurchasing] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [phrase, setPhrase] = useState("");
@@ -56,6 +58,29 @@ export function WorkshopDataCard() {
       toast.error(getErrorMessage(error));
     } finally {
       setSeeding(false);
+    }
+  };
+
+  /**
+   * La muestra de compras: lo que se queda esperando a que alguien monte la
+   * orden, una orden servida a medias y otra que ya entró entera. Se puede
+   * cargar tantas veces como haga falta —cada vez trae otra tanda—, así que no
+   * depende de haber cargado antes la muestra del taller (solo del catálogo).
+   */
+  const handleSeedPurchasing = async () => {
+    setSeedingPurchasing(true);
+    try {
+      const result = await seedPurchasing();
+      toast.success(
+        `Compras de ejemplo · ${result.purchases} peticiones de compra en ${result.orders} órdenes`,
+        {
+          description: `${result.receptions} recepciones con su albarán, para que la sección tenga algo que enseñar.`,
+        },
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setSeedingPurchasing(false);
     }
   };
 
@@ -94,7 +119,9 @@ export function WorkshopDataCard() {
             catálogo de repuestos, equipos, incidencias y peticiones ya
             repartidas. Un taller de verdad no la necesita —basta con dejar el
             taller vacío y dar de alta lo suyo—, y si ya se cargó por error, se
-            puede vaciar para empezar de cero.
+            puede vaciar para empezar de cero. «Compras de ejemplo» añade aparte
+            la otra mitad: peticiones sin tratar de varios proveedores, órdenes
+            a medio recibir y albaranes con los que recepcionar.
           </p>
         </div>
       </div>
@@ -112,9 +139,19 @@ export function WorkshopDataCard() {
         </Button>
         <Button
           type="button"
+          variant="outline"
+          className="gap-2"
+          disabled={seeding || seedingPurchasing || resetting}
+          onClick={() => void handleSeedPurchasing()}
+        >
+          <ShoppingCart className="size-4" />
+          {seedingPurchasing ? "Cargando compras..." : "Compras de ejemplo"}
+        </Button>
+        <Button
+          type="button"
           variant="destructive"
           className="gap-2"
-          disabled={seeding || resetting}
+          disabled={seeding || seedingPurchasing || resetting}
           onClick={() => setConfirming(true)}
         >
           <Trash2 className="size-4" />

@@ -14,14 +14,17 @@ import {
   vi,
 } from "vitest";
 
-const { CREADAS, RECIBIDAS, DATOS } = vi.hoisted(() => ({
+const { CREADAS, RECIBIDAS, APARTADAS, DATOS } = vi.hoisted(() => ({
   CREADAS: [] as unknown[],
   RECIBIDAS: [] as unknown[],
+  APARTADAS: [] as unknown[],
   // Lo que el backend de mentira sirve a cada consulta del módulo.
   DATOS: {
     purchaseRequests: [] as unknown[],
     orders: [] as unknown[],
     receptions: [] as unknown[],
+    partRequests: [] as unknown[],
+    parts: [] as unknown[],
   },
 }));
 
@@ -32,6 +35,7 @@ vi.mock("@/convex/_generated/api", () => ({
       listOrders: { nombre: "purchasing.listOrders" },
       listReceptions: { nombre: "purchasing.listReceptions" },
       requestPurchase: { nombre: "purchasing.requestPurchase" },
+      requestPurchases: { nombre: "purchasing.requestPurchases" },
       setSupplier: { nombre: "purchasing.setSupplier" },
       setNote: { nombre: "purchasing.setNote" },
       cancelPurchaseRequest: { nombre: "purchasing.cancelPurchaseRequest" },
@@ -56,8 +60,8 @@ vi.mock("convex/react", async () => {
       }
       if (query === api.purchasing.listOrders) return DATOS.orders;
       if (query === api.purchasing.listReceptions) return DATOS.receptions;
-      if (query === api.partRequests.list) return [];
-      if (query === api.spareParts.list) return [];
+      if (query === api.partRequests.list) return DATOS.partRequests;
+      if (query === api.spareParts.list) return DATOS.parts;
       return undefined;
     },
     useMutation: (mutation: unknown) => async (args: unknown) => {
@@ -68,6 +72,15 @@ vi.mock("convex/react", async () => {
       if (mutation === api.purchasing.receive) {
         RECIBIDAS.push(args);
         return { status: "completed", received: [], materialReceived: [] };
+      }
+      if (mutation === api.purchasing.requestPurchases) {
+        APARTADAS.push(args);
+        return {
+          references: ["PC-0001", "PC-0002"],
+          requests: 2,
+          repeated: 0,
+          skipped: [],
+        };
       }
       return undefined;
     },
@@ -121,6 +134,7 @@ beforeEach(() => {
   installMissingDomApis();
   CREADAS.length = 0;
   RECIBIDAS.length = 0;
+  APARTADAS.length = 0;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -182,16 +196,42 @@ const orden = {
   updatedAt: 1,
 } as never;
 
+/** La misma orden, ya cerrada: es la que llega entera al almacén. */
+function ordenCompletada() {
+  return {
+    ...(orden as unknown as Record<string, unknown>),
+    status: "completed",
+    lines: [
+      {
+        purchaseRequestId: "pc-0001",
+        requestId: "req-1",
+        requestReference: "PET-0007",
+        requestDate: 1,
+        sparePartId: "part-1",
+        code: "ALI-24015",
+        name: "Fuente de alimentación",
+        unit: "ud",
+        quantity: 3,
+        receivedQuantity: 3,
+      },
+    ],
+  } as never;
+}
+
 function pintar(
   props: {
     purchaseRequests?: unknown[];
     orders?: unknown[];
     receptions?: unknown[];
+    partRequests?: unknown[];
+    parts?: unknown[];
   } = {},
 ) {
   DATOS.purchaseRequests = props.purchaseRequests ?? [compra()];
   DATOS.orders = props.orders ?? [];
   DATOS.receptions = props.receptions ?? [];
+  DATOS.partRequests = props.partRequests ?? [];
+  DATOS.parts = props.parts ?? [];
   act(() => {
     root.render(<PurchasingView canManage />);
   });
@@ -207,7 +247,56 @@ function boton(texto: string): HTMLButtonElement {
   return encontrado as HTMLButtonElement;
 }
 
+/** Una petición de repuesto a la que el almacén no cubre, con su línea. */
+function peticionSinMaterial(reference: string, id: string) {
+  return {
+    _id: id,
+    reference,
+    requesterName: "Teo Técnico",
+    requesterTeam: "Plató 1",
+    priority: "normal",
+    status: "pending",
+    createdAt: Date.parse("2026-10-01T09:00:00.000Z"),
+    attachments: [],
+    lines: [
+      {
+        sparePartId: "part-1",
+        code: "ALI-24015",
+        name: "Fuente de alimentación",
+        unit: "ud",
+        quantity: 2,
+      },
+    ],
+  } as never;
+}
+
 describe("el módulo de compras, pintado", () => {
+  test("«Sin material» aparta varias peticiones de una vez", () => {
+    // Antes había un botón idéntico por fila: para nueve líneas, nueve clics y
+    // nueve esperas. Ahora se marcan y van en una sola llamada.
+    pintar({
+      // Sin compras vivas: las dos peticiones están esperando que alguien las aparte.
+      purchaseRequests: [],
+      partRequests: [
+        peticionSinMaterial("PET-0001", "req-1"),
+        peticionSinMaterial("PET-0002", "req-2"),
+      ],
+    });
+
+    expect(document.body.textContent).toContain("Sin material en el almacén");
+    expect(document.body.textContent).toContain("PET-0001");
+    // Sin marcar nada no hay nada que apartar.
+    expect(boton("Apartar las marcadas").disabled).toBe(true);
+
+    act(() => boton("Marcar todas").click());
+    // El botón dice cuántas van, para no apartar de más.
+    expect(document.body.textContent).toContain("Apartar 2 peticiones");
+    act(() => boton("Apartar 2 peticiones").click());
+
+    expect(APARTADAS).toHaveLength(1);
+    expect(APARTADAS[0]).toMatchObject({ requestIds: ["req-1", "req-2"] });
+  });
+
   test("lo que está sin tratar se agrupa por proveedor y se elige para la orden", () => {
     pintar({
       purchaseRequests: [
@@ -324,5 +413,43 @@ describe("el módulo de compras, pintado", () => {
 
     act(() => boton("Recepciones").click());
     expect(document.body.textContent).toContain("albaran.pdf");
+  });
+
+  test("la ficha de la orden explica su recorrido y qué toca ahora", () => {
+    pintar({ orders: [orden] });
+    act(() => boton("Órdenes de compra").click());
+    act(() => boton("Ver la orden").click());
+
+    const ficha = document.body.textContent ?? "";
+    expect(
+      document.querySelector('[aria-label="Recorrido de la orden de compra"]'),
+    ).not.toBeNull();
+    // El «Ahora» se pinta en dos trozos (la etiqueta y el estado), así que se
+    // comprueban por separado, como los lee un lector de pantalla.
+    expect(ficha).toContain("Ahora (paso 2 de 3):");
+    expect(ficha).toContain("Parcial · 1/3 ud");
+    expect(ficha).toContain("Siguiente:");
+    expect(ficha).toContain("Recepcionar el material que falta");
+    // Con la orden abierta no hay nada bloqueado que explicar…
+    expect(ficha).not.toContain("Aún no se puede");
+    // …y el bloque suelto ya no vive en la tarjeta de la lista.
+    expect(ficha).not.toContain("Por qué no se puede");
+  });
+
+  test("una orden completada cuenta cómo terminó y por qué ya no se toca", () => {
+    pintar({ orders: [ordenCompletada()] });
+    act(() => boton("Órdenes de compra").click());
+    act(() => boton("Ver la orden").click());
+
+    const ficha = document.body.textContent ?? "";
+    expect(ficha).toContain("Ahora (paso 3 de 3):");
+    expect(ficha).toContain("Completada · 3/3 ud");
+    expect(ficha).toContain("La orden está completada");
+    // Los dos motivos, bajo el tramo que cuenta cómo terminó.
+    expect(ficha).toContain("Aún no se puede");
+    expect(ficha).toContain("Recepcionar material");
+    expect(ficha).toContain("Anular la orden");
+    expect(ficha).toContain("ya está completada: entró todo lo que se pidió");
+    expect(ficha).not.toContain("Por qué no se puede");
   });
 });

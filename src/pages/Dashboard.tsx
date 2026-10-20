@@ -50,12 +50,17 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import type { SearchHit } from "./dashboard/GlobalSearch";
+import type { OpenArchivedDoc } from "./dashboard/ArchiveView";
 import type { RequestFilterId } from "./dashboard/requests/types";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
 import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
 import { DashboardStats } from "./dashboard/components/DashboardStats";
+import {
+  PageHeader,
+  type PageHeaderAction,
+} from "./dashboard/components/PageHeader";
 import { useSidebarPanel } from "./dashboard/hooks/useSidebarPanel";
 import type { NavId, NavItem } from "./dashboard/types";
 
@@ -163,6 +168,12 @@ export default function Dashboard() {
   const [incidentsViewKey, setIncidentsViewKey] = useState(0);
   const [initialIncidentId, setInitialIncidentId] =
     useState<Id<"incidents"> | null>(null);
+  // Lo archivado que llega desde el buscador: una ficha concreta del archivo,
+  // que se abre en solo lectura. El `key` remonta el archivo para que la abra
+  // aunque ya estuviera montado.
+  const [archiveViewKey, setArchiveViewKey] = useState(0);
+  const [archiveInitialEntry, setArchiveInitialEntry] =
+    useState<OpenArchivedDoc | null>(null);
   const [inventoryViewKey, setInventoryViewKey] = useState(0);
   const [inventoryInitialSearch, setInventoryInitialSearch] = useState("");
   const [equipmentViewKey, setEquipmentViewKey] = useState(0);
@@ -261,7 +272,9 @@ export default function Dashboard() {
       ? ([
           {
             id: "machines",
-            label: "Máquinas del taller",
+            // El vocabulario del taller llama «equipo» a lo que se repara:
+            // esta pantalla enseña los flujos de estados, no máquinas.
+            label: "Flujos y estados",
             icon: Workflow,
             badge: 0,
           },
@@ -440,7 +453,9 @@ export default function Dashboard() {
         added === 0
           ? "No había nada nuevo que añadir"
           : `${result.incidents} incidencias y ${result.requests} peticiones nuevas · ${result.maintenance} fichas de mantenimiento` +
-              (result.team > 0 ? ` · ${result.team} personas en el equipo` : "") +
+              (result.team > 0
+                ? ` · ${result.team} personas en el equipo`
+                : "") +
               (manuals.inserted > 0 ? ` · ${manuals.inserted} manuales` : ""),
       );
     } catch (error) {
@@ -575,6 +590,10 @@ export default function Dashboard() {
       setInitialIncidentId(null);
       setIncidentsViewKey((key) => key + 1);
     }
+    if (archiveInitialEntry) {
+      setArchiveInitialEntry(null);
+      setArchiveViewKey((key) => key + 1);
+    }
     setInventoryInitialSearch("");
     setEquipmentInitialSearch("");
     setRequestsInitialFilter("all");
@@ -582,6 +601,18 @@ export default function Dashboard() {
   };
 
   const handleSearchSelect = (hit: SearchHit) => {
+    // Lo archivado no está en su cola: se abre en el archivo y en solo lectura,
+    // que es donde sigue existiendo. Antes el resultado llevaba a un módulo que
+    // ya no lo tenía.
+    if ((hit.kind === "incident" || hit.kind === "request") && hit.archived) {
+      if (!can(hit.kind === "incident" ? "viewIncidents" : "viewRequests")) {
+        return;
+      }
+      setArchiveInitialEntry({ kind: hit.kind, id: hit.id });
+      setArchiveViewKey((key) => key + 1);
+      setTab("archive");
+      return;
+    }
     if (hit.kind === "incident") {
       if (!can("viewIncidents")) return;
       setInitialIncidentId(hit.id);
@@ -612,6 +643,145 @@ export default function Dashboard() {
   };
 
   const roleLabel = permissions?.label ?? fallbackRoleMeta(role).label;
+
+  // La cabecera de cada módulo: su nombre y una línea de contexto. Antes todas
+  // las pestañas enseñaban el mismo titular genérico y había que mirar el menú
+  // para saber dónde estabas.
+  const moduleMeta: Record<NavId, { title: string; description: string }> = {
+    incidents: {
+      title: "Incidencias",
+      description:
+        "Lo que se ha notificado y en qué punto está: asígnalo, verifícalo y ciérralo con su parte.",
+    },
+    requests: {
+      title: "Peticiones de repuesto",
+      description:
+        "El material que pide el taller: apruébalo, entrega lo que hay en el almacén y deja rastro de cada entrega.",
+    },
+    purchasing: {
+      title: "Compras",
+      description:
+        "Lo que el almacén no cubre: órdenes por proveedor y recepciones con su albarán.",
+    },
+    inventory: {
+      title: "Repuestos",
+      description:
+        "El catálogo del almacén: existencias, mínimos y ubicación de cada repuesto.",
+    },
+    equipment: {
+      title: "Equipos",
+      description:
+        "El inventario del taller, con modelo, número de serie y su mantenimiento preventivo.",
+    },
+    manuals: {
+      title: "Manuales",
+      description:
+        "La documentación de los equipos: PDFs y notas del taller, por tipo, marca y modelo.",
+    },
+    machines: {
+      title: "Flujos y estados",
+      description:
+        "Cómo avanza cada caso —incidencia, petición y compra—: de qué estado a cuál se puede ir y por qué.",
+    },
+    archive: {
+      title: "Archivo del taller",
+      description:
+        "Lo cerrado y lo decidido que ya no está en el día a día: búscalo aquí o recupéralo.",
+    },
+    audit: {
+      title: "Auditoría de documentos",
+      description:
+        "La trazabilidad de los documentos: quién movió qué, cuándo y desde dónde.",
+    },
+    users: {
+      title: "Usuarios",
+      description:
+        "Quién entra al taller, con qué rol y desde cuándo. Las bajas se reactivan desde aquí.",
+    },
+    permissions: {
+      title: "Roles y permisos",
+      description:
+        "Qué ve y qué puede modificar cada rol. Solo el administrador entra en esta pantalla.",
+    },
+    settings: {
+      title: "Ajustes del taller",
+      description:
+        "Correo, archivado automático, avisos y almacenamiento, en un solo sitio.",
+    },
+    profile: {
+      title: "Mi perfil",
+      description:
+        "Tu ficha en el taller: datos de contacto, incidencias asignadas y avisos.",
+    },
+  };
+
+  const heading = isGuest
+    ? {
+        title: "Sesión de invitado",
+        description:
+          "Sigue una incidencia con el código que te dieron al notificarla. El resto del taller es para quien entra con su cuenta.",
+      }
+    : moduleMeta[activeTab];
+
+  // Cuánto hay en el módulo que se está mirando, junto al título: el mismo
+  // número que lleva la píldora del menú, sin tener que buscarlo.
+  const headingCount: number | null =
+    activeTab === "incidents"
+      ? (summary?.incidents.reported ?? null)
+      : activeTab === "requests"
+        ? pendingRequests
+        : activeTab === "purchasing"
+          ? (summary?.purchasing.pending ?? null)
+          : activeTab === "inventory"
+            ? totalParts
+            : activeTab === "equipment"
+              ? (summary?.equipment ?? null)
+              : activeTab === "manuals"
+                ? (summary?.manuals ?? null)
+                : null;
+
+  // Lo que no es del día a día, en el menú «⋯» de la cabecera: antes eran cuatro
+  // botones fijos en todas las pantallas, encima de la lista.
+  const headerActions: PageHeaderAction[] = [
+    ...(canConfigureReport
+      ? [
+          {
+            label: "Resumen semanal por correo",
+            icon: Mail,
+            onSelect: () => setWeeklyReportOpen(true),
+          },
+        ]
+      : []),
+    ...(seesAlert && staleWork.length > 0 && alertDismissed
+      ? [
+          {
+            label: "Volver a mostrar el aviso",
+            icon: Eye,
+            onSelect: restoreAlert,
+          },
+        ]
+      : []),
+    ...(can("manageInventory") && !isEmpty
+      ? [
+          {
+            label: isSeedingMore
+              ? "Generando datos de ejemplo…"
+              : "Más datos de ejemplo",
+            icon: Sparkles,
+            onSelect: () => void handleSeedMore(),
+            disabled: isSeedingMore || loading,
+            separatorBefore: true,
+          },
+        ]
+      : []),
+  ];
+
+  // El título de la pestaña dice en qué módulo estás: con el genérico, dos
+  // pestañas del navegador eran indistinguibles.
+  const documentTitle = isGuest ? "Sesión de invitado" : heading.title;
+  useEffect(() => {
+    document.title = `${documentTitle} · Pulso Taller`;
+  }, [documentTitle]);
   const roleBadge = needsRole ? (
     <span className="inline-flex rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
       Configurando perfil...
@@ -653,6 +823,14 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background lg:flex-row">
+      {/* Atajo de teclado: quien navega sin ratón no tiene que recorrer el menú
+          entero (once módulos) en cada cambio de pantalla. Aparece al enfocarlo. */}
+      <a
+        href="#contenido"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        Saltar al contenido
+      </a>
       <DashboardSidebar
         sidebarRef={sidebarRef}
         sidebarCollapsed={sidebarCollapsed}
@@ -694,103 +872,17 @@ export default function Dashboard() {
           navBadges={navBadges}
         />
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-16 pt-8 sm:px-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-signal">{roleLabel}</p>
-              <h1 className="text-3xl font-semibold tracking-tight">
-                {isGuest
-                  ? "Sesión de invitado"
-                  : activeTab === "profile"
-                    ? "Mi perfil"
-                    : activeTab === "permissions"
-                      ? "Roles y permisos"
-                      : activeTab === "settings"
-                        ? "Ajustes del taller"
-                        : activeTab === "archive"
-                          ? "Archivo del taller"
-                          : activeTab === "manuals"
-                            ? "Manuales del taller"
-                            : activeTab === "machines"
-                              ? "Las máquinas del taller"
-                              : "Incidencias, peticiones y stock del taller"}
-              </h1>
-              <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                {isGuest
-                  ? "Has entrado como invitado: puedes seguir una incidencia con el código que te dieron al notificarla. El resto del taller es para quien entra con su cuenta."
-                  : activeTab === "profile"
-                    ? "Tu ficha en el taller: datos de contacto, incidencias asignadas, peticiones y avisos."
-                    : activeTab === "permissions"
-                      ? "Crea los roles del taller y configura qué ve y qué puede modificar cada uno. Solo el administrador tiene acceso a esta pantalla."
-                      : activeTab === "settings"
-                        ? "Las reglas de fondo del taller: por dónde sale el correo y qué avisos recibe cada rol, qué se archiva solo cada noche, a quién le avisa el panel del trabajo que avanza sin dejar rastro en el cuaderno y a quién le llegan los avisos del expediente."
-                        : activeTab === "archive"
-                          ? "El archivo del taller: incidencias cerradas y peticiones ya decididas que ya no están en el día a día. Búscalas aquí o recupera las que vuelvan a hacer falta."
-                          : activeTab === "manuals"
-                            ? "La documentación de los equipos: los manuales en PDF y las notas del taller, clasificados por tipo, marca y modelo. Descárgalos o consulta los de un equipo desde su ficha."
-                            : activeTab === "machines"
-                              ? "Cómo avanza cada caso —la incidencia, la petición de repuestos y la compra— con los estados y los pasos que dice el código: de dónde a dónde se puede ir y por qué no desde otro sitio."
-                              : "Revisa las peticiones de plató, realización y audio, aprueba el material y mantén el catálogo del almacén AV siempre al día."}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {canConfigureReport && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={() => setWeeklyReportOpen(true)}
-                  title="Resumen semanal del taller por correo: qué salió, cuándo y a quién"
-                >
-                  <Mail className="size-4" />
-                  Resumen semanal
-                </Button>
-              )}
-              {(can("manageIncidents") ||
-                can("decideRequests") ||
-                (adminOk && can("viewAudit"))) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={() => goToTab("settings")}
-                  title="Correo, archivado automático, aviso de trabajo sin constancia y avisos del expediente, en un solo sitio"
-                >
-                  <SlidersHorizontal className="size-4" />
-                  Ajustes del taller
-                </Button>
-              )}
-              {seesAlert && staleWork.length > 0 && alertDismissed && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={restoreAlert}
-                  title="Vuelve a mostrar el aviso de trabajo sin constancia"
-                >
-                  <Eye className="size-4" />
-                  Volver a mostrar el aviso
-                </Button>
-              )}
-              {can("manageInventory") && !isEmpty && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-muted-foreground"
-                  onClick={() => void handleSeedMore()}
-                  disabled={isSeedingMore || loading}
-                  title="Añade otra tanda de incidencias y peticiones de ejemplo"
-                >
-                  <Sparkles className="size-4" />
-                  {isSeedingMore ? "Generando..." : "Más datos de ejemplo"}
-                </Button>
-              )}
-            </div>
-          </div>
+        <main
+          id="contenido"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-7xl flex-1 px-4 pb-1 pt-4 sm:px-6 sm:pt-5"
+        >
+          <PageHeader
+            title={heading.title}
+            count={headingCount}
+            description={heading.description}
+            actions={headerActions}
+          />
 
           {!summaryHidden && (
             <WorkAlertNotice
@@ -812,7 +904,7 @@ export default function Dashboard() {
             stats={stats}
           />
 
-          <section className="mt-8">
+          <section className="mt-2">
             <DashboardContent
               isGuest={isGuest}
               showEmptyNotice={showEmptyNotice}
@@ -825,6 +917,8 @@ export default function Dashboard() {
               canSeePurchasing={canSeePurchasing}
               initialIncidentId={initialIncidentId}
               incidentsViewKey={incidentsViewKey}
+              archiveInitialEntry={archiveInitialEntry}
+              archiveViewKey={archiveViewKey}
               requestsEquipmentFilter={requestsEquipmentFilter}
               onEquipmentFilterChange={setRequestsEquipmentFilter}
               initialRequestId={initialRequestId}

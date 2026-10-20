@@ -41,20 +41,25 @@ import {
 } from "@/components/ui/sheet";
 import { AttachmentGroup } from "@/components/AttachmentGroup";
 import { AttachmentImage } from "@/components/AttachmentImage";
-import { BlockedSteps } from "@/components/BlockedSteps";
+import { JourneySummary } from "@/components/JourneySummary";
 import { RichText } from "@/components/RichText";
 import { api } from "@/convex/_generated/api";
 import {
-  REQUEST_STEP_LABELS,
-  blockedRequestSteps,
   canEditRequest,
   canRequestStep,
   isRequestInMotion,
+  isRequestSettled,
   lineDelivered,
   lineRemaining,
   requestDelivery,
   requestMaterialState,
 } from "@/lib/requestFlow";
+import {
+  NEXT_REQUEST_STEP_LABELS,
+  blockedJourneySteps,
+  nextRequestAction,
+  requestJourney,
+} from "@/lib/requestJourney";
 import { cn } from "@/lib/utils";
 import {
   PRIORITY_META,
@@ -81,21 +86,34 @@ export function RequestDetailSheet({
   onReturn,
   onCancel,
   onResume,
-  resuming,
+  resuming = false,
+  showStock = true,
 }: {
   request: RequestDoc;
   parts: PartDoc[];
   canManage: boolean;
   onClose: () => void;
-  onAssociate: () => void;
-  onApprove: () => void;
-  onReject: () => void;
-  onIssue: () => void;
-  onHold: () => void;
-  onReturn: () => void;
-  onCancel: () => void;
-  onResume: () => void;
-  resuming: boolean;
+  /**
+   * Los pasos del pie. Son opcionales porque la ficha también se abre desde el
+   * archivo, en solo lectura: allí no hay nada que decidir y `canManage` los
+   * deja sin pintar. Sin handler no hay botón, que es lo que evita un botón que
+   * parece hacer algo y no hace nada.
+   */
+  onAssociate?: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
+  onIssue?: () => void;
+  onHold?: () => void;
+  onReturn?: () => void;
+  onCancel?: () => void;
+  onResume?: () => void;
+  resuming?: boolean;
+  /**
+   * ¿Puede leer el almacén? La ficha del archivo la abre también quien no tiene
+   * el inventario entre sus permisos; sin él no se puede decir cuántas unidades
+   * quedan, así que la línea se enseña sin el stock en vez de inventarlo.
+   */
+  showStock?: boolean;
 }) {
   const archiveRequest = useMutation(api.partRequests.archive);
   const withdrawRequest = useMutation(api.partRequests.withdraw);
@@ -108,7 +126,13 @@ export function RequestDetailSheet({
   // quita el permiso, pero la regla vive aquí para que una petición archivada no
   // pueda volver a tramitarse por olvidarlo en otra pantalla.
   const archivedAt = request.archivedAt;
-  const canManage = canManageRequest && archivedAt === undefined;
+  // Retirada a la papelera: su ficha se abre desde el módulo Archivo —antes de
+  // recuperarla o borrarla— y se consulta en solo lectura, igual que lo
+  // archivado. La regla vive aquí para que una petición retirada no se pueda
+  // volver a tramitar por olvidarlo en otra pantalla.
+  const withdrawnAt = request.deletedAt;
+  const withdrawn = withdrawnAt !== undefined;
+  const canManage = canManageRequest && archivedAt === undefined && !withdrawn;
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
   const partById = new Map(parts.map((part) => [part._id, part]));
@@ -127,9 +151,44 @@ export function RequestDetailSheet({
     null,
   );
   const images = request.attachments.filter((a) => a.kind === "image");
-  // Lo que la máquina deja hacer desde aquí, y lo que no: los pasos que no se
-  // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/requestFlow`).
-  const blocked = canManage ? blockedRequestSteps(request.status) : [];
+  // El recorrido, arriba: en qué etapa está la petición y qué toca, con las
+  // mismas reglas que sus botones (`lib/requestJourney`). La suspensión se lee de
+  // donde salió, que es lo que la máquina usa al reanudar.
+  const stages = requestJourney(request.status, {
+    heldFrom: request.heldFrom,
+    archived: archivedAt !== undefined,
+  });
+  const nextAction = nextRequestAction(request.status, { canManage });
+  const nextLabel = nextAction
+    ? nextAction === "approve" && noReference
+      ? // Aprobar lo que no pide nada no es aprobar: primero hay que asociar el
+        // repuesto, que es lo que el botón del pie ofrece en ese caso.
+        "Asociar un repuesto y aprobarla"
+      : (NEXT_REQUEST_STEP_LABELS[nextAction] ?? nextAction)
+    : null;
+  const nextHint = withdrawn
+    ? "Retirada a la papelera: se consulta en solo lectura hasta recuperarla o borrarla."
+    : archivedAt !== undefined
+      ? "En el archivo: la petición se consulta en solo lectura."
+      : !canManage
+        ? "La tramita quien gestiona los repuestos; desde aquí puedes seguirla."
+        : request.status === "pendingSupplierQuote"
+          ? "Presupuesto pedido al proveedor: cuando llegue el material, entra y se aprueba."
+          : request.status === "issued"
+            ? "Material entregado: la petición se archiva cuando toque."
+            : request.status === "returned"
+              ? "El material se devolvió: si vuelve a hacer falta, se pide de nuevo."
+              : request.status === "rejected" || request.status === "cancelled"
+                ? "Ya está cerrada: no se vuelve a tramitar."
+                : "Sin pasos disponibles ahora mismo.";
+  // Lo que la máquina no deja dar, con su motivo y su etapa: se enseña dentro del
+  // recorrido, junto al paso que bloquee, y solo a quien va a actuar. Con la
+  // petición resuelta no se enumera: todos los pasos dirían lo mismo y el resumen
+  // ya lo cuenta en una línea.
+  const blocked =
+    canManage && !isRequestSettled(request.status)
+      ? blockedJourneySteps(request.status, { heldFrom: request.heldFrom })
+      : [];
   const documents = request.attachments.filter((a) => a.kind === "document");
 
   /** Al archivo: sale de la cola del día a día y queda consultable allí. */
@@ -200,7 +259,9 @@ export function RequestDetailSheet({
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
-        <SheetHeader>
+        {/* La cabecera se queda arriba: con la ficha larga, la referencia y el
+            estado se perdían al bajar a leer los repuestos. */}
+        <SheetHeader className="sticky top-0 z-20 border-b border-border/70 bg-background/95 backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm font-semibold text-muted-foreground">
               {request.reference}
@@ -248,7 +309,34 @@ export function RequestDetailSheet({
         </SheetHeader>
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
-          {archivedAt !== undefined && (
+          {/* Dónde va la petición y qué toca, lo primero: el rastro completo
+              sigue abajo para quien necesite el detalle de cada entrega. */}
+          <JourneySummary
+            label="Recorrido de la petición"
+            stages={stages}
+            // El archivo es un tramo del recorrido, no un estado: lo entregado y
+            // guardado se lee «Entregada · en el archivo».
+            nowLabel={
+              withdrawn
+                ? `${status.label} · retirada`
+                : archivedAt !== undefined
+                  ? `${status.label} · en el archivo`
+                  : status.label
+            }
+            nextLabel={nextLabel}
+            nextHint={nextHint}
+            blocked={blocked}
+          />
+          {withdrawnAt !== undefined && (
+            <p className="rounded-lg border border-dashed border-destructive/40 bg-destructive/5 p-3 text-xs leading-5 text-muted-foreground">
+              Retirada el {formatDateTime(withdrawnAt)}
+              {request.deletedBy ? ` por ${request.deletedBy}` : ""}
+              {request.deletedReason ? ` · ${request.deletedReason}` : ""}.
+              Mientras esté en la papelera se consulta en solo lectura; se
+              recupera o se borra desde el módulo Archivo.
+            </p>
+          )}
+          {archivedAt !== undefined && !withdrawn && (
             <p className="rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
               En el archivo desde el {formatDateTime(archivedAt)}: la petición
               se consulta en solo lectura y no se trabaja desde la cola. Para
@@ -340,7 +428,7 @@ export function RequestDetailSheet({
                   variant="ghost"
                   size="sm"
                   className="h-7 gap-1 text-xs"
-                  onClick={onAssociate}
+                  onClick={() => onAssociate?.()}
                 >
                   <Plus className="size-3.5" />
                   Asociar otro
@@ -363,7 +451,7 @@ export function RequestDetailSheet({
                     type="button"
                     size="sm"
                     className="mt-3 gap-1.5"
-                    onClick={onAssociate}
+                    onClick={() => onAssociate?.()}
                   >
                     <Wrench className="size-3.5" />
                     Asociar repuesto
@@ -408,18 +496,23 @@ export function RequestDetailSheet({
                             {formatDateTime(line.deliveredAt)}
                           </p>
                         )}
-                        <p
-                          className={cn(
-                            "text-xs tabular-nums",
-                            hasShortage
-                              ? "text-destructive"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {part
-                            ? `stock ${part.stock} ${part.unit}`
-                            : "no está en catálogo"}
-                        </p>
+                        {/* Sin catálogo a la vista —el archivo lo abre un
+                            técnico— no se puede decir cuántas quedan: mejor no
+                            decir nada que decir «no está en catálogo». */}
+                        {showStock && (
+                          <p
+                            className={cn(
+                              "text-xs tabular-nums",
+                              hasShortage
+                                ? "text-destructive"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {part
+                              ? `stock ${part.stock} ${part.unit}`
+                              : "no está en catálogo"}
+                          </p>
+                        )}
                       </div>
                     </li>
                   );
@@ -445,17 +538,9 @@ export function RequestDetailSheet({
           <DecisionNotes request={request} />
         </div>
 
-        <SheetFooter className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
-          {blocked.length > 0 && (
-            <BlockedSteps
-              groups={blocked.map((group) => ({
-                label: group.actions
-                  .map((action) => REQUEST_STEP_LABELS[action])
-                  .join(", "),
-                reason: group.reason,
-              }))}
-            />
-          )}
+        {/* Y las acciones, abajo y siempre a la vista: eran lo último de una
+            ficha de dos pantallas. */}
+        <SheetFooter className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6">
           <div className="flex w-full flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
@@ -468,18 +553,30 @@ export function RequestDetailSheet({
             {canManage &&
               canRequestStep(request.status, "approve") &&
               (noReference ? (
-                <Button type="button" className="gap-2" onClick={onAssociate}>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => onAssociate?.()}
+                >
                   <Wrench className="size-4" />
                   Asociar repuesto
                 </Button>
               ) : (
-                <Button type="button" className="gap-2" onClick={onApprove}>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={() => onApprove?.()}
+                >
                   <Check className="size-4" />
                   Aprobar
                 </Button>
               ))}
             {canManage && canRequestStep(request.status, "issue") && (
-              <Button type="button" className="gap-2" onClick={onIssue}>
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={() => onIssue?.()}
+              >
                 <PackageCheck className="size-4" />
                 Entregar material
               </Button>
@@ -492,7 +589,7 @@ export function RequestDetailSheet({
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={onHold}
+                onClick={() => onHold?.()}
               >
                 <CirclePause className="size-4" />
                 En espera
@@ -504,7 +601,7 @@ export function RequestDetailSheet({
                 variant="outline"
                 className="gap-2"
                 disabled={resuming}
-                onClick={onResume}
+                onClick={() => onResume?.()}
               >
                 <RotateCcw className="size-4" />
                 {resuming ? "Reanudando..." : "Reanudar"}
@@ -517,7 +614,7 @@ export function RequestDetailSheet({
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={onReturn}
+                onClick={() => onReturn?.()}
               >
                 <Undo2 className="size-4" />
                 Devolver material
@@ -528,7 +625,7 @@ export function RequestDetailSheet({
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={onCancel}
+                onClick={() => onCancel?.()}
               >
                 <Ban className="size-4" />
                 Cancelar petición

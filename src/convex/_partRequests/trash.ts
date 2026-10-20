@@ -198,3 +198,30 @@ export const trash = query({
     };
   },
 });
+
+/**
+ * Una petición retirada, entera, para leerla antes de decidir: la papelera
+ * enseña un resumen y desde aquí se abre su ficha —en solo lectura— antes de
+ * recuperarla o borrarla. Devuelve `null` si lo que se pide ya no está en la
+ * papelera: lo vivo se lee por su módulo, no por aquí.
+ */
+export const withdrawn = query({
+  args: { requestId: v.id("partRequests") },
+  handler: async (ctx, args) => {
+    await requireDecisionCapability(ctx, "ver la papelera de peticiones");
+
+    const row = await ctx.db.get(args.requestId);
+    if (!row || row.deletedAt === undefined) return null;
+    // Con sus adjuntos resueltos, igual que la cola: la ficha los enseña, y sin
+    // la URL solo saldría el hueco de la imagen.
+    return {
+      ...row,
+      attachments: await Promise.all(
+        (row.attachments ?? []).map(async (attachment) => ({
+          ...attachment,
+          url: await ctx.storage.getUrl(attachment.storageId),
+        })),
+      ),
+    };
+  },
+});

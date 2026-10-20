@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import { type MutationCtx, internalMutation, mutation, query } from "../_generated/server";
+import {
+  type MutationCtx,
+  internalMutation,
+  mutation,
+  query,
+} from "../_generated/server";
 import { archiveClosedIncidentsBefore } from "../archive";
 import { scheduleReporterEmail } from "../incidentMail";
 import { hasCapability } from "../permissions";
@@ -149,7 +154,6 @@ async function purgeIncident(
   await ctx.db.delete(incident._id);
 }
 
-
 export const withdraw = mutation({
   args: { incidentId: v.id("incidents"), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -177,12 +181,7 @@ export const withdraw = mutation({
     // Y se le cuenta a quien notificó: su referencia deja de seguir el caso, y
     // eso no puede descubrirlo mirando. Sale con la fecha de la retirada, que es
     // lo que distingue este aviso del de un cambio de estado.
-    await scheduleReporterEmail(
-      ctx,
-      incident,
-      INCIDENT_WITHDRAWN_NOTICE,
-      now,
-    );
+    await scheduleReporterEmail(ctx, incident, INCIDENT_WITHDRAWN_NOTICE, now);
   },
 });
 
@@ -332,5 +331,27 @@ export const trash = query({
       nextPurgeAt: items[0]?.purgeAt ?? null,
       retentionDays: await trashRetentionDays(ctx),
     };
+  },
+});
+
+/**
+ * Una incidencia retirada, entera, para leerla antes de decidir: la papelera
+ * enseña un resumen y desde aquí se abre su ficha —en solo lectura— antes de
+ * recuperarla o borrarla. Devuelve `null` si lo que se pide ya no está en la
+ * papelera: lo vivo se lee por su módulo, no por aquí.
+ */
+export const withdrawn = query({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
+      throw new ConvexError(
+        "No tienes permisos para ver la papelera de incidencias.",
+      );
+    }
+
+    const row = await ctx.db.get(args.incidentId);
+    if (!row || row.deletedAt === undefined) return null;
+    return row;
   },
 });

@@ -557,7 +557,7 @@ export function InventoryView({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8"
+                                className="size-10"
                                 onClick={() => handleQuickAdjust(part, -1)}
                                 disabled={part.stock <= 0}
                                 aria-label={`Quitar una unidad de ${part.code}`}
@@ -568,7 +568,7 @@ export function InventoryView({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8"
+                                className="size-10"
                                 onClick={() => handleQuickAdjust(part, 1)}
                                 aria-label={`Añadir una unidad de ${part.code}`}
                               >
@@ -578,7 +578,7 @@ export function InventoryView({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8"
+                                className="size-10"
                                 onClick={() => setFormTarget({ part })}
                                 aria-label={`Editar ${part.code}`}
                               >
@@ -588,7 +588,7 @@ export function InventoryView({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8 text-muted-foreground hover:text-destructive"
+                                className="size-10 text-muted-foreground hover:text-destructive"
                                 onClick={() => setStockTarget(part)}
                                 aria-label={`Ajustar stock de ${part.code}`}
                               >
@@ -598,7 +598,7 @@ export function InventoryView({
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="size-8 text-muted-foreground hover:text-destructive"
+                                className="size-10 text-muted-foreground hover:text-destructive"
                                 onClick={() => setDeleteTarget(part)}
                                 aria-label={`Borrar ${part.code}`}
                               >

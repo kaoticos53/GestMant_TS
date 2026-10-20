@@ -17,6 +17,7 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
@@ -29,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BlockedSteps } from "@/components/BlockedSteps";
+import { JourneySummary } from "@/components/JourneySummary";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import {
@@ -64,8 +65,12 @@ import {
   type PurchaseRequestDoc,
 } from "@/lib/purchasing";
 import {
-  PURCHASE_ORDER_STEP_LABELS,
-  blockedPurchaseOrderSteps,
+  NEXT_ORDER_STEP_LABELS,
+  blockedJourneySteps,
+  nextPurchaseOrderAction,
+  orderJourney,
+} from "@/lib/orderJourney";
+import {
   canAdvancePurchaseOrder,
   canAdvancePurchaseRequest,
   isPurchaseOrderClosed,
@@ -142,7 +147,13 @@ export function PurchasingView({ canManage }: PurchasingViewProps) {
 
   return (
     <div className="grid gap-5">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Las cuatro secciones se anuncian como un grupo de botones con su
+          estado: se veían como pestañas, pero nada decía cuál estaba puesta. */}
+      <div
+        role="group"
+        aria-label="Secciones de compras"
+        className="flex flex-wrap items-center gap-2"
+      >
         {SECTIONS.map((item) => {
           const Icon = item.icon;
           const activo = section === item.id;
@@ -160,6 +171,7 @@ export function PurchasingView({ canManage }: PurchasingViewProps) {
               key={item.id}
               type="button"
               variant={activo ? "default" : "outline"}
+              aria-pressed={activo}
               className="gap-2"
               onClick={() => setSection(item.id)}
             >
@@ -220,9 +232,14 @@ function PendingSection({
   canManage: boolean;
 }) {
   const requestPurchase = useMutation(api.purchasing.requestPurchase);
+  const requestPurchases = useMutation(api.purchasing.requestPurchases);
   const [generando, setGenerando] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [ordenAbierta, setOrdenAbierta] = useState(false);
+  // Lo marcado en «Sin material»: apartar de una en una era el cuello de botella
+  // de la compra del día —nueve clics para nueve líneas—.
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
+  const [apartando, setApartando] = useState(false);
 
   const groups = useMemo(
     () => groupBySupplier(purchaseRequests),
@@ -244,6 +261,63 @@ function PendingSection({
       else next.add(id);
       return next;
     });
+
+  const marcadasSinMaterial = sinMaterial.filter(({ request }) =>
+    marcadas.has(request._id),
+  );
+  const todasMarcadas =
+    sinMaterial.length > 0 && marcadasSinMaterial.length === sinMaterial.length;
+
+  const alternarSinMaterial = (id: string) =>
+    setMarcadas((actual) => {
+      const next = new Set(actual);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /**
+   * Aparta de una vez todo lo marcado. Lo que la máquina no deja —una petición
+   * que ya se resolvió mientras se miraba la pantalla, o cuya compra ya estaba
+   * en marcha— vuelve con su motivo y se dice, en vez de perderse.
+   */
+  const apartarMarcadas = async () => {
+    const ids = marcadasSinMaterial.map(({ request }) => request._id);
+    if (ids.length === 0) return;
+    setApartando(true);
+    try {
+      const { references, requests, repeated, skipped } =
+        await requestPurchases({ requestIds: ids });
+      const fuera = skipped
+        .map((row) => `${row.reference}: ${row.reason}`)
+        .join(" · ");
+      if (references.length === 0) {
+        toast.warning("No se apartó nada", { description: fuera });
+      } else {
+        toast.success(
+          `${requests} ${requests === 1 ? "petición apartada" : "peticiones apartadas"} para comprar`,
+          {
+            description: [
+              references.length === 1
+                ? references[0]
+                : `${references.length} líneas: ${references.join(", ")}`,
+              repeated > 0
+                ? `${repeated} ya estaba${repeated === 1 ? "" : "n"} en camino`
+                : "",
+              fuera ? `Sin apartar — ${fuera}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          },
+        );
+      }
+      setMarcadas(new Set());
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setApartando(false);
+    }
+  };
 
   const generar = async (request: PartRequestDoc) => {
     setGenerando(request._id);
@@ -273,15 +347,53 @@ function PendingSection({
     <div className="grid gap-5">
       {sinMaterial.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <PackageCheck className="size-4 text-signal" />
-              Sin material en el almacén
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Peticiones que el almacén no puede cubrir —repuestos nuevos o sin
-              existencias—. Apartarlas es el primer paso para comprarlas.
-            </p>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <PackageCheck className="size-4 text-signal" />
+                Sin material en el almacén
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Peticiones que el almacén no puede cubrir —repuestos nuevos o
+                sin existencias—. Apartarlas es el primer paso para comprarlas.
+              </p>
+            </div>
+            {canManage && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setMarcadas(
+                      todasMarcadas
+                        ? new Set()
+                        : new Set(
+                            sinMaterial.map(({ request }) => request._id),
+                          ),
+                    )
+                  }
+                >
+                  {todasMarcadas ? "Quitar todas" : "Marcar todas"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2"
+                  disabled={apartando || marcadasSinMaterial.length === 0}
+                  onClick={() => void apartarMarcadas()}
+                >
+                  <ShoppingCart className="size-4" />
+                  {marcadasSinMaterial.length === 0
+                    ? "Apartar las marcadas"
+                    : `Apartar ${marcadasSinMaterial.length} ${
+                        marcadasSinMaterial.length === 1
+                          ? "petición"
+                          : "peticiones"
+                      }`}
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="grid gap-2">
             {sinMaterial.map(({ request, missing }) => (
@@ -289,18 +401,28 @@ function PendingSection({
                 key={request._id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    {request.reference}
-                    <span className="ml-2 font-normal text-muted-foreground">
-                      {request.requesterName}
-                    </span>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {missing
-                      .map((line) => `${line.code} × ${line.quantity}`)
-                      .join(" · ")}
-                  </p>
+                <div className="flex min-w-0 items-start gap-3">
+                  {canManage && (
+                    <Checkbox
+                      checked={marcadas.has(request._id)}
+                      onCheckedChange={() => alternarSinMaterial(request._id)}
+                      aria-label={`Incluir ${request.reference} en la compra`}
+                      className="mt-1"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {request.reference}
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        {request.requesterName}
+                      </span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {missing
+                        .map((line) => `${line.code} × ${line.quantity}`)
+                        .join(" · ")}
+                    </p>
+                  </div>
                 </div>
                 {canManage && (
                   <Button
@@ -790,7 +912,7 @@ function OrdersSection({
       toast.success(`Orden ${anulando.reference} anulada`, {
         description:
           returned > 0
-            ? `${returned} petición${returned === 1 ? "" : "es"} de compra vuelven a la cola.`
+            ? `${returned} ${returned === 1 ? "petición de compra vuelve" : "peticiones de compra vuelven"} a la cola.`
             : "No había nada por devolver: lo recibido se queda.",
       });
       setAnulando(null);
@@ -807,12 +929,6 @@ function OrdersSection({
       {orders.map((order) => {
         const meta = PURCHASE_ORDER_STATUS_META[order.status];
         const total = orderTotals(order);
-        // Lo que ya no se puede hacer con esta orden, con su motivo: recepcionar
-        // y anular salen de la máquina (`lib/purchaseFlow`), y una orden cerrada
-        // los explica en vez de esconderlos sin decir por qué.
-        const blocked = canManage
-          ? blockedPurchaseOrderSteps(order.status)
-          : [];
         return (
           <Card key={order._id}>
             <CardContent className="grid gap-3 pt-6">
@@ -888,16 +1004,8 @@ function OrdersSection({
                     )}
                 </div>
               </div>
-              {blocked.length > 0 && (
-                <BlockedSteps
-                  groups={blocked.map((group) => ({
-                    label: group.actions
-                      .map((action) => PURCHASE_ORDER_STEP_LABELS[action])
-                      .join(", "),
-                    reason: group.reason,
-                  }))}
-                />
-              )}
+              {/* Los motivos viven en la ficha de la orden, junto a su etapa;
+                  la tarjeta solo dice lo que ha llegado. */}
               <Progress value={Math.round(total.ratio * 100)} />
             </CardContent>
           </Card>
@@ -912,6 +1020,11 @@ function OrdersSection({
           onClose={() => setAbierta(null)}
           onReceive={() => {
             setRecibiendo(actual);
+            setAbierta(null);
+          }}
+          onCancel={() => {
+            setMotivo("");
+            setAnulando(actual);
             setAbierta(null);
           }}
         />
@@ -977,12 +1090,14 @@ function OrderSheet({
   canManage,
   onClose,
   onReceive,
+  onCancel,
 }: {
   order: PurchaseOrderDoc;
   receptions: ReceptionDoc[];
   canManage: boolean;
   onClose: () => void;
   onReceive: () => void;
+  onCancel: () => void;
 }) {
   const setLineNote = useMutation(api.purchasing.setLineNote);
   const setSolicitudeCode = useMutation(api.purchasing.setSolicitudeCode);
@@ -995,6 +1110,23 @@ function OrderSheet({
   const [nota, setNota] = useState("");
   const meta = PURCHASE_ORDER_STATUS_META[order.status];
   const total = orderTotals(order);
+  // El recorrido, arriba: en qué tramo está la orden y qué toca, con las mismas
+  // reglas que sus botones (`lib/orderJourney`).
+  const stages = orderJourney(order.status, { received: total.received > 0 });
+  const nextAction = nextPurchaseOrderAction(order.status, { canManage });
+  const nextLabel = nextAction
+    ? (NEXT_ORDER_STEP_LABELS[nextAction] ?? nextAction)
+    : null;
+  const nextHint = !canManage
+    ? "La llevan quienes gestionan las compras."
+    : order.status === "completed"
+      ? "La orden está completada: entró todo lo que se pidió."
+      : order.status === "cancelled"
+        ? "La orden está anulada: sus peticiones volvieron a la cola."
+        : "Sin pasos disponibles ahora mismo.";
+  // Los dos pasos de la orden solo se bloquean cuando ya está cerrada, así que
+  // su motivo se lee bajo el tramo que cuenta cómo terminó.
+  const blocked = canManage ? blockedJourneySteps(order.status) : [];
 
   const guardarNota = async (line: PurchaseOrderLine) => {
     try {
@@ -1048,6 +1180,14 @@ function OrderSheet({
         </SheetHeader>
 
         <div className="grid gap-4 px-4 pb-6">
+          <JourneySummary
+            label="Recorrido de la orden de compra"
+            stages={stages}
+            nowLabel={`${meta.label} · ${total.received}/${total.quantity} ud`}
+            nextLabel={nextLabel}
+            nextHint={nextHint}
+            blocked={blocked}
+          />
           {/* Código de solicitud de compra externa */}
           <div className="rounded-lg border border-border bg-card p-3 shadow-xs">
             <div className="flex items-center justify-between gap-2">
@@ -1220,13 +1360,32 @@ function OrderSheet({
             )}
           </div>
 
+        </div>
+
+        {/* Las acciones, abajo y siempre a la vista: la ficha es larga y estaban
+            al final, tras los artículos y las recepciones. */}
+        <SheetFooter className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-3 backdrop-blur-sm sm:px-6">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cerrar
+          </Button>
+          {canManage && canAdvancePurchaseOrder(order.status, "cancel") && (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 text-destructive"
+              onClick={onCancel}
+            >
+              <Undo2 className="size-4" />
+              Anular la orden
+            </Button>
+          )}
           {canManage && canAdvancePurchaseOrder(order.status, "receive") && (
             <Button type="button" className="gap-2" onClick={onReceive}>
               <Truck className="size-4" />
               Recepcionar material
             </Button>
           )}
-        </div>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

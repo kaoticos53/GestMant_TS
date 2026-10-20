@@ -52,6 +52,7 @@ export function NotificationBell({
   const markAllRead = markAllReadProp ?? markAllReadBackend;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   // El desplegable se ancla a la ventana (no a su contenedor), que es lo que
   // impide que lo corte el panel lateral o la cabecera: el mismo anclaje que
   // usa el icono de mensajes, en `@/hooks/use-anchored-panel`.
@@ -74,7 +75,11 @@ export function NotificationBell({
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Al cerrar con el teclado, el foco vuelve a la campana: antes se quedaba
+      // en el vacío y el siguiente tabulador empezaba por el principio.
+      buttonRef.current?.focus();
     };
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -82,6 +87,14 @@ export function NotificationBell({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
+    // `buttonRef` es un `useRef` estable: va en la lista porque lo usa el cierre
+    // con `Esc`, y así la regla de dependencias no queda esquivada.
+  }, [open, buttonRef]);
+
+  // Al abrir, el foco entra en el panel: se anuncia como diálogo y lo que hay
+  // dentro se recorre con el tabulador, sin quedarse en el botón de la campana.
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
   }, [open]);
 
   const items = notifications ?? [];
@@ -131,10 +144,12 @@ export function NotificationBell({
 
       {open && (
         <div
+          ref={panelRef}
+          tabIndex={-1}
           role="dialog"
           aria-label="Notificaciones"
           style={panelStyle}
-          className="z-50 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 pt-2 shadow-lg"
+          className="z-50 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 pt-2 shadow-lg outline-none"
         >
           <div className="flex items-center justify-between px-2.5 py-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

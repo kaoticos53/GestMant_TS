@@ -36,10 +36,7 @@ import { AFTER_MONTHS_OPTIONS, archivableBefore } from "@/lib/archive";
 import { groupByDate, matchesQuery, monthsAgo, sortByDate } from "@/lib/browse";
 import { reporterNoticeText } from "@/lib/incidentMail";
 import { richDocToPlainText } from "@/lib/richDoc";
-import {
-  DEFAULT_TRASH_RETENTION_DAYS,
-  trashRemainingLabel,
-} from "@/lib/trash";
+import { DEFAULT_TRASH_RETENTION_DAYS, trashRemainingLabel } from "@/lib/trash";
 import { cn } from "@/lib/utils";
 import {
   INCIDENT_STATUS_META,
@@ -57,6 +54,7 @@ import {
   ArchiveRestore,
   CalendarClock,
   ClipboardList,
+  Eye,
   SearchX,
   SlidersHorizontal,
   Siren,
@@ -64,6 +62,8 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { IncidentDetailSheet } from "./incidents/components/IncidentDetailSheet";
+import { RequestDetailSheet } from "./requests/components/RequestDetailSheet";
 import {
   QueueToolbar,
   type QueueSortId,
@@ -108,6 +108,17 @@ interface ArchiveEntryBase {
 type ArchiveEntry =
   | (ArchiveEntryBase & { kind: "incident"; id: Id<"incidents"> })
   | (ArchiveEntryBase & { kind: "request"; id: Id<"partRequests"> });
+
+/**
+ * La ficha abierta, solo por su tipo y su identificador: la fila entera ya
+ * está cargada en el archivo, así que no hace falta guardarla. Así la misma
+ * forma sirve para abrirla desde una fila y para abrirla desde fuera —el
+ * buscador global—, que es lo que llega en `initialEntry`.
+ */
+export interface OpenArchivedDoc {
+  kind: "incident" | "request";
+  id: string;
+}
 
 function incidentEntry(incident: IncidentDoc): ArchiveEntry {
   const meta = INCIDENT_STATUS_META[incident.status];
@@ -247,20 +258,38 @@ function TrashGroup({
   );
 }
 
-/** Recuperar o borrar una ficha de la papelera, sea incidencia o petición. */
+/**
+ * Lo que se puede hacer con una ficha de la papelera: leerla, recuperarla o
+ * borrarla. Leerla va primero porque es lo que se hace antes de las otras dos:
+ * la lista enseña un resumen y la ficha entera es la que dice si merece la pena
+ * volver a por ella.
+ */
 function TrashButtons({
   row,
   busyId,
+  onOpen,
   onRestore,
   onDelete,
 }: {
   row: TrashRow;
   busyId: string | null;
+  onOpen: (row: TrashRow) => void;
   onRestore: (row: TrashRow) => Promise<void>;
   onDelete: (row: TrashRow) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-2"
+        disabled={busyId === row.item.id}
+        onClick={() => onOpen(row)}
+      >
+        <Eye className="size-4" />
+        Ver ficha
+      </Button>
       <Button
         type="button"
         variant="outline"
@@ -301,10 +330,30 @@ function TrashButtons({
 export function ArchiveView({
   canArchiveIncidents = false,
   canArchiveRequests = false,
+  canViewCatalog = false,
+  canViewEquipment = false,
+  currentUserId = null,
+  currentUserName = "",
+  onOpenRequest,
+  initialEntry,
   onOpenSettings,
 }: {
   canArchiveIncidents?: boolean;
   canArchiveRequests?: boolean;
+  /** Puede leer el almacén: la ficha enseña el stock de cada línea. */
+  canViewCatalog?: boolean;
+  /** Puede leer el inventario: la ficha enlaza el equipo del caso. */
+  canViewEquipment?: boolean;
+  currentUserId?: Id<"users"> | null;
+  /** Firma los informes que se exportan desde la ficha. */
+  currentUserName?: string;
+  /** Abrir una petición en su módulo, desde la ficha de la incidencia. */
+  onOpenRequest?: (id: Id<"partRequests">) => void;
+  /**
+   * La ficha que hay que abrir al entrar. La usa el buscador global para llevar
+   * una ficha archivada a su ficha en vez de a una cola donde ya no está.
+   */
+  initialEntry?: OpenArchivedDoc | null;
   /** Abre «Ajustes del taller», donde se configura el archivado automático. */
   onOpenSettings?: () => void;
 }) {
@@ -316,6 +365,13 @@ export function ArchiveView({
     useQuery(api.incidents.list, { includeArchived: true }) ?? [];
   const allRequests =
     useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
+  // La ficha de lo archivado se abre en solo lectura, pero necesita el catálogo
+  // —el stock de cada línea— y el inventario —el equipo del caso—. Quien no
+  // tiene esos permisos no los pide: la ficha se abre igual, sin esas dos cosas.
+  const parts =
+    useQuery(api.spareParts.list, canViewCatalog ? {} : "skip") ?? [];
+  const equipment =
+    useQuery(api.equipment.list, canViewEquipment ? {} : "skip") ?? [];
   const incidents = allIncidents.filter((row) => row.archivedAt !== undefined);
   const requests = allRequests.filter((row) => row.archivedAt !== undefined);
   const activeIncidents = allIncidents.filter(
@@ -355,6 +411,11 @@ export function ArchiveView({
   const [kind, setKind] = useState<ArchiveKind>("all");
   const [compact, setCompact] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // La ficha abierta —una incidencia o una petición—, siempre en solo lectura:
+  // el archivo es para consultar lo que ya terminó, no para seguir trabajándolo.
+  const [openEntry, setOpenEntry] = useState<OpenArchivedDoc | null>(
+    initialEntry ?? null,
+  );
   const [cutoffMonths, setCutoffMonths] = useState("12");
   const [bulkTarget, setBulkTarget] = useState<"incidents" | "requests" | null>(
     null,
@@ -365,6 +426,18 @@ export function ArchiveView({
   // pantalla —y plazo—, así que cada ficha lleva consigo de qué es.
   const [trashBusyId, setTrashBusyId] = useState<string | null>(null);
   const [trashDeleting, setTrashDeleting] = useState<TrashRow | null>(null);
+  // La ficha de la papelera que se está leyendo. Se pide entera —con su
+  // expediente, sus notas y sus repuestos— solo cuando alguien la abre: la lista
+  // de la papelera trae el resumen, no el documento.
+  const [trashOpen, setTrashOpen] = useState<TrashRow | null>(null);
+  const openWithdrawnIncident = useQuery(
+    api.incidents.withdrawn,
+    trashOpen?.kind === "incident" ? { incidentId: trashOpen.item.id } : "skip",
+  );
+  const openWithdrawnRequest = useQuery(
+    api.partRequests.withdrawn,
+    trashOpen?.kind === "request" ? { requestId: trashOpen.item.id } : "skip",
+  );
   // Lo retirado se enseña por tandas: cada cara solo con quien puede deshacerla
   // (el backend no contesta la papelera a quien no tiene la capacidad).
   const trashedIncidentRows: Extract<TrashRow, { kind: "incident" }>[] =
@@ -375,8 +448,7 @@ export function ArchiveView({
     canArchiveRequests
       ? trashedRequests.map((item) => ({ kind: "request" as const, item }))
       : [];
-  const trashCount =
-    trashedIncidentRows.length + trashedRequestRows.length;
+  const trashCount = trashedIncidentRows.length + trashedRequestRows.length;
 
   const entries = [
     ...incidents.map(incidentEntry),
@@ -432,6 +504,17 @@ export function ArchiveView({
     (canArchiveIncidents && pending.incidents > 0) ||
     (canArchiveRequests && pending.requests > 0);
 
+  // La ficha que se está mirando, con la fila entera del backend: el archivo ya
+  // tiene las dos colas cargadas, así que no hay que pedir nada más.
+  const openIncidentDoc =
+    openEntry?.kind === "incident"
+      ? (allIncidents.find((row) => row._id === openEntry.id) ?? null)
+      : null;
+  const openRequestDoc =
+    openEntry?.kind === "request"
+      ? (allRequests.find((row) => row._id === openEntry.id) ?? null)
+      : null;
+
   const handleRestore = async (entry: ArchiveEntry) => {
     setBusyId(entry.id);
     try {
@@ -484,9 +567,7 @@ export function ArchiveView({
       } else {
         await deleteRequest({ requestId: trashDeleting.item.id });
       }
-      toast.success(
-        `${trashDeleting.item.reference} borrada definitivamente`,
-      );
+      toast.success(`${trashDeleting.item.reference} borrada definitivamente`);
       setTrashDeleting(null);
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -767,6 +848,18 @@ export function ArchiveView({
                             </p>
                           </div>
 
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() =>
+                              setOpenEntry({ kind: entry.kind, id: entry.id })
+                            }
+                          >
+                            <Eye className="size-4" />
+                            Ver ficha
+                          </Button>
                           {canRestore && (
                             <Button
                               type="button"
@@ -840,7 +933,10 @@ export function ArchiveView({
                         <span className="font-mono text-xs font-semibold text-muted-foreground">
                           {item.reference}
                         </span>
-                        <Badge variant="outline" className={meta.badgeClassName}>
+                        <Badge
+                          variant="outline"
+                          className={meta.badgeClassName}
+                        >
                           {meta.label}
                         </Badge>
                         <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
@@ -871,7 +967,13 @@ export function ArchiveView({
                         Aviso a quien notificó: {reporterNoticeText(item)}
                       </p>
                     </div>
-                    <TrashButtons row={row} busyId={trashBusyId} onRestore={handleTrashRestore} onDelete={setTrashDeleting} />
+                    <TrashButtons
+                      row={row}
+                      busyId={trashBusyId}
+                      onOpen={setTrashOpen}
+                      onRestore={handleTrashRestore}
+                      onDelete={setTrashDeleting}
+                    />
                   </article>
                 );
               })}
@@ -886,7 +988,11 @@ export function ArchiveView({
               {trashedRequestRows.map((row) => {
                 const item = row.item;
                 const meta = STATUS_META[item.status] ?? STATUS_META.pending;
-                const context = [item.requesterName, item.requesterTeam, item.equipment]
+                const context = [
+                  item.requesterName,
+                  item.requesterTeam,
+                  item.equipment,
+                ]
                   .filter(Boolean)
                   .join(" · ");
                 return (
@@ -899,7 +1005,10 @@ export function ArchiveView({
                         <span className="font-mono text-xs font-semibold text-muted-foreground">
                           {item.reference}
                         </span>
-                        <Badge variant="outline" className={meta.badgeClassName}>
+                        <Badge
+                          variant="outline"
+                          className={meta.badgeClassName}
+                        >
                           {meta.label}
                         </Badge>
                         <span className="text-[11px] font-medium uppercase tracking-wide text-destructive">
@@ -923,7 +1032,13 @@ export function ArchiveView({
                           : ""}
                       </p>
                     </div>
-                    <TrashButtons row={row} busyId={trashBusyId} onRestore={handleTrashRestore} onDelete={setTrashDeleting} />
+                    <TrashButtons
+                      row={row}
+                      busyId={trashBusyId}
+                      onOpen={setTrashOpen}
+                      onRestore={handleTrashRestore}
+                      onDelete={setTrashDeleting}
+                    />
                   </article>
                 );
               })}
@@ -967,6 +1082,62 @@ export function ArchiveView({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* La ficha, en solo lectura: el recorrido enseña el tramo «Archivada»,
+          que es lo que el listado no cuenta. Los pasos no se dan desde aquí —el
+          caso ya terminó—: para volver a tramitarlo se recupera. */}
+      {openRequestDoc && (
+        <RequestDetailSheet
+          key={openRequestDoc._id}
+          request={openRequestDoc}
+          parts={parts}
+          canManage={false}
+          showStock={canViewCatalog}
+          onClose={() => setOpenEntry(null)}
+        />
+      )}
+      {openIncidentDoc && (
+        <IncidentDetailSheet
+          key={openIncidentDoc._id}
+          incident={openIncidentDoc}
+          equipment={equipment}
+          requests={allRequests}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          canAssign={false}
+          canOpenRequests={onOpenRequest !== undefined}
+          onOpenRequest={onOpenRequest}
+          onClose={() => setOpenEntry(null)}
+        />
+      )}
+
+      {/* La ficha de una retirada, también en solo lectura: es lo que se mira
+          antes de recuperarla o de borrarla de verdad, y sin abrirla la
+          decisión se toma con el resumen de una línea. */}
+      {openWithdrawnRequest && (
+        <RequestDetailSheet
+          key={openWithdrawnRequest._id}
+          request={openWithdrawnRequest}
+          parts={parts}
+          canManage={false}
+          showStock={canViewCatalog}
+          onClose={() => setTrashOpen(null)}
+        />
+      )}
+      {openWithdrawnIncident && (
+        <IncidentDetailSheet
+          key={openWithdrawnIncident._id}
+          incident={openWithdrawnIncident}
+          equipment={equipment}
+          requests={allRequests}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          canAssign={false}
+          canOpenRequests={onOpenRequest !== undefined}
+          onOpenRequest={onOpenRequest}
+          onClose={() => setTrashOpen(null)}
+        />
+      )}
 
       {bulkTarget && (
         <Dialog open onOpenChange={(open) => !open && setBulkTarget(null)}>

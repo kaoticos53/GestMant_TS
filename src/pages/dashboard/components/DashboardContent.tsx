@@ -7,6 +7,7 @@ import { Suspense, lazy } from "react";
 import { Link } from "react-router";
 import { IncidentLookup } from "../IncidentLookup";
 import type { RequestFilterId } from "../requests/types";
+import type { OpenArchivedDoc } from "../ArchiveView";
 import type { NavId } from "../types";
 
 const ArchiveView = lazy(() =>
@@ -76,6 +77,9 @@ export interface DashboardContentProps {
   canSeePurchasing: boolean;
   initialIncidentId: Id<"incidents"> | null;
   incidentsViewKey: number;
+  /** Ficha archivada que hay que abrir al entrar en el archivo (buscador). */
+  archiveInitialEntry: OpenArchivedDoc | null;
+  archiveViewKey: number;
   requestsEquipmentFilter: string;
   onEquipmentFilterChange: (val: string) => void;
   initialRequestId: Id<"partRequests"> | null;
@@ -110,6 +114,8 @@ export function DashboardContent({
   canSeePurchasing,
   initialIncidentId,
   incidentsViewKey,
+  archiveInitialEntry,
+  archiveViewKey,
   requestsEquipmentFilter,
   onEquipmentFilterChange,
   initialRequestId,
@@ -282,8 +288,17 @@ export function DashboardContent({
         />
       ) : activeTab === "archive" ? (
         <ArchiveView
+          key={`archive-${archiveViewKey}`}
+          initialEntry={archiveInitialEntry}
           canArchiveIncidents={can("manageIncidents")}
           canArchiveRequests={can("decideRequests")}
+          // La ficha del archivo se abre en solo lectura, pero necesita el
+          // catálogo y el inventario para contar el stock y el equipo.
+          canViewCatalog={can("viewInventory")}
+          canViewEquipment={can("viewEquipment")}
+          currentUserId={user?._id ?? null}
+          currentUserName={displayName}
+          onOpenRequest={onOpenRequest}
           onOpenSettings={
             can("manageIncidents") || can("decideRequests")
               ? () => goToTab("settings")

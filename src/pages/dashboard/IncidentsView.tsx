@@ -95,14 +95,22 @@ export function IncidentsView({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap rounded-lg border border-border/70 bg-card p-1 shadow-sm">
+        {/* Los filtros en una sola línea: antes, con ocho estados, se partían en
+            dos filas y empujaban la lista. En pantallas estrechas se recorren en
+            horizontal, y cada uno dice si está puesto (`aria-pressed`). */}
+        <div
+          role="group"
+          aria-label="Filtrar incidencias por estado"
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 rounded-lg border border-border/70 bg-card p-1 shadow-sm max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
+        >
           {INCIDENT_FILTERS.map((option) => (
             <button
               key={option.id}
               type="button"
+              aria-pressed={filter === option.id}
               onClick={() => setFilter(option.id)}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 filter === option.id
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -241,7 +249,7 @@ export function IncidentsView({
                             onClick={() => setDetailId(incident._id)}
                             className={cn(
                               "w-full rounded-xl border border-border/70 bg-card text-left shadow-sm transition-colors hover:border-signal/40",
-                              compact ? "p-3" : "p-4",
+                              compact ? "px-3 py-2" : "p-4",
                               canAssign && isClosed && "pb-12",
                             )}
                           >

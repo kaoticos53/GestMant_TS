@@ -1,3 +1,4 @@
+import { Kbd } from "@/components/ui/kbd";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { richDocToPlainText } from "@/lib/richDoc";
@@ -6,16 +7,43 @@ import {
   INCIDENT_STATUS_META,
   STATUS_META,
   equipmentLabel,
+  looksLikeIncidentReference,
   normalizeIncidentReference,
 } from "@/lib/workshop";
-import { Boxes, ClipboardList, Cpu, Search, Siren } from "lucide-react";
+import {
+  Archive,
+  Boxes,
+  ClipboardList,
+  Cpu,
+  Search,
+  Siren,
+} from "lucide-react";
 import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-/** Resultado de la búsqueda global: el módulo al que navega y qué abrir. */
+/**
+ * Resultado de la búsqueda global: el módulo al que navega y qué abrir.
+ *
+ * La incidencia y la petición llevan si están archivadas: se siguen
+ * encontrando —lo que se busca cuando algo lleva tiempo cerrado— pero no se
+ * abren en su cola, porque allí ya no están, sino en el archivo y en solo
+ * lectura.
+ */
 export type SearchHit =
-  | { kind: "incident"; id: Id<"incidents">; title: string; subtitle: string }
-  | { kind: "request"; id: Id<"partRequests">; title: string; subtitle: string }
+  | {
+      kind: "incident";
+      id: Id<"incidents">;
+      title: string;
+      subtitle: string;
+      archived: boolean;
+    }
+  | {
+      kind: "request";
+      id: Id<"partRequests">;
+      title: string;
+      subtitle: string;
+      archived: boolean;
+    }
   | {
       kind: "part";
       id: Id<"spareParts">;
@@ -32,7 +60,8 @@ export type SearchHit =
     };
 
 interface SearchGroup {
-  kind: SearchHit["kind"];
+  /** «archive» no es un tipo de ficha: es el grupo de lo que ya no está en la cola. */
+  kind: SearchHit["kind"] | "archive";
   label: string;
   icon: typeof Boxes;
   hits: SearchHit[];
@@ -79,19 +108,26 @@ export function GlobalSearch({
   // La lista vacía de mientras carga se guarda en su propio `useMemo`: si se
   // escribiera `?? []` en el cuerpo, cada render tendría una lista nueva y el
   // filtro de abajo se recalcularía sin que haya cambiado nada.
-  const consultaIncidencias = useQuery(api.incidents.list, {
-    includeArchived: true,
-  });
-  const consultaPeticiones = useQuery(api.partRequests.list, {
-    includeArchived: true,
-  });
+  // El buscador no descarga el taller hasta que alguien lo usa: vive en la barra
+  // lateral y se monta en cada pantalla, así que pedir todas las incidencias y
+  // peticiones —también las archivadas— nada más entrar anulaba el resumen
+  // contado del panel. Hasta el primer foco, las consultas se saltan.
+  const [engaged, setEngaged] = useState(false);
+  const consultaIncidencias = useQuery(
+    api.incidents.list,
+    engaged ? { includeArchived: true } : "skip",
+  );
+  const consultaPeticiones = useQuery(
+    api.partRequests.list,
+    engaged ? { includeArchived: true } : "skip",
+  );
   const consultaRepuestos = useQuery(
     api.spareParts.list,
-    canSearchCatalog ? {} : "skip",
+    engaged && canSearchCatalog ? {} : "skip",
   );
   const consultaEquipos = useQuery(
     api.equipment.list,
-    canSearchCatalog ? {} : "skip",
+    engaged && canSearchCatalog ? {} : "skip",
   );
   const incidents = useMemo(
     () => consultaIncidencias ?? [],
@@ -107,6 +143,23 @@ export function GlobalSearch({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // ⌘/Ctrl + K lleva el foco al buscador desde cualquier pantalla: es el atajo
+  // que se espera en un panel y ahorra recorrer el menú para buscar algo.
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "k") return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      event.preventDefault();
+      setEngaged(true);
+      setOpen(true);
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, []);
 
   // Cierre al pulsar fuera (suscrito al documento: callback, no setState en
   // el cuerpo del efecto).
@@ -127,7 +180,7 @@ export function GlobalSearch({
     const q = normalize(query.trim());
     if (!q) return [];
 
-    const requestHits: SearchHit[] = requests
+    const requestHits: Extract<SearchHit, { kind: "request" }>[] = requests
       .filter((request) =>
         [
           request.reference,
@@ -144,22 +197,27 @@ export function GlobalSearch({
       )
       .slice(0, MAX_PER_GROUP)
       .map((request) => ({
-        kind: "request",
+        kind: "request" as const,
         id: request._id,
         title: request.reference,
         subtitle: `${STATUS_META[request.status]?.label ?? STATUS_META.pending.label} · ${request.requesterName}${
           request.equipment ? ` · ${request.equipment}` : ""
         }`,
+        archived: request.archivedAt !== undefined,
       }));
 
     // Las incidencias se buscan también por su referencia —el número que se le
     // da a quien la notifica—, y no solo por texto: «inc-4», «INC-4» y «4»
-    // encuentran la misma ficha, igual que en la consulta de invitado.
-    const reference = normalizeIncidentReference(q);
-    const incidentHits: SearchHit[] = incidents
+    // encuentran la misma ficha, igual que en la consulta de invitado. Solo
+    // cuando lo escrito tiene forma de referencia: si no, «PET-0014» —una
+    // petición— sacaba también la incidencia 14, que no tiene nada que ver.
+    const reference = looksLikeIncidentReference(query.trim())
+      ? normalizeIncidentReference(query.trim())
+      : null;
+    const incidentHits: Extract<SearchHit, { kind: "incident" }>[] = incidents
       .filter(
         (incident) =>
-          incident.reference === reference ||
+          (reference !== null && incident.reference === reference) ||
           [
             incident.reference,
             incident.equipmentKind ?? "",
@@ -172,7 +230,7 @@ export function GlobalSearch({
       )
       .slice(0, MAX_PER_GROUP)
       .map((incident) => ({
-        kind: "incident",
+        kind: "incident" as const,
         id: incident._id,
         title: incident.reference,
         subtitle: [
@@ -182,20 +240,34 @@ export function GlobalSearch({
         ]
           .filter(Boolean)
           .join(" · "),
+        archived: incident.archivedAt !== undefined,
       }));
+
+    // Lo archivado va en su propio grupo: no se abre donde el resto —su cola ya
+    // no lo tiene—, sino en el archivo y en solo lectura. Mezclado con la cola,
+    // elegir una ficha archivada llevaba a un módulo donde no aparecía.
+    const archivedHits: SearchHit[] = [...incidentHits, ...requestHits].filter(
+      (hit) => hit.archived,
+    );
 
     const result: SearchGroup[] = [
       {
         kind: "incident",
         label: "Incidencias",
         icon: Siren,
-        hits: incidentHits,
+        hits: incidentHits.filter((hit) => !hit.archived),
       },
       {
         kind: "request",
         label: "Peticiones",
         icon: ClipboardList,
-        hits: requestHits,
+        hits: requestHits.filter((hit) => !hit.archived),
+      },
+      {
+        kind: "archive",
+        label: "Archivo · solo lectura",
+        icon: Archive,
+        hits: archivedHits,
       },
     ];
 
@@ -297,19 +369,34 @@ export function GlobalSearch({
     <div ref={containerRef} className={cn("relative", className)}>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <input
+        ref={inputRef}
         type="search"
         value={query}
         onChange={(event) => {
+          setEngaged(true);
           setQuery(event.target.value);
           setActiveIndex(0);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setEngaged(true);
+          setOpen(true);
+        }}
         onKeyDown={handleKeyDown}
         placeholder="Buscar por referencia o texto..."
         aria-label="Búsqueda global"
-        className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-signal/50 focus:ring-2 focus:ring-signal/20"
+        aria-keyshortcuts="Control+K"
+        className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-16 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring"
       />
+      {query === "" && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5"
+        >
+          <Kbd>Ctrl</Kbd>
+          <Kbd>K</Kbd>
+        </span>
+      )}
 
       {open && trimmed.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">

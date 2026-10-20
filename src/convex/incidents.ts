@@ -943,6 +943,7 @@ export {
   deleteNow,
   purgeExpired,
   trash,
+  withdrawn,
   type WithdrawnIncidentItem,
 } from "./_incidents/trash";
 

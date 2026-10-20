@@ -46,8 +46,8 @@ export function MachinesView() {
 
       <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
         Quién puede dar cada paso no está aquí —eso son las capacidades de tu
-        rol, en «Roles y permisos»—, y una máquina que no sabe explicar por qué
-        no se puede dar un paso se queda sin esa línea en vez de inventarla.
+        rol, en «Roles y permisos»—, y un flujo que no sabe explicar por qué no
+        se puede dar un paso se queda sin esa línea en vez de inventarla.
       </p>
     </div>
   );

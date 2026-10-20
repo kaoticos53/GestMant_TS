@@ -51,6 +51,7 @@ import type * as purchasing from "../purchasing.js";
 import type * as references from "../references.js";
 import type * as reportUploads from "../reportUploads.js";
 import type * as seed from "../seed.js";
+import type * as seedPurchasing from "../seedPurchasing.js";
 import type * as spareParts from "../spareParts.js";
 import type * as storageCleanup from "../storageCleanup.js";
 import type * as trash from "../trash.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   references: typeof references;
   reportUploads: typeof reportUploads;
   seed: typeof seed;
+  seedPurchasing: typeof seedPurchasing;
   spareParts: typeof spareParts;
   storageCleanup: typeof storageCleanup;
   trash: typeof trash;

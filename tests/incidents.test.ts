@@ -3884,6 +3884,34 @@ describe("papelera de incidencias", () => {
     );
   });
 
+  test("la ficha de una retirada se lee entera, y solo mientras está en la papelera", async () => {
+    const { coordinator, reference, incidentId } = await reported();
+
+    // Lo vivo no sale por aquí: se lee por su módulo.
+    expect(
+      await coordinator.query(api.incidents.withdrawn, { incidentId }),
+    ).toBeNull();
+
+    await coordinator.mutation(api.incidents.withdraw, {
+      incidentId,
+      reason: "Aviso duplicado",
+    });
+
+    const ficha = await coordinator.query(api.incidents.withdrawn, {
+      incidentId,
+    });
+    expect(ficha?.reference).toBe(reference);
+    expect(ficha?.deletedReason).toBe("Aviso duplicado");
+    // Lo que la lista de la papelera no lleva —la descripción con formato y el
+    // recorrido— viaja con la ficha, que es lo que se lee antes de decidir.
+    expect(ficha?.history.length).toBeGreaterThan(0);
+
+    await coordinator.mutation(api.incidents.restore, { incidentId });
+    expect(
+      await coordinator.query(api.incidents.withdrawn, { incidentId }),
+    ).toBeNull();
+  });
+
   test("recuperarla la devuelve tal y como estaba, con su traza", async () => {
     const { t, coordinator, reference, code, incidentId } = await reported();
     await coordinator.mutation(api.incidents.withdraw, { incidentId });
@@ -3921,6 +3949,10 @@ describe("papelera de incidencias", () => {
     );
     await expectConvexError(
       tech.query(api.incidents.trash, {}),
+      "No tienes permisos para ver la papelera de incidencias",
+    );
+    await expectConvexError(
+      tech.query(api.incidents.withdrawn, { incidentId }),
       "No tienes permisos para ver la papelera de incidencias",
     );
     // Borrar de un tirón lo que nunca pasó por la papelera no se puede: sería

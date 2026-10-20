@@ -238,7 +238,8 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
     // —«devuélvela desde Devolver material»—, y ese botón no existía.
     await abrirFicha(peticion({ status: "issued", issuedAt: AYER }));
 
-    expect(ficha().textContent).toContain("Por qué no se puede");
+    // Los motivos viven en el recorrido, bajo la etapa de su paso.
+    expect(ficha().textContent).toContain("Aún no se puede");
     expect(ficha().textContent).toContain(
       "primero devuélvela desde «Devolver material»",
     );
@@ -269,6 +270,13 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
     expect(texto).toContain("En el archivo desde el");
     expect(texto).toContain("solo lectura");
     expect(texto).toContain("recupérala desde el módulo Archivo");
+
+    // El archivo es un tramo del recorrido: una entregada y guardada no se lee
+    // igual que una entregada que sigue en la cola.
+    expect(texto).toContain("Ahora (paso 4 de 4):");
+    expect(texto).toContain("Entregada · en el archivo");
+    expect(texto).toContain("Archivada");
+    expect(texto).toContain("En el archivo: la petición se consulta en solo lectura.");
 
     // Y ninguna acción: los pasos de la máquina, el archivo y la retirada se
     // apagan aunque quien mire sea quien decide peticiones.
@@ -337,8 +345,12 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
     await abrirFicha(peticion({ status: "rejected", decidedAt: AYER }));
 
     const texto = ficha().textContent ?? "";
-    expect(texto).toContain("ya está resuelta");
-    // Los pasos que comparten motivo van juntos: una sola línea para todos.
-    expect(texto.match(/ya está resuelta/g) ?? []).toHaveLength(1);
+    // Lo dice el resumen del recorrido, en la línea de «Siguiente»…
+    expect(
+      texto.match(/Ya está cerrada: no se vuelve a tramitar/g) ?? [],
+    ).toHaveLength(1);
+    // …y no se repite el mismo motivo siete veces, uno por cada paso.
+    expect(texto.match(/ya está resuelta/g) ?? []).toHaveLength(0);
+    expect(texto).not.toContain("Aún no se puede");
   });
 });

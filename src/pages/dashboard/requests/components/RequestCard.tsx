@@ -64,7 +64,7 @@ export function RequestCard({
       data-row
       className={cn(
         "rounded-xl border border-border/70 bg-card shadow-sm transition-colors hover:border-signal/40",
-        compact ? "p-3" : "p-4 sm:p-5",
+        compact ? "px-3 py-2" : "p-4 sm:p-5",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -96,8 +96,8 @@ export function RequestCard({
         </span>
       </div>
 
-      <div className="mt-3">
-        <p className="text-base font-semibold tracking-tight">
+      <div className={compact ? "mt-1" : "mt-3"}>
+        <p className={compact ? "text-sm font-semibold tracking-tight" : "text-base font-semibold tracking-tight"}>
           {request.requesterName}
           {request.requesterTeam && (
             <span className="font-normal text-muted-foreground">
@@ -116,11 +116,19 @@ export function RequestCard({
       {request.description && (
         <RichText
           value={request.description}
-          className="mt-3 line-clamp-2 text-sm leading-6 text-foreground/80 [&_img]:max-h-36 [&_img]:w-auto [&_img]:rounded-md [&_img]:object-contain"
+          className={cn(
+            "text-sm leading-6 text-foreground/80 [&_img]:max-h-36 [&_img]:w-auto [&_img]:rounded-md [&_img]:object-contain",
+            compact
+              ? "mt-1 line-clamp-1 [&_img]:hidden"
+              : "mt-3 line-clamp-2",
+          )}
         />
       )}
 
-      {request.lines.length > 0 && (
+      {/* En compacta, el material va contado en el pie («2 líneas · 2 unidades»)
+          y no ficha por ficha: las tres líneas de repuestos son lo que hacía
+          alta la tarjeta. El detalle está a un clic. */}
+      {request.lines.length > 0 && !compact && (
         <ul className="mt-3 flex flex-wrap gap-2">
           {request.lines.map((line) => (
             <li
@@ -139,15 +147,19 @@ export function RequestCard({
         </ul>
       )}
 
-      {noReference && canEditRequest(request.status) && (
-        <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-800">
+      {/* El aviso largo de «sin repuesto» solo cuando la ficha es cómoda: en
+          compacta ya lo dice el distintivo de la cabecera. */}
+      {noReference && canEditRequest(request.status) && !compact && (
+        <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-900 dark:text-amber-200">
           <Wrench className="mt-0.5 size-3.5 shrink-0" />
           Petición sin repuesto: investiga el proveedor y su nº de parte antes
           de aprobar.
         </p>
       )}
 
-      {request.attachments.length > 0 && (
+      {/* En la vista compacta los adjuntos no se cuentan: la ficha los enseña,
+          y aquí lo que se busca es ver muchas peticiones de un vistazo. */}
+      {request.attachments.length > 0 && !compact && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/50 px-2.5 py-1.5">
             <Paperclip className="size-3.5" />
@@ -168,7 +180,7 @@ export function RequestCard({
         </div>
       )}
 
-      {request.notes && (
+      {request.notes && !compact && (
         // La nota la escribe el editor, así que se pinta con su formato: las
         // comillas eran el adorno de las notas de texto plano.
         <RichText
@@ -178,13 +190,23 @@ export function RequestCard({
       )}
 
       {request.status !== "pending" && decisionLine(request) !== "" && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p
+          className={cn(
+            "flex items-center gap-1.5 text-xs text-muted-foreground",
+            compact ? "mt-1.5" : "mt-3",
+          )}
+        >
           <Clock className="size-3.5" />
           {decisionLine(request)}
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 border-t border-border/70",
+          compact ? "mt-2 pt-2" : "mt-4 pt-4",
+        )}
+      >
         <span className="text-xs text-muted-foreground">
           {noReference
             ? "Sin repuestos asociados"

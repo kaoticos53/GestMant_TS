@@ -224,11 +224,17 @@ const MAQUINAS: ReadonlyArray<{ ruta: string; reglas: readonly string[] }> = [
   {
     // Compras: las dos máquinas que lleva dentro —la orden y sus peticiones—.
     ruta: "src/convex/purchasing.ts",
+    reglas: ["canAdvancePurchaseOrder", "nextPurchaseRequestStatus"],
+  },
+  {
+    // La recepción vive en el submódulo de compras porque la comparten el botón
+    // de la ficha y la muestra de datos (`seedPurchasing`): es ahí donde se
+    // mueven de verdad la orden y sus peticiones.
+    ruta: "src/convex/_purchasing/helpers.ts",
     reglas: [
-      "canAdvancePurchaseOrder",
-      "nextPurchaseRequestStatus",
       "purchaseOrderStatusAfterReceiving",
       "purchaseRequestReceivedStatus",
+      "nextRequestStatus",
     ],
   },
 ];

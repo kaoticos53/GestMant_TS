@@ -55,7 +55,10 @@ async function expectConvexError(promise: Promise<unknown>, fragment: string) {
     () => null,
     (err: unknown) => err,
   );
-  expect(error, `Se esperaba un error que contuviera: ${fragment}`).not.toBeNull();
+  expect(
+    error,
+    `Se esperaba un error que contuviera: ${fragment}`,
+  ).not.toBeNull();
   const message =
     error instanceof ConvexError ? String(error.data) : String(error);
   expect(message).toContain(fragment);
@@ -71,7 +74,10 @@ async function requestByReference(authed: Authed, reference: string) {
 
 describe("papelera de peticiones", () => {
   /** Petición ya rechazada (decidida, sin tocar stock). */
-  async function rejectedRequest(manager: Authed, description = "Conector roto.") {
+  async function rejectedRequest(
+    manager: Authed,
+    description = "Conector roto.",
+  ) {
     const reference = await manager.mutation(api.partRequests.create, {
       requesterName: "Iván Torres",
       requesterTeam: "Realización",
@@ -117,6 +123,36 @@ describe("papelera de peticiones", () => {
     expect(papelera.items[0].purgeAt - papelera.items[0].deletedAt).toBe(
       DEFAULT_TRASH_RETENTION_DAYS * DAY,
     );
+  });
+
+  test("la ficha de una retirada se lee entera, y solo mientras está en la papelera", async () => {
+    const { manager } = await setup();
+    const { id, reference } = await rejectedRequest(manager);
+
+    // Lo vivo no sale por aquí: se lee por su módulo.
+    expect(
+      await manager.query(api.partRequests.withdrawn, { requestId: id }),
+    ).toBeNull();
+
+    await manager.mutation(api.partRequests.withdraw, {
+      requestId: id,
+      reason: "Duplicada de la PET-0001",
+    });
+
+    const ficha = await manager.query(api.partRequests.withdrawn, {
+      requestId: id,
+    });
+    expect(ficha?.reference).toBe(reference);
+    expect(ficha?.status).toBe("rejected");
+    expect(ficha?.deletedReason).toBe("Duplicada de la PET-0001");
+    // Con los adjuntos resueltos, como la cola: la ficha los enseña y sin la URL
+    // solo saldría el hueco.
+    expect(ficha?.attachments).toEqual([]);
+
+    await manager.mutation(api.partRequests.restore, { requestId: id });
+    expect(
+      await manager.query(api.partRequests.withdrawn, { requestId: id }),
+    ).toBeNull();
   });
 
   test("recuperarla la devuelve tal y como estaba, con sus decisiones", async () => {
@@ -171,6 +207,10 @@ describe("papelera de peticiones", () => {
     );
     await expectConvexError(
       tech.query(api.partRequests.trash, {}),
+      "No tienes permisos para ver la papelera de peticiones",
+    );
+    await expectConvexError(
+      tech.query(api.partRequests.withdrawn, { requestId: id }),
       "No tienes permisos para ver la papelera de peticiones",
     );
     // Borrar de un tirón lo que nunca pasó por la papelera no se puede: sería
@@ -280,9 +320,9 @@ describe("papelera de peticiones", () => {
     expect(
       (await t.run((ctx) => ctx.db.get(retirada.id)))?.archivedAt,
     ).toBeUndefined();
-    expect(
-      (await t.run((ctx) => ctx.db.get(viva.id)))?.archivedAt,
-    ).toBeTypeOf("number");
+    expect((await t.run((ctx) => ctx.db.get(viva.id)))?.archivedAt).toBeTypeOf(
+      "number",
+    );
 
     // Y la pasada de la noche tampoco la toca.
     expect(await t.mutation(internal.archive.runAutoArchive, {})).toBe(0);

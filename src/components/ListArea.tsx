@@ -35,7 +35,7 @@ export function ListArea({
   resetKey,
   children,
   ref,
-  maxHeightClass = "max-h-[calc(100dvh_-_18rem)]",
+  maxHeightClass = "max-h-[calc(100dvh_-_25rem)]",
 }: {
   /**
    * La tanda que se está viendo —la página, con lo que se busca y cómo se

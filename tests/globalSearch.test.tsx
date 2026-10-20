@@ -70,9 +70,12 @@ const texto = () => container.textContent ?? "";
 /** Lo que el buscador contesta a cada elección. */
 const elegidas: SearchHit[][] = [];
 
-function pintar(props: Partial<Parameters<typeof GlobalSearch>[0]> = {}): void {
-  LISTAS.incidents = [incidencia];
-  LISTAS.requests = [peticion];
+function pintar(
+  props: Partial<Parameters<typeof GlobalSearch>[0]> = {},
+  listas: { incidents?: unknown[]; requests?: unknown[] } = {},
+): void {
+  LISTAS.incidents = listas.incidents ?? [incidencia];
+  LISTAS.requests = listas.requests ?? [peticion];
   act(() => {
     root.render(
       <GlobalSearch onSelect={(hit) => elegidas.push([hit])} {...props} />,
@@ -101,6 +104,23 @@ const peticion = {
   description: "Fuente de alimentación de repuesto.",
   lines: [{ code: "ALI-24015", name: "Fuente de alimentación" }],
   status: "pending" as const,
+};
+
+/** Las mismas fichas, ya archivadas: se siguen encontrando, pero van aparte. */
+const incidenciaArchivada = {
+  ...incidencia,
+  _id: "inc-2",
+  reference: "INC-0030",
+  status: "resolved" as const,
+  archivedAt: Date.parse("2025-08-29T18:51:00.000Z"),
+};
+
+const peticionArchivada = {
+  ...peticion,
+  _id: "req-2",
+  reference: "PET-0014",
+  status: "rejected" as const,
+  archivedAt: Date.parse("2025-08-30T01:26:00.000Z"),
 };
 
 /** Escribe en el buscador, como quien lo usa desde la cabecera. */
@@ -181,6 +201,41 @@ describe("GlobalSearch — las incidencias en el buscador del taller", () => {
     );
   });
 
+  test("lo archivado va en su grupo y llega marcado para abrirlo en el archivo", () => {
+    pintar(
+      {},
+      { incidents: [incidenciaArchivada], requests: [peticionArchivada] },
+    );
+
+    buscar("PET-0014");
+    expect(texto()).toContain("Archivo · solo lectura");
+    expect(texto()).not.toContain("Peticiones");
+
+    const resultado = [...container.querySelectorAll("button")].find((boton) =>
+      boton.textContent?.includes("PET-0014"),
+    );
+    expect(resultado).not.toBeUndefined();
+    act(() => {
+      resultado!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
+      );
+    });
+    // Quien decide a dónde va el resultado es el panel: el buscador le dice que
+    // esa ficha está archivada.
+    expect(elegidas[0][0]).toMatchObject({
+      kind: "request",
+      id: "req-2",
+      archived: true,
+    });
+  });
+
+  test("lo vivo no se cuela en el grupo del archivo", () => {
+    pintar();
+    buscar("INC-0004");
+    expect(texto()).toContain("Incidencias");
+    expect(texto()).not.toContain("Archivo · solo lectura");
+  });
+
   test("buscar por la referencia de la incidencia no esconde las peticiones", () => {
     pintar();
 
@@ -193,5 +248,21 @@ describe("GlobalSearch — las incidencias en el buscador del taller", () => {
     expect(resultados()).toContain(
       "PET-0007Pendiente · Iván Torres · Cámara de estudio",
     );
+  });
+
+  test("la referencia de una petición no saca la incidencia del mismo número", () => {
+    // PET-0004 e INC-0004 conviven: buscar la petición no debe traer además la
+    // incidencia porque ambas acaben en el mismo número.
+    pintar(
+      {},
+      {
+        incidents: [incidencia],
+        requests: [{ ...peticion, reference: "PET-0004" }],
+      },
+    );
+
+    buscar("PET-0004");
+    expect(texto()).toContain("Peticiones");
+    expect(texto()).not.toContain("Incidencias");
   });
 });

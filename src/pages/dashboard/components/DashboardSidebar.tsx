@@ -220,7 +220,7 @@ export function DashboardSidebar({
           <button
             type="button"
             onClick={() => setShowChangelog(true)}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer select-none"
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer select-none"
             title={`${DETAILED_VERSION} · Clic para ver la bitácora de cambios`}
           >
             <History className="size-3 shrink-0" />

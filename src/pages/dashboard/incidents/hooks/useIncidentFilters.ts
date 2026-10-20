@@ -9,6 +9,8 @@ import {
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
+import { initialQueueDensity, writeDensity, type Density } from "@/lib/density";
+import { safeLocalStorage } from "@/lib/sidebar";
 import type { QueueSortId } from "../../QueueToolbar";
 import { STATUS_RANK, type IncidentDoc } from "../types";
 
@@ -47,7 +49,18 @@ export function useIncidentFilters({
   );
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<QueueSortId>("recent");
-  const [compact, setCompact] = useState(false);
+  // La vista de la cola (cómoda o compacta) se recuerda entre visitas: es una
+  // preferencia de quien trabaja, no del módulo. Abre en compacta, que es donde
+  // caben más casos por pantalla.
+  const [density, setDensity] = useState<Density>(() =>
+    initialQueueDensity(safeLocalStorage()),
+  );
+  const compact = density === "compact";
+  const setCompact = (value: boolean) => {
+    const next: Density = value ? "compact" : "comfortable";
+    setDensity(next);
+    writeDensity(safeLocalStorage(), next);
+  };
 
   const inQueueOrder = (items: IncidentDoc[]) =>
     [...items].sort(

@@ -46,6 +46,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,7 +62,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { BlockedSteps } from "@/components/BlockedSteps";
+import { JourneySummary } from "@/components/JourneySummary";
 import { DocumentLink } from "@/components/DocumentLink";
 import { RichText } from "@/components/RichText";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -64,7 +71,6 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { downloadText } from "@/lib/export";
 import {
   INCIDENT_STEP_LABELS,
-  blockedIncidentSteps,
   canAdvanceIncident,
   canChangeWorkshopTechnician,
   incidentTakesPartRequests,
@@ -72,6 +78,12 @@ import {
   isIncidentInWorkshop,
   isIncidentWaitingParts,
 } from "@/lib/incidentFlow";
+import {
+  NEXT_STEP_LABELS,
+  blockedJourneySteps,
+  incidentJourney,
+  nextIncidentAction,
+} from "@/lib/incidentJourney";
 import { reporterNoticeText } from "@/lib/incidentMail";
 import {
   lineDelivered,
@@ -283,17 +295,68 @@ export function IncidentDetailSheet({
     currentUserId !== null &&
     (incident.assigneeId === currentUserId ||
       incident.workshopAssigneeId === currentUserId);
-  const canWork = canAssign || isAssignee;
+  // Lo archivado se consulta, no se trabaja: el caso salió de la cola y desde el
+  // módulo Archivo se abre en solo lectura. La regla vive aquí —y no solo en la
+  // vista que la abre— para que una incidencia archivada no se pueda volver a
+  // tramitar por olvidarlo en otra pantalla: el material que llevaba ya entró o
+  // se dio por perdido, y reabrirla desde la ficha la sacaría del archivo sin
+  // que nadie lo decida.
+  const archivedAt = incident.archivedAt;
+  const archived = archivedAt !== undefined;
+  // Retirada a la papelera: su ficha se abre desde el módulo Archivo, antes de
+  // recuperarla o borrarla, y se consulta en solo lectura igual que lo
+  // archivado. La regla vive aquí —y no solo en la vista que la abre— para que
+  // una incidencia retirada no se pueda volver a tramitar por olvidarlo en otra
+  // pantalla.
+  const withdrawnAt = incident.deletedAt;
+  const withdrawn = withdrawnAt !== undefined;
+  const canWork = !archived && !withdrawn && (canAssign || isAssignee);
+  /** Coordinar con cambios: asignar, adjuntar, archivar o retirar. */
+  const canCoordinate = canAssign && !archived && !withdrawn;
   // Cambiar el técnico de taller: lo puede hacer quien coordina y el técnico de la
   // orden —con el equipo en el taller y el paso permitido desde el estado—.
   const canReassignWorkshop = canChangeWorkshopTechnician(incident, {
     id: currentUserId,
-    coordinates: canAssign,
+    coordinates: canCoordinate,
   });
   // Lo que la máquina deja hacer desde aquí y lo que no: los pasos que no se
   // pueden dar se enseñan con su motivo en vez de desaparecer (`lib/incidentFlow`).
   // Solo se cuentan a quien va a actuar: al resto le basta saber que no le toca.
-  const blocked = canWork ? blockedIncidentSteps(incident.status) : [];
+  // Los pasos que la máquina no deja dar, cada uno con su motivo y la etapa a la
+  // que pertenece: se enseñan dentro del recorrido, junto al paso que bloquean,
+  // no en un bloque aparte al pie de la ficha.
+  // Con el caso cerrado no hay nada que explicar paso a paso: lo dice el
+  // resumen del recorrido con una frase, y repetir cinco motivos iguales sobra.
+  const blockedSteps =
+    canWork && !isClosedIncident(incident.status)
+      ? blockedJourneySteps(incident.status)
+      : [];
+  // El paso que toca ahora, para el resumen del recorrido: el mismo que ofrecen
+  // los botones del pie, preguntado a la máquina de estados. Si no hay ninguno
+  // al alcance, el resumen dice por qué en vez de dejar el hueco.
+  const nextAction = nextIncidentAction(incident.status, {
+    canWork,
+    canAssign: canCoordinate,
+    inWorkshop,
+  });
+  const nextLabel = nextAction
+    ? (NEXT_STEP_LABELS[nextAction] ?? INCIDENT_STEP_LABELS[nextAction])
+    : null;
+  const nextHint = withdrawn
+    ? "Retirada a la papelera: se consulta en solo lectura hasta recuperarla o borrarla."
+    : archived
+      ? "En el archivo: la incidencia se consulta en solo lectura."
+      : isClosedIncident(incident.status)
+        ? "El caso está cerrado: se archiva cuando toque desde el pie."
+        : isIncidentWaitingParts(incident.status)
+          ? "Esperando material: el caso sigue cuando se entregue la petición."
+          : !canWork && !canAssign
+            ? `No la llevas tú: la siguiente acción es de ${
+                incident.assigneeName ??
+                incident.workshopAssigneeName ??
+                "quien coordina las incidencias"
+              }.`
+            : "Sin pasos disponibles ahora mismo.";
   // El rastro llega con la consulta: mientras está en camino (solo se pide a
   // quien coordina) no se exporta un informe al que le falte la auditoría.
   const trailPending = canAssign && trail === undefined;
@@ -687,7 +750,10 @@ export function IncidentDetailSheet({
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
-        <SheetHeader>
+        {/* La referencia y el estado se quedan arriba al bajar por la ficha, y
+            los botones de actuar, abajo: antes los dos extremos se iban con el
+            desplazamiento y las acciones quedaban 450 px por debajo del pliegue. */}
+        <SheetHeader className="sticky top-0 z-20 border-b border-border/70 bg-background/95 backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2">
             {/* La referencia es el número con el que el taller cita el caso
                 («la INC-0004»): se queda a la vista y se puede seleccionar de un
@@ -718,6 +784,41 @@ export function IncidentDetailSheet({
         </SheetHeader>
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
+          {/* Dónde está el caso y qué toca, lo primero: el historial completo
+              sigue al final para quien necesite el detalle de cada paso. */}
+          <JourneySummary
+            label="Recorrido de la incidencia"
+            stages={incidentJourney(incident.status, { inWorkshop, archived })}
+            // El archivo es un tramo del recorrido, no un estado: lo cerrado y
+            // guardado se lee «Resuelta · en el archivo».
+            nowLabel={
+              withdrawn
+                ? `${statusLabel} · retirada`
+                : archived
+                  ? `${statusLabel} · en el archivo`
+                  : statusLabel
+            }
+            nextLabel={nextLabel}
+            nextHint={nextHint}
+            blocked={blockedSteps}
+          />
+          {withdrawnAt !== undefined && (
+            <p className="rounded-lg border border-dashed border-destructive/40 bg-destructive/5 p-3 text-xs leading-5 text-muted-foreground">
+              Retirada el {formatDateTime(withdrawnAt)}
+              {incident.deletedBy ? ` por ${incident.deletedBy}` : ""}
+              {incident.deletedReason ? ` · ${incident.deletedReason}` : ""}.
+              Mientras esté en la papelera se consulta en solo lectura; se
+              recupera o se borra desde el módulo Archivo.
+            </p>
+          )}
+          {archivedAt !== undefined && !withdrawn && (
+            <p className="rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+              En el archivo desde el {formatDateTime(archivedAt)}: la incidencia
+              se consulta en solo lectura y no se trabaja desde la cola. Para
+              volver a tramitarla, recupérala desde el módulo Archivo.
+            </p>
+          )}
+
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -1115,7 +1216,7 @@ export function IncidentDetailSheet({
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Documentos adjuntos
                 </p>
-                {canAssign && (
+                {canCoordinate && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -1165,7 +1266,7 @@ export function IncidentDetailSheet({
                       {/* Corregir —nombre, nota o archivo— o retirar del
                           expediente: los dos cambios quedan firmados en el
                           rastro de abajo. */}
-                      {canAssign && (
+                      {canCoordinate && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
@@ -1412,63 +1513,52 @@ export function IncidentDetailSheet({
           )}
         </div>
 
-        <div className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
-          {blocked.length > 0 && (
-            <BlockedSteps
-              groups={blocked.map((group) => ({
-                label: group.actions
-                  .map((action) => INCIDENT_STEP_LABELS[action])
-                  .join(", "),
-                reason: group.reason,
-              }))}
-            />
-          )}
-          <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={trailPending || preparingPdf}
-              title={
-                trailPending
-                  ? "Cargando el rastro de auditoría…"
-                  : `Descarga el parte de ${incident.reference} en Markdown, para leerlo o editarlo`
-              }
-              onClick={handleDownloadReport}
-            >
-              <FileDown className="size-4" />
-              Descargar Markdown
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={trailPending || preparingPdf || preparingPackage}
-              title={
-                trailPending
-                  ? "Cargando el rastro de auditoría…"
-                  : `Descarga el parte de ${incident.reference} en PDF, listo para entregar`
-              }
-              onClick={() => void handleDownloadReportPdf()}
-            >
-              <FileDown className="size-4" />
-              {preparingPdf ? "Preparando PDF…" : "Descargar PDF"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={trailPending || preparingPdf || preparingPackage}
-              title={
-                trailPending
-                  ? "Cargando el rastro de auditoría…"
-                  : `Descarga el parte de ${incident.reference} con sus fotos dentro, en un ZIP que se abre sin conexión`
-              }
-              onClick={() => void handleDownloadReportPackage()}
-            >
-              <FileDown className="size-4" />
-              {preparingPackage ? "Preparando paquete…" : "Descargar ZIP"}
-            </Button>
+        <div className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-3 backdrop-blur-sm sm:px-6">
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* Las tres descargas del parte viven en un solo botón: eran tres
+                botones seguidos con el mismo verbo y empujaban las acciones. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={trailPending}
+                  title={
+                    trailPending
+                      ? "Cargando el rastro de auditoría…"
+                      : "Descargar el parte de la incidencia"
+                  }
+                >
+                  <FileDown className="size-4" />
+                  Descargar
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                  Parte de {incident.reference}
+                </DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => handleDownloadReport()}>
+                  Markdown, para leerlo o editarlo
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={preparingPdf || preparingPackage}
+                  onSelect={() => void handleDownloadReportPdf()}
+                >
+                  {preparingPdf
+                    ? "Preparando PDF…"
+                    : "PDF, listo para entregar"}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={preparingPdf || preparingPackage}
+                  onSelect={() => void handleDownloadReportPackage()}
+                >
+                  {preparingPackage
+                    ? "Preparando paquete…"
+                    : "ZIP con las fotos dentro"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
             </Button>
@@ -1485,7 +1575,7 @@ export function IncidentDetailSheet({
                   <UserPlus className="size-4" />
                   Autoasignarme
                 </Button>
-                {canAssign && (
+                {canCoordinate && (
                   <Button
                     type="button"
                     className="gap-2"
@@ -1504,7 +1594,7 @@ export function IncidentDetailSheet({
               canWork &&
               !inWorkshop && (
                 <>
-                  {canAssign && (
+                  {canCoordinate && (
                     <Button
                       type="button"
                       variant="outline"
@@ -1542,7 +1632,7 @@ export function IncidentDetailSheet({
               </Button>
             )}
 
-            {isClosedIncident(incident.status) && canAssign && (
+            {isClosedIncident(incident.status) && canCoordinate && (
               <Button
                 type="button"
                 variant="outline"
@@ -1558,7 +1648,7 @@ export function IncidentDetailSheet({
             {/* Retirar: para el aviso equivocado o el duplicado. No borra —eso
                 sería irreversible—, deja la incidencia en la papelera unos
                 días, con el mismo plazo que lo retirado del almacén. */}
-            {canAssign && (
+            {canCoordinate && (
               <Button
                 type="button"
                 variant="outline"
@@ -1604,10 +1694,25 @@ export function IncidentDetailSheet({
                 </Button>
               )}
           </div>
-          {!canWork && !canAdvanceIncident(incident.status, "selfAssign") && (
+          {!archived &&
+            !withdrawn &&
+            !canWork &&
+            !canAdvanceIncident(incident.status, "selfAssign") && (
+              <p className="mt-2 text-right text-xs text-muted-foreground">
+                Solo el técnico asignado o el coordinador pueden actuar sobre
+                esta incidencia.
+              </p>
+            )}
+          {withdrawn && (
             <p className="mt-2 text-right text-xs text-muted-foreground">
-              Solo el técnico asignado o el coordinador pueden actuar sobre esta
-              incidencia.
+              En la papelera: el caso se consulta en solo lectura. Se recupera o
+              se borra desde el módulo Archivo.
+            </p>
+          )}
+          {archived && !withdrawn && (
+            <p className="mt-2 text-right text-xs text-muted-foreground">
+              En el archivo: el caso se consulta en solo lectura. Se recupera
+              desde el módulo Archivo.
             </p>
           )}
           {canWork && isIncidentWaitingParts(incident.status) && (

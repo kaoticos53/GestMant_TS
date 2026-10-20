@@ -107,23 +107,30 @@ export function DashboardHeader({
             >
               {initial}
             </button>
+            {/* En el móvil, «Salir» va solo con el icono: su texto empujaba la
+                campana y el avatar fuera de la barra. La etiqueta sigue ahí para
+                quien no ve el icono. */}
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground"
+              size="icon-sm"
+              className="text-muted-foreground"
               onClick={onSignOut}
+              aria-label="Salir"
+              title="Salir"
             >
               <LogOut className="size-4" />
-              Salir
             </Button>
           </div>
         </div>
 
         {/* Módulos en barra horizontal (móvil) */}
+        {/* La tira de módulos se recorre en horizontal, sin barra a la vista y
+            con parada en cada destino: con once módulos, las flechas del
+            navegador ocupaban más que los propios botones. */}
         <nav
           aria-label="Módulos"
-          className="flex gap-1 overflow-x-auto border-t border-border/70 px-3 py-2"
+          className="flex snap-x gap-1 overflow-x-auto border-t border-border/70 px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {navItems.map((item) => {
             const active = activeTab === item.id;
@@ -135,7 +142,7 @@ export function DashboardHeader({
                 onClick={() => goToTab(item.id)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                  "flex shrink-0 snap-start items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
                   active
                     ? "border-signal/30 bg-signal/10 text-signal"
                     : "border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground",

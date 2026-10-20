@@ -4,6 +4,8 @@ import { groupByDate, matchesQuery, sortByDate } from "@/lib/browse";
 import { requestMatchesEquipment } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
+import { initialQueueDensity, writeDensity, type Density } from "@/lib/density";
+import { safeLocalStorage } from "@/lib/sidebar";
 import type { QueueSortId } from "../../QueueToolbar";
 import type { EquipmentDoc, RequestDoc, RequestFilterId } from "../types";
 import { countByStatus, inQueueOrder, searchableFields } from "../helpers";
@@ -27,7 +29,17 @@ export function useRequestFilters({
   );
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<QueueSortId>("recent");
-  const [compact, setCompact] = useState(false);
+  // Misma preferencia que la cola de incidencias: la vista se recuerda y abre en
+  // compacta, que es la que deja más peticiones a la vista.
+  const [density, setDensity] = useState<Density>(() =>
+    initialQueueDensity(safeLocalStorage()),
+  );
+  const compact = density === "compact";
+  const setCompact = (value: boolean) => {
+    const next: Density = value ? "compact" : "comfortable";
+    setDensity(next);
+    writeDensity(safeLocalStorage(), next);
+  };
 
   const filterEquipment = equipment.find(
     (item) => item._id === equipmentFilter,

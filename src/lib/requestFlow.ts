@@ -391,6 +391,17 @@ const SETTLED_STATUSES: readonly RequestStatus[] = [
   "returned",
 ];
 
+/**
+ * ¿La petición ya está resuelta (rechazada, cancelada o devuelta)?
+ *
+ * Lo devuelto cuenta como resuelto aunque el material sí saliera: se dio el paso
+ * de devolverlo, así que no queda nada que decidir. La ficha lo usa para no
+ * enumerar paso a paso lo que ya no se va a dar.
+ */
+export function isRequestSettled(status: string): boolean {
+  return SETTLED_STATUSES.some((settled) => settled === status);
+}
+
 /** Un mismo motivo para todos los pasos: lo que ya no se decide. */
 const SETTLED_REASON =
   "ya está resuelta: no se vuelve a decidir, ni a entregar, ni a cancelar";
@@ -428,6 +439,19 @@ const REQUEST_STEP_EXCUSES: Partial<
 };
 
 /**
+ * El motivo concreto que cuenta qué hay que hacer antes de dar el paso —devolver
+ * el material, reanudar la suspensión—, o `null` cuando el bloqueo es solo «aquí
+ * ya no toca». La diferencia importa para la ficha: lo genérico se calla cuando
+ * la etapa ya se pasó, lo concreto se dice siempre.
+ */
+export function requestStepExcuse(
+  status: RequestStatus,
+  action: RequestAction,
+): string | null {
+  return REQUEST_STEP_EXCUSES[action]?.[status] ?? null;
+}
+
+/**
  * Por qué no se puede dar este paso desde aquí, o `null` si sí se puede. Es la
  * misma regla que consulta el servidor (`canRequestStep`) contada para que la lea
  * una persona: la ficha la enseña en vez de esconder el botón sin más.
@@ -437,10 +461,8 @@ export function requestStepBlocker(
   action: RequestAction,
 ): string | null {
   if (canRequestStep(status, action)) return null;
-  if (SETTLED_STATUSES.some((settled) => settled === status)) {
-    return SETTLED_REASON;
-  }
-  return REQUEST_STEP_EXCUSES[action]?.[status] ?? REQUEST_STEP_NEEDS[action];
+  if (isRequestSettled(status)) return SETTLED_REASON;
+  return requestStepExcuse(status, action) ?? REQUEST_STEP_NEEDS[action];
 }
 
 /**

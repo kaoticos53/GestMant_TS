@@ -98,13 +98,17 @@ async function pedir(
   lines: { sparePartId: Id<"spareParts">; quantity: number }[],
 ) {
   const authed = taller.como(taller.tecnico);
-  await authed.mutation(api.partRequests.create, {
+  const reference = await authed.mutation(api.partRequests.create, {
     requesterName: "Teo Técnico",
     requesterTeam: "Plató 1",
     priority: "normal",
     lines,
   });
-  const [request] = await authed.query(api.partRequests.list, {});
+  // Por referencia y no por posición: dos peticiones creadas en el mismo
+  // milisegundo se ordenan igual, y la prueba no puede quedarse con la de al lado.
+  const cola = await authed.query(api.partRequests.list, {});
+  const request = cola.find((row) => row.reference === reference);
+  if (!request) throw new Error(`No aparece ${reference} en la cola`);
   return request;
 }
 
@@ -236,6 +240,94 @@ describe("peticiones de compra: lo que el almacén no cubre", () => {
       {},
     );
     expect(grupos.map((group) => group.supplier)).toContain("Sin proveedor");
+  });
+
+  test("varias de una vez: aparta las que faltan y dice cuáles quedaron fuera", async () => {
+    const mundo = await taller();
+    const uno = await seedPart(mundo.t, { code: "A-1", supplier: "Electro" });
+    const dos = await seedPart(mundo.t, { code: "A-2" });
+    const conStock = await seedPart(mundo.t, { code: "A-3", stock: 10 });
+    const primera = await pedir(mundo, [{ sparePartId: uno, quantity: 2 }]);
+    const segunda = await pedir(mundo, [{ sparePartId: dos, quantity: 1 }]);
+    const cubierta = await pedir(mundo, [
+      { sparePartId: conStock, quantity: 1 },
+    ]);
+    const authed = mundo.como(mundo.responsable);
+
+    const resultado = await authed.mutation(api.purchasing.requestPurchases, {
+      requestIds: [primera._id, segunda._id, cubierta._id],
+    });
+
+    expect(resultado.references).toHaveLength(2);
+    expect(resultado.requests).toBe(2);
+    expect(resultado.repeated).toBe(0);
+    // Lo que no se puede apartar no tumba el resto: se cuenta con su motivo.
+    expect(resultado.skipped).toEqual([
+      { reference: cubierta.reference, reason: "el almacén ya cubre lo que pide" },
+    ]);
+
+    const { requests } = await authed.query(
+      api.purchasing.listPurchaseRequests,
+      {},
+    );
+    expect(requests.map((row) => row.requestReference).sort()).toEqual(
+      [primera.reference, segunda.reference].sort(),
+    );
+    expect(requests.every((row) => row.requestedBy === "Rita Repuestos")).toBe(
+      true,
+    );
+  });
+
+  test("varias de una vez: no repite lo que ya está en camino", async () => {
+    const mundo = await taller();
+    const uno = await seedPart(mundo.t, { code: "A-1" });
+    const dos = await seedPart(mundo.t, { code: "A-2" });
+    const primera = await pedir(mundo, [{ sparePartId: uno, quantity: 2 }]);
+    const segunda = await pedir(mundo, [{ sparePartId: dos, quantity: 3 }]);
+    const authed = mundo.como(mundo.responsable);
+    await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: primera._id,
+    });
+
+    const resultado = await authed.mutation(api.purchasing.requestPurchases, {
+      requestIds: [primera._id, segunda._id],
+    });
+
+    expect(resultado.references).toHaveLength(1);
+    expect(resultado.requests).toBe(1);
+    expect(resultado.skipped).toEqual([
+      {
+        reference: primera.reference,
+        reason:
+          "ya había una petición de compra viva para todo lo que falta",
+      },
+    ]);
+
+    const { requests } = await authed.query(
+      api.purchasing.listPurchaseRequests,
+      {},
+    );
+    // Dos líneas compradas y ninguna repetida.
+    expect(requests).toHaveLength(2);
+  });
+
+  test("varias de una vez: sin permiso no se aparta nada", async () => {
+    const mundo = await taller();
+    const part = await seedPart(mundo.t);
+    const request = await pedir(mundo, [{ sparePartId: part, quantity: 1 }]);
+
+    await expectConvexError(
+      mundo.como(mundo.tecnico).mutation(api.purchasing.requestPurchases, {
+        requestIds: [request._id],
+      }),
+      "No tienes permisos",
+    );
+    await expectConvexError(
+      mundo.como(mundo.responsable).mutation(api.purchasing.requestPurchases, {
+        requestIds: [],
+      }),
+      "Elige al menos una petición",
+    );
   });
 });
 

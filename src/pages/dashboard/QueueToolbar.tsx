@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -8,6 +7,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { DateSortId } from "@/lib/browse";
+import { cn } from "@/lib/utils";
 import { LayoutList, Rows3, Search, X } from "lucide-react";
 
 /** Órdenes de una cola: por fecha (dos sentidos) o el orden de trabajo. */
@@ -96,26 +96,45 @@ export function QueueToolbar({
             </SelectContent>
           </Select>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-pressed={compact}
-            onClick={() => onCompactChange(!compact)}
-            title={
-              compact
-                ? "Tarjetas con toda la información"
-                : "Tarjetas más pequeñas para ver más de golpe"
-            }
-            className="gap-2"
+          {/* La densidad se elige entre las dos vistas, no con un botón que
+              cambia de nombre según el estado: antes el rótulo decía la vista
+              contraria a la que se iba a poner. */}
+          <div
+            role="group"
+            aria-label={`Vista de ${noun}`}
+            className="inline-flex items-center rounded-md border border-border/70 bg-card p-0.5 shadow-xs"
           >
-            {compact ? (
-              <Rows3 className="size-4" />
-            ) : (
-              <LayoutList className="size-4" />
-            )}
-            {compact ? "Compacta" : "Cómoda"}
-          </Button>
+            {(
+              [
+                { id: "comfortable", label: "Cómoda", icon: LayoutList },
+                { id: "compact", label: "Compacta", icon: Rows3 },
+              ] as const
+            ).map((option) => {
+              const active = (option.id === "compact") === compact;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onCompactChange(option.id === "compact")}
+                  title={
+                    option.id === "compact"
+                      ? "Fichas más pequeñas para ver más de golpe"
+                      : "Fichas con toda la información"
+                  }
+                  className={cn(
+                    "flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <option.icon className="size-3.5" aria-hidden="true" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

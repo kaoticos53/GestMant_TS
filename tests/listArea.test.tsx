@@ -121,7 +121,11 @@ describe("el área de la lista", () => {
     // mínimo legible; lo que no cabe se desplaza dentro. En la medida, los
     // signos van con guiones bajos: así es como Tailwind escribe los espacios
     // que `calc()` necesita para entender la resta.
-    expect(classes).toContain("max-h-[calc(100dvh_-_18rem)]");
+    //
+    // El marco que se descuenta bajó de 18 a 25 rem al compactar la cabecera del
+    // módulo y la tira de cifras: la lista tiene que caber entera en la ventana
+    // —con su pie— para que no aparezca una segunda barra de desplazamiento.
+    expect(classes).toContain("max-h-[calc(100dvh_-_25rem)]");
     expect(classes).toContain("min-h-[12rem]");
     expect(classes).toContain("overflow-auto");
     // El único que desplaza es el área: al contenedor que trae la tabla de la

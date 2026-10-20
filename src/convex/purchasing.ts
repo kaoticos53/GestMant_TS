@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { mutation } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { mutation, type MutationCtx } from "./_generated/server";
 import { notifyUsers } from "./notify";
 import { freeReference } from "./references";
 import {
@@ -10,10 +10,8 @@ import {
   isPurchaseRequestClosed,
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
-  purchaseOrderStatusAfterReceiving,
-  purchaseRequestReceivedStatus,
 } from "../lib/purchaseFlow";
-import { canBuyForRequest, nextRequestStatus } from "../lib/requestFlow";
+import { canBuyForRequest } from "../lib/requestFlow";
 import {
   PURCHASE_ORDER_STATUSES,
   PURCHASE_REQUEST_STATUSES,
@@ -21,6 +19,7 @@ import {
 
 import {
   actorName,
+  applyReception,
   missingLines,
   requirePurchasing,
 } from "./_purchasing/helpers";
@@ -36,6 +35,71 @@ export {
   byRequest,
   generateUploadUrl,
 } from "./_purchasing/queries";
+
+/**
+ * Aparta las líneas que faltan de una petición de repuesto como peticiones de
+ * compra. Lo comparten la acción de una en una y la de varias a la vez, para que
+ * no puedan contar cosas distintas.
+ *
+ * Lo que ya está en camino no se aparta otra vez: cuántas van se cuenta aparte,
+ * para poder decir «de estas dos ya se estaba ocupando alguien».
+ */
+async function apartarLineas(
+  ctx: MutationCtx,
+  request: Doc<"partRequests">,
+  userId: Id<"users">,
+  options: {
+    sparePartIds?: Id<"spareParts">[];
+    supplier?: string;
+    notes?: string;
+  },
+): Promise<{ created: string[]; repeated: number }> {
+  const missing = await missingLines(ctx, request, options.sparePartIds);
+  const supplier = options.supplier?.trim() || "";
+
+  const previous = await ctx.db
+    .query("purchaseRequests")
+    .withIndex("by_request", (q) => q.eq("requestId", request._id))
+    .collect();
+
+  const created: string[] = [];
+  let repeated = 0;
+  const now = Date.now();
+  const requestedBy = await actorName(ctx, userId);
+  for (const line of missing) {
+    const already = previous.find(
+      (row) =>
+        row.sparePartId === line.sparePartId &&
+        isPurchaseRequestAwaitingDelivery(row),
+    );
+    if (already) {
+      repeated += 1;
+      continue;
+    }
+    const reference = await freeReference(ctx, "purchaseRequest");
+    await ctx.db.insert("purchaseRequests", {
+      reference,
+      requestId: request._id,
+      requestReference: request.reference,
+      requestDate: request.createdAt,
+      requesterName: request.requesterName,
+      sparePartId: line.sparePartId,
+      code: line.code,
+      name: line.name,
+      unit: line.unit,
+      quantity: line.quantity,
+      supplier: supplier || line.supplier,
+      status: PURCHASE_REQUEST_STATUSES.PENDING,
+      reason: line.reason,
+      ...(options.notes?.trim() ? { notes: options.notes.trim() } : {}),
+      requestedAt: now,
+      requestedBy,
+      createdAt: now,
+    });
+    created.push(reference);
+  }
+  return { created, repeated };
+}
 
 /**
  * Genera las peticiones de compra de una petición de repuesto: una por cada
@@ -78,53 +142,15 @@ export const requestPurchase = mutation({
       );
     }
 
-    const supplier = args.supplier?.trim() || "";
-    if (args.supplier !== undefined && !supplier) {
+    if (args.supplier !== undefined && !args.supplier.trim()) {
       throw new ConvexError("Escribe el proveedor o déjalo en blanco.");
     }
 
-    const previous = await ctx.db
-      .query("purchaseRequests")
-      .withIndex("by_request", (q) => q.eq("requestId", args.requestId))
-      .collect();
-
-    const created: string[] = [];
-    let repeated = 0;
-    const now = Date.now();
-    for (const line of missing) {
-      // Lo que ya está en camino no se aparta otra vez: cuántas van se cuenta
-      // aparte, para poder decirlo.
-      const already = previous.find(
-        (row) =>
-          row.sparePartId === line.sparePartId &&
-          isPurchaseRequestAwaitingDelivery(row),
-      );
-      if (already) {
-        repeated += 1;
-        continue;
-      }
-      const reference = await freeReference(ctx, "purchaseRequest");
-      await ctx.db.insert("purchaseRequests", {
-        reference,
-        requestId: request._id,
-        requestReference: request.reference,
-        requestDate: request.createdAt,
-        requesterName: request.requesterName,
-        sparePartId: line.sparePartId,
-        code: line.code,
-        name: line.name,
-        unit: line.unit,
-        quantity: line.quantity,
-        supplier: supplier || line.supplier,
-        status: PURCHASE_REQUEST_STATUSES.PENDING,
-        reason: line.reason,
-        ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
-        requestedAt: now,
-        requestedBy: await actorName(ctx, userId),
-        createdAt: now,
-      });
-      created.push(reference);
-    }
+    const { created, repeated } = await apartarLineas(ctx, request, userId, {
+      sparePartIds: args.sparePartIds,
+      supplier: args.supplier,
+      notes: args.notes,
+    });
 
     if (created.length === 0) {
       throw new ConvexError(
@@ -133,6 +159,81 @@ export const requestPurchase = mutation({
     }
 
     return { references: created, repeated };
+  },
+});
+
+/**
+ * La misma apartada, para varias peticiones de repuesto de una vez: es lo que
+ * pide la cola de «Sin material en el almacén», donde antes había un botón por
+ * fila y nueve clics para preparar la compra del día.
+ *
+ * Lo que no se puede apartar no tumba el resto: se cuenta aparte y se devuelve
+ * con su motivo —la petición ya está resuelta, el almacén ya la cubre, ya había
+ * una compra viva—, para que la pantalla lo diga en vez de dejar al responsable
+ * con un error y sin saber cuáles quedaron fuera.
+ *
+ * Todo va en una sola mutación: o entran todas las que se pueden, o no entra
+ * ninguna (Convex la revierte entera si algo falla de verdad).
+ */
+export const requestPurchases = mutation({
+  args: {
+    requestIds: v.array(v.id("partRequests")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requirePurchasing(ctx, "generar peticiones de compra");
+    const ids = [...new Set(args.requestIds)];
+    if (ids.length === 0) {
+      throw new ConvexError("Elige al menos una petición para comprar.");
+    }
+
+    const references: string[] = [];
+    const skipped: { reference: string; reason: string }[] = [];
+    let requests = 0;
+    let repeated = 0;
+
+    for (const id of ids) {
+      const request = await ctx.db.get(id);
+      if (!request) {
+        skipped.push({ reference: id, reason: "ya no existe" });
+        continue;
+      }
+      if (request.archivedAt !== undefined) {
+        skipped.push({
+          reference: request.reference,
+          reason: "está archivada: recupérala antes de comprar nada para ella",
+        });
+        continue;
+      }
+      // Para qué peticiones se puede comprar lo dice la máquina (`lib/requestFlow`).
+      if (!canBuyForRequest(request.status)) {
+        skipped.push({
+          reference: request.reference,
+          reason: `ya está resuelta (${request.status}): no hay nada que comprar para ella`,
+        });
+        continue;
+      }
+      if ((await missingLines(ctx, request)).length === 0) {
+        skipped.push({
+          reference: request.reference,
+          reason: "el almacén ya cubre lo que pide",
+        });
+        continue;
+      }
+
+      const result = await apartarLineas(ctx, request, userId, {});
+      repeated += result.repeated;
+      if (result.created.length === 0) {
+        skipped.push({
+          reference: request.reference,
+          reason: "ya había una petición de compra viva para todo lo que falta",
+        });
+        continue;
+      }
+      references.push(...result.created);
+      requests += 1;
+    }
+
+    return { references, requests, repeated, skipped };
   },
 });
 
@@ -369,7 +470,8 @@ export const setLineNote = mutation({
  * De aquí salen tres cosas: el movimiento de recepción con el albarán, el stock
  * que entra en el catálogo y el estado de la orden —completada si ha llegado
  * todo, parcial si falta algo—. Y las peticiones de repuesto que ya tienen todo
- * lo comprado pasan a «material recibido», que es lo que las desatasca.
+ * lo comprado pasan a «material recibido», que es lo que las desatasca. Todo eso
+ * está en `applyReception`, que es también lo que usa la muestra de compras.
  */
 export const receive = mutation({
   args: {
@@ -389,177 +491,21 @@ export const receive = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requirePurchasing(ctx, "recepcionar material");
-    const order = await ctx.db.get(args.orderId);
-    if (!order) throw new ConvexError("La orden ya no existe.");
-    if (!canAdvancePurchaseOrder(order.status, "receive")) {
-      throw new ConvexError(
-        order.status === PURCHASE_ORDER_STATUSES.CANCELLED
-          ? `La orden ${order.reference} está anulada: no se recepciona nada de ella.`
-          : `La orden ${order.reference} ya está completada: no queda nada por recibir.`,
-      );
-    }
 
-    const note = args.deliveryNote.name.trim();
-    if (!note) {
-      throw new ConvexError(
-        "El albarán necesita un nombre para poder abrirlo.",
-      );
-    }
-    if ((await ctx.storage.getUrl(args.deliveryNote.storageId)) === null) {
-      throw new ConvexError(
-        "El albarán adjunto ya no está disponible: vuelve a adjuntarlo.",
-      );
-    }
-
-    // Se comprueba **todo** antes de tocar nada: media recepción no deja ni la
-    // orden ni el almacén a medias.
-    const wanted = new Map<string, number>();
-    for (const item of args.items) {
-      const cantidad = Math.trunc(item.quantity);
-      if (cantidad <= 0) continue;
-      const line = order.lines.find(
-        (row) => row.purchaseRequestId === item.purchaseRequestId,
-      );
-      if (!line) {
-        throw new ConvexError(
-          `Ese artículo no está en la orden ${order.reference}.`,
-        );
-      }
-      const pendiente = line.quantity - line.receivedQuantity;
-      if (cantidad > pendiente) {
-        throw new ConvexError(
-          `${line.code}: solo faltan ${pendiente} ${line.unit} por recibir de esta orden.`,
-        );
-      }
-      wanted.set(
-        item.purchaseRequestId,
-        (wanted.get(item.purchaseRequestId) ?? 0) + cantidad,
-      );
-    }
-    if (wanted.size === 0) {
-      throw new ConvexError("No has dicho qué ha llegado.");
-    }
-
-    const now = Date.now();
-    const received: {
-      sparePartId: Id<"spareParts">;
-      code: string;
-      name: string;
-      quantity: number;
-    }[] = [];
-    const lines = [];
-    for (const line of order.lines) {
-      const cantidad = wanted.get(line.purchaseRequestId) ?? 0;
-      if (cantidad > 0) {
-        // El material entra en el almacén: es un movimiento de entrada, no un
-        // ajuste de stock a mano.
-        const part = await ctx.db.get(line.sparePartId);
-        if (!part) {
-          throw new ConvexError(
-            `El repuesto ${line.code} ya no está en el catálogo: no se puede dar entrada.`,
-          );
-        }
-        await ctx.db.patch(part._id, {
-          stock: part.stock + cantidad,
-          updatedAt: now,
-        });
-        received.push({
-          sparePartId: part._id,
-          code: line.code,
-          name: line.name,
-          quantity: cantidad,
-        });
-      }
-      lines.push({
-        ...line,
-        receivedQuantity: line.receivedQuantity + cantidad,
+    const { status, received, materialReceived, requesterIds } =
+      await applyReception(ctx, {
+        orderId: args.orderId,
+        items: args.items,
+        deliveryNote: args.deliveryNote,
+        note: args.note,
+        receivedBy: await actorName(ctx, userId),
+        at: Date.now(),
       });
-    }
-
-    await ctx.db.insert("receptions", {
-      orderId: order._id,
-      orderReference: order.reference,
-      supplier: order.supplier,
-      lines: received,
-      deliveryNote: {
-        storageId: args.deliveryNote.storageId,
-        name: note,
-        kind: args.deliveryNote.kind,
-      },
-      ...(args.note?.trim() ? { note: args.note.trim() } : {}),
-      receivedBy: await actorName(ctx, userId),
-      receivedAt: now,
-    });
-
-    // Completada o parcial según lo que haya llegado de cada artículo: es la
-    // regla de la orden (`lib/purchaseFlow`), la misma que consultan los botones
-    // de la ficha para ofrecer «Recepcionar».
-    const status = purchaseOrderStatusAfterReceiving(lines);
-    await ctx.db.patch(order._id, {
-      lines,
-      status,
-      ...(status === PURCHASE_ORDER_STATUSES.COMPLETED
-        ? { completedAt: now }
-        : {}),
-      updatedAt: now,
-    });
-
-    // Las peticiones de compra que ya han llegado enteras se cierran solas.
-    const closed: Id<"partRequests">[] = [];
-    for (const line of lines) {
-      const recibido = line.receivedQuantity >= line.quantity;
-      const row = await ctx.db.get(line.purchaseRequestId);
-      if (!row) continue;
-      // Ha llegado todo lo que pedía: se cierra sola (la regla, en
-      // `lib/purchaseFlow`; una ya cerrada no se vuelve a cerrar).
-      const settled = recibido
-        ? purchaseRequestReceivedStatus(row.status)
-        : null;
-      if (settled !== null) {
-        await ctx.db.patch(row._id, { status: settled, receivedAt: now });
-        if (!closed.includes(row.requestId)) closed.push(row.requestId);
-      }
-    }
-
-    // Y las peticiones de repuesto que ya tienen todo lo comprado pasan a
-    // «material recibido». Mientras quede algo pendiente o en camino, no: la
-    // petición sigue esperando.
-    const materialReceived: string[] = [];
-    for (const requestId of closed) {
-      const delPedido = await ctx.db
-        .query("purchaseRequests")
-        .withIndex("by_request", (q) => q.eq("requestId", requestId))
-        .collect();
-      // Mientras quede algo sin tratar o en camino, no: la petición sigue
-      // esperando material (`lib/purchaseFlow`).
-      const waiting = delPedido.some(isPurchaseRequestAwaitingDelivery);
-      if (waiting) continue;
-      const request = await ctx.db.get(requestId);
-      if (!request) continue;
-      // Desde qué estados se pasa a «material recibido» lo dice la máquina de la
-      // petición (`lib/requestFlow`), la misma que consultan el resto de pasos y
-      // los botones de la ficha. Aquí, además, lo que no encaja se salta sin
-      // ruido: esto es una pasada sobre lo que acaba de entrar, no una decisión de
-      // nadie.
-      const received = nextRequestStatus(request.status, "receiveMaterial");
-      if (received === null) continue;
-      await ctx.db.patch(requestId, {
-        status: received,
-        decisionNote: `Material recibido de ${order.supplier} (orden ${order.reference}).`,
-      });
-      materialReceived.push(request.reference);
-    }
 
     if (materialReceived.length > 0) {
-      const ids = (
-        await Promise.all(closed.map((requestId) => ctx.db.get(requestId)))
-      )
-        .filter((request) => request !== null)
-        .map((request) => request.requesterId)
-        .filter((id): id is Id<"users"> => Boolean(id));
       await notifyUsers(
         ctx,
-        ids,
+        requesterIds,
         `Material recibido: ${materialReceived.join(", ")} ya se puede entregar`,
         undefined,
         userId,

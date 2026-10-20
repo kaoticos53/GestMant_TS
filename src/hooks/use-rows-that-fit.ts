@@ -91,8 +91,13 @@ function measureFit(
   }
   if (fit < rows.length) return Math.max(fit, MIN_ROWS_FIT);
 
+  // Entran todas las que se están pintando: esa es la cuenta mínima. Sin esto,
+  // la media de unas pocas filas —que carga con los huecos entre ellas— daba
+  // menos de las que de verdad caben, y la lista se quedaba dando vueltas hacia
+  // abajo: tres filas, luego dos, y ahí se paraba.
   const average = (bottomOf(rows[rows.length - 1]) - top) / rows.length;
-  return rowsThatFit({ available, header, row: average });
+  const byAverage = rowsThatFit({ available, header, row: average });
+  return Math.max(byAverage, rows.length);
 }
 
 /**

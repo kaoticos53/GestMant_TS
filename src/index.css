@@ -62,10 +62,14 @@
   --muted-foreground: oklch(0.52 0.02 250);
   --accent: oklch(0.945 0.028 195);
   --accent-foreground: oklch(0.33 0.07 195);
-  --destructive: oklch(0.577 0.245 27.325);
+  /* Oscurecido para que el texto destructivo pase 4,5:1 sobre su propio fondo
+     claro (antes 3,87–3,97:1 en los distintivos «Urgente», «Agotado», «Nueva»). */
+  --destructive: oklch(0.505 0.21 27.325);
   --border: oklch(0.915 0.006 242);
   --input: oklch(0.915 0.006 242);
-  --ring: oklch(0.58 0.1 193);
+  /* El anillo de foco a plena opacidad y más oscuro: el indicador de foco es
+     lo único que dice dónde estás con el teclado y antes daba 1,35–1,97:1. */
+  --ring: oklch(0.45 0.1 193);
   --signal: oklch(0.48 0.09 193);
   --chart-1: oklch(0.55 0.1 193);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -119,7 +123,9 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Sin el 50 %: el contorno del navegador hereda este color y con la mitad
+       de opacidad el foco se perdía en todas las pantallas. */
+    @apply border-border outline-ring;
   }
   html {
     -webkit-font-smoothing: antialiased;
