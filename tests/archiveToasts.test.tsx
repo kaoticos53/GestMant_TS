@@ -8,6 +8,7 @@ import {
   archiveWithUndoToast,
   unarchiveSuccessToast,
 } from "@/lib/archiveToasts";
+import { toast } from "sonner";
 import { TOASTER_SELECTOR } from "@/lib/toasts";
 import { settle } from "./settle";
 
@@ -84,6 +85,7 @@ async function press(target: Element) {
 }
 
 beforeEach(() => {
+  toast.dismiss();
   (
     globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
@@ -91,6 +93,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  toast.dismiss();
   await act(async () => {
     for (const root of roots) root.unmount();
   });

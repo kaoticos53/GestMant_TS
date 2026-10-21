@@ -52,9 +52,10 @@ import type { EquipmentDoc, IncidentDoc } from "../../types";
 
 export interface IncidentActionsBarProps {
   incident: IncidentDoc;
+  equipment: EquipmentDoc[];
   linkedEquipment: EquipmentDoc | null;
   linkedRequests: Doc<"partRequests">[];
-  trail: Doc<"incidentAuditLog">[] | undefined;
+  trail: Doc<"incidentDocumentLog">[] | undefined;
   currentUserId: Id<"users"> | null;
   currentUserName: string;
   canWork: boolean;
@@ -69,6 +70,7 @@ export interface IncidentActionsBarProps {
 
 export function IncidentActionsBar({
   incident,
+  equipment,
   linkedEquipment,
   linkedRequests,
   trail,
@@ -396,22 +398,31 @@ export function IncidentActionsBar({
       {assignTarget && (
         <AssignDialog
           incident={incident}
-          target={assignTarget}
+          mode={assignTarget}
           onClose={() => setAssignTarget(null)}
         />
       )}
 
       {verifyOpen && (
-        <VerifyDialog incident={incident} onClose={() => setVerifyOpen(false)} />
+        <VerifyDialog
+          incident={incident}
+          equipment={equipment}
+          onClose={() => setVerifyOpen(false)}
+        />
       )}
 
       {closeOpen && (
-        <CloseDialog incident={incident} onClose={() => setCloseOpen(false)} />
+        <CloseDialog
+          incident={incident}
+          equipment={equipment}
+          onClose={() => setCloseOpen(false)}
+        />
       )}
 
       {requestOpen && (
         <IncidentRequestDialog
           incident={incident}
+          currentUserName={currentUserName}
           onClose={() => setRequestOpen(false)}
         />
       )}

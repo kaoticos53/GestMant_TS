@@ -23,7 +23,7 @@ export interface UseIncidentExportProps {
   incident: IncidentDoc;
   linkedEquipment: EquipmentDoc | null;
   linkedRequests: Doc<"partRequests">[];
-  trail: Doc<"incidentAuditLog">[] | undefined;
+  trail: Doc<"incidentDocumentLog">[] | undefined;
   currentUserName: string;
 }
 

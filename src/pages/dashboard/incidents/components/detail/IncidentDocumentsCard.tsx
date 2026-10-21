@@ -46,7 +46,7 @@ export interface IncidentDocumentsCardProps {
   incident: IncidentDoc;
   canAssign: boolean;
   canCoordinate: boolean;
-  trail: Doc<"incidentAuditLog">[] | undefined;
+  trail: Doc<"incidentDocumentLog">[] | undefined;
 }
 
 export function IncidentDocumentsCard({
@@ -64,7 +64,6 @@ export function IncidentDocumentsCard({
     documentFile,
     documentFileInputRef,
     editingDocumentId,
-    deletingDocumentId,
     setDeletingDocumentId,
     editingDocument,
     deletingDocument,
