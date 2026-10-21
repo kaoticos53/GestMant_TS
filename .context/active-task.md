@@ -1,32 +1,16 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-PART-FORM-DOMAIN`
-- **Objetivo:** Fase 1 - Extracción de lógica pura de dominio, DTOs y validación desacoplada para el formulario de repuestos con tests unitarios.
-- **Módulo(s) Afectado(s):** `src/pages/dashboard/inventory/domain/partForm.ts`, `tests/partFormDomain.test.ts`.
+- **ID / Nombre de la Tarea:** `REF-PART-FORM-COMPLETE`
+- **Objetivo:** Refactorización integral y desacoplamiento de calidad para `PartFormDialog.tsx`.
+- **Estado:** ✅ Completada y Verificada.
 
 ---
 
-## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/inventory/domain/partForm.ts`: Tipos `PartFormValues`, `PartPayload`, parsers numéricos y validación declarativa pura.
-- [x] `tests/partFormDomain.test.ts`: Pruebas unitarias de validación y transformación de DTOs (9 tests pasados).
-- [x] `src/pages/dashboard/inventory/hooks/usePartForm.ts`: Hook de orquestación de estado, validación y mutaciones.
-- [x] `src/pages/dashboard/inventory/components/CompatibleModelsSection.tsx`: Subcomponente desacoplado para modelos compatibles con indexación Map O(1).
+## 2. Resumen de Fases y Commits
+- [x] **Fase 1 (Dominio Puro):** Commit `05b0c5f` — Extracción de lógica pura de dominio, DTOs y validación en `domain/partForm.ts` con tests unitarios en `tests/partFormDomain.test.ts`.
+- [x] **Fase 2 (Hook de Orquestación):** Commit `8aa7ca6` — Creación de `usePartForm.ts` desacoplando el estado del formulario (17 `useState` unificados) y mutaciones Convex con `Promise.allSettled`.
+- [x] **Fase 3 (Subcomponente Cohesivo):** Commit `9ae0c02` — Extracción de `CompatibleModelsSection.tsx` con resolución indexada Map $O(1)$ y búsqueda memoizada.
+- [x] **Fase 4 (Integración Final & Verificación):** Commit actual — `PartFormDialog.tsx` reducido de 479 a 230 líneas declarativas; `npm run build` limpio y 1842/1842 tests pasados.
 
----
-
-## 3. Comprobaciones de Invariantes Previas
-- [x] ¿Afecta a `src/lib/`? No.
-- [x] ¿TypeScript estricto? Sin `any`.
-- [x] ¿Seguridad / Arquitectura? Preservadas (18/18 tests pasados).
-
----
-
-## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `src/pages/dashboard/inventory/domain/partForm.ts`.
-- [x] **Paso 2:** Crear `tests/partFormDomain.test.ts`.
-- [x] **Paso 3:** Crear `src/pages/dashboard/inventory/hooks/usePartForm.ts`.
-- [x] **Paso 4:** Crear `src/pages/dashboard/inventory/components/CompatibleModelsSection.tsx`.
-- [x] **Paso 5:** Validar con `npx tsc --noEmit` y suite de tests.
-- [x] **Paso 6:** Commit atómico de la Fase 3.
 

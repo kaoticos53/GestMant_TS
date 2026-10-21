@@ -37,7 +37,7 @@ export interface PartPayload {
   unitPrice: number;
   purchaseUrl: string;
   compatibleModels: Id<"equipmentModels">[];
-  compatibleWith: string[];
+  compatibleWith: Id<"equipment">[];
 }
 
 /**
