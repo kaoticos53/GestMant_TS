@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { DataTableToolbar } from "@/components/DataTableToolbar";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -221,28 +222,27 @@ export function EquipmentView({
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-border/70 bg-card shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-border/70 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por marca, modelo o nº de serie..."
-              className="pl-9"
-              aria-label="Buscar equipo"
-            />
-          </div>
-          {canManage && (
-            <Button
-              type="button"
-              className="gap-2"
-              onClick={() => setFormTarget({ item: null })}
-            >
-              <Plus className="size-4" />
-              Nuevo equipo
-            </Button>
-          )}
-        </div>
+        <DataTableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar por marca, modelo o nº de serie..."
+          searchAriaLabel="Buscar equipo"
+          hasActiveFilters={search.trim() !== ""}
+          onResetFilters={() => setSearch("")}
+          resetFiltersLabel="Limpiar búsqueda"
+          actions={
+            canManage ? (
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={() => setFormTarget({ item: null })}
+              >
+                <Plus className="size-4" />
+                Nuevo equipo
+              </Button>
+            ) : null
+          }
+        />
 
         {equipment.length === 0 ? (
           <div className="p-10 text-center">

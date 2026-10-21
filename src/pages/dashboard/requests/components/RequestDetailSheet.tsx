@@ -68,6 +68,7 @@ import {
   getErrorMessage,
   type Priority,
 } from "@/lib/workshop";
+import { archiveWithUndoToast, unarchiveSuccessToast } from "@/lib/archiveToasts";
 
 import type { PartDoc, RequestDoc } from "../types";
 import { DecisionNotes } from "./DecisionNotes";
@@ -116,6 +117,7 @@ export function RequestDetailSheet({
   showStock?: boolean;
 }) {
   const archiveRequest = useMutation(api.partRequests.archive);
+  const unarchiveRequest = useMutation(api.partRequests.unarchive);
   const withdrawRequest = useMutation(api.partRequests.withdraw);
   const [archiving, setArchiving] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -196,7 +198,18 @@ export function RequestDetailSheet({
     setArchiving(true);
     try {
       await archiveRequest({ requestId: request._id });
-      toast.success(`${request.reference} enviada al archivo`);
+      archiveWithUndoToast({
+        reference: request.reference,
+        noun: "petición",
+        onUndo: async () => {
+          try {
+            await unarchiveRequest({ requestId: request._id });
+            unarchiveSuccessToast({ reference: request.reference });
+          } catch (err) {
+            toast.error(getErrorMessage(err));
+          }
+        },
+      });
       onClose();
     } catch (error) {
       toast.error(getErrorMessage(error));

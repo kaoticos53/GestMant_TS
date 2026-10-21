@@ -99,6 +99,7 @@ import {
   noteRestoredToast,
   noteVersionRestoredToast,
 } from "@/lib/noteToasts";
+import { archiveWithUndoToast, unarchiveSuccessToast } from "@/lib/archiveToasts";
 import { downloadPdf, loadPdfImage } from "@/lib/pdfBrowser";
 import { formatPublicCode } from "@/lib/publicCode";
 import {
@@ -210,6 +211,7 @@ export function IncidentDetailSheet({
 }) {
   const selfAssign = useMutation(api.incidents.selfAssign);
   const archiveIncident = useMutation(api.incidents.archive);
+  const unarchiveIncident = useMutation(api.incidents.unarchive);
   const withdrawIncident = useMutation(api.incidents.withdraw);
   const attachDocument = useMutation(api.incidents.attachDocument);
   const updateDocument = useMutation(api.incidents.updateDocument);
@@ -479,7 +481,18 @@ export function IncidentDetailSheet({
     setBusy(true);
     try {
       await archiveIncident({ incidentId: incident._id });
-      toast.success(`${incident.reference} enviada al archivo`);
+      archiveWithUndoToast({
+        reference: incident.reference,
+        noun: "incidencia",
+        onUndo: async () => {
+          try {
+            await unarchiveIncident({ incidentId: incident._id });
+            unarchiveSuccessToast({ reference: incident.reference });
+          } catch (err) {
+            toast.error(getErrorMessage(err));
+          }
+        },
+      });
       onClose();
     } catch (error) {
       toast.error(getErrorMessage(error));

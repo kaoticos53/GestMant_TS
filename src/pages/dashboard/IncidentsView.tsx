@@ -21,6 +21,7 @@ import {
   incidentStatusLabel,
   type IncidentStatus,
 } from "@/lib/workshop";
+import { archiveWithUndoToast, unarchiveSuccessToast } from "@/lib/archiveToasts";
 
 import { IncidentReportsDialog } from "./IncidentReportsDialog";
 import { QueueToolbar } from "./QueueToolbar";
@@ -55,6 +56,7 @@ export function IncidentsView({
 
   const [reportsOpen, setReportsOpen] = useState(false);
   const archiveIncident = useMutation(api.incidents.archive);
+  const unarchiveIncident = useMutation(api.incidents.unarchive);
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
   const {
@@ -82,9 +84,18 @@ export function IncidentsView({
     setArchivingId(incident._id);
     try {
       await archiveIncident({ incidentId: incident._id });
-      toast.success(
-        `${incident.reference} al archivo · puedes recuperarla desde Archivo`,
-      );
+      archiveWithUndoToast({
+        reference: incident.reference,
+        noun: "incidencia",
+        onUndo: async () => {
+          try {
+            await unarchiveIncident({ incidentId: incident._id });
+            unarchiveSuccessToast({ reference: incident.reference });
+          } catch (err) {
+            toast.error(getErrorMessage(err));
+          }
+        },
+      });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
