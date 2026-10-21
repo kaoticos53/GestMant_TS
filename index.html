@@ -18,6 +18,12 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet" />
+  <!-- Mitigación de Clickjacking en capa cliente (CWE-1021) -->
+  <script>
+    if (window.top !== window.self) {
+      window.top.location = window.self.location;
+    }
+  </script>
 </head>
 
 

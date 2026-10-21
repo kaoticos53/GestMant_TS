@@ -1,33 +1,29 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `SEC-FASE1-CSV-INJECTION-ANTI-BRUTEFORCE`
-- **Objetivo:** Remediación de vulnerabilidades de severidad alta: neutralización de CSV Formula Injection (CWE-1236) en exportaciones de datos y blindaje de la consulta pública de incidencias contra fuerza bruta masiva distribuida (CWE-307).
-- **Módulo(s) Afectado(s):** `src/lib/export.ts`, `src/lib/purchasing.ts`, `src/convex/publicLookupLimits.ts`, `tests/csvSecurity.test.ts`.
+- **ID / Nombre de la Tarea:** `SEC-FASE2-OTP-CLICKJACKING`
+- **Objetivo:** Endurecimiento del tiempo de expiración del token OTP a 5 minutos bajo NIST SP 800-63B e incorporación de protección anti-clickjacking por Frame Busting en capa cliente (CWE-1021).
+- **Módulo(s) Afectado(s):** `src/convex/auth/emailOtp.ts`, `index.html`, `tests/sessionSecurity.test.ts`.
 
 ---
 
-## 2. Archivos a Modificar / Crear
-- [x] `src/lib/export.ts`: Neutralizar celdas que inicien por `=+\-@\t\r` prefijándolas con `'`.
-- [x] `src/lib/purchasing.ts`: Neutralizar celdas en `historyRowsToCsv`.
-- [x] `src/convex/publicLookupLimits.ts`: Implementar cupo global horario de consultas no coincidentes.
-- [x] `src/lib/publicLookup.ts`: Constante `GLOBAL_LOOKUP_LIMIT_PER_HOUR` y helper `admitGlobalLookup`.
-- [x] `tests/csvSecurity.test.ts`: Test unitario de neutralización de fórmulas CSV (4/4 pasados).
-- [x] `tests/publicLookupSecurity.test.ts`: Test de cupo global anti-fuerza bruta (2/2 pasados).
+## 2. Archivos Modificados / Creados
+- [x] `src/convex/auth/emailOtp.ts`: Reducir `maxAge` a 5 minutos (`60 * 5`).
+- [x] `index.html`: Script de Frame Busting (`window.top !== window.self`).
+- [x] `tests/sessionSecurity.test.ts`: Verificación de `maxAge <= 300s`, aleatoriedad de OTP y frame busting (3/3 pasados).
 
 ---
 
 ## 3. Comprobaciones de Invariantes Previas
-- [x] ¿Afecta a `src/lib/`? Sí, `src/lib/export.ts` y `purchasing.ts`. Prohibido importar React o Convex en `src/lib/`. (Verificado 0 imports).
-- [x] ¿TypeScript estricto? Cero `any`. (Verificado `npx tsc --noEmit` -> 0 errores).
-- [x] ¿Seguridad en Convex? Sí, preserva la identidad y control de acceso.
+- [x] ¿Afecta a `src/lib/`? No.
+- [x] ¿TypeScript estricto? Verificado con `npx tsc --noEmit` -> 0 errores.
+- [x] ¿Seguridad en Convex? Sí, endurece la autenticación por OTP.
 
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Neutralizar fórmulas en `src/lib/export.ts` (`escapeCsvCell`).
-- [x] **Paso 2:** Neutralizar fórmulas en `src/lib/purchasing.ts` (`historyRowsToCsv`).
-- [x] **Paso 3:** Implementar límite global horario en `src/convex/publicLookupLimits.ts`.
-- [x] **Paso 4:** Crear tests unitarios `tests/csvSecurity.test.ts` y `tests/publicLookupSecurity.test.ts`.
-- [x] **Paso 5:** Verificar tipos (`npx tsc --noEmit`) y tests (`tests/arquitectura.test.ts`, `tests/seguridad.test.ts`).
-- [x] **Paso 6:** Commit de la Fase 1 y continuación con la Fase 2.
+- [x] **Paso 1:** Reducir `maxAge` de `emailOtp` a 300s.
+- [x] **Paso 2:** Añadir Frame Busting a `index.html`.
+- [x] **Paso 3:** Test unitario `tests/sessionSecurity.test.ts`.
+- [x] **Paso 4:** Verificación `npx tsc --noEmit` y tests de arquitectura/seguridad.
+- [x] **Paso 5:** Commit de la Fase 2 y continuación con la Fase 3.

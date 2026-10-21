@@ -4,7 +4,7 @@ import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 
 export const emailOtp = Email({
   id: "email-otp",
-  maxAge: 60 * 15, // 15 minutes
+  maxAge: 60 * 5, // 5 minutos (NIST SP 800-63B / OWASP)
   // This function can be asynchronous
   async generateVerificationToken() {
     const random: RandomReader = {
