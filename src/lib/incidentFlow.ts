@@ -40,6 +40,8 @@ export type IncidentAction =
   | "partsArrived" // la última petición viva se entregó: a reparar
   | "partsSettledOnsite" // las peticiones se cerraron sin material: vuelve al sitio
   | "partsSettledWorkshop" // las peticiones se cerraron sin material: vuelve al taller
+  | "sendExternal" // derivada a empresa o SAT externo
+  | "returnExternal" // recibida de vuelta en el taller
   | "closeResolved" // trabajo terminado: resuelta
   | "closeUnresolved"; // trabajo terminado: sin resolución
 
@@ -95,8 +97,19 @@ export const INCIDENT_STEPS = {
   // vuelve a donde estaba, que es lo que dice su entrada a taller abierta.
   partsSettledOnsite: { from: ["waitingParts"], to: "assigned" },
   partsSettledWorkshop: { from: ["waitingParts"], to: "workshop" },
-  closeResolved: { from: ["workshop", "repairing"], to: "resolved" },
-  closeUnresolved: { from: ["workshop", "repairing"], to: "unresolved" },
+  sendExternal: {
+    from: ["assigned", "workshop", "repairing"],
+    to: "externalRepair",
+  },
+  returnExternal: { from: ["externalRepair"], to: "workshop" },
+  closeResolved: {
+    from: ["workshop", "repairing", "externalRepair"],
+    to: "resolved",
+  },
+  closeUnresolved: {
+    from: ["workshop", "repairing", "externalRepair"],
+    to: "unresolved",
+  },
 } as const satisfies Record<IncidentAction, IncidentStep>;
 
 /** Los estados en los que la incidencia ya no se mueve. */
@@ -170,6 +183,7 @@ const IN_PROGRESS_STATUSES: readonly IncidentStatus[] = [
   "workshop",
   "waitingParts",
   "repairing",
+  "externalRepair",
 ];
 
 /**
@@ -193,6 +207,11 @@ export function isIncidentWaitingParts(status: string): boolean {
 /** ¿Ya está el material en manos del técnico, en reparación? */
 export function isIncidentRepairing(status: string): boolean {
   return status === "repairing";
+}
+
+/** ¿Está el equipo en reparación externa? */
+export function isIncidentInExternalRepair(status: string): boolean {
+  return status === "externalRepair";
 }
 
 /**
@@ -295,6 +314,8 @@ export const INCIDENT_STEP_LABELS: Record<IncidentAction, string> = {
   partsArrived: "Repuestos entregados",
   partsSettledOnsite: "Cerrar la espera sin material (en el sitio)",
   partsSettledWorkshop: "Cerrar la espera sin material (en taller)",
+  sendExternal: "Enviar a reparación externa",
+  returnExternal: "Retornar al taller",
   closeResolved: "Cerrar como resuelta",
   closeUnresolved: "Cerrar sin resolución",
 };
@@ -329,6 +350,8 @@ const INCIDENT_STEP_NEEDS: Record<IncidentAction, string> = {
   partsArrived: "se da por entregado lo que se estaba esperando",
   partsSettledOnsite: "se cierra una espera que se quedó sin material",
   partsSettledWorkshop: "se cierra una espera que se quedó sin material",
+  sendExternal: "se envía a reparar fuera mientras está asignada o en taller",
+  returnExternal: "se registra la llegada al taller de un equipo enviado fuera",
   closeResolved: "se cierra un trabajo terminado",
   closeUnresolved: "se cierra un trabajo terminado",
 };
@@ -345,16 +368,34 @@ const INCIDENT_STEP_EXCUSES: Partial<
     workshop: "está en taller: la lleva el técnico de taller",
     waitingParts: "ya está en marcha: la lleva el técnico asignado",
     repairing: "ya está en marcha: la lleva el técnico asignado",
+    externalRepair: "está en reparación externa",
   },
   waitParts: {
     reported:
       "todavía no la ha cogido nadie: primero alguien tiene que mirarla",
+    externalRepair:
+      "está en reparación externa: el material lo suministra la empresa externa",
+  },
+  sendExternal: {
+    reported:
+      "todavía no la ha cogido nadie: asígnala (o autoasígnatela) antes de enviarla fuera",
+    waitingParts:
+      "está esperando repuestos: no se envía fuera mientras espera material del taller",
+    externalRepair: "ya está enviada a reparación externa",
+  },
+  returnExternal: {
+    reported: "no se ha enviado a reparar fuera",
+    assigned: "no se ha enviado a reparar fuera",
+    workshop: "no está en reparación externa",
+    waitingParts: "no está en reparación externa",
+    repairing: "no está en reparación externa",
   },
   assign: {
     workshop: "está en taller: su técnico se cambia desde la orden de taller",
     waitingParts:
       "está esperando repuestos: su técnico se cambia desde la ficha, no volviendo a asignarla",
     repairing: "está en reparación: no se vuelve a asignar desde cero",
+    externalRepair: "está en reparación externa",
   },
   verifyOnsite: {
     reported:
@@ -362,6 +403,7 @@ const INCIDENT_STEP_EXCUSES: Partial<
     workshop: "ya está en taller: el trabajo se cierra desde ahí",
     waitingParts:
       "está esperando repuestos: primero tiene que llegar el material",
+    externalRepair: "está en reparación externa",
   },
   verifyWorkshop: {
     reported:
@@ -370,6 +412,7 @@ const INCIDENT_STEP_EXCUSES: Partial<
       "ya está en taller: se cierra desde ahí cuando el trabajo termine",
     waitingParts:
       "está esperando repuestos: primero tiene que llegar el material",
+    externalRepair: "está en reparación externa",
   },
   verifyUnresolved: {
     reported:
@@ -378,6 +421,7 @@ const INCIDENT_STEP_EXCUSES: Partial<
       "ya está en taller: se cierra desde ahí cuando el trabajo termine",
     waitingParts:
       "está esperando repuestos: primero tiene que llegar el material",
+    externalRepair: "está en reparación externa",
   },
   closeResolved: {
     reported: "está recién notificada: primero alguien tiene que mirarla",

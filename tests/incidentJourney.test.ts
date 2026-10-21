@@ -50,15 +50,22 @@ describe("el recorrido de una incidencia", () => {
   test("esperando repuestos y reparación se cuentan dentro de la etapa de taller", () => {
     expect(isWorkshopStage("waitingParts")).toBe(true);
     expect(isWorkshopStage("repairing")).toBe(true);
+    expect(isWorkshopStage("externalRepair")).toBe(true);
     expect(isWorkshopStage("assigned")).toBe(false);
 
-    // La etapa se llama «En taller» en los tres casos: el detalle —espera de
-    // material, reparación— va en la línea de «Ahora», que es la que lo cuenta.
+    // La etapa se llama «En taller» en los casos de taller: el detalle —espera de
+    // material, reparación, reparación externa— va en la línea de «Ahora», que es la que lo cuenta.
     const waiting = incidentJourney("waitingParts", { inWorkshop: true });
     expect(waiting[2]).toMatchObject({ state: "current", label: "En taller" });
 
     const repairing = incidentJourney("repairing", { inWorkshop: true });
     expect(repairing[2]).toMatchObject({
+      state: "current",
+      label: "En taller",
+    });
+
+    const external = incidentJourney("externalRepair", { inWorkshop: true });
+    expect(external[2]).toMatchObject({
       state: "current",
       label: "En taller",
     });
@@ -208,6 +215,16 @@ describe("el siguiente paso del recorrido", () => {
         inWorkshop: true,
       }),
     ).toBe("closeResolved");
+  });
+
+  test("en reparación externa: toca registrar el retorno", () => {
+    expect(
+      nextIncidentAction("externalRepair", {
+        canWork: true,
+        canAssign: false,
+        inWorkshop: true,
+      }),
+    ).toBe("returnExternal");
   });
 
   test("sin permiso sobre el caso no hay siguiente paso", () => {

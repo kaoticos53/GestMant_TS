@@ -4044,3 +4044,164 @@ describe("papelera de incidencias", () => {
     );
   });
 });
+
+describe("reparación externa", () => {
+  test("ciclo completo: envío a SAT externo, retorno con coste y cierre", async () => {
+    const { t, coordinator, tech, techId } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId: incident._id,
+      assigneeId: techId,
+    });
+
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+      notes: "Avería compleja interna. Derivar a taller.",
+    });
+
+    // Envío a SAT externo
+    await tech.mutation(api.incidents.sendToExternalRepair, {
+      incidentId: incident._id,
+      companyName: "Laboratorio SAT Central",
+      contactName: "Marta Ruiz",
+      contactPhone: "600123456",
+      defectNotes: "Placa base con microfisura intermitente",
+      dispatchNotes: "Enviado por mensajería urgente 24h",
+      includedAccessories: "Alimentador original y cables de estudio",
+    });
+
+    const sent = await firstIncident(coordinator);
+    expect(sent.status).toBe("externalRepair");
+    expect(sent.externalRepair?.companyName).toBe("Laboratorio SAT Central");
+    expect(sent.externalRepair?.contactName).toBe("Marta Ruiz");
+    expect(sent.externalRepair?.contactPhone).toBe("600123456");
+    expect(sent.externalRepair?.equipmentSnapshot?.model).toBe("HDC-3500");
+    expect(sent.externalRepair?.sentByName).toBe("Iván Torres");
+    expect(sent.externalRepair?.receivedAt).toBeUndefined();
+
+    // Retorno al taller desde reparación externa
+    await tech.mutation(api.incidents.receiveFromExternalRepair, {
+      incidentId: incident._id,
+      repairNotes: "Reballing de chipset y sustitución de reguladores de tensión",
+      workshopNotes: "Comprobado en banco de pruebas durante 2 horas. Estable y calibrado.",
+      cost: 385.5,
+      deliveryNoteNumber: "ALB-SAT-4820",
+    });
+
+    const received = await firstIncident(coordinator);
+    expect(received.status).toBe("workshop");
+    expect(received.externalRepair?.repairNotes).toBe(
+      "Reballing de chipset y sustitución de reguladores de tensión",
+    );
+    expect(received.externalRepair?.cost).toBe(385.5);
+    expect(received.externalRepair?.deliveryNoteNumber).toBe("ALB-SAT-4820");
+    expect(received.externalRepair?.receivedByName).toBe("Iván Torres");
+    expect(received.externalRepair?.receivedAt).toBeDefined();
+
+    // Cierre exitoso tras retorno
+    await tech.mutation(api.incidents.close, {
+      incidentId: incident._id,
+      outcome: "resolved",
+      notes: "Reparación externa completada y validada en plató.",
+    });
+
+    const closed = await firstIncident(coordinator);
+    expect(closed.status).toBe("resolved");
+  });
+
+  test("cierre directo desde reparación externa si resulta irreparable", async () => {
+    const { t, coordinator, tech, techId } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId: incident._id,
+      assigneeId: techId,
+    });
+
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+      notes: "Fallo crítico.",
+    });
+
+    await tech.mutation(api.incidents.sendToExternalRepair, {
+      incidentId: incident._id,
+      companyName: "Servicio Técnico Oficial",
+      defectNotes: "Óptica descabezada y chasis deformado",
+    });
+
+    const sent = await firstIncident(coordinator);
+    expect(sent.status).toBe("externalRepair");
+
+    // Cierre sin resolución directo desde externalRepair
+    await tech.mutation(api.incidents.close, {
+      incidentId: incident._id,
+      outcome: "unresolved",
+      notes: "El fabricante indica que no hay recambios de chasis para este lote.",
+    });
+
+    const closed = await firstIncident(coordinator);
+    expect(closed.status).toBe("unresolved");
+  });
+
+  test("validaciones de entrada en reparación externa", async () => {
+    const { t, coordinator, tech, techId } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    // Técnico no asignado no puede enviar a reparación externa
+    await expectConvexError(
+      tech.mutation(api.incidents.sendToExternalRepair, {
+        incidentId: incident._id,
+        companyName: "SAT Rápido",
+        defectNotes: "Avería detectada",
+      }),
+      "Solo el técnico asignado, el técnico de taller o el coordinador",
+    );
+
+    // Ni siquiera el coordinador puede enviarla si está recién notificada (debe estar asignada o en taller)
+    await expectConvexError(
+      coordinator.mutation(api.incidents.sendToExternalRepair, {
+        incidentId: incident._id,
+        companyName: "SAT Rápido",
+        defectNotes: "Avería detectada",
+      }),
+      "La incidencia no se puede enviar a reparación externa desde su estado actual",
+    );
+
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId: incident._id,
+      assigneeId: techId,
+    });
+
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+      notes: "A taller.",
+    });
+
+    // Nombre de empresa obligatorio
+    await expectConvexError(
+      tech.mutation(api.incidents.sendToExternalRepair, {
+        incidentId: incident._id,
+        companyName: "   ",
+        defectNotes: "Avería detectada",
+      }),
+      "Indica el nombre de la empresa externa o SAT",
+    );
+
+    // No se puede recibir si no está en reparación externa
+    await expectConvexError(
+      tech.mutation(api.incidents.receiveFromExternalRepair, {
+        incidentId: incident._id,
+        repairNotes: "Notas",
+      }),
+      "La incidencia no está en reparación externa",
+    );
+  });
+});
+

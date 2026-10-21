@@ -397,7 +397,7 @@ async function montarIncidencia(
   // verificación pide que no la haya—.
   const enTaller =
     from === "workshop" ||
-    ((from === "waitingParts" || from === "repairing") &&
+    ((from === "waitingParts" || from === "repairing" || from === "externalRepair") &&
       (action === "partsSettledWorkshop" ||
         action === "reassignWorkshop" ||
         action === "closeResolved" ||
@@ -425,6 +425,21 @@ async function montarIncidencia(
               dueno === "taller" ? persona.id : mundo.otroDeTaller,
             workshopAssigneeName:
               dueno === "taller" ? persona.nombre : "Otro de taller",
+          }
+        : {}),
+      ...(from === "externalRepair"
+        ? {
+            externalRepair: {
+              sentAt: ahora,
+              companyName: "SAT Especializado",
+              defectNotes: "Avería compleja",
+              sentById: persona.id,
+              sentByName: persona.nombre,
+              equipmentSnapshot: {
+                name: "Monitor",
+                model: "PVM-A250",
+              },
+            },
           }
         : {}),
       createdAt: ahora,
@@ -480,6 +495,16 @@ async function montarIncidencia(
       persona.sesion.mutation(api.incidents.close, {
         incidentId,
         outcome: "unresolved",
+      }),
+    sendExternal: () =>
+      persona.sesion.mutation(api.incidents.sendToExternalRepair, {
+        incidentId,
+        companyName: "SAT Especializado",
+        defectNotes: "Avería compleja",
+      }),
+    returnExternal: () =>
+      persona.sesion.mutation(api.incidents.receiveFromExternalRepair, {
+        incidentId,
       }),
     waitParts: () =>
       persona.sesion.mutation(api.partRequests.create, {

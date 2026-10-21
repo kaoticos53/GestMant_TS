@@ -25,6 +25,7 @@ export const STATUS_RANK: Record<IncidentStatus, number> = {
   workshop: 2,
   waitingParts: 2,
   repairing: 2,
+  externalRepair: 2,
   unresolved: 3,
   resolved: 4,
 };

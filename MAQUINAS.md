@@ -47,7 +47,7 @@ permisos, y la ficha nace **notificada** sin dueño.
 
 Cómo se llama cada estado en pantalla: `reported` **Nueva** · `assigned`
 **Asignada** · `workshop` **En taller** · `waitingParts` **En espera de
-repuestos** · `repairing` **En reparación** · `resolved` **Resuelta** ·
+repuestos** · `repairing` **En reparación** · `externalRepair` **En reparación externa** · `resolved` **Resuelta** ·
 `unresolved` **Sin resolución**.
 
 Dos de esos estados no dicen dónde está el equipo: esperar repuestos o estar en
@@ -66,7 +66,9 @@ stateDiagram-v2
     assigned --> workshop: verifyWorkshop — asignado o coordinador
     assigned --> unresolved: verifyUnresolved — asignado o coordinador
     assigned --> waitingParts: waitParts — al abrir la petición
+    assigned --> externalRepair: sendExternal — asignado o coordinador
     workshop --> waitingParts: waitParts — al abrir la petición
+    workshop --> externalRepair: sendExternal — técnico de taller o coordinador
     workshop --> workshop: reassignWorkshop — coordinador o técnico de taller
     waitingParts --> waitingParts: reassignWorkshop — coordinador o técnico de taller
     repairing --> repairing: reassignWorkshop — coordinador o técnico de taller
@@ -79,8 +81,12 @@ stateDiagram-v2
     repairing --> workshop: verifyWorkshop — asignado o coordinador
     repairing --> unresolved: verifyUnresolved — asignado o coordinador
     repairing --> waitingParts: waitParts — al abrir otra petición o devolver el material
+    repairing --> externalRepair: sendExternal — asignado o coordinador
     repairing --> resolved: closeResolved — técnico de taller o coordinador
     repairing --> unresolved: closeUnresolved — técnico de taller o coordinador
+    externalRepair --> workshop: returnExternal — asignado o coordinador
+    externalRepair --> resolved: closeResolved — técnico de taller o coordinador
+    externalRepair --> unresolved: closeUnresolved — técnico de taller o coordinador
     resolved --> [*]
     unresolved --> [*]
 ```
@@ -121,7 +127,9 @@ Cuatro cosas que no son de estilo:
 | `assigned` Asignada                   | `verifyWorkshop` Verificar y derivar a taller                    | `workshop` En taller                  | `manageIncidents` o **el técnico asignado**                                           |
 | `assigned` Asignada                   | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado**                                           |
 | `assigned` Asignada                   | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` lo abre quien pide el material para el caso                          |
+| `assigned` Asignada                   | `sendExternal` Enviar a reparación externa                       | `externalRepair` En reparación externa| `manageIncidents` o **el técnico asignado**                                           |
 | `workshop` En taller                  | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` lo abre quien pide el material para el caso                          |
+| `workshop` En taller                  | `sendExternal` Enviar a reparación externa                       | `externalRepair` En reparación externa| `manageIncidents` o **el técnico asignado o el de taller**                            |
 | `workshop` En taller                  | `reassignWorkshop` Cambiar el técnico de taller                  | `workshop` En taller                  | `manageIncidents` o **el técnico de la orden de taller**                              |
 | `waitingParts` En espera de repuestos | `reassignWorkshop` Cambiar el técnico de taller                  | `waitingParts` En espera de repuestos | `manageIncidents` o **el técnico de la orden de taller**, con el equipo en el taller  |
 | `repairing` En reparación             | `reassignWorkshop` Cambiar el técnico de taller                  | `repairing` En reparación             | `manageIncidents` o **el técnico de la orden de taller**, con el equipo en el taller  |
@@ -134,8 +142,12 @@ Cuatro cosas que no son de estilo:
 | `repairing` En reparación             | `verifyWorkshop` Verificar y derivar a taller                    | `workshop` En taller                  | `manageIncidents` o **el técnico asignado**                                           |
 | `repairing` En reparación             | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado**                                           |
 | `repairing` En reparación             | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` En espera de repuestos | `createRequests` otra petición, o el material devuelto                                |
+| `repairing` En reparación             | `sendExternal` Enviar a reparación externa                       | `externalRepair` En reparación externa| `manageIncidents` o **el técnico asignado o el de taller**                            |
 | `repairing` En reparación             | `closeResolved` Cerrar como resuelta                             | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado o el de taller**                            |
 | `repairing` En reparación             | `closeUnresolved` Cerrar sin resolución                          | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `externalRepair` En reparación externa| `returnExternal` Retornar al taller                              | `workshop` En taller                  | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `externalRepair` En reparación externa| `closeResolved` Cerrar como resuelta                             | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `externalRepair` En reparación externa| `closeUnresolved` Cerrar sin resolución                          | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado o el de taller**                            |
 
 La segunda puerta no es una capacidad sino una pregunta —«¿la tengo yo?»— y por
 eso va en negrita: el técnico asignado verifica y cierra **su** incidencia sin

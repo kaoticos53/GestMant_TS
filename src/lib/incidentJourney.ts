@@ -46,6 +46,7 @@ const WORKSHOP_STATUSES: readonly IncidentStatus[] = [
   "workshop",
   "waitingParts",
   "repairing",
+  "externalRepair",
 ];
 
 /** ¿El caso está en la etapa de taller (derivado, esperando o reparándose)? */
@@ -160,6 +161,9 @@ export function nextIncidentAction(
   if (canWork && !inWorkshop && canAdvanceIncident(status, "verifyWorkshop")) {
     return "verifyWorkshop";
   }
+  if (canWork && inWorkshop && canAdvanceIncident(status, "returnExternal")) {
+    return "returnExternal";
+  }
   if (canWork && inWorkshop && canAdvanceIncident(status, "closeResolved")) {
     return "closeResolved";
   }
@@ -183,6 +187,8 @@ const STAGE_OF_STEP: Record<IncidentAction, JourneyStageKey> = {
   verifyWorkshop: "assigned",
   verifyUnresolved: "assigned",
   reassignWorkshop: "workshop",
+  sendExternal: "workshop",
+  returnExternal: "workshop",
   waitParts: "workshop",
   partsArrived: "workshop",
   partsSettledOnsite: "workshop",
@@ -240,4 +246,6 @@ export const NEXT_STEP_LABELS: Partial<Record<IncidentAction, string>> = {
   verifyWorkshop: "Verificarla (resolver, derivar o cerrar sin resolución)",
   closeResolved: "Cerrar el trabajo de taller como resuelto",
   closeUnresolved: "Cerrar el trabajo de taller sin resolución",
+  sendExternal: "Enviar a reparación externa",
+  returnExternal: "Registrar retorno de reparación externa",
 };

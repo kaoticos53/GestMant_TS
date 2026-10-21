@@ -14,6 +14,7 @@ import {
   Plus,
   PackagePlus,
   Trash2,
+  Truck,
   Undo2,
   Upload,
   UserPlus,
@@ -151,6 +152,8 @@ import { VerifyDialog } from "../dialogs/VerifyDialog";
 import { CloseDialog } from "../dialogs/CloseDialog";
 import { CorrectEquipmentDialog } from "../dialogs/CorrectEquipmentDialog";
 import { IncidentRequestDialog } from "../dialogs/IncidentRequestDialog";
+import { SendToExternalDialog } from "../dialogs/SendToExternalDialog";
+import { ReceiveFromExternalDialog } from "../dialogs/ReceiveFromExternalDialog";
 import { EquipmentFormDialog } from "../../equipment/dialogs/EquipmentFormDialog";
 import { NoteHistory } from "./NoteHistory";
 
@@ -233,6 +236,8 @@ export function IncidentDetailSheet({
   const [withdrawReason, setWithdrawReason] = useState("");
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [sendExternalOpen, setSendExternalOpen] = useState(false);
+  const [receiveExternalOpen, setReceiveExternalOpen] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
   // Corrección de los datos del equipo: quien notificó los escribió de memoria,
   // y quien tiene la máquina delante es quien los puede poner bien.
@@ -963,6 +968,128 @@ export function IncidentDetailSheet({
             </div>
           </div>
 
+          {/* Ficha de reparación externa (si fue enviada a empresa externa o está en proceso) */}
+          {incident.externalRepair && (
+            <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Truck className="size-4 text-indigo-600 dark:text-indigo-400" />
+                  <p className="text-xs font-medium uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+                    Reparación externa
+                  </p>
+                </div>
+                <span className="rounded bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                  {incident.status === "externalRepair"
+                    ? "En curso en el SAT externo"
+                    : "Retornada al taller"}
+                </span>
+              </div>
+
+              <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Empresa externa / SAT</dt>
+                  <dd className="font-medium text-foreground">
+                    {incident.externalRepair.companyName}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Fecha de envío</dt>
+                  <dd>{formatDateTime(incident.externalRepair.sentAt)}</dd>
+                </div>
+                {(incident.externalRepair.contactName ||
+                  incident.externalRepair.contactPhone) && (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Contacto SAT</dt>
+                    <dd>
+                      {[
+                        incident.externalRepair.contactName,
+                        incident.externalRepair.contactPhone,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </dd>
+                  </div>
+                )}
+                {incident.externalRepair.dispatchNotes && (
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Agencia / Transporte</dt>
+                    <dd>{incident.externalRepair.dispatchNotes}</dd>
+                  </div>
+                )}
+                {incident.externalRepair.equipmentSnapshot?.includedAccessories && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs text-muted-foreground">
+                      Accesorios enviados con el equipo
+                    </dt>
+                    <dd className="text-foreground">
+                      {incident.externalRepair.equipmentSnapshot.includedAccessories}
+                    </dd>
+                  </div>
+                )}
+                {incident.externalRepair.defectNotes && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-xs text-muted-foreground">Avería comunicada al SAT</dt>
+                    <dd className="rounded bg-background/60 p-2.5 text-xs border border-border/40 mt-1 leading-5">
+                      {incident.externalRepair.defectNotes}
+                    </dd>
+                  </div>
+                )}
+
+                {/* Datos de retorno si ya llegó al taller */}
+                {incident.externalRepair.receivedAt && (
+                  <>
+                    <div className="sm:col-span-2 pt-2 border-t border-border/50 font-medium text-xs text-foreground">
+                      Datos de recepción y retorno
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Fecha de recepción</dt>
+                      <dd>{formatDateTime(incident.externalRepair.receivedAt)}</dd>
+                    </div>
+                    {incident.externalRepair.receivedByName && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Recepcionado por</dt>
+                        <dd>{incident.externalRepair.receivedByName}</dd>
+                      </div>
+                    )}
+                    {incident.externalRepair.deliveryNoteNumber && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Nº albarán / factura</dt>
+                        <dd className="font-mono">{incident.externalRepair.deliveryNoteNumber}</dd>
+                      </div>
+                    )}
+                    {incident.externalRepair.cost !== undefined && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Coste reparación</dt>
+                        <dd className="font-semibold text-foreground">
+                          {incident.externalRepair.cost.toLocaleString("es-ES", {
+                            style: "currency",
+                            currency: "EUR",
+                          })}
+                        </dd>
+                      </div>
+                    )}
+                    {incident.externalRepair.repairNotes && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-muted-foreground">Informe del SAT externo</dt>
+                        <dd className="rounded bg-background/60 p-2.5 text-xs border border-border/40 mt-1 leading-5">
+                          {incident.externalRepair.repairNotes}
+                        </dd>
+                      </div>
+                    )}
+                    {incident.externalRepair.workshopNotes && (
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-muted-foreground">Comprobación en taller</dt>
+                        <dd className="rounded bg-background/60 p-2.5 text-xs border border-border/40 mt-1 leading-5">
+                          {incident.externalRepair.workshopNotes}
+                        </dd>
+                      </div>
+                    )}
+                  </>
+                )}
+              </dl>
+            </div>
+          )}
+
           {/* El listado de material del caso, con el estado de cada petición. La
               ficha del taller se lee para decidir el siguiente paso, y ese paso
               depende de si el material está pedido, aprobado o entregado. */}
@@ -1679,6 +1806,31 @@ export function IncidentDetailSheet({
               </Button>
             )}
 
+            {/* Enviar a reparación externa: si no es reparable en el taller interno */}
+            {canAdvanceIncident(incident.status, "sendExternal") && canWork && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setSendExternalOpen(true)}
+              >
+                <Truck className="size-4" />
+                Reparación externa
+              </Button>
+            )}
+
+            {/* Registrar retorno de reparación externa: cuando llega de vuelta al taller */}
+            {canAdvanceIncident(incident.status, "returnExternal") && canWork && (
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={() => setReceiveExternalOpen(true)}
+              >
+                <Truck className="size-4" />
+                Registrar retorno
+              </Button>
+            )}
+
             {/* Finalizar el trabajo de taller: con la orden abierta, se cierra la
                 incidencia desde aquí, esté esperando material o ya reparándose. */}
             {canAdvanceIncident(incident.status, "closeResolved") &&
@@ -1749,6 +1901,18 @@ export function IncidentDetailSheet({
             incident={incident}
             currentUserName={currentUserName}
             onClose={() => setRequestOpen(false)}
+          />
+        )}
+        {sendExternalOpen && (
+          <SendToExternalDialog
+            incident={incident}
+            onClose={() => setSendExternalOpen(false)}
+          />
+        )}
+        {receiveExternalOpen && (
+          <ReceiveFromExternalDialog
+            incident={incident}
+            onClose={() => setReceiveExternalOpen(false)}
           />
         )}
         {equipmentOpen && (

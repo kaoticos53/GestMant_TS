@@ -213,6 +213,7 @@ export type IncidentStatus =
   | "workshop"
   | "waitingParts"
   | "repairing"
+  | "externalRepair"
   | "resolved"
   | "unresolved";
 
@@ -247,6 +248,12 @@ export const INCIDENT_STATUS_META: Record<
       "border-violet-600/25 bg-violet-600/10 text-violet-700 dark:text-violet-300",
     description:
       "Con el material entregado: el trabajo sigue en el sitio o en el taller",
+  },
+  externalRepair: {
+    label: "En reparación externa",
+    badgeClassName:
+      "border-indigo-600/25 bg-indigo-600/10 text-indigo-700 dark:text-indigo-300",
+    description: "Enviada a una empresa o servicio técnico externo",
   },
   resolved: {
     label: "Resuelta",
@@ -335,6 +342,7 @@ export const INCIDENT_FILTERS: { id: IncidentStatus | "all"; label: string }[] =
     { id: "workshop", label: "En taller" },
     { id: "waitingParts", label: "Esperando repuestos" },
     { id: "repairing", label: "En reparación" },
+    { id: "externalRepair", label: "Reparación externa" },
     { id: "resolved", label: "Resueltas" },
     { id: "unresolved", label: "Sin resolución" },
   ];

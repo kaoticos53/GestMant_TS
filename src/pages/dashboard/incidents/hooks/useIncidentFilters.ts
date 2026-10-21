@@ -29,6 +29,9 @@ export function searchableFields(
     incident.reporterRole,
     incident.assigneeName,
     incident.workshopAssigneeName,
+    incident.externalRepair?.companyName,
+    incident.externalRepair?.contactName,
+    incident.externalRepair?.deliveryNoteNumber,
     ...(incident.documents?.map((d) => d.name) ?? []),
     ...liveNotes(incident.lifecycleNotes).map((n) =>
       richDocToPlainText(n.note),
@@ -90,6 +93,8 @@ export function useIncidentFilters({
     waitingParts: matched.filter((item) => item.status === "waitingParts")
       .length,
     repairing: matched.filter((item) => item.status === "repairing").length,
+    externalRepair: matched.filter((item) => item.status === "externalRepair")
+      .length,
     resolved: matched.filter((item) => item.status === "resolved").length,
     unresolved: matched.filter((item) => item.status === "unresolved").length,
   };

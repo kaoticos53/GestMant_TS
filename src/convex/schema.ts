@@ -58,6 +58,8 @@ export const INCIDENT_STATUSES = {
   // Con el material ya en manos del técnico: es el estado desde el que se
   // termina el trabajo, en el sitio o en el taller.
   REPAIRING: "repairing",
+  // Derivada a empresa o servicio técnico externo
+  EXTERNAL_REPAIR: "externalRepair",
   RESOLVED: "resolved", // cerrada resuelta
   UNRESOLVED: "unresolved", // cerrada sin resolución
 } as const;
@@ -68,6 +70,7 @@ export const incidentStatusValidator = v.union(
   v.literal(INCIDENT_STATUSES.WORKSHOP),
   v.literal(INCIDENT_STATUSES.WAITING_PARTS),
   v.literal(INCIDENT_STATUSES.REPAIRING),
+  v.literal(INCIDENT_STATUSES.EXTERNAL_REPAIR),
   v.literal(INCIDENT_STATUSES.RESOLVED),
   v.literal(INCIDENT_STATUSES.UNRESOLVED),
 );
@@ -416,6 +419,38 @@ const schema = defineSchema({
     // Entrada a taller: responsable de la orden (mismo u otro técnico)
     workshopAssigneeId: v.optional(v.id("users")),
     workshopAssigneeName: v.optional(v.string()),
+    // Reparación externa: datos de salida a empresa/SAT externa y de retorno
+    externalRepair: v.optional(
+      v.object({
+        // Envío
+        sentAt: v.number(),
+        companyName: v.string(), // Empresa externa / SAT
+        contactName: v.optional(v.string()), // Persona o departamento de contacto
+        contactPhone: v.optional(v.string()), // Teléfono o contacto del SAT
+        defectNotes: v.string(), // Descripción técnica de la avería comunicada
+        dispatchNotes: v.optional(v.string()), // Agencia, nº de seguimiento, albarán
+        sentById: v.id("users"), // Quién autorizó o ejecutó el envío
+        sentByName: v.string(),
+        // Instantánea del equipo al momento de enviarse
+        equipmentSnapshot: v.object({
+          name: v.string(),
+          model: v.string(),
+          brand: v.optional(v.string()),
+          serialNumber: v.optional(v.string()),
+          code: v.optional(v.string()), // Ej: EQ-0012
+          includedAccessories: v.optional(v.string()), // Cables, cargador, tapas, etc.
+        }),
+        // Retorno / Recepción
+        receivedAt: v.optional(v.number()),
+        receivedById: v.optional(v.id("users")),
+        receivedByName: v.optional(v.string()),
+        repairNotes: v.optional(v.string()), // Diagnóstico y trabajos realizados por la empresa externa
+        workshopNotes: v.optional(v.string()), // Notas de comprobación del taller tras recibirlo
+        cost: v.optional(v.number()), // Coste de la reparación (€)
+        deliveryNoteNumber: v.optional(v.string()), // Nº de albarán o factura externa
+        deliveryNoteStorageId: v.optional(v.id("_storage")), // Archivo del albarán externo adjunto
+      }),
+    ),
     // Datos aportados por el técnico al cerrar
     notes: v.optional(v.string()),
     resolvedNote: v.optional(v.string()),

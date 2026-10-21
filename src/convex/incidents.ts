@@ -661,9 +661,12 @@ export const close = mutation({
         : "closeUnresolved",
       () => "La incidencia no tiene una entrada de taller abierta.",
     );
-    // Cerrar el trabajo de taller pide una orden abierta: desde «en reparación»
-    // sin entrada a taller, el cierre es la verificación en el sitio.
-    if (!isIncidentInWorkshop(incident)) {
+    // Cerrar el trabajo de taller pide una orden abierta (salvo si viene de
+    // reparación externa, que puede cerrarse directamente al recibir el dictamen).
+    if (
+      !isIncidentInWorkshop(incident) &&
+      incident.status !== INCIDENT_STATUSES.EXTERNAL_REPAIR
+    ) {
       throw new ConvexError(
         "La incidencia no tiene una entrada de taller abierta: su cierre es la verificación en el sitio.",
       );
@@ -725,6 +728,200 @@ export const close = mutation({
     );
     await scheduleReporterEmail(ctx, incident, status);
     await scheduleStaffEmail(ctx, incident, status);
+  },
+});
+
+/**
+ * Enviar el equipo a reparación a una empresa o servicio técnico externo:
+ * cuando la avería no es reparable en el taller interno.
+ */
+export const sendToExternalRepair = mutation({
+  args: {
+    incidentId: v.id("incidents"),
+    companyName: v.string(),
+    contactName: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    defectNotes: v.string(),
+    dispatchNotes: v.optional(v.string()),
+    includedAccessories: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
+    if (
+      !canCoordinate &&
+      incident.workshopAssigneeId !== actor._id &&
+      incident.assigneeId !== actor._id
+    ) {
+      throw new ConvexError(
+        "Solo el técnico asignado, el técnico de taller o el coordinador pueden enviar el equipo a reparación externa.",
+      );
+    }
+
+    const nextStatus = requireIncidentStep(
+      incident,
+      "sendExternal",
+      () =>
+        "La incidencia no se puede enviar a reparación externa desde su estado actual.",
+    );
+
+    const now = Date.now();
+    const name = actorName(actor);
+
+    // Instantánea del equipo al enviarse
+    let equipmentSnapshot = {
+      name: incident.equipmentKind ?? "Equipo",
+      model: incident.model ?? "Sin modelo",
+      brand: undefined as string | undefined,
+      serialNumber: incident.serialNumber,
+      code: undefined as string | undefined,
+      includedAccessories: args.includedAccessories?.trim() || undefined,
+    };
+
+    if (incident.equipmentId) {
+      const eq = await ctx.db.get(incident.equipmentId);
+      if (eq) {
+        equipmentSnapshot = {
+          name: eq.name,
+          model: eq.model,
+          brand: eq.brand,
+          serialNumber: eq.serialNumber ?? incident.serialNumber,
+          code: eq.code,
+          includedAccessories: args.includedAccessories?.trim() || undefined,
+        };
+      }
+    }
+
+    const companyName = args.companyName.trim();
+    if (!companyName) {
+      throw new ConvexError("Indica el nombre de la empresa externa o SAT.");
+    }
+    const defectNotes = richDocToStore(args.defectNotes) ?? args.defectNotes.trim();
+    const dispatchNotes = args.dispatchNotes?.trim() || undefined;
+
+    await ctx.db.patch(args.incidentId, {
+      status: nextStatus,
+      updatedAt: now,
+      externalRepair: {
+        sentAt: now,
+        companyName,
+        contactName: args.contactName?.trim() || undefined,
+        contactPhone: args.contactPhone?.trim() || undefined,
+        defectNotes,
+        dispatchNotes,
+        sentById: actor._id,
+        sentByName: name,
+        equipmentSnapshot,
+      },
+      history: [
+        ...incident.history,
+        historyEntry(
+          nextStatus,
+          now,
+          name,
+          `Enviado a reparación externa · ${companyName}`,
+        ),
+      ],
+    });
+
+    await notifyUsers(
+      ctx,
+      [
+        ...(await moderatorIds(ctx)),
+        ...(incident.assigneeId ? [incident.assigneeId] : []),
+        ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
+      ],
+      `${incident.reference} enviada a reparación externa (${companyName}) por ${name}`,
+      incident._id,
+      actor._id,
+    );
+
+    await scheduleReporterEmail(ctx, incident, nextStatus);
+  },
+});
+
+/**
+ * Registrar el retorno del equipo desde la empresa externa de vuelta al taller.
+ */
+export const receiveFromExternalRepair = mutation({
+  args: {
+    incidentId: v.id("incidents"),
+    repairNotes: v.optional(v.string()),
+    workshopNotes: v.optional(v.string()),
+    cost: v.optional(v.number()),
+    deliveryNoteNumber: v.optional(v.string()),
+    deliveryNoteStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireActor(ctx);
+    const incident = await getIncident(ctx, args.incidentId);
+    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
+    if (
+      !canCoordinate &&
+      incident.workshopAssigneeId !== actor._id &&
+      incident.assigneeId !== actor._id
+    ) {
+      throw new ConvexError(
+        "Solo el técnico asignado, el técnico de taller o el coordinador pueden registrar la recepción de la reparación externa.",
+      );
+    }
+
+    const nextStatus = requireIncidentStep(
+      incident,
+      "returnExternal",
+      () => "La incidencia no está en reparación externa.",
+    );
+
+    if (!incident.externalRepair) {
+      throw new ConvexError(
+        "La incidencia no tiene datos de envío a reparación externa.",
+      );
+    }
+
+    const now = Date.now();
+    const name = actorName(actor);
+    const repairNotes = args.repairNotes?.trim() || undefined;
+    const workshopNotes = args.workshopNotes?.trim() || undefined;
+
+    await ctx.db.patch(args.incidentId, {
+      status: nextStatus,
+      updatedAt: now,
+      externalRepair: {
+        ...incident.externalRepair,
+        receivedAt: now,
+        receivedById: actor._id,
+        receivedByName: name,
+        repairNotes,
+        workshopNotes,
+        cost: args.cost,
+        deliveryNoteNumber: args.deliveryNoteNumber?.trim() || undefined,
+        deliveryNoteStorageId: args.deliveryNoteStorageId,
+      },
+      history: [
+        ...incident.history,
+        historyEntry(
+          nextStatus,
+          now,
+          name,
+          `Recibido de reparación externa (${incident.externalRepair.companyName})`,
+        ),
+      ],
+    });
+
+    await notifyUsers(
+      ctx,
+      [
+        ...(await moderatorIds(ctx)),
+        ...(incident.assigneeId ? [incident.assigneeId] : []),
+        ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
+      ],
+      `${incident.reference} recibida de reparación externa por ${name}`,
+      incident._id,
+      actor._id,
+    );
+
+    await scheduleReporterEmail(ctx, incident, nextStatus);
   },
 });
 
@@ -881,6 +1078,17 @@ async function createHistorySheet(
     }.`,
     `Avería descrita: ${richDocToPlainText(incident.description)}`,
     args.notes ? `Notas del técnico: ${args.notes}` : "",
+    incident.externalRepair
+      ? `Reparación externa: ${incident.externalRepair.companyName}${
+          incident.externalRepair.repairNotes
+            ? ` · ${incident.externalRepair.repairNotes}`
+            : ""
+        }${
+          incident.externalRepair.cost !== undefined
+            ? ` · Coste: ${incident.externalRepair.cost} €`
+            : ""
+        }.`
+      : "",
     `Cierre: ${
       args.status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución"
     } por ${args.technician} el ${closed}.`,

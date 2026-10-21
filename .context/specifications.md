@@ -48,6 +48,12 @@ stateDiagram-v2
   assigned --> waitingParts : waitParts
   workshop --> waitingParts : waitParts
   repairing --> waitingParts : waitParts
+  assigned --> externalRepair : sendExternal
+  workshop --> externalRepair : sendExternal
+  repairing --> externalRepair : sendExternal
+  externalRepair --> workshop : returnExternal
+  externalRepair --> resolved : closeResolved
+  externalRepair --> unresolved : closeUnresolved
   waitingParts --> repairing : partsArrived
   waitingParts --> assigned : partsSettledOnsite
   waitingParts --> workshop : partsSettledWorkshop
@@ -59,65 +65,66 @@ stateDiagram-v2
   unresolved --> [*]
 ```
 
-Dos cosas que el dibujo deja fuera a propósito. Un caso cerrado —`resolved` o
-`unresolved`— **no se reabre** desde la máquina: volver a por él es una incidencia
-nueva, que deja su propio rastro. Y «archivada» **no es un estado**: es lo que se
-hace después con lo cerrado (`lib/archive`), y por eso no aparece aquí ni cuenta
-como paso del ciclo.
+Dos de esos estados no dicen dónde está el equipo: esperar repuestos o estar en
+reparación pasa igual en el banco que en el taller. Eso lo dice su **entrada a
+taller abierta** (`workshopAssigneeId`), que es la que decide qué cierre toca —el
+trabajo de taller o la verificación en el sitio— y la que la ficha enseña junto al
+estado: «En espera de repuestos · taller».
 
-El estado dice qué le pasa al caso, no dónde está el equipo: `waitingParts` y
-`repairing` pueden ocurrir en el sitio o en el taller, y eso lo cuenta la entrada a
-taller abierta (`isIncidentInWorkshop`). Por eso `verifyOnsite` y `closeResolved`
-salen los dos desde `repairing`: el cierre lo elige `incidentCloseStep` según dónde
-esté el equipo, y el backend rechaza el que no toca.
-
-Los siete estados del ciclo son estos, con el nombre que enseña la app:
+Los ocho estados del ciclo son estos, con el nombre que enseña la app:
 
 #### Estados — incident
 
-| Estado         | Nombre                 | Qué cuenta                                                                                                                            |
-| -------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `reported`     | Nueva                  | Acaba de entrar, por el formulario público o por el taller: nadie la ha mirado todavía y no es de nadie.                              |
-| `assigned`     | Asignada               | Tiene técnico y se trabaja en el sitio; si el equipo se deriva, pasa a `workshop`.                                                    |
-| `workshop`     | En taller              | Entrada de incidencia a taller abierta: la lleva el técnico de taller.                                                                |
-| `waitingParts` | En espera de repuestos | Tiene una petición de repuesto abierta y no se trabaja hasta que llegue el material. El sitio del equipo lo dice su entrada a taller. |
-| `repairing`    | En reparación          | El material ya está entregado y el trabajo sigue: en el sitio o en el taller.                                                         |
-| `resolved`     | Resuelta               | Cerrada con resolución: deja su parte de trabajo si el equipo estaba relacionado.                                                     |
-| `unresolved`   | Sin resolución         | Cerrada sin poder resolverla.                                                                                                         |
+| Estado           | Nombre                 | Qué cuenta                                                                                                                            |
+| ---------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `reported`       | Nueva                  | Acaba de entrar, por el formulario público o por el taller: nadie la ha mirado todavía y no es de nadie.                              |
+| `assigned`       | Asignada               | Tiene técnico y se trabaja en el sitio; si el equipo se deriva, pasa a `workshop`.                                                    |
+| `workshop`       | En taller              | Entrada de incidencia a taller abierta: la lleva el técnico de taller.                                                                |
+| `waitingParts`   | En espera de repuestos | Tiene una petición de repuesto abierta y no se trabaja hasta que llegue el material. El sitio del equipo lo dice su entrada a taller. |
+| `repairing`      | En reparación          | El material ya está entregado y el trabajo sigue: en el sitio o en el taller.                                                         |
+| `externalRepair` | En reparación externa  | Enviada a una empresa o servicio técnico externo.                                                                                     |
+| `resolved`       | Resuelta               | Cerrada con resolución: deja su parte de trabajo si el equipo estaba relacionado.                                                     |
+| `unresolved`     | Sin resolución         | Cerrada sin poder resolverla.                                                                                                         |
 
-Los doce pasos, uno por fila:
+Los catorce pasos, uno por fila:
 
 Cada fila es una transición: desde dónde se puede dar el paso, a dónde lleva y
-quién lo da. Las que comparten paso se leen juntas: `waitParts` y
+quién lo da. Las que comparten paso se leen juntas: `waitParts`, `sendExternal` y
 `reassignWorkshop` salen de tres sitios, y `verifyOnsite`, `verifyWorkshop`,
-`verifyUnresolved`, `closeResolved` y `closeUnresolved` entran desde dos.
+`verifyUnresolved`, `closeResolved` y `closeUnresolved` entran desde varios.
 
 #### Tabla de pasos — incident
 
-| desde          | paso                                                             | a              | quién                                                                           |
-| -------------- | ---------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------- |
-| `reported`     | `assign` Asignar a un técnico                                    | `assigned`     | El coordinador                                                                  |
-| `assigned`     | `assign` Asignar a un técnico                                    | `assigned`     | El coordinador                                                                  |
-| `reported`     | `selfAssign` Autoasignarme                                       | `assigned`     | Un técnico que ve la cola                                                       |
-| `assigned`     | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved`     | El técnico asignado o el coordinador, con el equipo en el sitio                 |
-| `repairing`    | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved`     | El técnico asignado o el coordinador, con el equipo en el sitio                 |
-| `assigned`     | `verifyWorkshop` Verificar y derivar a taller                    | `workshop`     | El técnico asignado o el coordinador                                            |
-| `repairing`    | `verifyWorkshop` Verificar y derivar a taller                    | `workshop`     | El técnico asignado o el coordinador                                            |
-| `assigned`     | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved`   | El técnico asignado o el coordinador, con el equipo en el sitio                 |
-| `repairing`    | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved`   | El técnico asignado o el coordinador, con el equipo en el sitio                 |
-| `workshop`     | `reassignWorkshop` Cambiar el técnico de taller                  | `workshop`     | El coordinador o el técnico de la orden, con el equipo en el taller             |
-| `waitingParts` | `reassignWorkshop` Cambiar el técnico de taller                  | `waitingParts` | El coordinador o el técnico de la orden, con el equipo en el taller             |
-| `repairing`    | `reassignWorkshop` Cambiar el técnico de taller                  | `repairing`    | El coordinador o el técnico de la orden, con el equipo en el taller             |
-| `assigned`     | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` | Abrir una petición de repuesto                                                  |
-| `workshop`     | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` | Abrir una petición de repuesto                                                  |
-| `repairing`    | `waitParts` Quedar a la espera de repuestos                      | `waitingParts` | Abrir otra petición, o devolver material ya entregado                           |
-| `waitingParts` | `partsArrived` Repuestos entregados                              | `repairing`    | La entrega del material de la última petición viva                              |
-| `waitingParts` | `partsSettledOnsite` Cerrar la espera sin material (en el sitio) | `assigned`     | Rechazar, cancelar o devolver las peticiones, con la incidencia fuera de taller |
-| `waitingParts` | `partsSettledWorkshop` Cerrar la espera sin material (en taller) | `workshop`     | Rechazar, cancelar o devolver las peticiones, con la orden de taller abierta    |
-| `workshop`     | `closeResolved` Cerrar como resuelta                             | `resolved`     | El técnico que lleva el caso, al terminar el trabajo                            |
-| `repairing`    | `closeResolved` Cerrar como resuelta                             | `resolved`     | El técnico que lleva el caso, al terminar el trabajo                            |
-| `workshop`     | `closeUnresolved` Cerrar sin resolución                          | `unresolved`   | El técnico que lleva el caso                                                    |
-| `repairing`    | `closeUnresolved` Cerrar sin resolución                          | `unresolved`   | El técnico que lleva el caso                                                    |
+| desde            | paso                                                             | a                | quién                                                                           |
+| ---------------- | ---------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| `reported`       | `assign` Asignar a un técnico                                    | `assigned`       | El coordinador                                                                  |
+| `assigned`       | `assign` Asignar a un técnico                                    | `assigned`       | El coordinador                                                                  |
+| `reported`       | `selfAssign` Autoasignarme                                       | `assigned`       | Un técnico que ve la cola                                                       |
+| `assigned`       | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved`       | El técnico asignado o el coordinador, con el equipo en el sitio                 |
+| `repairing`      | `verifyOnsite` Verificar y resolver en el sitio                  | `resolved`       | El técnico asignado o el coordinador, con el equipo en el sitio                 |
+| `assigned`       | `verifyWorkshop` Verificar y derivar a taller                    | `workshop`       | El técnico asignado o el coordinador                                            |
+| `repairing`      | `verifyWorkshop` Verificar y derivar a taller                    | `workshop`       | El técnico asignado o el coordinador                                            |
+| `assigned`       | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved`     | El técnico asignado o el coordinador, con el equipo en el sitio                 |
+| `repairing`      | `verifyUnresolved` Verificar y cerrar sin resolución             | `unresolved`     | El técnico asignado o el coordinador, con el equipo en el sitio                 |
+| `workshop`       | `reassignWorkshop` Cambiar el técnico de taller                  | `workshop`       | El coordinador o el técnico de la orden, con el equipo en el taller             |
+| `waitingParts`   | `reassignWorkshop` Cambiar el técnico de taller                  | `waitingParts`   | El coordinador o el técnico de la orden, con el equipo en el taller             |
+| `repairing`      | `reassignWorkshop` Cambiar el técnico de taller                  | `repairing`      | El coordinador o el técnico de la orden, con el equipo en el taller             |
+| `assigned`       | `waitParts` Quedar a la espera de repuestos                      | `waitingParts`   | Abrir una petición de repuesto                                                  |
+| `workshop`       | `waitParts` Quedar a la espera de repuestos                      | `waitingParts`   | Abrir una petición de repuesto                                                  |
+| `repairing`      | `waitParts` Quedar a la espera de repuestos                      | `waitingParts`   | Abrir otra petición, o devolver material ya entregado                           |
+| `assigned`       | `sendExternal` Enviar a reparación externa                       | `externalRepair` | El técnico asignado o el coordinador                                            |
+| `workshop`       | `sendExternal` Enviar a reparación externa                       | `externalRepair` | El técnico asignado o el de taller                                              |
+| `repairing`      | `sendExternal` Enviar a reparación externa                       | `externalRepair` | El técnico asignado o el de taller                                              |
+| `externalRepair` | `returnExternal` Retornar al taller                              | `workshop`       | El técnico asignado o el de taller, al recibir el equipo                         |
+| `waitingParts`   | `partsArrived` Repuestos entregados                              | `repairing`      | La entrega del material de la última petición viva                              |
+| `waitingParts`   | `partsSettledOnsite` Cerrar la espera sin material (en el sitio) | `assigned`       | Rechazar, cancelar o devolver las peticiones, con la incidencia fuera de taller |
+| `waitingParts`   | `partsSettledWorkshop` Cerrar la espera sin material (en taller) | `workshop`     | Rechazar, cancelar o devolver las peticiones, con la orden de taller abierta    |
+| `workshop`       | `closeResolved` Cerrar como resuelta                             | `resolved`       | El técnico que lleva el caso, al terminar el trabajo                            |
+| `repairing`      | `closeResolved` Cerrar como resuelta                             | `resolved`       | El técnico que lleva el caso, al terminar el trabajo                            |
+| `externalRepair` | `closeResolved` Cerrar como resuelta                             | `resolved`       | El técnico que lleva el caso, al terminar el trabajo                            |
+| `workshop`       | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
+| `repairing`      | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
+| `externalRepair` | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
 
 **Regla:** un paso solo se da si `INCIDENT_STEPS` lo admite desde el estado en el
 que está la incidencia, y desde un estado cerrado no sale ninguno. La tabla de

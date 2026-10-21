@@ -33,6 +33,8 @@ export const TRACKING_STATUS_NOTE: Record<IncidentStatus, string> = {
     "No se puede seguir hasta que llegue el material que el taller ha pedido; el caso no está parado por otra cosa.",
   repairing:
     "El material ya está y el trabajo sigue, en el taller o en el propio sitio.",
+  externalRepair:
+    "El equipo se ha enviado a un servicio técnico especializado externo para su reparación.",
   resolved: "El caso está cerrado con la reparación hecha.",
   unresolved:
     "Se cerró sin poder resolverlo. Si vuelve a pasar, notifícalo otra vez: el aviso anterior ya no sirve para seguir el caso nuevo.",

@@ -42,6 +42,7 @@ export const INCIDENT_MAIL_STATUSES = [
   "workshop",
   "waitingParts",
   "repairing",
+  "externalRepair",
   "resolved",
   "unresolved",
 ] as const;
@@ -129,6 +130,10 @@ const NOTICE_MAIL_TEXT: Record<
   repairing: {
     headline: "Ya está el material: el equipo está en reparación",
     what: "Ha llegado lo que faltaba y el técnico lo tiene en sus manos: el trabajo del equipo continúa con la pieza puesta.",
+  },
+  externalRepair: {
+    headline: "El equipo se ha enviado a un servicio especializado",
+    what: "El equipo no se puede reparar en el taller y se ha derivado a una empresa especializada externa para su reparación.",
   },
   resolved: {
     headline: "Tu incidencia se ha resuelto",
