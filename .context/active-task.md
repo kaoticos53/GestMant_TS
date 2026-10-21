@@ -1,21 +1,23 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-DASHBOARD-SEED-ALERTS`
-- **Objetivo:** Fase 2 - Extracción de `useWorkAlertState.ts` y `useDashboardSeed.ts` en `src/pages/dashboard/hooks/`, pruebas unitarias e integración en `Dashboard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-DASHBOARD-NAVCONFIG-DESACOP`
+- **Objetivo:** Fase 3 - Creación de `navConfig.ts`, desacoplamiento de props en `DashboardContent.tsx`, pruebas unitarias en `tests/navConfig.test.ts` y reensamblado limpio de `Dashboard.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/hooks/useWorkAlertState.ts`
-  - `src/pages/dashboard/hooks/useDashboardSeed.ts`
+  - `src/pages/dashboard/constants/navConfig.ts`
+  - `src/pages/dashboard/components/DashboardContent.tsx`
+  - `src/pages/dashboard/hooks/useDashboardNavigation.ts`
   - `src/pages/Dashboard.tsx`
-  - `tests/dashboardSeedAndAlerts.test.tsx`
+  - `tests/navConfig.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/hooks/useWorkAlertState.ts`: Centralización de avisos de trabajo, taller vacío y sincronización local/perfil.
-- [x] `src/pages/dashboard/hooks/useDashboardSeed.ts`: Centralización de acciones de seeding y toasting informativo.
-- [x] `src/pages/Dashboard.tsx`: Integración de los nuevos hooks de dominio.
-- [x] `tests/dashboardSeedAndAlerts.test.tsx`: Pruebas de descarte/restauración de alertas y seeding.
+- [x] `src/pages/dashboard/constants/navConfig.ts`: `MODULE_META`, `buildNavItems`, `computeNavBadges`, `buildDashboardStats`, `isSummaryHidden`, `getHeadingInfo`, `buildHeaderActions`.
+- [x] `src/pages/dashboard/hooks/useDashboardNavigation.ts`: Export del tipo `DashboardNavigation`.
+- [x] `src/pages/dashboard/components/DashboardContent.tsx`: Reducción de 34 props a interfaz limpia con `navigation: DashboardNavigation`.
+- [x] `src/pages/Dashboard.tsx`: Reensamblado orquestador conciso (308 líneas) delegando configuración y acciones.
+- [x] `tests/navConfig.test.ts`: Pruebas de configuración de navegación, badges, stats y acciones de cabecera.
 
 ---
 
@@ -27,9 +29,9 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `useWorkAlertState.ts`.
-- [x] **Paso 2:** Crear `useDashboardSeed.ts`.
-- [x] **Paso 3:** Conectar en `Dashboard.tsx`.
-- [x] **Paso 4:** Crear `tests/dashboardSeedAndAlerts.test.tsx`.
+- [x] **Paso 1:** Crear `navConfig.ts` con funciones puras y metadatos.
+- [x] **Paso 2:** Crear suite de pruebas `tests/navConfig.test.ts`.
+- [x] **Paso 3:** Refactorizar `DashboardContent.tsx` para recibir `navigation`.
+- [x] **Paso 4:** Reensamblar `Dashboard.tsx` conectando las nuevas utilidades.
 - [x] **Paso 5:** Validar con `npx tsc --noEmit` y suite de tests.
-- [x] **Paso 6:** Commit atómico de la Fase 2.
+- [x] **Paso 6:** Commit atómico de la Fase 3.

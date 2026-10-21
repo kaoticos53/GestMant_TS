@@ -1,14 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Doc, Id } from "@/convex/_generated/dataModel";
+import type { Doc } from "@/convex/_generated/dataModel";
 import type { Capability } from "@/lib/permissions";
 import { LogOut, Search, Siren, Sparkles } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { Link } from "react-router";
 import { IncidentLookup } from "../IncidentLookup";
-import type { RequestFilterId } from "../requests/types";
-import type { OpenArchivedDoc } from "../ArchiveView";
-import type { NavId } from "../types";
+import type { DashboardNavigation } from "../hooks/useDashboardNavigation";
 import { ModuleErrorBoundary } from "@/components/ModuleErrorBoundary";
 
 const ArchiveView = lazy(() =>
@@ -67,76 +65,48 @@ function ViewSkeleton() {
 }
 
 export interface DashboardContentProps {
+  navigation: DashboardNavigation;
   isGuest: boolean;
   showEmptyNotice: boolean;
   loading: boolean;
-  activeTab: NavId;
   user: Doc<"users"> | null | undefined;
   displayName: string;
   adminOk: boolean;
   can: (capability: Capability) => boolean;
   canSeePurchasing: boolean;
-  initialIncidentId: Id<"incidents"> | null;
-  incidentsViewKey: number;
-  /** Ficha archivada que hay que abrir al entrar en el archivo (buscador). */
-  archiveInitialEntry: OpenArchivedDoc | null;
-  archiveViewKey: number;
-  requestsEquipmentFilter: string;
-  onEquipmentFilterChange: (val: string) => void;
-  initialRequestId: Id<"partRequests"> | null;
-  requestsInitialFilter: RequestFilterId;
-  requestsViewKey: number;
-  inventoryInitialSearch: string;
-  inventoryLowStockOnly: boolean;
-  inventoryViewKey: number;
-  equipmentInitialSearch: string;
-  equipmentViewKey: number;
   searchParamsCode: string | null;
   isSeeding: boolean;
   onSeed: () => void;
   onStartEmpty: () => void;
   onSwitchAccount: () => void;
-  onOpenIncident: (id: Id<"incidents">) => void;
-  /** Abrir una petición concreta en su módulo (la ficha de la incidencia). */
-  onOpenRequest: (id: Id<"partRequests">) => void;
-  goToTab: (id: NavId) => void;
-  onEquipmentViewRequests: (equipmentId: string) => void;
 }
 
 export function DashboardContent({
+  navigation,
   isGuest,
   showEmptyNotice,
   loading,
-  activeTab,
   user,
   displayName,
   adminOk,
   can,
   canSeePurchasing,
-  initialIncidentId,
-  incidentsViewKey,
-  archiveInitialEntry,
-  archiveViewKey,
-  requestsEquipmentFilter,
-  onEquipmentFilterChange,
-  initialRequestId,
-  requestsInitialFilter,
-  requestsViewKey,
-  inventoryInitialSearch,
-  inventoryLowStockOnly,
-  inventoryViewKey,
-  equipmentInitialSearch,
-  equipmentViewKey,
   searchParamsCode,
   isSeeding,
   onSeed,
   onStartEmpty,
   onSwitchAccount,
-  onOpenIncident,
-  onOpenRequest,
-  goToTab,
-  onEquipmentViewRequests,
 }: DashboardContentProps) {
+  const {
+    activeTab,
+    target,
+    viewKeys,
+    goToTab,
+    openIncident,
+    openRequest,
+    openEquipmentViewRequests,
+    setRequestsEquipmentFilter,
+  } = navigation;
   if (isGuest) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
@@ -240,36 +210,36 @@ export function DashboardContent({
           </div>
         ) : activeTab === "incidents" ? (
           <IncidentsView
-            key={`incidents-${incidentsViewKey}`}
+            key={`incidents-${viewKeys.incidents}`}
             currentUserId={user?._id ?? null}
             currentUserName={displayName}
             canAssign={can("manageIncidents")}
-            initialDetailId={initialIncidentId}
+            initialDetailId={target.incidentId ?? null}
             // Ver las peticiones es lo que permite saltar a una: sin ese permiso la
             // ficha las enseña —el estado del material es parte del caso— pero no
             // ofrece un botón que llevaría a un módulo cerrado.
             canOpenRequests={can("viewRequests")}
-            onOpenRequest={onOpenRequest}
+            onOpenRequest={openRequest}
           />
         ) : activeTab === "requests" ? (
           <RequestsView
-            key={`requests-${requestsViewKey}`}
-            equipmentFilter={requestsEquipmentFilter}
-            onEquipmentFilterChange={onEquipmentFilterChange}
+            key={`requests-${viewKeys.requests}`}
+            equipmentFilter={target.requestsEquipmentFilter ?? "all"}
+            onEquipmentFilterChange={setRequestsEquipmentFilter}
             canManage={can("decideRequests")}
             canPurchase={can("managePurchasing") && can("viewPurchasing")}
-            initialDetailId={initialRequestId}
-            initialFilter={requestsInitialFilter}
+            initialDetailId={target.requestId ?? null}
+            initialFilter={target.requestsFilter ?? "all"}
           />
         ) : activeTab === "purchasing" && canSeePurchasing ? (
           <PurchasingView canManage={can("managePurchasing")} />
         ) : activeTab === "inventory" && can("viewInventory") ? (
           <InventoryView
-            key={`inventory-${inventoryViewKey}`}
+            key={`inventory-${viewKeys.inventory}`}
             canManage={can("manageInventory")}
             currentUserId={user?._id ?? null}
-            initialSearch={inventoryInitialSearch}
-            initialLowStockOnly={inventoryLowStockOnly}
+            initialSearch={target.inventorySearch ?? ""}
+            initialLowStockOnly={target.inventoryLowStockOnly ?? false}
           />
         ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
           <ManualsView
@@ -280,18 +250,18 @@ export function DashboardContent({
           <MachinesView />
         ) : activeTab === "equipment" && can("viewEquipment") ? (
           <EquipmentView
-            key={`equipment-${equipmentViewKey}`}
+            key={`equipment-${viewKeys.equipment}`}
             canManage={can("manageEquipment")}
             canWriteManuals={can("viewManuals") && !isGuest}
             canManageManuals={can("manageManuals")}
             currentUserId={user?._id ?? null}
-            initialSearch={equipmentInitialSearch}
-            onViewRequests={onEquipmentViewRequests}
+            initialSearch={target.equipmentSearch ?? ""}
+            onViewRequests={openEquipmentViewRequests}
           />
         ) : activeTab === "archive" ? (
           <ArchiveView
-            key={`archive-${archiveViewKey}`}
-            initialEntry={archiveInitialEntry}
+            key={`archive-${viewKeys.archive}`}
+            initialEntry={target.archiveEntry ?? null}
             canArchiveIncidents={can("manageIncidents")}
             canArchiveRequests={can("decideRequests")}
             // La ficha del archivo se abre en solo lectura, pero necesita el
@@ -300,7 +270,7 @@ export function DashboardContent({
             canViewEquipment={can("viewEquipment")}
             currentUserId={user?._id ?? null}
             currentUserName={displayName}
-            onOpenRequest={onOpenRequest}
+            onOpenRequest={openRequest}
             onOpenSettings={
               can("manageIncidents") || can("decideRequests")
                 ? () => goToTab("settings")

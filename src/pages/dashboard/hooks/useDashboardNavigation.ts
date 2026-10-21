@@ -231,3 +231,5 @@ export function useDashboardNavigation(
     ],
   );
 }
+
+export type DashboardNavigation = ReturnType<typeof useDashboardNavigation>;
