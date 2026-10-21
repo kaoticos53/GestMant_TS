@@ -31,6 +31,7 @@ import {
 export {
   listPurchaseRequests,
   listOrders,
+  paginatedOrders,
   listReceptions,
   byRequest,
   generateUploadUrl,

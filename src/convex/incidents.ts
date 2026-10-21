@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { paginationOptsValidator } from "convex/server";
 import {
   mutation,
   query,
@@ -111,6 +112,54 @@ export const list = query({
         ),
       })),
     );
+  },
+});
+
+/**
+ * Consulta paginada de incidencias mediante cursor de Convex (para usePaginatedQuery).
+ */
+export const paginatedList = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    if ((await memberOrNull(ctx)) === null) {
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+    const paginated = await ctx.db
+      .query("incidents")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const live = paginated.page.filter((item) => item.deletedAt === undefined);
+    const visible = args.includeArchived
+      ? live
+      : live.filter((item) => item.archivedAt === undefined);
+
+    const withDocs = await Promise.all(
+      visible.map(async (item) => ({
+        ...item,
+        documents: await Promise.all(
+          (item.documents ?? []).map(async (document) => ({
+            ...document,
+            url: document.storageId
+              ? await ctx.storage.getUrl(document.storageId)
+              : null,
+          })),
+        ),
+      })),
+    );
+
+    return {
+      ...paginated,
+      page: withDocs,
+    };
   },
 });
 

@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, mutation, query } from "./_generated/server";
@@ -166,6 +167,32 @@ export const list = query({
       (a, b) =>
         a.name.localeCompare(b.name, "es") || a.code.localeCompare(b.code, "es"),
     );
+  },
+});
+
+/**
+ * Consulta paginada del catálogo de repuestos mediante cursor de Convex (para usePaginatedQuery).
+ */
+export const paginatedList = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const me = await memberOrNull(ctx);
+    if (
+      !me ||
+      !(await hasAnyCapability(ctx, me, ["viewInventory", "lookupCatalog"]))
+    ) {
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+    return await ctx.db
+      .query("spareParts")
+      .withIndex("by_name")
+      .paginate(args.paginationOpts);
   },
 });
 

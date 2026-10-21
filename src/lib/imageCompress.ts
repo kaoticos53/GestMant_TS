@@ -108,10 +108,73 @@ export function compressedImageName(name: string, type: string): string {
   return `${base || "foto"}.${extension}`;
 }
 
+/**
+ * Intenta delegar la compresión pesada a un Web Worker en un hilo secundario
+ * para no congelar la interfaz de usuario. Si el entorno no soporta Workers u
+ * OffscreenCanvas, o si se produce un timeout, devuelve null para usar el fallback.
+ */
+async function compressWithWorker(file: File): Promise<File | null> {
+  if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") {
+    return null;
+  }
+  return new Promise<File | null>((resolve) => {
+    let worker: Worker | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+    };
+
+    try {
+      worker = new Worker(
+        new URL("../workers/compress.worker.ts", import.meta.url),
+        { type: "module" },
+      );
+
+      timer = setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, 5000);
+
+      worker.onmessage = (e: MessageEvent<{ success: boolean; file?: File }>) => {
+        const result = e.data;
+        cleanup();
+        if (result && result.success && result.file) {
+          resolve(result.file);
+        } else {
+          resolve(null);
+        }
+      };
+
+      worker.onerror = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      worker.postMessage({
+        id: Math.random().toString(36).substring(2),
+        file,
+        maxSide: MAX_IMAGE_SIDE,
+        quality: IMAGE_QUALITY,
+      });
+    } catch {
+      cleanup();
+      resolve(null);
+    }
+  });
+}
+
 /** El archivo comprimido, o el original si no sale a cuenta subirlo recomprimido. */
 export async function compressImageFile(file: File): Promise<File> {
   if (!shouldCompressImage(file)) return file;
   try {
+    const fromWorker = await compressWithWorker(file);
+    if (fromWorker) return fromWorker;
+
     return (await recompressImage(file)) ?? file;
   } catch {
     // Que este navegador no sepa leer o codificar esa foto no puede impedir que

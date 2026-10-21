@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
@@ -86,6 +87,29 @@ export const listOrders = query({
           .collect()
       : await ctx.db.query("purchaseOrders").collect();
     return orders.sort((a, b) => b.orderedAt - a.orderedAt);
+  },
+});
+
+/** Órdenes de compra paginadas con cursor para listas largas. */
+export const paginatedOrders = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(purchaseOrderStatusValidator),
+  },
+  handler: async (ctx, args) => {
+    await requireReading(ctx);
+    if (args.status) {
+      return await ctx.db
+        .query("purchaseOrders")
+        .withIndex("by_status", (q) => q.eq("status", args.status!))
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
+    return await ctx.db
+      .query("purchaseOrders")
+      .withIndex("by_orderedAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
