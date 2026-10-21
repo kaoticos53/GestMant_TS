@@ -1,12 +1,11 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-ARCHIVE-SUPPORT-COMPONENTS`
-- **Objetivo:** Fase 2 - Extracción de componentes de soporte (`BulkArchiveCard`, `ArchiveFilterTabs`, `ArchiveTrashSection`) para `ArchiveView.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-ARCHIVE-LIST-DETAIL-HOST`
+- **Objetivo:** Fase 3 - Extracción de componentes de listado (`ArchiveListSection`) y host de hojas (`ArchiveDetailHost`) para `ArchiveView.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/BulkArchiveCard.tsx`
-  - `src/pages/dashboard/archive/components/ArchiveFilterTabs.tsx`
-  - `src/pages/dashboard/archive/components/ArchiveTrashSection.tsx`
+  - `src/pages/dashboard/archive/components/ArchiveListSection.tsx`
+  - `src/pages/dashboard/archive/components/ArchiveDetailHost.tsx`
 
 ---
 
@@ -20,6 +19,8 @@
 - [x] `src/pages/dashboard/archive/components/BulkArchiveCard.tsx`: Tarjeta de corte manual masivo y diálogo de confirmación.
 - [x] `src/pages/dashboard/archive/components/ArchiveFilterTabs.tsx`: Pestañas accesibles Todo / Incidencias / Peticiones.
 - [x] `src/pages/dashboard/archive/components/ArchiveTrashSection.tsx`: Sección de papelera con grupos, botones y diálogo de purga definitiva.
+- [x] `src/pages/dashboard/archive/components/ArchiveListSection.tsx`: Presentación de listado paginado y agrupado por meses.
+- [x] `src/pages/dashboard/archive/components/ArchiveDetailHost.tsx`: Montaje desacoplado de hojas de detalle de incidencia y petición.
 
 ---
 
@@ -31,8 +32,7 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `BulkArchiveCard.tsx`.
-- [x] **Paso 2:** Crear `ArchiveFilterTabs.tsx`.
-- [x] **Paso 3:** Crear `ArchiveTrashSection.tsx`.
-- [x] **Paso 4:** Validar con `npx tsc --noEmit` y suite de tests.
-- [x] **Paso 5:** Commit atómico de la Fase 2.
+- [x] **Paso 1:** Crear `ArchiveListSection.tsx`.
+- [x] **Paso 2:** Crear `ArchiveDetailHost.tsx`.
+- [x] **Paso 3:** Validar con `npx tsc --noEmit` y suite de tests.
+- [x] **Paso 4:** Commit atómico de la Fase 3.
