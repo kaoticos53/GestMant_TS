@@ -54,69 +54,47 @@ import { toast } from "sonner";
  * no abre conexiones TCP, así que un servidor SMTP se usa a través de un relevo
  * HTTP, y los códigos de acceso siguen saliendo por la pasarela.
  */
+import { useMailServerForm } from "./mail/hooks/useMailServerForm";
+import { useMailPathCheck } from "./mail/hooks/useMailPathCheck";
+
 export function MailServerCard() {
   const settings = useQuery(api.mailSettings.settings);
   const history = useQuery(api.mailLog.history, { limit: 20 });
-  const save = useMutation(api.mailSettings.save);
   const sendTest = useAction(api.mailSettings.sendTest);
-  const checkMail = useAction(api.mailSettings.check);
 
-  const [provider, setProvider] = useState<MailProvider>("vly");
-  const [enabled, setEnabled] = useState(true);
-  const [fromName, setFromName] = useState("Pulso Taller");
-  const [fromEmail, setFromEmail] = useState("");
-  const [replyTo, setReplyTo] = useState("");
-  const [bcc, setBcc] = useState("");
-  const [domain, setDomain] = useState("");
-  const [relayUrl, setRelayUrl] = useState("");
-  const [smtpUser, setSmtpUser] = useState("");
-  // Secretos: solo lo que se escribe ahora. Vacío = «conserva el guardado».
-  const [apiKey, setApiKey] = useState("");
-  const [relayToken, setRelayToken] = useState("");
-  const [clearApiKey, setClearApiKey] = useState(false);
-  const [clearRelayToken, setClearRelayToken] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testTo, setTestTo] = useState("");
-  const [testing, setTesting] = useState(false);
-  // Lo que dijo la comprobación previa: no se guarda en ningún sitio porque no
-  // ha salido ningún correo; vale mientras se mira la pantalla.
-  const [checking, setChecking] = useState(false);
-  const [checkState, setCheckState] = useState<{
-    ok: boolean;
-    detail?: string;
-    error?: string;
-    at: number;
-    automatic: boolean;
-  } | null>(null);
+  const {
+    formData,
+    saving,
+    meta,
+    needsKey,
+    needsDomain,
+    needsRelay,
+    needsToken,
+    needsAccount,
+    smtp,
+    validation: checked,
+    insecureRelay,
+    relayHint,
+    accountHelp,
+    changeProvider,
+    updateField,
+    setEnabled,
+    setFromName,
+    setFromEmail,
+    setReplyTo,
+    setBcc,
+    setDomain,
+    setRelayUrl,
+    setSmtpUser,
+    setApiKey,
+    setRelayToken,
+    setClearApiKey,
+    setClearRelayToken,
+    handleSave,
+    keyStatus,
+  } = useMailServerForm(settings);
 
-  // El formulario se rellena con lo guardado en cuanto llega, una sola vez:
-  // mientras se edita no se pisa (la consulta sigue viva y puede refrescarse
-  // por detrás).
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (seeded.current || settings === undefined) return;
-    seeded.current = true;
-    setProvider(settings.provider);
-    setEnabled(settings.enabled);
-    setFromName(settings.fromName);
-    setFromEmail(settings.fromEmail);
-    setReplyTo(settings.replyTo);
-    setBcc(settings.bcc);
-    setDomain(settings.domain);
-    setRelayUrl(settings.relayUrl);
-    setSmtpUser(settings.smtpUser);
-    setTestTo(settings.fromEmail);
-  }, [settings]);
-
-  const meta = MAIL_PROVIDER_META[provider];
-  const needsKey = meta.fields.includes("apiKey");
-  const needsDomain = meta.fields.includes("domain");
-  const needsRelay = meta.fields.includes("relayUrl");
-  const needsToken = meta.fields.includes("relayToken");
-  const needsAccount = meta.fields.includes("smtpUser");
-  const smtp = meta.smtp;
-
-  const checked = validateMailSettings({
+  const {
     provider,
     enabled,
     fromName,
@@ -126,126 +104,33 @@ export function MailServerCard() {
     domain,
     relayUrl,
     smtpUser,
-  });
-  const insecureRelay = mailCredentialsWarning({ provider, relayUrl });
-  // Se mira lo que hay escrito, no lo guardado: el aviso sirve para corregir
-  // antes de guardar, que es cuando se puede arreglar sin buscar el fallo luego.
-  const relayHint = mailRelayAddressHint(relayUrl);
+    apiKey,
+    relayToken,
+    clearApiKey,
+    clearRelayToken,
+  } = formData;
 
-  /**
-   * Lo que hay que saber antes de rellenar: ni Gmail ni Ethereal se explican
-   * solos. De Google se cuenta lo de la contraseña de aplicación —la de la
-   * cuenta no vale— y lo del remitente; del buzón de pruebas, dónde se crea y
-   * dónde se leen los correos, que es lo único que tiene.
-   */
-  const accountHelp =
-    provider === "gmail"
-      ? "Google no acepta la contraseña de la cuenta: hay que activar la verificación en dos pasos y crear una contraseña de aplicación de 16 letras en la cuenta de Google. El remitente tiene que ser esa misma cuenta, o una dirección que la cuenta tenga verificada, o Google reescribirá la cabecera."
-      : provider === "ethereal"
-        ? "Ethereal es un buzón de mentira, para probar sin molestar a nadie: se crea una cuenta gratis en ethereal.email y sus mensajes se leen en ethereal.email/messages. Lo que se mande desde aquí no llega a ningún buzón real."
-        : null;
+  const {
+    checking,
+    checkState,
+    handleCheck,
+    lastSend,
+    lastSendFailed,
+    pathCheckable,
+    pathFailed,
+    pathLine,
+  } = useMailPathCheck(settings, history);
 
-  /** Cambiar de servicio descarta la clave del anterior: no sirve para este. */
-  const changeProvider = (next: MailProvider) => {
-    if (next === provider) return;
-    setProvider(next);
-    setApiKey("");
-    setRelayToken("");
-    setClearApiKey(false);
-    setClearRelayToken(false);
-  };
+  const [testTo, setTestTo] = useState("");
+  const [testing, setTesting] = useState(false);
 
-  const handleSave = async () => {
-    if (!checked.ok) return;
-    setSaving(true);
-    try {
-      await save({
-        provider,
-        enabled,
-        fromName,
-        fromEmail,
-        replyTo,
-        bcc,
-        domain,
-        relayUrl,
-        smtpUser,
-        ...(apiKey.trim() === "" ? {} : { apiKey: apiKey.trim() }),
-        ...(clearApiKey ? { clearApiKey: true } : {}),
-        ...(relayToken.trim() === "" ? {} : { relayToken: relayToken.trim() }),
-        ...(clearRelayToken ? { clearRelayToken: true } : {}),
-      });
-      setApiKey("");
-      setRelayToken("");
-      setClearApiKey(false);
-      setClearRelayToken(false);
-      toast.success("Ajustes del correo guardados");
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /**
-   * Pide al relevo que se conecte y se autentique contra el servidor de correo,
-   * con lo que hay guardado y **sin mandar nada**. Si la pantalla tiene cambios
-   * sin guardar, se comprueba lo guardado: la comprobación la hace el relevo, no
-   * el navegador.
-   *
-   * La llama sola el efecto de abajo —al abrir el panel y al guardar— y también
-   * el botón, para repetirla sin salir de aquí. El resultado anterior se queda a
-   * la vista mientras se repite, para que la línea no parpadee.
-   */
-  const runCheck = useCallback(
-    async (automatic: boolean) => {
-      setChecking(true);
-      try {
-        const result = await checkMail({});
-        setCheckState({
-          ok: result.ok,
-          ...(result.detail === undefined ? {} : { detail: result.detail }),
-          ...(result.error === undefined ? {} : { error: result.error }),
-          at: Date.now(),
-          automatic,
-        });
-      } catch (error) {
-        setCheckState({
-          ok: false,
-          error: getErrorMessage(error),
-          at: Date.now(),
-          automatic,
-        });
-      } finally {
-        setChecking(false);
-      }
-    },
-    [checkMail],
-  );
-
-  /**
-   * El camino de envío se comprueba solo. Se lanza al abrir el panel y cada vez
-   * que cambia lo guardado —al guardar, no al teclear—: es justo cuando cambia
-   * el camino. Sin correo encendido, o con un servicio que va por su API, no hay
-   * nada que comprobar y no se molesta al relevo.
-   */
-  const checkedPath = useRef<string | null>(null);
+  // Inicializar testTo con el correo remitente guardado
+  const seeded = useRef(false);
   useEffect(() => {
-    if (settings === undefined) return;
-    if (!settings.enabled || !usesMailRelay(settings.provider)) return;
-    const key = [
-      settings.provider,
-      settings.relayUrl,
-      settings.smtpUser,
-      settings.hasKey,
-      settings.hasRelayToken,
-      settings.updatedAt ?? 0,
-    ].join("|");
-    if (checkedPath.current === key) return;
-    checkedPath.current = key;
-    void runCheck(true);
-  }, [settings, runCheck]);
-
-  const handleCheck = () => void runCheck(false);
+    if (seeded.current || settings === undefined) return;
+    seeded.current = true;
+    setTestTo(settings.fromEmail);
+  }, [settings]);
 
   const handleTest = async () => {
     const to = testTo.trim() === "" ? fromEmail.trim() : testTo.trim();
@@ -263,61 +148,6 @@ export function MailServerCard() {
       setTesting(false);
     }
   };
-
-  /**
-   * Cómo está la clave del servicio elegido, sin enseñarla. Se pasa lo guardado
-   * en vez de leerlo de fuera porque la consulta puede estar cargando: aquí
-   * dentro ya se sabe que llegó.
-   */
-  const keyStatus = (saved: NonNullable<typeof settings>) => {
-    if (provider === "vly") {
-      return saved.envConfigured
-        ? `La pasarela usa la clave del deployment (${saved.envVar}).`
-        : `La pasarela necesita ${saved.envVar} en el deployment: sin ella no sale ningún correo.`;
-    }
-    const secret = meta.secretLabel ?? "La clave";
-    if (saved.keySource === "guardada") {
-      return `${secret}: hay una guardada (${saved.keyHint}).`;
-    }
-    if (saved.keySource === "entorno") {
-      return `${secret}: no hay guardada; se usa la del servidor (${saved.envVar}).`;
-    }
-    if (saved.envVar === null) {
-      return `${secret}: guárdala aquí; este servicio no se configura por variable del servidor.`;
-    }
-    return `${secret}: guárdala aquí o define ${saved.envVar} en el servidor.`;
-  };
-
-  /**
-   * El estado del camino de envío, en dos líneas: lo que pasó en el último envío
-   * de verdad —eso sí queda apuntado en el histórico— y lo que contesta el
-   * relevo ahora mismo. Describe lo **guardado**, que es por donde saldría el
-   * próximo correo, aunque el formulario tenga cambios sin guardar.
-   */
-  const lastSend = history === undefined ? null : (history[0] ?? null);
-  const lastSendFailed = lastSend !== null && !lastSend.ok;
-  const savedPath = settings === undefined ? null : settings;
-  const pathCheckable = savedPath !== null && usesMailRelay(savedPath.provider);
-  const pathFailed =
-    savedPath !== null &&
-    savedPath.enabled &&
-    pathCheckable &&
-    checkState !== null &&
-    !checkState.ok;
-  const pathLine =
-    savedPath === null
-      ? ""
-      : !savedPath.enabled
-        ? "Camino de envío: el correo está apagado, así que no hay nada que entregar."
-        : !pathCheckable
-          ? `Camino de envío: ${MAIL_PROVIDER_META[savedPath.provider].label} se comprueba mandando un correo; su API no dice nada sin enviar.`
-          : checking
-            ? "Camino de envío: comprobando el relevo…"
-            : checkState === null
-              ? "Camino de envío: sin comprobar todavía."
-              : checkState.ok
-                ? `Camino de envío: el relevo responde y acepta las credenciales — ${checkState.detail ?? "conexión y autenticación correctas"} (${formatDateTime(checkState.at)}).`
-                : `Camino de envío: el relevo no supera la comprobación — ${checkState.error ?? "sin motivo apuntado"} (${formatDateTime(checkState.at)}).`;
 
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
