@@ -95,13 +95,7 @@ export default function Dashboard() {
     markStartedEmpty,
     isEmpty,
     showEmptyNotice,
-  } = useWorkAlertState(
-    user,
-    role,
-    summary?.parts.total ?? 0,
-    summary?.requests.active ?? 0,
-    summary === undefined,
-  );
+  } = useWorkAlertState(user, role);
 
   // Carga de datos de demostración
   const { isSeeding, isSeedingMore, handleSeed, handleSeedMore } = useDashboardSeed({

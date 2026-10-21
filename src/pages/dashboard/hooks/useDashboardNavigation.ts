@@ -1,4 +1,4 @@
-import type { Id } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { Capability } from "@/lib/permissions";
 import { useCallback, useMemo, useState } from "react";
 import type { SearchHit } from "../GlobalSearch";

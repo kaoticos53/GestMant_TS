@@ -289,7 +289,7 @@ export function DashboardContent({
             canDecideRequests={can("decideRequests")}
           />
         ) : activeTab === "audit" && adminOk ? (
-          <AuditView onOpenIncident={onOpenIncident} />
+          <AuditView onOpenIncident={openIncident} />
         ) : activeTab === "users" && adminOk ? (
           <UsersView />
         ) : activeTab === "permissions" && adminOk ? (

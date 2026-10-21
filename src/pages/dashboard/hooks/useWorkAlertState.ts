@@ -21,12 +21,16 @@ export interface UserAlertSource {
   workAlertDismissal?: WorkAlertDismissal;
 }
 
+export interface WorkAlertOverrides {
+  totalParts?: number;
+  activeRequests?: number;
+  loading?: boolean;
+}
+
 export function useWorkAlertState(
   user: UserAlertSource | null | undefined,
   role: string,
-  totalParts: number,
-  activeRequests: number,
-  loading: boolean,
+  overrides?: WorkAlertOverrides,
 ) {
   const alertSettings = useQuery(api.alerts.settings);
   const alertDays = alertSettings?.days ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
@@ -85,6 +89,9 @@ export function useWorkAlertState(
     writeStartedEmpty(safeLocalStorage(), value);
   }, []);
 
+  const loading = overrides?.loading ?? (summary === undefined);
+  const totalParts = overrides?.totalParts ?? (summary?.parts.total ?? 0);
+  const activeRequests = overrides?.activeRequests ?? (summary?.requests.active ?? 0);
   const isEmpty = !loading && totalParts === 0 && activeRequests === 0;
   const showEmptyNotice = isEmpty && !startedEmpty;
 
