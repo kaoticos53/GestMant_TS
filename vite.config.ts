@@ -67,7 +67,16 @@ function apiCspPlugin(): Plugin {
       );
     },
     transformIndexHtml(html) {
-      return html.split(API_CSP_TOKEN).join(sources);
+      let result = html.split(API_CSP_TOKEN).join(sources);
+      if (building) {
+        // En compilación de producción, limpiar los comodines de desarrollo local (CWE-1188)
+        result = result
+          .replace(/\s*http:\/\/127\.0\.0\.1:\*\s*/g, " ")
+          .replace(/\s*ws:\/\/127\.0\.0\.1:\*\s*/g, " ")
+          .replace(/\s*http:\/\/localhost:\*\s*/g, " ")
+          .replace(/\s*ws:\/\/localhost:\*\s*/g, " ");
+      }
+      return result;
     },
     buildStart() {
       if (!building) return;
