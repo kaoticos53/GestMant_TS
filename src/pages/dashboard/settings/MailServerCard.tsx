@@ -9,19 +9,17 @@ import {
   MAIL_ORIGIN_LABELS,
   MAIL_PROVIDER_META,
   MAIL_PROVIDER_OPTIONS,
-  mailCredentialsWarning,
-  mailRelayAddressHint,
   usesMailRelay,
-  validateMailSettings,
   type MailOrigin,
-  type MailProvider,
 } from "@/lib/mail";
 import { cn } from "@/lib/utils";
-import { formatDateTime, getErrorMessage } from "@/lib/workshop";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { Activity, Mail, PlugZap, Send } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { formatDateTime } from "@/lib/workshop";
+import { useQuery } from "convex/react";
+import { Mail, PlugZap } from "lucide-react";
+import { MailPathStatusBanner } from "./mail/components/MailPathStatusBanner";
+import { MailTestSendSection } from "./mail/components/MailTestSendSection";
+import { useMailPathCheck } from "./mail/hooks/useMailPathCheck";
+import { useMailServerForm } from "./mail/hooks/useMailServerForm";
 
 /**
  * El correo del taller, configurable desde Ajustes.
@@ -54,13 +52,9 @@ import { toast } from "sonner";
  * no abre conexiones TCP, así que un servidor SMTP se usa a través de un relevo
  * HTTP, y los códigos de acceso siguen saliendo por la pasarela.
  */
-import { useMailServerForm } from "./mail/hooks/useMailServerForm";
-import { useMailPathCheck } from "./mail/hooks/useMailPathCheck";
-
 export function MailServerCard() {
   const settings = useQuery(api.mailSettings.settings);
   const history = useQuery(api.mailLog.history, { limit: 20 });
-  const sendTest = useAction(api.mailSettings.sendTest);
 
   const {
     formData,
@@ -121,34 +115,6 @@ export function MailServerCard() {
     pathLine,
   } = useMailPathCheck(settings, history);
 
-  const [testTo, setTestTo] = useState("");
-  const [testing, setTesting] = useState(false);
-
-  // Inicializar testTo con el correo remitente guardado
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (seeded.current || settings === undefined) return;
-    seeded.current = true;
-    setTestTo(settings.fromEmail);
-  }, [settings]);
-
-  const handleTest = async () => {
-    const to = testTo.trim() === "" ? fromEmail.trim() : testTo.trim();
-    setTesting(true);
-    try {
-      const result = await sendTest({ to });
-      if (result.ok) {
-        toast.success(`Correo de prueba enviado a ${to}`);
-      } else {
-        toast.error(result.error ?? "El envío de prueba no salió");
-      }
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setTesting(false);
-    }
-  };
-
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
       <div className="flex items-start gap-3">
@@ -177,58 +143,14 @@ export function MailServerCard() {
         </div>
       ) : (
         <>
-          <div
-            aria-live="polite"
-            className={cn(
-              "mt-4 rounded-lg border px-3 py-2.5",
-              lastSendFailed || pathFailed
-                ? "border-destructive/50 bg-destructive/5"
-                : "border-border/70",
-            )}
-          >
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              <Activity className="size-4" /> Estado del camino de envío
-            </p>
-            <ul className="mt-1 grid gap-0.5 text-xs leading-5">
-              <li
-                className={cn(
-                  lastSendFailed
-                    ? "font-medium text-destructive"
-                    : "text-muted-foreground",
-                )}
-              >
-                {lastSend === null
-                  ? "Último envío: todavía no ha salido ninguno."
-                  : lastSendFailed
-                    ? `Último envío: no salió el ${formatDateTime(lastSend.at)} (${
-                        MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
-                        lastSend.what
-                      }): ${lastSend.error ?? "el servicio no dijo por qué"}.`
-                    : `Último envío: salió el ${formatDateTime(lastSend.at)} (${
-                        MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
-                        lastSend.what
-                      }).`}
-              </li>
-              <li
-                className={cn(
-                  pathFailed
-                    ? "font-medium text-destructive"
-                    : pathCheckable && checkState?.ok === true
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-muted-foreground",
-                )}
-              >
-                {pathLine}
-              </li>
-            </ul>
-            {lastSendFailed && (
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                El intento quedó apuntado en «Últimos envíos». La comprobación
-                del camino se repite cada vez que se abre este panel; si ya está
-                bien, manda una prueba para dejar constancia.
-              </p>
-            )}
-          </div>
+          <MailPathStatusBanner
+            lastSend={lastSend}
+            lastSendFailed={lastSendFailed}
+            pathFailed={pathFailed}
+            pathCheckable={pathCheckable}
+            checkState={checkState}
+            pathLine={pathLine}
+          />
 
           <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border/70 px-3 py-2.5">
             <div className="min-w-0">
@@ -597,59 +519,13 @@ export function MailServerCard() {
             </div>
           )}
 
-          <div className="mt-4 rounded-lg border border-dashed border-border px-3 py-3">
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              <Send className="size-4" /> Probar el envío
-            </p>
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-              Manda un correo de prueba ahora, con lo guardado, a la dirección
-              que escribas. No toca ninguna incidencia ni entra en el resumen.
-            </p>
-            <div className="mt-2 flex flex-wrap items-end gap-2">
-              <div className="grid min-w-[14rem] flex-1 gap-1.5 sm:max-w-sm">
-                <Label htmlFor="ajustes-correo-prueba" className="text-xs">
-                  Dirección de la prueba
-                </Label>
-                <Input
-                  id="ajustes-correo-prueba"
-                  type="email"
-                  value={testTo}
-                  maxLength={200}
-                  disabled={testing}
-                  onChange={(event) => setTestTo(event.target.value)}
-                  placeholder="tu-correo@taller.es"
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                disabled={testing || testTo.trim() === ""}
-                onClick={() => void handleTest()}
-              >
-                <Send className="size-4" />
-                {testing ? "Enviando..." : "Enviar prueba"}
-              </Button>
-            </div>
-            {settings.lastTestAt !== null && (
-              <p
-                className={cn(
-                  "mt-2 text-xs leading-5",
-                  settings.lastTestOk
-                    ? "text-muted-foreground"
-                    : "text-destructive",
-                )}
-              >
-                {settings.lastTestOk
-                  ? `Última prueba correcta: ${formatDateTime(
-                      settings.lastTestAt,
-                    )} a ${settings.lastTestTo ?? "—"}.`
-                  : `La última prueba falló el ${formatDateTime(
-                      settings.lastTestAt,
-                    )}: ${settings.lastTestError ?? "sin motivo apuntado"}`}
-              </p>
-            )}
-          </div>
+          <MailTestSendSection
+            defaultToEmail={settings.fromEmail}
+            lastTestAt={settings.lastTestAt}
+            lastTestOk={settings.lastTestOk}
+            lastTestTo={settings.lastTestTo}
+            lastTestError={settings.lastTestError}
+          />
 
           <div className="mt-4 rounded-lg border border-border/70 px-3 py-3">
             <p className="text-sm font-medium">Últimos envíos</p>
