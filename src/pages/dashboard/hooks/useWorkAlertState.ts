@@ -30,8 +30,19 @@ export interface WorkAlertOverrides {
 export function useWorkAlertState(
   user: UserAlertSource | null | undefined,
   role: string,
-  overrides?: WorkAlertOverrides,
+  overridesOrTotalParts?: WorkAlertOverrides | number,
+  legacyActiveRequests?: number,
+  legacyLoading?: boolean,
 ) {
+  const overrides: WorkAlertOverrides | undefined =
+    typeof overridesOrTotalParts === "number"
+      ? {
+          totalParts: overridesOrTotalParts,
+          activeRequests: legacyActiveRequests,
+          loading: legacyLoading,
+        }
+      : overridesOrTotalParts;
+
   const alertSettings = useQuery(api.alerts.settings);
   const alertDays = alertSettings?.days ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
   const summary = useQuery(api.dashboard.summary, { marginDays: alertDays });

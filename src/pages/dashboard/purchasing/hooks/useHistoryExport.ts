@@ -33,7 +33,10 @@ export function useHistoryExport(
       let mensaje = "";
 
       if (selectedCells.size > 0) {
-        tsv = selectedCellsToTsv(rows as PurchaseHistoryRow[], selectedCells);
+        tsv = selectedCellsToTsv(
+          rows as PurchaseHistoryRow[],
+          selectedCells as Set<string>,
+        );
         const count = selectedCells.size;
         const plural = count === 1 ? "" : "s";
         mensaje = `${count} celda${plural} señalada${plural} copiada${plural} al portapapeles`;
