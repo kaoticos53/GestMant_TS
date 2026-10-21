@@ -10,11 +10,13 @@ import {
   looksLikeIncidentReference,
   normalizeIncidentReference,
 } from "@/lib/workshop";
+import { BarcodeScannerModal } from "@/components/BarcodeScannerModal";
 import {
   Archive,
   Boxes,
   ClipboardList,
   Cpu,
+  ScanLine,
   Search,
   Siren,
 } from "lucide-react";
@@ -113,6 +115,7 @@ export function GlobalSearch({
   // peticiones —también las archivadas— nada más entrar anulaba el resumen
   // contado del panel. Hasta el primer foco, las consultas se saltan.
   const [engaged, setEngaged] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const consultaIncidencias = useQuery(
     api.incidents.list,
     engaged ? { includeArchived: true } : "skip",
@@ -386,17 +389,43 @@ export function GlobalSearch({
         placeholder="Buscar por referencia o texto..."
         aria-label="Búsqueda global"
         aria-keyshortcuts="Control+K"
-        className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-16 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring"
+        className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-22 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring"
       />
-      {query === "" && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5"
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+        {query === "" && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none hidden sm:flex items-center gap-0.5"
+          >
+            <Kbd>Ctrl</Kbd>
+            <Kbd>K</Kbd>
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            setEngaged(true);
+            setScannerOpen(true);
+          }}
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+          title="Escanear código QR o barras"
+          aria-label="Escanear código QR o barras"
         >
-          <Kbd>Ctrl</Kbd>
-          <Kbd>K</Kbd>
-        </span>
-      )}
+          <ScanLine className="size-4" />
+        </button>
+      </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScan={(code) => {
+          setEngaged(true);
+          setQuery(code);
+          setActiveIndex(0);
+          setOpen(true);
+          inputRef.current?.focus();
+        }}
+      />
 
       {open && trimmed.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
