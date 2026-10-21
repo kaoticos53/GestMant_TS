@@ -4,6 +4,7 @@ import {
   isPurchaseRequestUntreated,
 } from "./purchaseFlow";
 import { canBuyForRequest } from "./requestFlow";
+import { escapeCsvCell } from "./export";
 
 /**
  * Compras: la copia que lee la pantalla y las cuentas que hace.
@@ -333,21 +334,8 @@ export function historyRowsToTsv(
  * para máxima compatibilidad al abrir en Excel en español / Europa.
  */
 export function historyRowsToCsv(rows: PurchaseHistoryRow[]): string {
-  const escapeCsv = (val: string | number) => {
-    const s = String(val ?? "");
-    if (
-      s.includes(";") ||
-      s.includes('"') ||
-      s.includes("\n") ||
-      s.includes("\r")
-    ) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  };
-
   const lines = [
-    PURCHASE_HISTORY_HEADERS.map(escapeCsv).join(";"),
+    PURCHASE_HISTORY_HEADERS.map(escapeCsvCell).join(";"),
     ...rows.map((row) =>
       [
         row.orderReference,
@@ -362,7 +350,7 @@ export function historyRowsToCsv(rows: PurchaseHistoryRow[]): string {
         row.orderedDate,
         row.receivedDate,
       ]
-        .map(escapeCsv)
+        .map(escapeCsvCell)
         .join(";"),
     ),
   ];

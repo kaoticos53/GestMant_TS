@@ -38,6 +38,26 @@ export const LOOKUP_WINDOW_MS = 60 * 60 * 1000;
  */
 export const LOOKUP_LIMIT_PER_HOUR = 30;
 
+/**
+ * Límite global horario de consultas públicas para todo el despliegue del taller.
+ * Previene ataques de fuerza bruta y enumeración masiva distribuida (CWE-307).
+ */
+export const GLOBAL_LOOKUP_LIMIT_PER_HOUR = 150;
+
+/** Valida si el volumen global de consultas de seguimiento supera el umbral de seguridad. */
+export function admitGlobalLookup(
+  totalRecentQueries: number,
+): { allowed: boolean; error?: string } {
+  if (totalRecentQueries >= GLOBAL_LOOKUP_LIMIT_PER_HOUR) {
+    return {
+      allowed: false,
+      error:
+        "Se ha alcanzado el límite global de consultas de seguimiento por hora. Por favor, inténtalo más tarde.",
+    };
+  }
+  return { allowed: true };
+}
+
 /** La ventana que guarda la base: cuándo empezó y cuántas consultas lleva. */
 export interface LookupWindow {
   windowStart: number;

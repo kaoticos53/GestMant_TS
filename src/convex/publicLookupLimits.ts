@@ -1,6 +1,11 @@
 import { ConvexError } from "convex/values";
 import { internalMutation, MutationCtx } from "./_generated/server";
-import { admitLookup, expiredBefore } from "../lib/publicLookup";
+import {
+  LOOKUP_WINDOW_MS,
+  admitGlobalLookup,
+  admitLookup,
+  expiredBefore,
+} from "../lib/publicLookup";
 
 /**
  * La mitad que habla con la base del freno de la consulta pública.
@@ -26,6 +31,18 @@ export async function admitPublicLookup(
   code: string,
   now: number = Date.now(),
 ): Promise<void> {
+  // Freno global horario: impide ataques distribuidos de fuerza bruta y enumeración masiva (CWE-307)
+  const since = now - LOOKUP_WINDOW_MS;
+  const recentTotal = await ctx.db
+    .query("publicLookupLimits")
+    .withIndex("by_windowStart", (q) => q.gt("windowStart", since))
+    .collect();
+
+  const globalAdmission = admitGlobalLookup(recentTotal.length);
+  if (!globalAdmission.allowed) {
+    throw new ConvexError(globalAdmission.error!);
+  }
+
   // Una fila por código: la ventana en curso. Si no hay ninguna, esta consulta
   // abre la primera; si la que hay ya cumplió su hora, la vuelve a abrir.
   const current = await ctx.db

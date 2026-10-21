@@ -10,10 +10,20 @@
 
 export type CsvCell = string | number | boolean | null | undefined;
 
-/** Escapa una celda según RFC 4180 (adaptado al separador `;`). */
+/**
+ * Escapa una celda según RFC 4180 (adaptado al separador `;`) y neutraliza
+ * activamente la inyección de fórmulas (CWE-1236 / CSV Formula Injection)
+ * cuando el valor empieza por `=`, `+`, `-`, `@`, `\t` o `\r`.
+ */
 export function escapeCsvCell(value: CsvCell): string {
   const text = value === null || value === undefined ? "" : String(value);
-  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  if (text === "") return "";
+
+  // Neutralizar fórmulas DDE/Excel para que se traten como texto literal
+  const sanitized = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[";\n\r]/.test(sanitized)
+    ? `"${sanitized.replace(/"/g, '""')}"`
+    : sanitized;
 }
 
 /** Convierte una cabecera y sus filas en un texto CSV separado por `;`. */
