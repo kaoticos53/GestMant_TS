@@ -4203,5 +4203,50 @@ describe("reparación externa", () => {
       "La incidencia no está en reparación externa",
     );
   });
+
+  test("catálogo maestro de empresas externas/SAT: alta, autocompletado y propagación", async () => {
+    const { t, coordinator, tech, techId } = await setup();
+    await t.mutation(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    await coordinator.mutation(api.incidents.assign, {
+      incidentId: incident._id,
+      assigneeId: techId,
+    });
+    await tech.mutation(api.incidents.verify, {
+      incidentId: incident._id,
+      outcome: "workshop",
+    });
+
+    // Alta en el catálogo de empresas externas / SAT
+    const catalogId = await tech.mutation(api.catalogs.ensureItem, {
+      kind: "externalWorkshop",
+      name: "Moncada y Lorenzo SAT",
+    });
+    expect(catalogId).toBeDefined();
+
+    const list = await tech.query(api.catalogs.list, {
+      kind: "externalWorkshop",
+    });
+    expect(list.some((item) => item.name === "Moncada y Lorenzo SAT")).toBe(true);
+
+    // Enviar con ese nombre
+    await tech.mutation(api.incidents.sendToExternalRepair, {
+      incidentId: incident._id,
+      companyName: "Moncada y Lorenzo SAT",
+      defectNotes: "Fallo de comunicación SDI",
+    });
+
+    // Renombrar la empresa en Ajustes -> CatalogsCard propaga a las incidencias
+    await coordinator.mutation(api.catalogs.update, {
+      id: catalogId,
+      name: "Moncada Broadcast Service",
+    });
+
+    const updated = await firstIncident(coordinator);
+    expect(updated.externalRepair?.companyName).toBe(
+      "Moncada Broadcast Service",
+    );
+  });
 });
 

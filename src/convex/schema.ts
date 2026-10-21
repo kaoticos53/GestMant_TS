@@ -1273,6 +1273,7 @@ const schema = defineSchema({
       v.literal("supplier"),
       v.literal("position"),
       v.literal("partCategory"),
+      v.literal("externalWorkshop"),
     ),
     name: v.string(), // Nombre oficial o canónico visible, ej. "Plató 1" o "Estantería A-01"
     normalized: v.string(), // Minúsculas, sin acentos ni espacios sobrantes para deduplicación

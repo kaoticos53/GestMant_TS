@@ -87,6 +87,13 @@ describe("Catálogos y Autocompletado (src/lib/catalogs.ts)", () => {
       expect(CATALOG_KIND_LABELS.equipmentLocation.singular).toContain("equipo");
       expect(CATALOG_KIND_LABELS.partLocation.singular).toContain("almacén");
     });
+
+    test("incluye catálogo para empresas externas y SAT", async () => {
+      const { CATALOG_KIND_LABELS } = await import("../src/lib/catalogs");
+      expect(CATALOG_KIND_LABELS.externalWorkshop).toBeDefined();
+      expect(CATALOG_KIND_LABELS.externalWorkshop.label).toContain("Empresas externas");
+      expect(CATALOG_KIND_LABELS.externalWorkshop.singular).toContain("SAT");
+    });
   });
 });
 

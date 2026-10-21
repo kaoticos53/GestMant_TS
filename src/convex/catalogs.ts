@@ -11,6 +11,7 @@ export const catalogKindValidator = v.union(
   v.literal("supplier"),
   v.literal("position"),
   v.literal("partCategory"),
+  v.literal("externalWorkshop"),
 );
 
 type Ctx = QueryCtx | MutationCtx;
@@ -134,7 +135,7 @@ export const ensureItem = mutation({
  */
 async function propagateCatalogRename(
   ctx: MutationCtx,
-  kind: "brand" | "equipmentLocation" | "partLocation" | "supplier" | "position" | "partCategory" | "location",
+  kind: Doc<"catalogs">["kind"],
   oldName: string,
   newName: string,
 ) {
@@ -264,6 +265,22 @@ async function propagateCatalogRename(
     for (const sp of parts) {
       if (sp.category && normalizeCatalogString(sp.category) === normOld) {
         await ctx.db.patch(sp._id, { category: newName });
+      }
+    }
+  } else if (kind === "externalWorkshop") {
+    // Incidencias con reparación externa
+    const incidents = await ctx.db.query("incidents").collect();
+    for (const inc of incidents) {
+      if (
+        inc.externalRepair?.companyName &&
+        normalizeCatalogString(inc.externalRepair.companyName) === normOld
+      ) {
+        await ctx.db.patch(inc._id, {
+          externalRepair: {
+            ...inc.externalRepair,
+            companyName: newName,
+          },
+        });
       }
     }
   }

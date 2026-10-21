@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { api } from "@/convex/_generated/api";
 import { getErrorMessage } from "@/lib/workshop";
 import { richDocToPlainText } from "@/lib/richDoc";
@@ -26,6 +27,10 @@ export function SendToExternalDialog({
   onClose: () => void;
 }) {
   const sendExternal = useMutation(api.incidents.sendToExternalRepair);
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
+  const catalogWorkshops =
+    useQuery(api.catalogs.list, { kind: "externalWorkshop" }) ?? [];
+
   const [companyName, setCompanyName] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -60,6 +65,13 @@ export function SendToExternalDialog({
         defectNotes: defectNotes.trim(),
         dispatchNotes: dispatchNotes.trim() || undefined,
       });
+
+      // Registro transparente en catálogo maestro para futuros autocompletados
+      void ensureCatalogItem({
+        kind: "externalWorkshop",
+        name: companyName.trim(),
+      }).catch(() => {});
+
       toast.success(
         `${incident.reference} enviada a reparación externa (${companyName.trim()})`,
       );
@@ -88,11 +100,13 @@ export function SendToExternalDialog({
               <Label htmlFor="companyName">
                 Empresa externa / SAT <span className="text-destructive">*</span>
               </Label>
-              <Input
+              <AutocompleteInput
                 id="companyName"
                 placeholder="Ej. Servicio Técnico Oficial Sony, Talleres AudioPro..."
                 value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                onChange={setCompanyName}
+                items={catalogWorkshops}
+                kind="externalWorkshop"
                 disabled={busy}
                 autoFocus
                 required

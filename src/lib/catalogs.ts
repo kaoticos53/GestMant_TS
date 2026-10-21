@@ -13,7 +13,8 @@ export type CatalogKind =
   | "partLocation"
   | "supplier"
   | "position"
-  | "partCategory";
+  | "partCategory"
+  | "externalWorkshop";
 
 export interface CatalogItemLike {
   name: string;
@@ -60,6 +61,11 @@ export const CATALOG_KIND_LABELS: Record<
     label: "Categorías de repuestos",
     singular: "Categoría",
     placeholder: "ej. Electrónica, Mecánica, Conectividad...",
+  },
+  externalWorkshop: {
+    label: "Empresas externas y SAT",
+    singular: "Empresa externa / SAT",
+    placeholder: "ej. Servicio Técnico Oficial Sony, Talleres AudioPro...",
   },
 };
 
