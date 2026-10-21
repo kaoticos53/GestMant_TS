@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useAuth } from "@/hooks/use-auth";
-import { readStartedEmpty, writeStartedEmpty } from "@/lib/emptyWorkshop";
 import { DEFAULT_GRANTS, type Capability } from "@/lib/permissions";
 import {
   DEFAULT_ROLE,
@@ -11,21 +10,8 @@ import {
   isSystemRole,
   roleBadgeClassName,
 } from "@/lib/roles";
-import { safeLocalStorage } from "@/lib/sidebar";
 import { cn } from "@/lib/utils";
-import {
-  dismissalOf,
-  isDismissed,
-  readDismissal,
-  writeDismissal,
-} from "@/lib/workAlert";
-import {
-  DEFAULT_WORK_WITHOUT_TRACE_DAYS,
-  DEFAULT_WORK_WITHOUT_TRACE_ROLES,
-  alertReachesRole,
-  getErrorMessage,
-} from "@/lib/workshop";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import {
   Archive,
   BookOpen,
@@ -59,8 +45,10 @@ import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
 import { DashboardStats } from "./dashboard/components/DashboardStats";
 import { PageHeader, type PageHeaderAction } from "./dashboard/components/PageHeader";
 import { useDashboardNavigation } from "./dashboard/hooks/useDashboardNavigation";
+import { useDashboardSeed } from "./dashboard/hooks/useDashboardSeed";
 import { useEnsureRole } from "./dashboard/hooks/useEnsureRole";
 import { useSidebarPanel } from "./dashboard/hooks/useSidebarPanel";
+import { useWorkAlertState } from "./dashboard/hooks/useWorkAlertState";
 import type { NavId, NavItem } from "./dashboard/types";
 
 const WeeklyReportDialog = lazy(() =>
@@ -81,65 +69,7 @@ export default function Dashboard() {
   // (`?codigo=A7K2QX9M`) para que a quien notificó no le toque teclearlo.
   const [searchParams] = useSearchParams();
   const permissions = useQuery(api.permissions.myPermissions);
-  // Ajustes del aviso de trabajo sin constancia: margen y a quién le llega.
-  // Los lee cualquiera con sesión (el panel decide con ellos si enseña el
-  // aviso); cambiarlos es cosa de quien coordina las incidencias.
-  const alertSettings = useQuery(api.alerts.settings);
-  // El margen con el que se cuenta el trabajo sin constancia: mientras cargan
-  // los ajustes vale el de partida.
-  const alertDays = alertSettings?.days ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
-  // El armazón no carga los módulos: pide contado lo que enseña —las píldoras
-  // del menú, las tarjetas del resumen y el aviso de trabajo sin constancia— y
-  // cada módulo carga lo suyo al abrirse. El backend no cuenta lo que ese rol no
-  // puede ver, así que esto es el mismo número que salía de aquellas listas.
-  const summary = useQuery(api.dashboard.summary, { marginDays: alertDays });
-  const seedDemoData = useMutation(api.seed.seedDemoData);
-  const seedMoreDemoData = useMutation(api.seed.seedMoreDemoData);
-  // Las fotos abandonadas del formulario y los PDF de los manuales son lo único
-  // de la muestra que necesita una acción: el almacén solo se escribe desde ahí
-  // (ver `seedDemoUploads` y `seedDemoManuals`).
-  const seedDemoUploads = useAction(api.seed.seedDemoUploads);
-  const seedDemoManuals = useAction(api.seed.seedDemoManuals);
-  const saveWorkAlertDismissal = useMutation(
-    api.members.saveWorkAlertDismissal,
-  );
-
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [isSeedingMore, setIsSeedingMore] = useState(false);
-  // «Empezar con el taller vacío»: la elección de no cargar la muestra cuando
-  // la base está recién instalada. Se recuerda en el navegador para que el
-  // aviso no vuelva a tapar los módulos en cada visita mientras no haya datos.
-  const [startedEmpty, setStartedEmpty] = useState(() =>
-    readStartedEmpty(safeLocalStorage()),
-  );
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
-  // Aviso de trabajo sin constancia: lo que esta persona ya cerró (qué
-  // incidencias y con qué margen), para no repetírselo tal cual. Cerrarlo es
-  // cosa de cada uno, pero se recuerda en su perfil y no solo en este
-  // navegador: al entrar desde otro dispositivo el aviso sigue cerrado.
-  // `localStorage` se mantiene como copia local para el primer render, igual
-  // que el ancho del panel; ver `lib/workAlert`.
-  const [alertDismissal, setAlertDismissal] = useState(() =>
-    readDismissal(safeLocalStorage()),
-  );
-  // El perfil llega después del primer render, así que se adopta una sola vez
-  // por usuario (el mismo patrón que el menú lateral).
-  const [alertOwner, setAlertOwner] = useState<string | null>(null);
-  if (user && alertOwner !== user._id) {
-    setAlertOwner(user._id);
-    // Un perfil sin nada cerrado (cuenta nueva) conserva la copia local: es lo
-    // que esa persona acaba de cerrar en este navegador.
-    if (user.workAlertDismissal !== undefined) {
-      setAlertDismissal(user.workAlertDismissal);
-    }
-  }
-
-  // La copia local sigue al perfil: al volver a este navegador, el aviso ya
-  // sale cerrado en el primer render (antes de que llegue el perfil), sin
-  // parpadeo. Quien manda es el perfil, que es lo que viaja entre dispositivos.
-  useEffect(() => {
-    writeDismissal(safeLocalStorage(), alertDismissal);
-  }, [alertDismissal]);
 
   // El menú lateral: un invitado no tiene perfil donde guardar la preferencia,
   // así que se le pasa `null` y se queda solo con la copia local, sin la
@@ -276,41 +206,40 @@ export default function Dashboard() {
     handleSearchSelect,
   } = useDashboardNavigation(can, navItems);
 
+  // Alertas de trabajo y estado de taller vacío
+  const {
+    summary,
+    alertDays,
+    alertRoleKeys,
+    seesAlert,
+    staleWork,
+    alertDismissed,
+    dismissAlert,
+    restoreAlert,
+    handleStartEmpty,
+    markStartedEmpty,
+    isEmpty,
+    showEmptyNotice,
+  } = useWorkAlertState(
+    user,
+    role,
+    summary?.parts.total ?? 0,
+    summary?.requests.active ?? 0,
+    summary === undefined,
+  );
+
+  // Carga de datos de demostración
+  const { isSeeding, isSeedingMore, handleSeed, handleSeedMore } = useDashboardSeed({
+    onSeedSuccess: () => markStartedEmpty(false),
+  });
+
+  const loading = summary === undefined;
   const pendingRequests = summary?.requests.pending ?? 0;
   const urgentPending = summary?.requests.urgent ?? 0;
   const withoutReference = summary?.requests.withoutReference ?? 0;
   const issuedRequests = summary?.requests.issued ?? 0;
   const lowStockParts = summary?.parts.lowStock ?? 0;
   const totalParts = summary?.parts.total ?? 0;
-  const isEmpty =
-    !loading && totalParts === 0 && (summary?.requests.active ?? 0) === 0;
-  const showEmptyNotice = isEmpty && !startedEmpty;
-
-  const alertRoleKeys =
-    alertSettings?.roleKeys ?? DEFAULT_WORK_WITHOUT_TRACE_ROLES;
-  const seesAlert = alertReachesRole(role, alertRoleKeys);
-  const staleWork = summary?.staleWork ?? [];
-  const alertReferences = staleWork.map(({ incident }) => incident.reference);
-  const alertDismissed = isDismissed(
-    alertDismissal,
-    alertReferences,
-    alertDays,
-  );
-
-  const dismissAlert = () => {
-    const dismissal = dismissalOf(alertReferences, alertDays);
-    setAlertDismissal(dismissal);
-    saveWorkAlertDismissal({ dismissal }).catch((error: unknown) => {
-      console.warn("No se pudo guardar el aviso cerrado en el perfil:", error);
-    });
-  };
-
-  const restoreAlert = () => {
-    setAlertDismissal(null);
-    saveWorkAlertDismissal({ dismissal: null }).catch((error: unknown) => {
-      console.warn("No se pudo olvidar el aviso cerrado en el perfil:", error);
-    });
-  };
 
   const navBadges: Record<NavId, number> = {
     incidents: summary?.incidents.reported ?? 0,
@@ -342,66 +271,6 @@ export default function Dashboard() {
   const handleSwitchAccount = async () => {
     await signOut();
     navigate("/auth");
-  };
-
-  const handleStartEmpty = () => {
-    setStartedEmpty(true);
-    writeStartedEmpty(safeLocalStorage(), true);
-  };
-
-  const handleSeed = async () => {
-    setIsSeeding(true);
-    try {
-      const photos = await seedDemoUploads();
-      await seedDemoData();
-      const manuals = await seedDemoManuals();
-      const telling = [
-        photos.uploaded > 0
-          ? `${photos.uploaded} fotos del formulario esperando limpieza`
-          : null,
-        manuals.inserted > 0 ? `${manuals.inserted} manuales` : null,
-      ].filter((part): part is string => part !== null);
-      toast.success(
-        telling.length > 0
-          ? `Datos de ejemplo cargados · ${telling.join(" · ")}`
-          : "Datos de ejemplo cargados",
-      );
-      setStartedEmpty(false);
-      writeStartedEmpty(safeLocalStorage(), false);
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
-  const handleSeedMore = async () => {
-    setIsSeedingMore(true);
-    try {
-      await seedDemoUploads();
-      const result = await seedMoreDemoData({});
-      const manuals = await seedDemoManuals();
-      const added =
-        result.incidents +
-        result.requests +
-        result.equipment +
-        result.parts +
-        result.team +
-        manuals.inserted;
-      toast.success(
-        added === 0
-          ? "No había nada nuevo que añadir"
-          : `${result.incidents} incidencias y ${result.requests} peticiones nuevas · ${result.maintenance} fichas de mantenimiento` +
-              (result.team > 0
-                ? ` · ${result.team} personas en el equipo`
-                : "") +
-              (manuals.inserted > 0 ? ` · ${manuals.inserted} manuales` : ""),
-      );
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setIsSeedingMore(false);
-    }
   };
 
 
