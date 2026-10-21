@@ -57,10 +57,9 @@ import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
 import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
 import { DashboardStats } from "./dashboard/components/DashboardStats";
-import {
-  PageHeader,
-  type PageHeaderAction,
-} from "./dashboard/components/PageHeader";
+import { PageHeader, type PageHeaderAction } from "./dashboard/components/PageHeader";
+import { useDashboardNavigation } from "./dashboard/hooks/useDashboardNavigation";
+import { useEnsureRole } from "./dashboard/hooks/useEnsureRole";
 import { useSidebarPanel } from "./dashboard/hooks/useSidebarPanel";
 import type { NavId, NavItem } from "./dashboard/types";
 
@@ -105,7 +104,6 @@ export default function Dashboard() {
     api.members.saveWorkAlertDismissal,
   );
 
-  const [tab, setTab] = useState<NavId>("incidents");
   const [isSeeding, setIsSeeding] = useState(false);
   const [isSeedingMore, setIsSeedingMore] = useState(false);
   // «Empezar con el taller vacío»: la elección de no cargar la muestra cuando
@@ -154,82 +152,20 @@ export default function Dashboard() {
     asideRef: sidebarRef,
     resizeHandleProps,
   } = useSidebarPanel(isGuest ? null : user);
-  const [requestsEquipmentFilter, setRequestsEquipmentFilter] =
-    useState<string>("all");
 
-  // Búsqueda global: estado para abrir el resultado elegido en su módulo.
-  // Los "key" permiten remontar la vista si ya estaba visible (p. ej. se
-  // elige una petición estando ya en la cola).
-  const [requestsViewKey, setRequestsViewKey] = useState(0);
-  const [initialRequestId, setInitialRequestId] =
-    useState<Id<"partRequests"> | null>(null);
-  // Aviso del panel: abrir la ficha de una incidencia concreta (y remontar la
-  // cola para que la abra aunque ya estuviera visible).
-  const [incidentsViewKey, setIncidentsViewKey] = useState(0);
-  const [initialIncidentId, setInitialIncidentId] =
-    useState<Id<"incidents"> | null>(null);
-  // Lo archivado que llega desde el buscador: una ficha concreta del archivo,
-  // que se abre en solo lectura. El `key` remonta el archivo para que la abra
-  // aunque ya estuviera montado.
-  const [archiveViewKey, setArchiveViewKey] = useState(0);
-  const [archiveInitialEntry, setArchiveInitialEntry] =
-    useState<OpenArchivedDoc | null>(null);
-  const [inventoryViewKey, setInventoryViewKey] = useState(0);
-  const [inventoryInitialSearch, setInventoryInitialSearch] = useState("");
-  const [equipmentViewKey, setEquipmentViewKey] = useState(0);
-  const [equipmentInitialSearch, setEquipmentInitialSearch] = useState("");
+  // Permisos y asignación de rol garantizada
+  const { role, roleLabel, adminOk, needsRole } = useEnsureRole(
+    user,
+    permissions?.label,
+  );
 
-  // Tarjetas del resumen: abren su módulo con el filtro que corresponde.
-  const [requestsInitialFilter, setRequestsInitialFilter] =
-    useState<RequestFilterId>("all");
-  const [inventoryLowStockOnly, setInventoryLowStockOnly] = useState(false);
-
-  // Permisos: el rol llega de `users`; si aún no está asignado, se pide una vez
-  // (con reintentos: un fallo transitorio no debe dejar el perfil sin asignar).
-  const ensureRole = useMutation(api.members.ensureRole);
-  const roleAttempts = useRef(0);
-  const role = user?.role ?? DEFAULT_ROLE;
-  const adminOk = isAdmin(user?.role);
-  // Permisos configurados por el administrador (defaults mientras cargan). El
-  // invitado va directo a los del rol guest, para no enseñar un menú de técnico
-  // mientras el backend todavía no le ha asignado su rol.
   const grants = isGuest
     ? DEFAULT_GRANTS.guest
     : (permissions?.grants ??
       DEFAULT_GRANTS[isSystemRole(role) ? role : DEFAULT_ROLE]);
   const can = (capability: Capability) => grants[capability] === true;
-  // El resumen semanal es de los mandos del taller: los mismos que coordinan
-  // las incidencias o deciden las peticiones (igual que el archivo).
   const canConfigureReport = can("manageIncidents") || can("decideRequests");
-  // Compras: lo que el almacén no cubre. El módulo carga sus tres listas al
-  // abrirse —lo que espera por proveedor, las órdenes y las recepciones con su
-  // albarán—; aquí solo queda la capacidad, que decide si el módulo se enseña.
   const canSeePurchasing = can("viewPurchasing") || can("managePurchasing");
-  const needsRole =
-    user !== undefined && user !== null && user.role === undefined;
-
-  useEffect(() => {
-    if (!needsRole) {
-      roleAttempts.current = 0;
-      return;
-    }
-    let cancelled = false;
-    const assignRole = async () => {
-      try {
-        await ensureRole();
-      } catch (error) {
-        console.warn("No se pudo asignar el rol:", error);
-        roleAttempts.current += 1;
-        if (!cancelled && roleAttempts.current < 6) {
-          window.setTimeout(() => void assignRole(), 2500);
-        }
-      }
-    };
-    void assignRole();
-    return () => {
-      cancelled = true;
-    };
-  }, [needsRole, ensureRole]);
 
   // Módulos visibles según los permisos que el administrador dio al rol.
   const navItems: NavItem[] = [
@@ -324,18 +260,21 @@ export default function Dashboard() {
       : []),
   ];
 
-  // Mientras el contador no ha llegado no se enseña una cifra que todavía no es:
-  // se enseña el esqueleto, como antes mientras cargaban las listas.
-  const loading = summary === undefined;
-
-  // Si el rol cambia y el módulo activo deja de estar permitido, se muestra
-  // la cola (valor derivado, sin efectos que re-rendericen en cascada).
-  const activeAllowed =
-    tab === "profile" || navItems.some((item) => item.id === tab);
-  const fallbackTab: NavId = navItems.some((item) => item.id === "requests")
-    ? "requests"
-    : (navItems[0]?.id ?? "profile");
-  const activeTab: NavId = activeAllowed ? tab : fallbackTab;
+  // Navegación unificada entre submódulos
+  const {
+    target,
+    activeTab,
+    viewKeys,
+    goToTab,
+    openRequests,
+    openRequest,
+    openIncident,
+    openNotification,
+    openInventory,
+    setRequestsEquipmentFilter,
+    openEquipmentViewRequests,
+    handleSearchSelect,
+  } = useDashboardNavigation(can, navItems);
 
   const pendingRequests = summary?.requests.pending ?? 0;
   const urgentPending = summary?.requests.urgent ?? 0;
@@ -465,51 +404,7 @@ export default function Dashboard() {
     }
   };
 
-  const openRequests = (filter: RequestFilterId) => {
-    setRequestsInitialFilter(filter);
-    setRequestsEquipmentFilter("all");
-    setInitialRequestId(null);
-    setRequestsViewKey((key) => key + 1);
-    setTab("requests");
-  };
 
-  /**
-   * Abrir una petición concreta en su módulo (hoy la llama la ficha de la
-   * incidencia, que enseña el material que se pidió para el caso). Se remonta la
-   * cola con la petición delante, que es el mismo camino que usa el buscador
-   * global: así se abre aunque la cola ya estuviera montada en otra pestaña.
-   */
-  const openRequest = (id: Id<"partRequests">) => {
-    if (!can("viewRequests")) return;
-    setInitialRequestId(id);
-    setRequestsInitialFilter("all");
-    setRequestsEquipmentFilter("all");
-    setRequestsViewKey((key) => key + 1);
-    setTab("requests");
-  };
-
-  const openIncident = (id: Id<"incidents">) => {
-    setInitialIncidentId(id);
-    setIncidentsViewKey((key) => key + 1);
-    setTab("incidents");
-  };
-
-  const openNotification = (notification: {
-    incidentId?: Id<"incidents"> | null;
-  }) => {
-    if (notification.incidentId) {
-      openIncident(notification.incidentId);
-    } else {
-      goToTab("incidents");
-    }
-  };
-
-  const openInventory = (lowStockOnly: boolean) => {
-    setInventoryLowStockOnly(lowStockOnly);
-    setInventoryInitialSearch("");
-    setInventoryViewKey((key) => key + 1);
-    setTab("inventory");
-  };
 
   const stats = [
     ...(can("viewRequests")
@@ -580,69 +475,7 @@ export default function Dashboard() {
     activeTab === "audit" ||
     stats.length === 0;
 
-  const goToTab = (id: NavId) => {
-    setTab(id);
-    if (initialRequestId) {
-      setInitialRequestId(null);
-      setRequestsViewKey((key) => key + 1);
-    }
-    if (initialIncidentId) {
-      setInitialIncidentId(null);
-      setIncidentsViewKey((key) => key + 1);
-    }
-    if (archiveInitialEntry) {
-      setArchiveInitialEntry(null);
-      setArchiveViewKey((key) => key + 1);
-    }
-    setInventoryInitialSearch("");
-    setEquipmentInitialSearch("");
-    setRequestsInitialFilter("all");
-    setInventoryLowStockOnly(false);
-  };
 
-  const handleSearchSelect = (hit: SearchHit) => {
-    // Lo archivado no está en su cola: se abre en el archivo y en solo lectura,
-    // que es donde sigue existiendo. Antes el resultado llevaba a un módulo que
-    // ya no lo tenía.
-    if ((hit.kind === "incident" || hit.kind === "request") && hit.archived) {
-      if (!can(hit.kind === "incident" ? "viewIncidents" : "viewRequests")) {
-        return;
-      }
-      setArchiveInitialEntry({ kind: hit.kind, id: hit.id });
-      setArchiveViewKey((key) => key + 1);
-      setTab("archive");
-      return;
-    }
-    if (hit.kind === "incident") {
-      if (!can("viewIncidents")) return;
-      setInitialIncidentId(hit.id);
-      setIncidentsViewKey((key) => key + 1);
-      setTab("incidents");
-      return;
-    }
-    if (hit.kind === "request") {
-      if (!can("viewRequests")) return;
-      setInitialRequestId(hit.id);
-      setRequestsInitialFilter("all");
-      setRequestsViewKey((key) => key + 1);
-      setTab("requests");
-      return;
-    }
-    if (hit.kind === "part") {
-      if (!can("viewInventory")) return;
-      setInventoryInitialSearch(hit.term);
-      setInventoryLowStockOnly(false);
-      setInventoryViewKey((key) => key + 1);
-      setTab("inventory");
-    } else {
-      if (!can("viewEquipment")) return;
-      setEquipmentInitialSearch(hit.term);
-      setEquipmentViewKey((key) => key + 1);
-      setTab("equipment");
-    }
-  };
-
-  const roleLabel = permissions?.label ?? fallbackRoleMeta(role).label;
 
   // La cabecera de cada módulo: su nombre y una línea de contexto. Antes todas
   // las pestañas enseñaban el mismo titular genérico y había que mirar el menú
@@ -915,20 +748,20 @@ export default function Dashboard() {
               adminOk={adminOk}
               can={can}
               canSeePurchasing={canSeePurchasing}
-              initialIncidentId={initialIncidentId}
-              incidentsViewKey={incidentsViewKey}
-              archiveInitialEntry={archiveInitialEntry}
-              archiveViewKey={archiveViewKey}
-              requestsEquipmentFilter={requestsEquipmentFilter}
+              initialIncidentId={target.incidentId ?? null}
+              incidentsViewKey={viewKeys.incidents}
+              archiveInitialEntry={target.archiveEntry ?? null}
+              archiveViewKey={viewKeys.archive}
+              requestsEquipmentFilter={target.requestsEquipmentFilter ?? "all"}
               onEquipmentFilterChange={setRequestsEquipmentFilter}
-              initialRequestId={initialRequestId}
-              requestsInitialFilter={requestsInitialFilter}
-              requestsViewKey={requestsViewKey}
-              inventoryInitialSearch={inventoryInitialSearch}
-              inventoryLowStockOnly={inventoryLowStockOnly}
-              inventoryViewKey={inventoryViewKey}
-              equipmentInitialSearch={equipmentInitialSearch}
-              equipmentViewKey={equipmentViewKey}
+              initialRequestId={target.requestId ?? null}
+              requestsInitialFilter={target.requestsFilter ?? "all"}
+              requestsViewKey={viewKeys.requests}
+              inventoryInitialSearch={target.inventorySearch ?? ""}
+              inventoryLowStockOnly={target.inventoryLowStockOnly ?? false}
+              inventoryViewKey={viewKeys.inventory}
+              equipmentInitialSearch={target.equipmentSearch ?? ""}
+              equipmentViewKey={viewKeys.equipment}
               searchParamsCode={searchParams.get("codigo")}
               isSeeding={isSeeding}
               onSeed={() => void handleSeed()}
@@ -937,12 +770,7 @@ export default function Dashboard() {
               onOpenIncident={openIncident}
               onOpenRequest={openRequest}
               goToTab={goToTab}
-              onEquipmentViewRequests={(equipmentId) => {
-                setRequestsEquipmentFilter(equipmentId);
-                setInitialRequestId(null);
-                setRequestsViewKey((key) => key + 1);
-                setTab("requests");
-              }}
+              onEquipmentViewRequests={openEquipmentViewRequests}
             />
           </section>
         </main>
