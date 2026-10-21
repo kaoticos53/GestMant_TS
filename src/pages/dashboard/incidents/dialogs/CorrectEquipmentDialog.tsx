@@ -50,6 +50,7 @@ export function CorrectEquipmentDialog({
         incidentId: incident._id,
         model: model.trim(),
         serialNumber: serialNumber.trim(),
+        expectedUpdatedAt: incident.updatedAt,
       });
       toast.success(`Datos del equipo de ${incident.reference} corregidos`);
       onClose();

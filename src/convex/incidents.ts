@@ -32,6 +32,7 @@ import { INCIDENT_STATUSES, incidentStatusValidator } from "./schema";
 
 import {
   actorName,
+  assertIncidentNotModified,
   getIncident,
   historyEntry,
   isModerator,
@@ -301,6 +302,7 @@ export const assign = mutation({
   args: {
     incidentId: v.id("incidents"),
     assigneeId: v.id("users"),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
@@ -312,6 +314,7 @@ export const assign = mutation({
       );
     }
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const assigned = requireIncidentStep(
       incident,
       "assign",
@@ -357,7 +360,10 @@ export const assign = mutation({
  * llevarse trabajo aunque no tenga el módulo en el menú.
  */
 export const selfAssign = mutation({
-  args: { incidentId: v.id("incidents") },
+  args: {
+    incidentId: v.id("incidents"),
+    expectedUpdatedAt: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     if (
@@ -371,6 +377,7 @@ export const selfAssign = mutation({
       );
     }
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const assigned = requireIncidentStep(incident, "selfAssign", () =>
       incident.assigneeName
         ? `Ya está asignada a ${incident.assigneeName}.`
@@ -429,10 +436,12 @@ export const verify = mutation({
     ),
     equipmentId: v.optional(v.id("equipment")),
     notes: v.optional(v.string()),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
     if (
       !canCoordinate &&
@@ -569,10 +578,12 @@ export const assignWorkshop = mutation({
   args: {
     incidentId: v.id("incidents"),
     assigneeId: v.id("users"),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
     if (!canCoordinate && incident.workshopAssigneeId !== actor._id) {
       throw new ConvexError(
@@ -640,10 +651,12 @@ export const close = mutation({
     ),
     equipmentId: v.optional(v.id("equipment")),
     notes: v.optional(v.string()),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
     if (
       !canCoordinate &&
@@ -954,10 +967,12 @@ export const updateEquipment = mutation({
     equipmentId: v.optional(v.id("equipment")),
     model: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     await requireEquipmentEditor(ctx, actor, incident);
 
     const equipmentId = args.equipmentId ?? incident.equipmentId;

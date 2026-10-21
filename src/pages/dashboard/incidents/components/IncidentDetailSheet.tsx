@@ -468,7 +468,10 @@ export function IncidentDetailSheet({
   const handleSelfAssign = async () => {
     setBusy(true);
     try {
-      await selfAssign({ incidentId: incident._id });
+      await selfAssign({
+        incidentId: incident._id,
+        expectedUpdatedAt: incident.updatedAt,
+      });
       toast.success(`${incident.reference} autoasignada`);
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -671,10 +674,15 @@ export function IncidentDetailSheet({
           incidentId: incident._id,
           noteId: editingNoteId,
           note: noteText,
+          expectedUpdatedAt: incident.updatedAt,
         });
         toast.success("Nota corregida");
       } else {
-        await addNote({ incidentId: incident._id, note: noteText });
+        await addNote({
+          incidentId: incident._id,
+          note: noteText,
+          expectedUpdatedAt: incident.updatedAt,
+        });
         toast.success("Nota añadida");
       }
       handleCloseNote();
@@ -1949,6 +1957,7 @@ export function IncidentDetailSheet({
                   equipmentId: createdId,
                   model: incident.model,
                   serialNumber: incident.serialNumber,
+                  expectedUpdatedAt: incident.updatedAt,
                 });
                 toast.success(
                   `Equipo vinculado a la incidencia ${incident.reference}`,

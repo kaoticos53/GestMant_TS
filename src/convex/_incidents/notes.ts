@@ -8,6 +8,7 @@ import {
   type Actor,
   type LifecycleNote,
   actorName,
+  assertIncidentNotModified,
   getIncident,
   isAssignedTo,
   requireActor,
@@ -86,11 +87,13 @@ export const addNote = mutation({
     incidentId: v.id("incidents"),
     note: v.string(),
     at: v.optional(v.number()),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // Quien firma la nota es el mismo actor al que se le comprueba el permiso.
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     await requireNoteAuthor(ctx, actor, incident);
     // El cuaderno admite formato (negritas, listas, imágenes), así que lo que
     // se guarda es el documento del editor, ya recortado de párrafos vacíos: si
@@ -136,10 +139,12 @@ export const updateNote = mutation({
     incidentId: v.id("incidents"),
     noteId: v.string(),
     note: v.string(),
+    expectedUpdatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireActor(ctx);
     const incident = await getIncident(ctx, args.incidentId);
+    assertIncidentNotModified(incident, args.expectedUpdatedAt);
     const notes = incident.lifecycleNotes ?? [];
     const index = noteIndex(notes, args.noteId);
     const now = Date.now();

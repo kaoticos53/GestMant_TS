@@ -95,3 +95,22 @@ export function historyEntry(
     ...(note ? { note } : {}),
   };
 }
+
+/**
+ * Control de Concurrencia Optimista (Optimistic Locking).
+ * Si el cliente envía `expectedUpdatedAt` y la incidencia en base de datos
+ * tiene un `updatedAt` posterior, se rechaza la mutación para evitar sobreescritura
+ * accidental entre técnicos concurrentes.
+ */
+export function assertIncidentNotModified(
+  incident: Doc<"incidents">,
+  expectedUpdatedAt?: number,
+): void {
+  if (expectedUpdatedAt === undefined) return;
+  if (incident.updatedAt > expectedUpdatedAt) {
+    throw new ConvexError(
+      "CONFLICT: La incidencia ha sido modificada por otro usuario mientras la editabas. Por favor, revisa los cambios antes de continuar.",
+    );
+  }
+}
+
