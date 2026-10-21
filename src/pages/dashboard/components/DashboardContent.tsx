@@ -9,6 +9,7 @@ import { IncidentLookup } from "../IncidentLookup";
 import type { RequestFilterId } from "../requests/types";
 import type { OpenArchivedDoc } from "../ArchiveView";
 import type { NavId } from "../types";
+import { ModuleErrorBoundary } from "@/components/ModuleErrorBoundary";
 
 const ArchiveView = lazy(() =>
   import("../ArchiveView").then((m) => ({ default: m.ArchiveView })),
@@ -224,105 +225,108 @@ export function DashboardContent({
   }
 
   return (
-    <Suspense fallback={<ViewSkeleton />}>
-      {activeTab === "profile" ? (
-        <ProfileView
-          user={user}
-          onOpenIncidents={() => goToTab("incidents")}
-          onOpenRequests={() => goToTab("requests")}
-        />
-      ) : loading && activeTab !== "permissions" ? (
-        <div className="grid gap-4">
-          <Skeleton className="h-40 rounded-xl" />
-          <Skeleton className="h-40 rounded-xl" />
-        </div>
-      ) : activeTab === "incidents" ? (
-        <IncidentsView
-          key={`incidents-${incidentsViewKey}`}
-          currentUserId={user?._id ?? null}
-          currentUserName={displayName}
-          canAssign={can("manageIncidents")}
-          initialDetailId={initialIncidentId}
-          // Ver las peticiones es lo que permite saltar a una: sin ese permiso la
-          // ficha las enseña —el estado del material es parte del caso— pero no
-          // ofrece un botón que llevaría a un módulo cerrado.
-          canOpenRequests={can("viewRequests")}
-          onOpenRequest={onOpenRequest}
-        />
-      ) : activeTab === "requests" ? (
-        <RequestsView
-          key={`requests-${requestsViewKey}`}
-          equipmentFilter={requestsEquipmentFilter}
-          onEquipmentFilterChange={onEquipmentFilterChange}
-          canManage={can("decideRequests")}
-          canPurchase={can("managePurchasing") && can("viewPurchasing")}
-          initialDetailId={initialRequestId}
-          initialFilter={requestsInitialFilter}
-        />
-      ) : activeTab === "purchasing" && canSeePurchasing ? (
-        <PurchasingView canManage={can("managePurchasing")} />
-      ) : activeTab === "inventory" && can("viewInventory") ? (
-        <InventoryView
-          key={`inventory-${inventoryViewKey}`}
-          canManage={can("manageInventory")}
-          currentUserId={user?._id ?? null}
-          initialSearch={inventoryInitialSearch}
-          initialLowStockOnly={inventoryLowStockOnly}
-        />
-      ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
-        <ManualsView
-          canManage={can("manageManuals")}
-          currentUserId={user?._id ?? null}
-        />
-      ) : activeTab === "machines" && !isGuest ? (
-        <MachinesView />
-      ) : activeTab === "equipment" && can("viewEquipment") ? (
-        <EquipmentView
-          key={`equipment-${equipmentViewKey}`}
-          canManage={can("manageEquipment")}
-          canWriteManuals={can("viewManuals") && !isGuest}
-          canManageManuals={can("manageManuals")}
-          currentUserId={user?._id ?? null}
-          initialSearch={equipmentInitialSearch}
-          onViewRequests={onEquipmentViewRequests}
-        />
-      ) : activeTab === "archive" ? (
-        <ArchiveView
-          key={`archive-${archiveViewKey}`}
-          initialEntry={archiveInitialEntry}
-          canArchiveIncidents={can("manageIncidents")}
-          canArchiveRequests={can("decideRequests")}
-          // La ficha del archivo se abre en solo lectura, pero necesita el
-          // catálogo y el inventario para contar el stock y el equipo.
-          canViewCatalog={can("viewInventory")}
-          canViewEquipment={can("viewEquipment")}
-          currentUserId={user?._id ?? null}
-          currentUserName={displayName}
-          onOpenRequest={onOpenRequest}
-          onOpenSettings={
-            can("manageIncidents") || can("decideRequests")
-              ? () => goToTab("settings")
-              : undefined
-          }
-        />
-      ) : activeTab === "settings" ? (
-        <WorkshopSettingsView
-          canManageArchive={can("manageIncidents") || can("decideRequests")}
-          canManageAlert={can("manageIncidents")}
-          canManageAudit={adminOk && can("viewAudit")}
-          canPurgeUploads={can("manageIncidents") || can("decideRequests")}
-          canManageData={adminOk}
-          canManageMail={adminOk}
-          canManageIncidents={can("manageIncidents")}
-          canDecideRequests={can("decideRequests")}
-        />
-      ) : activeTab === "audit" && adminOk ? (
-        <AuditView onOpenIncident={onOpenIncident} />
-      ) : activeTab === "users" && adminOk ? (
-        <UsersView />
-      ) : activeTab === "permissions" && adminOk ? (
-        <PermissionsView />
-      ) : null}
-    </Suspense>
+    <ModuleErrorBoundary key={activeTab} moduleName={activeTab}>
+      <Suspense fallback={<ViewSkeleton />}>
+        {activeTab === "profile" ? (
+          <ProfileView
+            user={user}
+            onOpenIncidents={() => goToTab("incidents")}
+            onOpenRequests={() => goToTab("requests")}
+          />
+        ) : loading && activeTab !== "permissions" ? (
+          <div className="grid gap-4">
+            <Skeleton className="h-40 rounded-xl" />
+            <Skeleton className="h-40 rounded-xl" />
+          </div>
+        ) : activeTab === "incidents" ? (
+          <IncidentsView
+            key={`incidents-${incidentsViewKey}`}
+            currentUserId={user?._id ?? null}
+            currentUserName={displayName}
+            canAssign={can("manageIncidents")}
+            initialDetailId={initialIncidentId}
+            // Ver las peticiones es lo que permite saltar a una: sin ese permiso la
+            // ficha las enseña —el estado del material es parte del caso— pero no
+            // ofrece un botón que llevaría a un módulo cerrado.
+            canOpenRequests={can("viewRequests")}
+            onOpenRequest={onOpenRequest}
+          />
+        ) : activeTab === "requests" ? (
+          <RequestsView
+            key={`requests-${requestsViewKey}`}
+            equipmentFilter={requestsEquipmentFilter}
+            onEquipmentFilterChange={onEquipmentFilterChange}
+            canManage={can("decideRequests")}
+            canPurchase={can("managePurchasing") && can("viewPurchasing")}
+            initialDetailId={initialRequestId}
+            initialFilter={requestsInitialFilter}
+          />
+        ) : activeTab === "purchasing" && canSeePurchasing ? (
+          <PurchasingView canManage={can("managePurchasing")} />
+        ) : activeTab === "inventory" && can("viewInventory") ? (
+          <InventoryView
+            key={`inventory-${inventoryViewKey}`}
+            canManage={can("manageInventory")}
+            currentUserId={user?._id ?? null}
+            initialSearch={inventoryInitialSearch}
+            initialLowStockOnly={inventoryLowStockOnly}
+          />
+        ) : activeTab === "manuals" && can("viewManuals") && !isGuest ? (
+          <ManualsView
+            canManage={can("manageManuals")}
+            currentUserId={user?._id ?? null}
+          />
+        ) : activeTab === "machines" && !isGuest ? (
+          <MachinesView />
+        ) : activeTab === "equipment" && can("viewEquipment") ? (
+          <EquipmentView
+            key={`equipment-${equipmentViewKey}`}
+            canManage={can("manageEquipment")}
+            canWriteManuals={can("viewManuals") && !isGuest}
+            canManageManuals={can("manageManuals")}
+            currentUserId={user?._id ?? null}
+            initialSearch={equipmentInitialSearch}
+            onViewRequests={onEquipmentViewRequests}
+          />
+        ) : activeTab === "archive" ? (
+          <ArchiveView
+            key={`archive-${archiveViewKey}`}
+            initialEntry={archiveInitialEntry}
+            canArchiveIncidents={can("manageIncidents")}
+            canArchiveRequests={can("decideRequests")}
+            // La ficha del archivo se abre en solo lectura, pero necesita el
+            // catálogo y el inventario para contar el stock y el equipo.
+            canViewCatalog={can("viewInventory")}
+            canViewEquipment={can("viewEquipment")}
+            currentUserId={user?._id ?? null}
+            currentUserName={displayName}
+            onOpenRequest={onOpenRequest}
+            onOpenSettings={
+              can("manageIncidents") || can("decideRequests")
+                ? () => goToTab("settings")
+                : undefined
+            }
+          />
+        ) : activeTab === "settings" ? (
+          <WorkshopSettingsView
+            canManageArchive={can("manageIncidents") || can("decideRequests")}
+            canManageAlert={can("manageIncidents")}
+            canManageAudit={adminOk && can("viewAudit")}
+            canPurgeUploads={can("manageIncidents") || can("decideRequests")}
+            canManageData={adminOk}
+            canManageMail={adminOk}
+            canManageIncidents={can("manageIncidents")}
+            canDecideRequests={can("decideRequests")}
+          />
+        ) : activeTab === "audit" && adminOk ? (
+          <AuditView onOpenIncident={onOpenIncident} />
+        ) : activeTab === "users" && adminOk ? (
+          <UsersView />
+        ) : activeTab === "permissions" && adminOk ? (
+          <PermissionsView />
+        ) : null}
+      </Suspense>
+    </ModuleErrorBoundary>
   );
 }
+
