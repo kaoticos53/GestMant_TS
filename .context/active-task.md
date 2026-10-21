@@ -11,12 +11,16 @@
 ---
 
 ## 2. Archivos Modificados / Creados
+## 2. Archivos Modificados / Creados
 - [x] `src/pages/dashboard/incidents/hooks/useIncidentNotes.ts`: Orquestación de bitácora, versionado y toasts de deshacer.
 - [x] `src/pages/dashboard/incidents/hooks/useIncidentDocuments.ts`: Orquestación de expediente documental, compresión y upload.
 - [x] `src/pages/dashboard/incidents/hooks/useIncidentExport.ts`: Orquestación de reportes (Markdown, PDF, ZIP).
 - [x] `src/pages/dashboard/incidents/components/detail/IncidentHeader.tsx`: Cabecera fija y metadatos de la incidencia.
 - [x] `src/pages/dashboard/incidents/components/detail/IncidentEquipmentCard.tsx`: Datos del equipo, notificación, asignación y SAT externo.
 - [x] `src/pages/dashboard/incidents/components/detail/IncidentPartRequestsCard.tsx`: Peticiones de material vinculadas y estado de líneas.
+- [x] `src/pages/dashboard/incidents/components/detail/IncidentNotesCard.tsx`: Cuaderno de notas, versionado y modales.
+- [x] `src/pages/dashboard/incidents/components/detail/IncidentDocumentsCard.tsx`: Expediente documental, uploads y rastro.
+- [x] `src/pages/dashboard/incidents/components/detail/IncidentActionsBar.tsx`: Barra fija de acciones y modales de transición.
 
 ---
 
@@ -28,11 +32,10 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `useIncidentNotes.ts`.
-- [x] **Paso 2:** Crear `useIncidentDocuments.ts`.
-- [x] **Paso 3:** Crear `useIncidentExport.ts`.
-- [x] **Paso 4:** Crear `IncidentHeader.tsx`, `IncidentEquipmentCard.tsx` e `IncidentPartRequestsCard.tsx`.
-- [x] **Paso 5:** Validar con `npx tsc --noEmit` y suite de tests.
-- [x] **Paso 6:** Commit atómico de la Fase 2.
+- [x] **Paso 1:** Crear hooks (`useIncidentNotes`, `useIncidentDocuments`, `useIncidentExport`).
+- [x] **Paso 2:** Crear subcomponentes de lectura (`IncidentHeader`, `IncidentEquipmentCard`, `IncidentPartRequestsCard`).
+- [x] **Paso 3:** Crear subcomponentes interactivos (`IncidentNotesCard`, `IncidentDocumentsCard`, `IncidentActionsBar`).
+- [x] **Paso 4:** Validar con `npx tsc --noEmit` y suite de tests.
+- [x] **Paso 5:** Commit atómico de la Fase 3.
 
 
