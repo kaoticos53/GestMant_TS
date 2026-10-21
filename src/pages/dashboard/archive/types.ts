@@ -5,8 +5,10 @@ import { AFTER_MONTHS_OPTIONS } from "@/lib/archive";
 import type { QueueSortOption } from "../QueueToolbar";
 import { Siren, ClipboardList } from "lucide-react";
 
+import type { RequestDoc } from "../requests/types";
+
 export type IncidentDoc = Doc<"incidents">;
-export type RequestDoc = Doc<"partRequests">;
+export type { RequestDoc };
 
 /** Qué se está mirando dentro del archivo. */
 export type ArchiveKind = "all" | "incident" | "request";

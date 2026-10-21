@@ -91,7 +91,10 @@ export function ArchiveDetailHost({
       {openWithdrawnRequest && (
         <RequestDetailSheet
           key={openWithdrawnRequest._id}
-          request={openWithdrawnRequest}
+          request={{
+            ...openWithdrawnRequest,
+            attachments: openWithdrawnRequest.attachments ?? [],
+          }}
           parts={parts}
           canManage={false}
           showStock={canViewCatalog}
