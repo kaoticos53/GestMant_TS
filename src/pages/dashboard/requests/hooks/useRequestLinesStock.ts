@@ -11,6 +11,7 @@ export interface EnrichedRequestLine {
   sparePartId: RequestDoc["lines"][number]["sparePartId"];
   name: string;
   code: string;
+  partNumber?: string;
   quantity: number;
   deliveredQuantity: number;
   remainingQuantity: number;
@@ -61,6 +62,7 @@ export function useRequestLinesStock(
         sparePartId: line.sparePartId,
         name: line.name,
         code: line.code,
+        partNumber: part?.partNumber,
         quantity: line.quantity,
         deliveredQuantity: delivered,
         remainingQuantity: remaining,
