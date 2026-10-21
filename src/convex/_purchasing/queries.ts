@@ -127,7 +127,9 @@ export const listReceptions = query({
           .withIndex("by_order", (q) => q.eq("orderId", args.orderId!))
           .collect()
       : await ctx.db.query("receptions").collect();
-    const sorted = rows.sort((a, b) => b.receivedAt - a.receivedAt);
+    const sorted = rows.sort(
+      (a, b) => b.receivedAt - a.receivedAt || b._creationTime - a._creationTime,
+    );
     return await Promise.all(
       sorted.map(async (row) => ({
         ...row,
