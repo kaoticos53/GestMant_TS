@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Camera, Flashlight, RefreshCw, ScanLine, X } from "lucide-react";
+import { Camera, Flashlight, ScanLine } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +44,6 @@ export function BarcodeScannerModal({
   const [torchOn, setTorchOn] = React.useState<boolean>(false);
   const [hasTorch, setHasTorch] = React.useState<boolean>(false);
   const [manualCode, setManualCode] = React.useState<string>("");
-  const [isScanning, setIsScanning] = React.useState<boolean>(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   // Iniciar cámara y detector
@@ -100,7 +99,6 @@ export function BarcodeScannerModal({
         const capabilities = track?.getCapabilities?.() as { torch?: boolean } | undefined;
         setHasTorch(Boolean(capabilities?.torch));
 
-        setIsScanning(true);
         setHasCamera(true);
 
         // Bucle de detección continua
@@ -162,7 +160,6 @@ export function BarcodeScannerModal({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    setIsScanning(false);
     setTorchOn(false);
   };
 

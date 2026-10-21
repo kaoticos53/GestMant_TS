@@ -243,4 +243,36 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       expect(contenido).toContain("0x46"); // 'F'
     });
   });
+
+  describe("6. Prevención de Inyección de Fórmulas CSV (CWE-1236 / OWASP A03:2021)", () => {
+    test("export.ts y purchasing.ts neutralizan caracteres de inicio de fórmula", () => {
+      const rutaExport = join(RAIZ, "src", "lib", "export.ts");
+      const contenidoExport = readFileSync(rutaExport, "utf8");
+      expect(contenidoExport).toContain("/^[=+\\-@\\t\\r]/");
+
+      const rutaPurchasing = join(RAIZ, "src", "lib", "purchasing.ts");
+      const contenidoPurchasing = readFileSync(rutaPurchasing, "utf8");
+      expect(contenidoPurchasing).toContain("escapeCsvCell");
+    });
+  });
+
+  describe("7. Endurecimiento de Parámetros de Autenticación OTP (NIST SP 800-63B)", () => {
+    test("emailOtp define maxAge <= 300 segundos", () => {
+      const rutaOtp = join(RAIZ, "src", "convex", "auth", "emailOtp.ts");
+      const contenidoOtp = readFileSync(rutaOtp, "utf8");
+      expect(contenidoOtp).toMatch(/maxAge:\s*60\s*\*\s*5/);
+    });
+  });
+
+  describe("8. Freno Global Anti-Fuerza Bruta en Consulta Pública (CWE-307)", () => {
+    test("publicLookupLimits.ts valida cupo global contra barridos distribuidos", () => {
+      const rutaLookup = join(RAIZ, "src", "convex", "publicLookupLimits.ts");
+      const contenidoLookup = readFileSync(rutaLookup, "utf8");
+      expect(contenidoLookup).toContain("admitGlobalLookup");
+
+      const rutaLib = join(RAIZ, "src", "lib", "publicLookup.ts");
+      const contenidoLib = readFileSync(rutaLib, "utf8");
+      expect(contenidoLib).toContain("GLOBAL_LOOKUP_LIMIT_PER_HOUR");
+    });
+  });
 });

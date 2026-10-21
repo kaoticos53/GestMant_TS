@@ -4,11 +4,7 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { BarcodeScannerModal } from "../src/components/BarcodeScannerModal";
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-}
+import { settle } from "./settle";
 
 describe("Componente de campo: BarcodeScannerModal", () => {
   let container: HTMLDivElement;

@@ -138,9 +138,9 @@ function buscar(consulta: string) {
 
 /** Los resultados que se ofrecen, con el grupo al que pertenecen. */
 function resultados(): string[] {
-  return [...container.querySelectorAll("button")].map(
-    (button) => button.textContent?.trim() ?? "",
-  );
+  return [...container.querySelectorAll("button")]
+    .filter((button) => button.getAttribute("aria-label") !== "Escanear código QR o barras")
+    .map((button) => button.textContent?.trim() ?? "");
 }
 
 describe("GlobalSearch — las incidencias en el buscador del taller", () => {

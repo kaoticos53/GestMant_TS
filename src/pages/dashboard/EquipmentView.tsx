@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -32,7 +31,7 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import { cn } from "@/lib/utils";
 import { equipmentLabel, getErrorMessage, nextReview } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
-import { BookOpen, Copy, Cpu, Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Cpu, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ManualDeleteDialog } from "./ManualDeleteDialog";
 import { ManualDetailSheet } from "./ManualDetailSheet";

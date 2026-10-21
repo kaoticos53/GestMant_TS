@@ -217,6 +217,7 @@ describe("ficha de la incidencia — corregir los datos del equipo", () => {
         model: "HDC-3500",
         // Los espacios de más no se guardan: el dato se limpia al entrar
         serialNumber: "HDC3500-2505-0147",
+        expectedUpdatedAt: AYER,
       },
     ]);
   });
