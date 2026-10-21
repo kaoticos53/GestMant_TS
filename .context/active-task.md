@@ -10,6 +10,7 @@
 ## 2. Archivos Modificados / Creados
 - [x] `src/pages/dashboard/inventory/domain/partForm.ts`: Tipos `PartFormValues`, `PartPayload`, parsers numéricos y validación declarativa pura.
 - [x] `tests/partFormDomain.test.ts`: Pruebas unitarias de validación y transformación de DTOs (9 tests pasados).
+- [x] `src/pages/dashboard/inventory/hooks/usePartForm.ts`: Hook de orquestación de estado, validación y mutaciones.
 
 ---
 
@@ -23,6 +24,7 @@
 ## 4. Checklist de Ejecución
 - [x] **Paso 1:** Crear `src/pages/dashboard/inventory/domain/partForm.ts`.
 - [x] **Paso 2:** Crear `tests/partFormDomain.test.ts`.
-- [x] **Paso 3:** Validar con `npx vitest run tests/partFormDomain.test.ts` y `npx tsc --noEmit`.
-- [x] **Paso 4:** Commit atómico de la Fase 1.
+- [x] **Paso 3:** Crear `src/pages/dashboard/inventory/hooks/usePartForm.ts`.
+- [x] **Paso 4:** Validar con `npx tsc --noEmit` y suite de tests.
+- [x] **Paso 5:** Commit atómico de la Fase 2.
 
