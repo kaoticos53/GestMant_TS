@@ -1,12 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-MANUALS-VIEW`
-- **Objetivo:** Fase 2 - Modularización de subcomponentes visuales (`ManualsFilterBar`, `ManualsEmptyState`, `ManualsTableRow`).
+- **ID / Nombre de la Tarea:** `REF-FASE3-MANUALS-VIEW`
+- **Objetivo:** Fase 3 - Reensamblado de `ManualsView.tsx` como orquestador limpio y desacoplado.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/manuals/components/ManualsFilterBar.tsx`
-  - `src/pages/dashboard/manuals/components/ManualsEmptyState.tsx`
-  - `src/pages/dashboard/manuals/components/ManualsTableRow.tsx`
+  - `src/pages/dashboard/ManualsView.tsx`
 
 ---
 
@@ -18,6 +16,7 @@
 - [x] `src/pages/dashboard/manuals/components/ManualsFilterBar.tsx`: Barra superior con buscador, selects en cascada y botones de acción.
 - [x] `src/pages/dashboard/manuals/components/ManualsEmptyState.tsx`: Estados vacíos para módulo sin manuales y sin resultados de búsqueda.
 - [x] `src/pages/dashboard/manuals/components/ManualsTableRow.tsx`: Fila individual con badges, columnas responsivas y acciones con comprobación de permisos.
+- [x] `src/pages/dashboard/ManualsView.tsx`: Vista orquestadora limpia, reducida de 580 a 237 líneas (~59% de reducción).
 
 ---
 
@@ -29,9 +28,7 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Implementar `ManualsFilterBar.tsx`.
-- [x] **Paso 2:** Implementar `ManualsEmptyState.tsx`.
-- [x] **Paso 3:** Implementar `ManualsTableRow.tsx`.
-- [x] **Paso 4:** Verificar tipos con `npx tsc -b`.
-- [x] **Paso 5:** Ejecutar tests unitarios con `npx vitest run tests/manualsListState.test.ts`.
-- [x] **Paso 6:** Commit atómico de Fase 2.
+- [x] **Paso 1:** Reensamblar `ManualsView.tsx`.
+- [x] **Paso 2:** Verificar tipos con `npx tsc -b`.
+- [x] **Paso 3:** Ejecutar tests con `npx vitest run tests/manualsListState.test.ts tests/manuales.test.ts`.
+- [x] **Paso 4:** Commit atómico de Fase 3.
