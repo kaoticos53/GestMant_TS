@@ -1,30 +1,29 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-EQUIPMENT-VIEW`
-- **Objetivo:** Fase 4 - Verificación de compilación, suite de pruebas completa y cierre de EquipmentView.
+- **ID / Nombre de la Tarea:** `REF-FASE1-CHANGELOG-DIALOG`
+- **Objetivo:** Fase 1 - Extraer tipos, helpers puros y crear suite de tests unitarios para ChangelogDialog.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/EquipmentView.tsx`
-  - `src/pages/dashboard/equipment/`
-  - `tests/equipmentViewHelpers.test.ts`
+  - `src/components/changelog/types.ts`
+  - `src/components/changelog/helpers.ts`
+  - `tests/changelogDialogHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes `EquipmentTable`, `EquipmentModals` y helpers creados en `equipment/`.
-- [x] `EquipmentView.tsx` refactorizado de 311 a 184 líneas (-40.8% de reducción neta en vista orquestadora).
-- [x] Suite de pruebas y build de producción verificados.
+- [x] `src/components/changelog/types.ts` creado.
+- [x] `src/components/changelog/helpers.ts` creado con función pura de filtrado y opciones.
+- [x] `tests/changelogDialogHelpers.test.ts` creado con 13 tests unitarios verdes.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.225 tests pasados (183 archivos pasados, 0 fallos).
+- [x] ¿Tests unitarios y de seguridad? 31 tests verdes.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] Compilación Vite de producción: Exitosa en 5.12s.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y verificada. Lista para commit atómico de cierre de Fase 4.
+- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
