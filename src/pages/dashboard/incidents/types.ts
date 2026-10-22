@@ -16,6 +16,12 @@ export type IncidentDoc = Omit<Doc<"incidents">, "documents"> & {
 
 export type EquipmentDoc = Doc<"equipment">;
 
+export type IncidentSection = {
+  key: string;
+  label: string;
+  items: IncidentDoc[];
+};
+
 /** Orden de la cola: primero lo que está esperando acción. */
 export const STATUS_RANK: Record<IncidentStatus, number> = {
   reported: 0,
