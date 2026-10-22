@@ -1,20 +1,15 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-CHANGELOG-DIALOG`
-- **Objetivo:** Fase 2 - Modularizar cabecera, timeline y filas de cambios en changelog/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-CHANGELOG-DIALOG`
+- **Objetivo:** Fase 3 - Reensamblar ChangelogDialog como orquestador declarativo modular.
 - **Módulo(s) Afectado(s):**
-  - `src/components/changelog/components/ChangelogHeader.tsx`
-  - `src/components/changelog/components/ChangelogChangeRow.tsx`
-  - `src/components/changelog/components/ChangelogReleaseItem.tsx`
-  - `src/components/changelog/components/ChangelogEmptyState.tsx`
-  - `src/components/changelog/components/ChangelogFooter.tsx`
-  - `src/components/changelog/components/index.ts`
+  - `src/components/changelog/ChangelogDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes modulares de ChangelogDialog implementados y exportados.
+- [x] `src/components/changelog/ChangelogDialog.tsx` reensamblado (323 -> 72 líneas, -77.7%).
 
 ---
 
@@ -27,4 +22,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2 y proceder a Fase 3.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3 y proceder a Fase 4.
