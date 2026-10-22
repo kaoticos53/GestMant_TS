@@ -1,12 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-NEW-REQUEST-DIALOG`
-- **Objetivo:** Fase 2 - Modularización de subcomponentes visuales (`RequestEquipmentSection`, `RequestAttachmentsSection`, `RequestPartsSection`).
+- **ID / Nombre de la Tarea:** `REF-FASE3-NEW-REQUEST-DIALOG`
+- **Objetivo:** Fase 3 - Reensamblado de `NewRequestDialog.tsx` como orquestador limpio y desacoplado.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/components/RequestEquipmentSection.tsx`
-  - `src/pages/dashboard/requests/dialogs/components/RequestAttachmentsSection.tsx`
-  - `src/pages/dashboard/requests/dialogs/components/RequestPartsSection.tsx`
+  - `src/pages/dashboard/requests/dialogs/NewRequestDialog.tsx`
 
 ---
 
@@ -18,6 +16,7 @@
 - [x] `src/pages/dashboard/requests/dialogs/components/RequestEquipmentSection.tsx`: Selector accesible de inventario con opción manual y etiquetas aria.
 - [x] `src/pages/dashboard/requests/dialogs/components/RequestAttachmentsSection.tsx`: Subida, previews, spinners de progreso y borrado accesible de ficheros.
 - [x] `src/pages/dashboard/requests/dialogs/components/RequestPartsSection.tsx`: Filtrado de compatibilidad, dropdown de catálogo y filas de repuesto con inputs numéricos.
+- [x] `src/pages/dashboard/requests/dialogs/NewRequestDialog.tsx`: Orquestador declarativo reducido de 648 a 210 líneas (~68% de reducción).
 
 ---
 
@@ -29,9 +28,7 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Implementar `RequestEquipmentSection.tsx`.
-- [x] **Paso 2:** Implementar `RequestAttachmentsSection.tsx`.
-- [x] **Paso 3:** Implementar `RequestPartsSection.tsx`.
-- [x] **Paso 4:** Verificar tipos con `npx tsc -b`.
-- [x] **Paso 5:** Ejecutar tests con `npx vitest run tests/newRequestLogic.test.ts tests/requestsViewFlow.test.tsx`.
-- [x] **Paso 6:** Commit atómico de Fase 2.
+- [x] **Paso 1:** Reensamblar `NewRequestDialog.tsx`.
+- [x] **Paso 2:** Verificar tipos con `npx tsc -b`.
+- [x] **Paso 3:** Ejecutar tests con `npx vitest run tests/newRequestLogic.test.ts tests/requestsViewFlow.test.tsx`.
+- [x] **Paso 4:** Commit atómico de Fase 3.
