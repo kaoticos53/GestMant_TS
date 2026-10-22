@@ -13,6 +13,11 @@
 ## 2. Archivos Modificados / Creados
 - [x] `src/pages/dashboard/requests/helpers.ts`: Extraer `REQUESTS_CSV_HEADER` y `buildRequestsCsvData`.
 - [x] `tests/requestsViewHelpers.test.ts`: Batería de 6 tests unitarios de exportación tabular y formateo.
+- [x] `src/pages/dashboard/requests/types.ts`: Tipo `RequestSection`.
+- [x] `src/pages/dashboard/requests/components/RequestsHeaderBar.tsx`: Filtros de estado, selector de equipo y botones de acción.
+- [x] `src/pages/dashboard/requests/components/RequestsEmptyState.tsx`: Estado vacío contextual con soporte a búsqueda/equipo.
+- [x] `src/pages/dashboard/requests/components/RequestsList.tsx`: ListArea, secciones, RequestCard y TablePagination.
+- [x] `src/pages/dashboard/requests/components/RequestsDialogs.tsx`: Modales de decisión, asociación, detalle y nueva petición.
 
 ---
 
@@ -26,7 +31,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
+- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
 
 
 

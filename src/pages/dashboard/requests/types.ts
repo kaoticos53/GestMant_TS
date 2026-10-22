@@ -18,8 +18,13 @@ export type PartDoc = Doc<"spareParts">;
 export type EquipmentDoc = Doc<"equipment">;
 export type RequestStatusId = RequestDoc["status"];
 
-/** Filtro de la cola: todos o un estado concreto (lo usan el menú y las tarjetas del resumen). */
 export type RequestFilterId = "all" | RequestStatusId;
+
+export type RequestSection = {
+  key: string;
+  label: string;
+  items: RequestDoc[];
+};
 
 export const STATUS_RANK: Record<RequestStatusId, number> = {
   pending: 0,
