@@ -1,19 +1,17 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-MAIL-AUDIENCE-CARD`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de MailAudienceCard en mailAudience/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-MAIL-AUDIENCE-CARD`
+- **Objetivo:** Fase 3 - Reensamblar MailAudienceCard como orquestador declarativo modular con useMailAudienceState.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/mailAudience/components/MailAudienceHeader.tsx`
-  - `src/pages/dashboard/settings/mailAudience/components/MailAudienceMatrixHeader.tsx`
-  - `src/pages/dashboard/settings/mailAudience/components/MailAudienceRow.tsx`
-  - `src/pages/dashboard/settings/mailAudience/components/MailAudienceFooterNotices.tsx`
-  - `src/pages/dashboard/settings/mailAudience/components/index.ts`
+  - `src/pages/dashboard/settings/MailAudienceCard.tsx`
+  - `src/pages/dashboard/settings/mailAudience/hooks/useMailAudienceState.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de MailAudienceCard implementados y exportados.
+- [x] `src/pages/dashboard/settings/mailAudience/hooks/useMailAudienceState.ts` creado.
+- [x] `src/pages/dashboard/settings/MailAudienceCard.tsx` reensamblado (336 -> 75 líneas, -77.7%).
 
 ---
 
@@ -26,4 +24,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2 y proceder a Fase 3.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3 y proceder a Fase 4.
