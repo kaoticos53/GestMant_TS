@@ -2,6 +2,7 @@ import type { Doc } from "@/convex/_generated/dataModel";
 
 export type PartDoc = Doc<"spareParts">;
 export type EquipmentModelDoc = Doc<"equipmentModels">;
+export type EquipmentDoc = Doc<"equipment">;
 
 /** Cuántos equipos enseña a la vez la búsqueda de compatibles. */
 export const COMPATIBLE_RESULTS = 6;
@@ -15,4 +16,14 @@ export interface InventoryViewProps {
   initialSearch?: string;
   /** Abre la tabla mostrando solo lo que está por debajo del mínimo */
   initialLowStockOnly?: boolean;
+}
+
+export interface FilterInventoryParams {
+  parts: PartDoc[];
+  equipment: EquipmentDoc[];
+  catalogModels: EquipmentModelDoc[];
+  category: string;
+  equipmentFilter: string;
+  lowStockOnly: boolean;
+  search: string;
 }
