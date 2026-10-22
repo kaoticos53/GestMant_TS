@@ -1,19 +1,19 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-ASSOCIATE-DIALOG`
-- **Objetivo:** Fase 1 - Extraer tipos de dominio (`types.ts`), helpers puros de parseo numérico, compatibilidad y validación (`helpers.ts`) y suite de tests unitarios (`tests/associateDialogHelpers.test.ts`) para `AssociateDialog.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-ASSOCIATE-DIALOG`
+- **Objetivo:** Fase 2 - Modularizar subcomponentes visuales de selección de modo, selección de repuesto existente y formulario de alta de nuevo repuesto para `AssociateDialog.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/associate/types.ts`
-  - `src/pages/dashboard/requests/dialogs/associate/helpers.ts`
-  - `tests/associateDialogHelpers.test.ts`
+  - `src/pages/dashboard/requests/dialogs/associate/components/AssociateModeToggle.tsx`
+  - `src/pages/dashboard/requests/dialogs/associate/components/AssociateExistingSection.tsx`
+  - `src/pages/dashboard/requests/dialogs/associate/components/AssociateNewSection.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/requests/dialogs/associate/types.ts`: Tipos `AssociateMode`, `AssociateDialogProps`, contratos de props.
-- [x] `src/pages/dashboard/requests/dialogs/associate/helpers.ts`: Funciones puras `parseNumericInput`, `getCompatibleParts`, `validateNewPartPayload`.
-- [x] `tests/associateDialogHelpers.test.ts`: Tests unitarios para las funciones puras de helpers (12 tests pasados).
+- [x] `src/pages/dashboard/requests/dialogs/associate/components/AssociateModeToggle.tsx`: Conmutador de modo ("existing" vs "new").
+- [x] `src/pages/dashboard/requests/dialogs/associate/components/AssociateExistingSection.tsx`: Selector de catálogo, filtro de compatibilidad y cantidad.
+- [x] `src/pages/dashboard/requests/dialogs/associate/components/AssociateNewSection.tsx`: Formulario de 11 campos con autocompletados y editor enriquecido.
 
 ---
 
@@ -26,7 +26,7 @@
 ---
 
 ## 4. Estado Final
-- **Estado:** Completada Fase 1. Lista para commit.
+- **Estado:** Completada Fase 2. Lista para commit.
 
 
 
