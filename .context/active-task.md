@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-DATA-TABLE-TOOLBAR`
-- **Objetivo:** Fase 2 - Crear hook `useDataTableToolbarSearch` y subcomponentes visuales (`DataTableToolbarSearch`, `DataTableToolbarReset`, `DataTableToolbarDensity`) con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-DATA-TABLE-TOOLBAR`
+- **Objetivo:** Fase 3 - Reensamblar `DataTableToolbar.tsx` consumiendo el submódulo modular `dataTableToolbar/`, reduciendo su tamaño de 222 a ~65 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/components/dataTableToolbar/hooks/useDataTableToolbarSearch.ts`
-  - `src/components/dataTableToolbar/components/DataTableToolbarSearch.tsx`
-  - `src/components/dataTableToolbar/components/DataTableToolbarReset.tsx`
-  - `src/components/dataTableToolbar/components/DataTableToolbarDensity.tsx`
-  - `src/components/dataTableToolbar/index.ts`
+  - `src/components/DataTableToolbar.tsx`
 
 ---
 
@@ -21,6 +17,7 @@
 - [x] `dataTableToolbar/components/DataTableToolbarReset.tsx`: botón accesible para limpiar filtros.
 - [x] `dataTableToolbar/components/DataTableToolbarDensity.tsx`: selector toggle accesible de densidad.
 - [x] `dataTableToolbar/index.ts`: barril unificado.
+- [x] `DataTableToolbar.tsx`: reducción de 222 a ~65 líneas orquestando limpiamente.
 
 ---
 
@@ -33,4 +30,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
