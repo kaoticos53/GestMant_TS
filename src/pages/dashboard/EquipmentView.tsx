@@ -1,29 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
-import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
-import { SortableTableHead, TableSortBar } from "@/components/TableSort";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { api } from "@/convex/_generated/api";
-import type { ManualRights } from "@/lib/manuals";
 import { useQuery } from "convex/react";
 import { Plus } from "lucide-react";
-import { EquipmentDetailSheet } from "./equipment/components/EquipmentDetailSheet";
-import { EquipmentEmptyState } from "./equipment/components/EquipmentEmptyState";
-import { EquipmentTableRow } from "./equipment/components/EquipmentTableRow";
-import { DeleteEquipmentDialog } from "./equipment/dialogs/DeleteEquipmentDialog";
-import { EquipmentFormDialog } from "./equipment/dialogs/EquipmentFormDialog";
+import {
+  EquipmentEmptyState,
+  EquipmentModals,
+  EquipmentTable,
+} from "./equipment/components";
+import { canAddManualNotes, getManualRights } from "./equipment/helpers";
 import { useEquipmentDialogs } from "./equipment/hooks/useEquipmentDialogs";
 import { useEquipmentListState } from "./equipment/hooks/useEquipmentListState";
-import { ManualDeleteDialog } from "./ManualDeleteDialog";
-import { ManualDetailSheet } from "./ManualDetailSheet";
-import { ManualFormDialog } from "./ManualFormDialog";
 
 export function EquipmentView({
   canManage = false,
@@ -97,11 +85,8 @@ export function EquipmentView({
     setManualDelete,
   } = useEquipmentDialogs();
 
-  const canAddManual = canWriteManuals || canManageManuals;
-  const rights: ManualRights = {
-    manage: canManageManuals,
-    userId: currentUserId,
-  };
+  const canAddManual = canAddManualNotes(canWriteManuals, canManageManuals);
+  const rights = getManualRights(canManageManuals, currentUserId);
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,89 +122,22 @@ export function EquipmentView({
             onClearSearch={() => setSearch("")}
           />
         ) : (
-          <>
-            <TableSortBar
-              columns={columns}
-              sort={sort}
-              onSortChange={setSort}
-            />
-            <ListArea ref={areaRef} resetKey={paging.page}>
-              <Table>
-                <TableHeader className="sticky top-0 z-10 bg-card">
-                  <TableRow>
-                    <SortableTableHead
-                      column="equipment"
-                      label="Equipo"
-                      sort={sort}
-                      onSortChange={setSort}
-                    />
-                    <SortableTableHead
-                      column="brand"
-                      label="Marca"
-                      sort={sort}
-                      onSortChange={setSort}
-                      className="hidden md:table-cell"
-                    />
-                    <SortableTableHead
-                      column="serial"
-                      label="Nº de serie"
-                      sort={sort}
-                      onSortChange={setSort}
-                      className="hidden xl:table-cell"
-                    />
-                    <SortableTableHead
-                      column="location"
-                      label="Ubicación"
-                      sort={sort}
-                      onSortChange={setSort}
-                      className="hidden lg:table-cell"
-                    />
-                    <SortableTableHead
-                      column="manuals"
-                      label="Manuales"
-                      sort={sort}
-                      onSortChange={setSort}
-                      align="right"
-                      className="text-right"
-                    />
-                    <SortableTableHead
-                      column="parts"
-                      label="Repuestos compatibles"
-                      sort={sort}
-                      onSortChange={setSort}
-                      align="right"
-                      className="text-right"
-                    />
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visible.map((item) => {
-                    const review = reviewOf(item);
-                    const docs = manualsOf(item);
-                    return (
-                      <EquipmentTableRow
-                        key={item._id}
-                        item={item}
-                        canManage={canManage}
-                        reviewOverdue={review.state === "overdue"}
-                        manualsCount={{
-                          assigned: docs.assigned.length,
-                          byModel: docs.byModel.length,
-                          total: docs.assigned.length + docs.byModel.length,
-                        }}
-                        compatibleCount={compatibleCount(item)}
-                        onViewDetail={openDetail}
-                        onDuplicate={openDuplicateForm}
-                        onEdit={openEditForm}
-                        onDelete={setDeleteTarget}
-                      />
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ListArea>
-          </>
+          <EquipmentTable
+            columns={columns}
+            sort={sort}
+            onSortChange={setSort}
+            areaRef={areaRef}
+            resetKey={paging.page}
+            visible={visible}
+            canManage={canManage}
+            reviewOf={reviewOf}
+            manualsOf={manualsOf}
+            compatibleCount={compatibleCount}
+            onViewDetail={openDetail}
+            onDuplicate={openDuplicateForm}
+            onEdit={openEditForm}
+            onDelete={setDeleteTarget}
+          />
         )}
 
         {filtered.length > 0 && (
@@ -236,75 +154,30 @@ export function EquipmentView({
         )}
       </div>
 
-      {detail && (
-        <EquipmentDetailSheet
-          item={detail.item}
-          openedAt={detail.openedAt}
-          parts={parts}
-          requests={requests}
-          maintenance={recordsFor(detail.item)}
-          manuals={manualsOf(detail.item)}
-          canManage={canManage}
-          canAddManual={canAddManual}
-          rights={rights}
-          onAddManual={(item) =>
-            setManualForm({ manual: null, equipmentId: item._id })
-          }
-          onViewManual={setManualDetail}
-          onEditManual={(manual) =>
-            setManualForm({ manual, equipmentId: null })
-          }
-          onDeleteManual={setManualDelete}
-          onClose={closeDetail}
-          onViewRequests={(equipmentId) => {
-            closeDetail();
-            onViewRequests(equipmentId);
-          }}
-        >
-          {manualDetail && (
-            <ManualDetailSheet
-              manual={manualDetail}
-              equipment={equipment}
-              onClose={() => setManualDetail(null)}
-            />
-          )}
-
-          {manualForm && (
-            <ManualFormDialog
-              key={manualForm.manual?._id ?? `manual-${manualForm.equipmentId}`}
-              manual={manualForm.manual}
-              equipment={equipment}
-              canManage={canManageManuals}
-              fixedEquipmentId={manualForm.equipmentId}
-              onClose={() => setManualForm(null)}
-            />
-          )}
-
-          {manualDelete && (
-            <ManualDeleteDialog
-              manual={manualDelete}
-              onClose={() => setManualDelete(null)}
-              onDeleted={() => setManualDetail(null)}
-            />
-          )}
-        </EquipmentDetailSheet>
-      )}
-
-      {formTarget && (
-        <EquipmentFormDialog
-          key={formTarget.item?._id ?? formTarget.initialValues?.model ?? "new"}
-          item={formTarget.item}
-          initialValues={formTarget.initialValues}
-          onClose={closeForm}
-        />
-      )}
-
-      {deleteTarget && (
-        <DeleteEquipmentDialog
-          item={deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
+      <EquipmentModals
+        detail={detail}
+        parts={parts}
+        requests={requests}
+        equipment={equipment}
+        maintenanceRecordsFor={recordsFor}
+        manualsOf={manualsOf}
+        canManage={canManage}
+        canAddManual={canAddManual}
+        canManageManuals={canManageManuals}
+        rights={rights}
+        formTarget={formTarget}
+        deleteTarget={deleteTarget}
+        manualForm={manualForm}
+        manualDetail={manualDetail}
+        manualDelete={manualDelete}
+        onCloseDetail={closeDetail}
+        onViewRequests={onViewRequests}
+        setManualForm={setManualForm}
+        setManualDetail={setManualDetail}
+        setManualDelete={setManualDelete}
+        closeForm={closeForm}
+        setDeleteTarget={setDeleteTarget}
+      />
     </div>
   );
 }

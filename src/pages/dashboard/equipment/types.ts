@@ -93,7 +93,7 @@ export interface EquipmentTableProps {
   onSortChange: (
     sort: import("@/lib/tableSort").TableSort<EquipmentColumn> | null,
   ) => void;
-  areaRef: React.RefObject<HTMLDivElement | null>;
+  areaRef: React.Ref<HTMLDivElement>;
   resetKey: number;
   visible: EquipmentDoc[];
   canManage: boolean;
@@ -130,7 +130,7 @@ export interface EquipmentModalsProps {
   deleteTarget: EquipmentDoc | null;
   manualForm: {
     manual: ManualDoc | null;
-    equipmentId: Id<"equipment"> | null;
+    equipmentId: string | null;
   } | null;
   manualDetail: ManualDoc | null;
   manualDelete: ManualDoc | null;
@@ -139,7 +139,7 @@ export interface EquipmentModalsProps {
   setManualForm: (
     target: {
       manual: ManualDoc | null;
-      equipmentId: Id<"equipment"> | null;
+      equipmentId: string | null;
     } | null,
   ) => void;
   setManualDetail: (manual: ManualDoc | null) => void;
