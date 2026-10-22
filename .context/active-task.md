@@ -13,6 +13,8 @@
 
 ## 2. Archivos Modificados / Creados
 - [x] Subcomponentes visuales de imagen y avisos de fallo (`Picture.tsx`, `NotOpenedNotice.tsx`, `UnavailableNotice.tsx`, `NoFileNotice.tsx`).
+- [x] Hook de estado (`usePictureNoticeState.ts`) y ensamblador `PictureWithNotice.tsx`.
+- [x] Orquestador declarativo (`AttachmentImage.tsx`, 393 -> 31 líneas, -92.1%).
 
 ---
 
@@ -25,7 +27,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
