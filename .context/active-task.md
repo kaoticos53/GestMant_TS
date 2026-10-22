@@ -21,13 +21,14 @@
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 37 tests pasados al 100%.
+- [x] ¿Tests unitarios y de seguridad? 2.120 tests pasados al 100% en Vitest (174 suites).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
+- [x] ¿Build de producción Vite? Verificado (dist generado en 4.95s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
+- **Estado:** Fase 4 completada. Componente `MailProviderSettingsFields.tsx` modularizado (387 -> 138 líneas, -64.3%) con 100% tests verdes y build limpio.
 
 
 
