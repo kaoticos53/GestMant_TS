@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import {
   Table,
   TableBody,
@@ -17,7 +16,7 @@ export interface InventoryTableProps {
   columns: typeof INVENTORY_SORT_COLUMNS;
   sort: TableSort<keyof typeof INVENTORY_SORT_COLUMNS> | null;
   onSortChange: (sort: TableSort<keyof typeof INVENTORY_SORT_COLUMNS> | null) => void;
-  areaRef: RefObject<HTMLDivElement | null>;
+  areaRef: (element: HTMLDivElement | null) => void;
   page: number;
   visibleParts: PartDoc[];
   canManage: boolean;
