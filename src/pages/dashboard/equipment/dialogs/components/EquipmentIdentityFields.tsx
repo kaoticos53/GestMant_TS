@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import type { Doc } from "@/convex/_generated/dataModel";
 import type { MatchedTemplate } from "../equipmentFormLogic";
 
 export interface EquipmentIdentityFieldsProps {
@@ -14,7 +15,7 @@ export interface EquipmentIdentityFieldsProps {
   model: string;
   matchedTemplate: MatchedTemplate | null;
   allSuggestedModels: string[];
-  catalogBrands: { id: string; name: string }[];
+  catalogBrands: Doc<"catalogs">[];
   onCodeChange: (value: string) => void;
   onBrandChange: (value: string) => void;
   onNameChange: (value: string) => void;

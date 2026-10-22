@@ -1,3 +1,4 @@
+import type { Doc } from "@/convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
@@ -7,8 +8,8 @@ export interface EquipmentDetailsFieldsProps {
   location: string;
   serialNumber: string;
   supplier: string;
-  catalogLocations: { id: string; name: string }[];
-  catalogSuppliers: { id: string; name: string }[];
+  catalogLocations: Doc<"catalogs">[];
+  catalogSuppliers: Doc<"catalogs">[];
   onLocationChange: (value: string) => void;
   onSerialNumberChange: (value: string) => void;
   onSupplierChange: (value: string) => void;
