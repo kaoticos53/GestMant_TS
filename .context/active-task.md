@@ -1,20 +1,23 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-DASHBOARD-SIDEBAR`
-- **Objetivo:** Fase 1 - Creación de helpers de estilo, contratos de tipos y suite unitaria para `DashboardSidebar.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-DASHBOARD-SIDEBAR`
+- **Objetivo:** Fase 2 - Desacoplamiento de cabecera, navegación, pie y manejador de redimensionamiento de `DashboardSidebar.tsx` en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/components/DashboardSidebar.tsx`
-  - `src/pages/dashboard/components/sidebar/types.ts`
-  - `src/pages/dashboard/components/sidebar/helpers.ts`
-  - `tests/dashboardSidebarHelpers.test.ts`
+  - `src/pages/dashboard/components/sidebar/SidebarHeader.tsx`
+  - `src/pages/dashboard/components/sidebar/SidebarNavList.tsx`
+  - `src/pages/dashboard/components/sidebar/SidebarFooter.tsx`
+  - `src/pages/dashboard/components/sidebar/SidebarResizeHandle.tsx`
+  - `src/pages/dashboard/components/sidebar/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `sidebar/types.ts`: contratos de props para cabecera, lista de navegación, pie y manejador de redimensionamiento.
-- [x] `sidebar/helpers.ts`: funciones puras `getNavButtonClass` y `getNavPillClass`.
-- [x] `tests/dashboardSidebarHelpers.test.ts`: 4 pruebas unitarias verificando estados activos y discretos.
+- [x] `SidebarHeader.tsx`: logo, marca del taller, campana de notificaciones y centro de mensajes.
+- [x] `SidebarNavList.tsx`: lista accesible de navegación con distintivos e insignias, y acceso a incidencias para invitados.
+- [x] `SidebarFooter.tsx`: tarjeta de perfil, botón de plegado accesible, badge de rol, botón de salir y changelog modal.
+- [x] `SidebarResizeHandle.tsx`: separador accesible con agarre táctil y foco por teclado.
+- [x] `sidebar/index.ts`: barril unificado del módulo sidebar.
 
 ---
 
@@ -27,7 +30,8 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+
 
 
 
