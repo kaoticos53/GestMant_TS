@@ -1,19 +1,19 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-PART-REQUESTS-CARD`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers puros de estado de material de petición y líneas con pruebas unitarias.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-PART-REQUESTS-CARD`
+- **Objetivo:** Fase 2 - Desacoplamiento de componentes de presentación (`IncidentPartRequestLine`, `IncidentPartRequestItem`) y barril en `partRequests/`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/partRequests/types.ts`
-  - `src/pages/dashboard/incidents/components/detail/partRequests/helpers.ts`
-  - `tests/incidentPartRequestsCardHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/partRequests/IncidentPartRequestLine.tsx`
+  - `src/pages/dashboard/incidents/components/detail/partRequests/IncidentPartRequestItem.tsx`
+  - `src/pages/dashboard/incidents/components/detail/partRequests/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `partRequests/types.ts`: contratos de props para `IncidentPartRequestsCard`, `IncidentPartRequestItem` e `IncidentPartRequestLine`.
-- [x] `partRequests/helpers.ts`: funciones puras `untouchedLineLabel`, `resolveRequestDeliveryMeta` y `getLineProgress`.
-- [x] `tests/incidentPartRequestsCardHelpers.test.ts`: 5 tests unitarios verificando estados de material, líneas y resolución de metadatos.
+- [x] `partRequests/IncidentPartRequestLine.tsx`: componente atómico para el renderizado y desglose cuantitativo de una línea de repuesto.
+- [x] `partRequests/IncidentPartRequestItem.tsx`: ficha individual de la petición con cabecera, badges, líneas y notas de entrega/archivo.
+- [x] `partRequests/index.ts`: barril unificado para el submódulo partRequests.
 
 ---
 
@@ -26,4 +26,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
