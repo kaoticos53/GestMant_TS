@@ -1,12 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-WORKSHOP-SETTINGS-VIEW`
-- **Objetivo:** Fase 2 - Crear subcomponentes `WorkshopSettingsTabsHeader` y `WorkshopSettingsTabsPanels` con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-WORKSHOP-SETTINGS-VIEW`
+- **Objetivo:** Fase 3 - Reensamblar `WorkshopSettingsView.tsx` consumiendo el submódulo modular `settings/view/`, reduciendo su tamaño de 225 a ~45 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/view/components/WorkshopSettingsTabsHeader.tsx`
-  - `src/pages/dashboard/settings/view/components/WorkshopSettingsTabsPanels.tsx`
-  - `src/pages/dashboard/settings/view/index.ts`
+  - `src/pages/dashboard/WorkshopSettingsView.tsx`
 
 ---
 
@@ -17,6 +15,7 @@
 - [x] `settings/view/components/WorkshopSettingsTabsHeader.tsx`: cabecera accesible horizontal con triggers de tabs.
 - [x] `settings/view/components/WorkshopSettingsTabsPanels.tsx`: paneles temáticos agrupados y condicionales.
 - [x] `settings/view/index.ts`: barril unificado.
+- [x] `WorkshopSettingsView.tsx`: reducción de 225 a ~45 líneas orquestando limpiamente.
 
 ---
 
@@ -29,4 +28,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
