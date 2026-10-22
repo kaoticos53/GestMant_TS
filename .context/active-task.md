@@ -1,19 +1,21 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-EQUIPMENT-CARD`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers puros de formateo y tests unitarios para `IncidentEquipmentCard`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-EQUIPMENT-CARD`
+- **Objetivo:** Fase 2 - Desacoplamiento de subsecciones visuales (`IncidentNotificationSection`, `IncidentAssignmentSection`, `IncidentExternalRepairSection`) y barril en `equipment/`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/equipment/types.ts`
-  - `src/pages/dashboard/incidents/components/detail/equipment/helpers.ts`
-  - `tests/incidentEquipmentCardHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/equipment/IncidentNotificationSection.tsx`
+  - `src/pages/dashboard/incidents/components/detail/equipment/IncidentAssignmentSection.tsx`
+  - `src/pages/dashboard/incidents/components/detail/equipment/IncidentExternalRepairSection.tsx`
+  - `src/pages/dashboard/incidents/components/detail/equipment/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `equipment/types.ts`: contratos de props para las subsecciones de la tarjeta de equipo.
-- [x] `equipment/helpers.ts`: funciones puras `formatExternalRepairCost`, `getExternalRepairBadge`, `formatSatContact`, `getEquipmentInventoryInfo`.
-- [x] `tests/incidentEquipmentCardHelpers.test.ts`: 12 tests unitarios cubriendo los helpers con tipado estricto sin `any`.
+- [x] `equipment/IncidentNotificationSection.tsx`: datos de notificación, equipamiento en inventario, seguimiento y descripción.
+- [x] `equipment/IncidentAssignmentSection.tsx`: asignación de técnicos, entrada a taller, fecha de cierre y notas.
+- [x] `equipment/IncidentExternalRepairSection.tsx`: gestión de SAT, costes en EUR, fechas de retorno e informes.
+- [x] `equipment/index.ts`: barril unificado para el submódulo equipment.
 
 ---
 
@@ -26,4 +28,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
