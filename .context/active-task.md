@@ -15,6 +15,9 @@
 - [x] `src/pages/auth/types.ts`: Tipos `AuthProps`, `AuthMethod`, `PasswordFlow`, `OtpStep`.
 - [x] `src/pages/auth/helpers.ts`: Función pura `resolveRedirectAfterAuth` con prevención Open Redirect (CWE-601).
 - [x] `tests/authHelpers.test.ts`: Batería de 5 tests unitarios verificando rutas relativas, esquemas bloqueados y fallbacks.
+- [x] `src/pages/auth/components/AuthHeader.tsx`: Logo, títulos y conmutador de método de acceso.
+- [x] `src/pages/auth/components/PasswordAuthForm.tsx`: Formulario de acceso/registro con email y contraseña.
+- [x] `src/pages/auth/components/OtpEmailForm.tsx`: Flujo OTP por correo (paso de solicitud y paso de verificación con InputOTP).
 
 ---
 
@@ -28,7 +31,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
+- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
 
 
 
