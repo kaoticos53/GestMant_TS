@@ -1,21 +1,15 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-PENDING-SECTION`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales desacoplados (`PurchaseRequestActionDialog`, `PurchaseRequestRow`, `MissingStockCard`, `SupplierGroupCard`).
+- **ID / Nombre de la Tarea:** `REF-FASE3-PENDING-SECTION`
+- **Objetivo:** Fase 3 - Reensamblado de `PendingSection.tsx` como orquestador limpio y desacoplado.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/purchasing/components/pending/components/PurchaseRequestActionDialog.tsx`
-  - `src/pages/dashboard/purchasing/components/pending/components/PurchaseRequestRow.tsx`
-  - `src/pages/dashboard/purchasing/components/pending/components/MissingStockCard.tsx`
-  - `src/pages/dashboard/purchasing/components/pending/components/SupplierGroupCard.tsx`
+  - `src/pages/dashboard/purchasing/components/PendingSection.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `PurchaseRequestActionDialog.tsx`: Diálogo modal singleton elevado para proveedor/nota/retirar.
-- [x] `PurchaseRequestRow.tsx`: Fila puramente presentacional sin modales en el DOM.
-- [x] `MissingStockCard.tsx`: Tarjeta de peticiones de repuesto sin material en almacén.
-- [x] `SupplierGroupCard.tsx`: Tarjeta de agrupación por proveedor con selector de grupo.
+- [x] `PendingSection.tsx`: Orquestador principal refactorizado, reducido de 552 a 129 líneas (~77% de reducción).
 
 ---
 
@@ -27,9 +21,7 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `PurchaseRequestActionDialog.tsx`.
-- [x] **Paso 2:** Crear `PurchaseRequestRow.tsx`.
-- [x] **Paso 3:** Crear `MissingStockCard.tsx`.
-- [x] **Paso 4:** Crear `SupplierGroupCard.tsx`.
-- [x] **Paso 5:** Verificar con `npx tsc -b`.
-- [x] **Paso 6:** Commit atómico de Fase 2.
+- [x] **Paso 1:** Reensamblar `PendingSection.tsx`.
+- [x] **Paso 2:** Verificar tipos con `npx tsc -b`.
+- [x] **Paso 3:** Ejecutar suite de pruebas de compras con Vitest (38 tests verdes).
+- [x] **Paso 4:** Commit atómico de Fase 3.
