@@ -1,19 +1,20 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-ARCHIVE-TRASH-SECTION`
-- **Objetivo:** Fase 1 - Extraer tipos, helpers puros y crear suite de tests unitarios para la papelera de archivo.
+- **ID / Nombre de la Tarea:** `REF-FASE2-ARCHIVE-TRASH-SECTION`
+- **Objetivo:** Fase 2 - Desacoplar subcomponentes modulares de ArchiveTrashSection en trashSection/components/.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/trashSection/types.ts`
-  - `src/pages/dashboard/archive/components/trashSection/helpers.ts`
-  - `tests/archiveTrashSectionHelpers.test.ts`
+  - `src/pages/dashboard/archive/components/trashSection/components/TrashGroup.tsx`
+  - `src/pages/dashboard/archive/components/trashSection/components/TrashButtons.tsx`
+  - `src/pages/dashboard/archive/components/trashSection/components/TrashedIncidentItem.tsx`
+  - `src/pages/dashboard/archive/components/trashSection/components/TrashedRequestItem.tsx`
+  - `src/pages/dashboard/archive/components/trashSection/components/TrashDeleteDialog.tsx`
+  - `src/pages/dashboard/archive/components/trashSection/components/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/archive/components/trashSection/types.ts` creado.
-- [x] `src/pages/dashboard/archive/components/trashSection/helpers.ts` creado con funciones puras de formateo.
-- [x] `tests/archiveTrashSectionHelpers.test.ts` creado con 14 tests unitarios verdes.
+- [x] Subcomponentes visuales de la papelera implementados y exportados.
 
 ---
 
@@ -26,4 +27,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
+- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2 y proceder a Fase 3.
