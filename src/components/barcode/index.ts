@@ -1,6 +1,7 @@
 export { ScannerCameraUnavailable } from "./ScannerCameraUnavailable";
 export { ScannerManualFallback } from "./ScannerManualFallback";
 export { ScannerViewport } from "./ScannerViewport";
+export { useBarcodeScannerStream } from "./useBarcodeScannerStream";
 export {
   DEFAULT_BARCODE_FORMATS,
   cleanScannedCode,
