@@ -1,18 +1,21 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-DETAIL-SHEET`
-- **Objetivo:** Fase 1 - Creación de helpers puros y test suite unitaria para `IncidentDetailSheet.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-DETAIL-SHEET`
+- **Objetivo:** Fase 2 - Desacoplamiento de banners de ciclo de vida, historial de estados y modales de equipo en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/IncidentDetailSheet.tsx`
-  - `src/pages/dashboard/incidents/components/detail/helpers.ts`
-  - `tests/incidentDetailSheetHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/IncidentStatusBanners.tsx`
+  - `src/pages/dashboard/incidents/components/detail/IncidentHistoryCard.tsx`
+  - `src/pages/dashboard/incidents/components/detail/IncidentEquipmentModals.tsx`
+  - `src/pages/dashboard/incidents/components/detail/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/incidents/components/detail/helpers.ts`: funciones puras `getIncidentNextHint`, `getJourneyNowLabel`, `resolveIncidentDerivedState` y `filterAndSortIncidentRequests`.
-- [x] `tests/incidentDetailSheetHelpers.test.ts`: 18 pruebas unitarias exhaustivas con 100% de ramas cubiertas.
+- [x] `IncidentStatusBanners.tsx`: avisos contextuales de retirada a la papelera y archivo.
+- [x] `IncidentHistoryCard.tsx`: línea de tiempo de cambios de estado y anotaciones rich text.
+- [x] `IncidentEquipmentModals.tsx`: encapsulación de modales subordinados de corrección y alta de equipo con mutación y toasts.
+- [x] `detail/index.ts`: barril unificado de exportaciones del detalle.
 
 ---
 
@@ -25,7 +28,8 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+
 
 
 
