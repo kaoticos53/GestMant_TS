@@ -1,19 +1,19 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-REQUEST-ACTIONS-FOOTER`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers deterministas de visibilidad de acciones y pruebas unitarias para `RequestActionsFooter`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-REQUEST-ACTIONS-FOOTER`
+- **Objetivo:** Fase 2 - Creación de subcomponentes desacoplados `RequestWithdrawDialog` y `RequestWorkflowButtons` con barril público.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/components/detail/actions/types.ts`
-  - `src/pages/dashboard/requests/components/detail/actions/helpers.ts`
-  - `tests/requestActionsFooterHelpers.test.ts`
+  - `src/pages/dashboard/requests/components/detail/actions/RequestWithdrawDialog.tsx`
+  - `src/pages/dashboard/requests/components/detail/actions/RequestWorkflowButtons.tsx`
+  - `src/pages/dashboard/requests/components/detail/actions/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `actions/types.ts`: interfaces de props y de flags de acciones (`RequestActionFlags`, `RequestWorkflowButtonsProps`, etc.).
-- [x] `actions/helpers.ts`: funciones puras `computeRequestActionFlags` y `sanitizeWithdrawReason`.
-- [x] `tests/requestActionsFooterHelpers.test.ts`: 9 tests unitarios cubriendo todos los estados clave y permisos.
+- [x] `RequestWithdrawDialog.tsx`: diálogo accesible con captura de motivo para papelera.
+- [x] `RequestWorkflowButtons.tsx`: barra completa de acciones de flujo de trabajo tipadas y condicionales.
+- [x] `actions/index.ts`: barril público que expone helpers, componentes y tipos.
 
 ---
 
@@ -26,4 +26,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
