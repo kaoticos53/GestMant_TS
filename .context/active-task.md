@@ -1,32 +1,36 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-CATALOGS-CARD`
-- **Objetivo:** Fase 1 - Extraer tipos de dominio (`types.ts`), helpers puros de filtrado/validación (`helpers.ts`) y suite de tests unitarios (`tests/catalogsCardHelpers.test.ts`) para `CatalogsCard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-CATALOGS-CARD`
+- **Objetivo:** Fase 2 - Extraer y modularizar los 4 diálogos modales en `src/pages/dashboard/settings/catalogs/dialogs/` (`AddCatalogItemDialog`, `EditCatalogItemDialog`, `MergeCatalogItemDialog`, `DeleteCatalogItemDialog`).
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/catalogs/types.ts`
-  - `src/pages/dashboard/settings/catalogs/helpers.ts`
-  - `tests/catalogsCardHelpers.test.ts`
+  - `src/pages/dashboard/settings/catalogs/dialogs/AddCatalogItemDialog.tsx`
+  - `src/pages/dashboard/settings/catalogs/dialogs/EditCatalogItemDialog.tsx`
+  - `src/pages/dashboard/settings/catalogs/dialogs/MergeCatalogItemDialog.tsx`
+  - `src/pages/dashboard/settings/catalogs/dialogs/DeleteCatalogItemDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/settings/catalogs/types.ts`: Tipos `CatalogItemDoc`, `EditingCatalogItem`, `MergingCatalogItem` y contratos de props.
-- [x] `src/pages/dashboard/settings/catalogs/helpers.ts`: Funciones puras `filterCatalogItems`, `validateCatalogItemName` y `getAvailableMergeTargets`.
-- [x] `tests/catalogsCardHelpers.test.ts`: Tests unitarios para las funciones puras de helpers (8 tests).
+- [x] `src/pages/dashboard/settings/catalogs/dialogs/AddCatalogItemDialog.tsx`: Diálogo modal para añadir nueva opción canónica.
+- [x] `src/pages/dashboard/settings/catalogs/dialogs/EditCatalogItemDialog.tsx`: Diálogo modal para editar nombre canónico existente.
+- [x] `src/pages/dashboard/settings/catalogs/dialogs/MergeCatalogItemDialog.tsx`: Diálogo modal para fusionar duplicados.
+- [x] `src/pages/dashboard/settings/catalogs/dialogs/DeleteCatalogItemDialog.tsx`: Diálogo modal de confirmación de eliminación.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio sin errores.
-- [x] ¿Tests unitarios? 8 tests pasando al 100%.
-- [x] ¿Guardrails de Arquitectura y Seguridad? Verificados (18 tests).
+- [x] ¿Tests unitarios? 26 tests pasando al 100% (helpers, arquitectura, seguridad).
+- [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 
 ---
 
 ## 4. Estado Final
-- **Estado:** Fase 1 completada. Listo para commit atómico.
+- **Estado:** Fase 2 completada. Listo para commit atómico.
+
+
 
 
 
