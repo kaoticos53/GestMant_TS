@@ -1,33 +1,32 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-MAIL-PROVIDER-FIELDS`
-- **Objetivo:** Fase 1 - Extraer tipos, helpers de textos explicativos y tests unitarios para MailProviderSettingsFields.
+- **ID / Nombre de la Tarea:** `REF-FASE2-MAIL-PROVIDER-FIELDS`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales en src/pages/dashboard/settings/mail/components/providerFields/components/.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/mail/components/providerFields/types.ts`
-  - `src/pages/dashboard/settings/mail/components/providerFields/helpers.ts`
-  - `tests/mailProviderFieldsHelpers.test.ts`
-  - `src/pages/dashboard/settings/mail/components/MailProviderSettingsFields.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/components/ProviderSelector.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/components/SenderFields.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/components/RelayFields.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/components/CredentialsFields.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/components/ProviderActionsBar.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/settings/mail/components/providerFields/types.ts`: Contratos de props para subcomponentes.
-- [x] `src/pages/dashboard/settings/mail/components/providerFields/helpers.ts`: Funciones puras de textos explicativos.
-- [x] `tests/mailProviderFieldsHelpers.test.ts`: Batería de 8 tests unitarios de helpers de textos (8 tests pasando).
+- [x] Subcomponentes visuales de configuración de correo (`ProviderSelector.tsx`, `SenderFields.tsx`, `RelayFields.tsx`, `CredentialsFields.tsx`, `ProviderActionsBar.tsx`).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 8 tests pasados al 100%.
+- [x] ¿Tests unitarios y de seguridad? 37 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
+- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
 
 
 
