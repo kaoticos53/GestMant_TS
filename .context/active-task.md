@@ -1,23 +1,17 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-EQUIPMENT-MODELS-CARD`
-- **Objetivo:** Fase 2 - Modularizar subcomponentes visuales de cabecera (`EquipmentModelsHeader`), barra de búsqueda (`EquipmentModelsSearchBar`), estados vacíos (`EquipmentModelsEmptyState`), tabla con insignias de uso (`EquipmentModelsTable`) y diálogo de borrado (`DeleteEquipmentModelDialog`) para `EquipmentModelsCard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-EQUIPMENT-MODELS-CARD`
+- **Objetivo:** Fase 3 - Extraer custom hook `useEquipmentModelsState` y reensamblar `EquipmentModelsCard.tsx` como componente orquestador limpio (~84 líneas).
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsHeader.tsx`
-  - `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsSearchBar.tsx`
-  - `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsEmptyState.tsx`
-  - `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsTable.tsx`
-  - `src/pages/dashboard/settings/equipmentModels/components/DeleteEquipmentModelDialog.tsx`
+  - `src/pages/dashboard/settings/equipmentModels/hooks/useEquipmentModelsState.ts`
+  - `src/pages/dashboard/settings/EquipmentModelsCard.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsHeader.tsx`: Cabecera de tarjeta y botón de alta.
-- [x] `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsSearchBar.tsx`: Input de búsqueda con contador de modelos.
-- [x] `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsEmptyState.tsx`: Estado vacío descriptivo.
-- [x] `src/pages/dashboard/settings/equipmentModels/components/EquipmentModelsTable.tsx`: Tabla responsiva con badges de uso e icono de preventivo.
-- [x] `src/pages/dashboard/settings/equipmentModels/components/DeleteEquipmentModelDialog.tsx`: Diálogo modal con restricción explicativa o confirmación.
+- [x] `src/pages/dashboard/settings/equipmentModels/hooks/useEquipmentModelsState.ts`: Custom hook que encapsula queries Convex, mutación removeModel, estados modales y paginación.
+- [x] `src/pages/dashboard/settings/EquipmentModelsCard.tsx`: Reducido de 428 a 84 líneas (-80.4%), integrando subcomponentes.
 
 ---
 
@@ -30,7 +24,7 @@
 ---
 
 ## 4. Estado Final
-- **Estado:** Completada Fase 2. Lista para commit.
+- **Estado:** Completada Fase 3. Lista para commit.
 
 
 
