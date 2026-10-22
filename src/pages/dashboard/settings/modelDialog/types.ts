@@ -1,4 +1,5 @@
 import type { Doc } from "@/convex/_generated/dataModel";
+import type { CatalogItemLike } from "@/lib/catalogs";
 
 export type EquipmentModelDoc = Doc<"equipmentModels">;
 
@@ -39,7 +40,7 @@ export interface ModelBasicFieldsProps {
   onBrandChange: (value: string) => void;
   name: string;
   onNameChange: (value: string) => void;
-  catalogBrands: string[];
+  catalogBrands: readonly CatalogItemLike[];
   disabled: boolean;
 }
 
@@ -52,6 +53,6 @@ export interface ModelDetailsFieldsProps {
   onMaintenanceIntervalChange: (value: string) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
-  catalogSuppliers: string[];
+  catalogSuppliers: readonly CatalogItemLike[];
   disabled: boolean;
 }

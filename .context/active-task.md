@@ -1,19 +1,21 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-EQUIPMENT-MODEL-DIALOG`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers deterministas de validación y generación de payload para `EquipmentModelDialog`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-EQUIPMENT-MODEL-DIALOG`
+- **Objetivo:** Fase 2 - Creación de subcomponentes desacoplados `ModelBasicFields`, `ModelDetailsFields`, hook `useEquipmentModelForm` y barril público.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/modelDialog/types.ts`
-  - `src/pages/dashboard/settings/modelDialog/helpers.ts`
-  - `tests/equipmentModelDialogHelpers.test.ts`
+  - `src/pages/dashboard/settings/modelDialog/ModelBasicFields.tsx`
+  - `src/pages/dashboard/settings/modelDialog/ModelDetailsFields.tsx`
+  - `src/pages/dashboard/settings/modelDialog/useEquipmentModelForm.ts`
+  - `src/pages/dashboard/settings/modelDialog/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `modelDialog/types.ts`: interfaces de props, formulario y payload tipadas.
-- [x] `modelDialog/helpers.ts`: funciones puras `getInitialModelFormValues` y `validateEquipmentModelForm`.
-- [x] `tests/equipmentModelDialogHelpers.test.ts`: 7 tests unitarios cubriendo campos obligatorios, intervalos y normalización.
+- [x] `ModelBasicFields.tsx`: inputs de código de modelo comercial, autocompletado de marca y designación genérica.
+- [x] `ModelDetailsFields.tsx`: inputs de categoría, proveedor habitual, intervalo preventivo y notas técnicas.
+- [x] `useEquipmentModelForm.ts`: hook con control de estados, carga de catálogos y submit hacia mutaciones Convex.
+- [x] `modelDialog/index.ts`: barril unificado.
 
 ---
 
@@ -26,4 +28,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
