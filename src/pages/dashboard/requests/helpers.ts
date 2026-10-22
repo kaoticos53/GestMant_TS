@@ -126,3 +126,51 @@ export function attachmentCounts(request: RequestDoc) {
   }
   return { images, documents };
 }
+
+export const REQUESTS_CSV_HEADER = [
+  "Referencia",
+  "Estado",
+  "Prioridad",
+  "Solicitante",
+  "Área",
+  "Equipo",
+  "Líneas",
+  "Descripción",
+  "Notas",
+  "Decisión",
+  "Motivo",
+  "Decidido por",
+  "Creada",
+  "Decidida",
+  "Entregada",
+];
+
+/**
+ * Transforma una lista de peticiones al formato tabular estructurado para exportar en CSV.
+ */
+export function buildRequestsCsvData(requests: RequestDoc[]): {
+  header: string[];
+  rows: (string | number)[][];
+} {
+  const rows = requests.map((request) => [
+    request.reference,
+    STATUS_META[request.status]?.label ?? request.status,
+    PRIORITY_META[request.priority as Priority]?.label ?? request.priority,
+    request.requesterName,
+    request.requesterTeam ?? "",
+    request.equipment ?? "",
+    (request.lines ?? [])
+      .map((line) => `${line.code} ${line.name} x${line.quantity}`)
+      .join(" | "),
+    richDocToPlainText(request.description),
+    richDocToPlainText(request.notes),
+    richDocToPlainText(request.decisionNote),
+    stepReason(request),
+    request.decidedBy ?? "",
+    formatDateTime(request.createdAt),
+    request.decidedAt ? formatDateTime(request.decidedAt) : "",
+    request.issuedAt ? formatDateTime(request.issuedAt) : "",
+  ]);
+
+  return { header: REQUESTS_CSV_HEADER, rows };
+}
