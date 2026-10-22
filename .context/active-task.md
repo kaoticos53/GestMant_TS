@@ -1,44 +1,36 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-NEW-REQUEST-DIALOG-CIERRE`
-- **Objetivo:** Fase 4 - Validación integral, build de producción y cierre de refactorización arquitectónica de `NewRequestDialog.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-MANUALS-VIEW`
+- **Objetivo:** Fase 1 - Extracción de tipos y hooks de dominio (`useManualsListState`, `useManualExport`) y pruebas unitarias puras (`tests/manualsListState.test.ts`).
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/NewRequestDialog.tsx`
-  - `src/pages/dashboard/requests/hooks/useRequestAttachments.ts`
-  - `src/pages/dashboard/requests/hooks/useRequestPartsSelection.ts`
-  - `src/pages/dashboard/requests/hooks/useNewRequestForm.ts`
-  - `src/pages/dashboard/requests/dialogs/components/RequestEquipmentSection.tsx`
-  - `src/pages/dashboard/requests/dialogs/components/RequestAttachmentsSection.tsx`
-  - `src/pages/dashboard/requests/dialogs/components/RequestPartsSection.tsx`
-  - `tests/newRequestLogic.test.ts`
+  - `src/pages/dashboard/manuals/types.ts`
+  - `src/pages/dashboard/manuals/hooks/useManualsListState.ts`
+  - `src/pages/dashboard/manuals/hooks/useManualExport.ts`
+  - `tests/manualsListState.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/requests/hooks/useRequestAttachments.ts`: Hook para subida de ficheros, compresión y revocación determinista de blobs.
-- [x] `src/pages/dashboard/requests/hooks/useRequestPartsSelection.ts`: Hook para compatibilidad de catálogo, memoización de repuestos y manipulación de líneas.
-- [x] `src/pages/dashboard/requests/hooks/useNewRequestForm.ts`: Hook para control de estado del formulario, validaciones puras y creación de petición.
-- [x] `tests/newRequestLogic.test.ts`: Pruebas unitarias de compatibilidad, validación de inputs y cálculo de líneas (17 tests).
-- [x] `src/pages/dashboard/requests/dialogs/components/RequestEquipmentSection.tsx`: Selector accesible de inventario con opción manual y etiquetas aria.
-- [x] `src/pages/dashboard/requests/dialogs/components/RequestAttachmentsSection.tsx`: Subida, previews, spinners de progreso y borrado accesible de ficheros.
-- [x] `src/pages/dashboard/requests/dialogs/components/RequestPartsSection.tsx`: Filtrado de compatibilidad, dropdown de catálogo y filas de repuesto con inputs numéricos.
-- [x] `src/pages/dashboard/requests/dialogs/NewRequestDialog.tsx`: Orquestador declarativo reducido de 648 a 210 líneas (~68% de reducción).
+- [x] `src/pages/dashboard/manuals/types.ts`: Tipos base (`ManualDoc`, `ManualChangeDoc`, `EquipmentDoc`, etc.).
+- [x] `src/pages/dashboard/manuals/hooks/useManualsListState.ts`: Hook de estado de filtros, brands/models e indexación $O(1)$ de equipos.
+- [x] `src/pages/dashboard/manuals/hooks/useManualExport.ts`: Hook para exportación a CSV con resolución $O(1)$.
+- [x] `tests/manualsListState.test.ts`: Pruebas unitarias de filtrado por texto, tipo, marca, modelo y filtro especial `__none__` (8 tests).
 
 ---
 
 ## 3. Comprobaciones de Invariantes Previas
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Seguridad / Arquitectura? Preservadas (`tests/arquitectura.test.ts` y `tests/seguridad.test.ts` 100% verdes).
-- [x] ¿Build de producción? Verificada con `npm run build` en 5.06s.
+- [x] ¿Seguridad / Arquitectura? Preservadas.
 
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Verificación de tipos estricta (`npx tsc -b`).
-- [x] **Paso 2:** Verificación de guardrails de arquitectura (`tests/arquitectura.test.ts`).
-- [x] **Paso 3:** Verificación de guardrails de seguridad (`tests/seguridad.test.ts`).
-- [x] **Paso 4:** Suite completa de tests (`1927 passed`, 0 fallos).
-- [x] **Paso 5:** Compilación de producción exitosa (`npm run build`).
-- [x] **Paso 6:** Commit atómico de Fase 4 y cierre.
+- [x] **Paso 1:** Crear `src/pages/dashboard/manuals/types.ts`.
+- [x] **Paso 2:** Implementar `src/pages/dashboard/manuals/hooks/useManualsListState.ts`.
+- [x] **Paso 3:** Implementar `src/pages/dashboard/manuals/hooks/useManualExport.ts`.
+- [x] **Paso 4:** Crear `tests/manualsListState.test.ts`.
+- [x] **Paso 5:** Verificar tipos con `npx tsc -b`.
+- [x] **Paso 6:** Ejecutar tests unitarios con `npx vitest run tests/manualsListState.test.ts`.
+- [x] **Paso 7:** Commit atómico de Fase 1.
