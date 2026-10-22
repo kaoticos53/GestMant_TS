@@ -7,6 +7,7 @@ export { IncidentHistoryCard } from "./IncidentHistoryCard";
 export { IncidentNotesCard } from "./IncidentNotesCard";
 export { IncidentPartRequestsCard } from "./IncidentPartRequestsCard";
 export { IncidentStatusBanners } from "./IncidentStatusBanners";
+export { useIncidentDetailState } from "./useIncidentDetailState";
 export {
   filterAndSortIncidentRequests,
   getIncidentNextHint,
