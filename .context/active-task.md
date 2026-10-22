@@ -20,13 +20,14 @@
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 49 tests pasados al 100%.
+- [x] ¿Tests unitarios y de seguridad? 2.112 tests pasados al 100% en Vitest (173 suites).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
+- [x] ¿Build de producción Vite? Verificado (dist generado en 4.98s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
+- **Estado:** Fase 4 completada. Componente `UnusedUploadsCard.tsx` modularizado (373 -> 126 líneas, -66.2%) con 100% tests verdes y build limpio.
 
 
 
