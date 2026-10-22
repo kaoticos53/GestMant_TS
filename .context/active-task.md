@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-AUDIT-FILTERS-CARD`
-- **Objetivo:** Fase 2 - Crear subcomponentes `AuditFiltersGrid`, `AuditPresetsBar` y `AuditSummaryFooter` con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-AUDIT-FILTERS-CARD`
+- **Objetivo:** Fase 3 - Reensamblar `AuditFiltersCard.tsx` consumiendo el submódulo modular `filters/`, reduciendo su tamaño de 215 a ~45 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/audit/components/filters/components/AuditFiltersGrid.tsx`
-  - `src/pages/dashboard/audit/components/filters/components/AuditPresetsBar.tsx`
-  - `src/pages/dashboard/audit/components/filters/components/AuditSummaryFooter.tsx`
-  - `src/pages/dashboard/audit/components/filters/index.ts`
+  - `src/pages/dashboard/audit/components/AuditFiltersCard.tsx`
 
 ---
 
@@ -19,6 +16,7 @@
 - [x] `audit/filters/components/AuditPresetsBar.tsx`: fila de presets, reinicio y exportación.
 - [x] `audit/filters/components/AuditSummaryFooter.tsx`: pie informativo de resumen y desglose.
 - [x] `audit/filters/index.ts`: barril unificado.
+- [x] `AuditFiltersCard.tsx`: reducción de 215 a ~45 líneas orquestando limpiamente.
 
 ---
 
@@ -31,4 +29,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
