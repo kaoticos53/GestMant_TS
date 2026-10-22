@@ -1,35 +1,34 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-DASHBOARD-PAGE`
-- **Objetivo:** Fase 4 - Verificación de compilación, suite de pruebas completa y cierre de `Dashboard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-DASHBOARD-SIDEBAR`
+- **Objetivo:** Fase 1 - Creación de helpers de estilo, contratos de tipos y suite unitaria para `DashboardSidebar.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/Dashboard.tsx`
-  - `src/pages/dashboard/components/DashboardInactiveNotice.tsx`
-  - `src/pages/dashboard/helpers/dashboardHelpers.ts`
-  - `src/pages/dashboard/hooks/useDashboardState.ts`
-  - `tests/dashboardHelpers.test.ts`
+  - `src/pages/dashboard/components/DashboardSidebar.tsx`
+  - `src/pages/dashboard/components/sidebar/types.ts`
+  - `src/pages/dashboard/components/sidebar/helpers.ts`
+  - `tests/dashboardSidebarHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes modulares (`DashboardInactiveNotice`), hook `useDashboardState` y helpers en `helpers/`.
-- [x] `Dashboard.tsx` refactorizado de 303 a 169 líneas (-44.2% de reducción).
-- [x] Suite de pruebas y build de producción verificados.
+- [x] `sidebar/types.ts`: contratos de props para cabecera, lista de navegación, pie y manejador de redimensionamiento.
+- [x] `sidebar/helpers.ts`: funciones puras `getNavButtonClass` y `getNavPillClass`.
+- [x] `tests/dashboardSidebarHelpers.test.ts`: 4 pruebas unitarias verificando estados activos y discretos.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.290 tests pasados (188 archivos pasados, 0 fallos).
+- [x] ¿Tests unitarios y de seguridad? 37 tests pasados (4 unitarios + 15 del sidebar + 9 arquitectura + 9 seguridad).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados y cumplidos.
-- [x] Compilación Vite de producción: Exitosa en 5.10s.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y verificada. Lista para commit atómico de cierre de Fase 4.
+- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+
 
 
 
