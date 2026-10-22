@@ -1,19 +1,19 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-PART-FORM-DIALOG`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers puros de catálogo y pruebas unitarias para `PartFormDialog`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-PART-FORM-DIALOG`
+- **Objetivo:** Fase 2 - Desacoplamiento de subcomponentes de campos (`PartBasicFields`, `PartStockLocationFields`) y barril en `partForm/`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/inventory/dialogs/partForm/types.ts`
-  - `src/pages/dashboard/inventory/dialogs/partForm/helpers.ts`
-  - `tests/partFormDialogHelpers.test.ts`
+  - `src/pages/dashboard/inventory/dialogs/partForm/PartBasicFields.tsx`
+  - `src/pages/dashboard/inventory/dialogs/partForm/PartStockLocationFields.tsx`
+  - `src/pages/dashboard/inventory/dialogs/partForm/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `partForm/types.ts`: contratos de props para `PartBasicFields` y `PartStockLocationFields`.
-- [x] `partForm/helpers.ts`: función pura `buildPartCategoryOptions` para deduplicar y combinar categorías estándar y personalizadas.
-- [x] `tests/partFormDialogHelpers.test.ts`: 4 tests unitarios cubriendo deduplicación, catálogo vacío y formato.
+- [x] `partForm/PartBasicFields.tsx`: campos de código, nombre, categoría autocompletable y unidad.
+- [x] `partForm/PartStockLocationFields.tsx`: campos de stock actual, mínimo, ubicación, proveedor, nº parte, precio y url.
+- [x] `partForm/index.ts`: barril unificado para el submódulo partForm.
 
 ---
 
@@ -26,4 +26,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
