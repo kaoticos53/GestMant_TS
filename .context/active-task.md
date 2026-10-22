@@ -23,14 +23,15 @@
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de compras? 29 tests pasados al 100%.
+- [x] ¿Tests unitarios y de integración? 2.082 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [ ] ¿Build de producción Vite? (Fase 4)
+- [x] ¿Build de producción Vite? Exitoso (4.97s).
 
 ---
 
-## 4. Estado Actual
-- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
+## 4. Estado Final
+- **Estado:** Completada y Cerrada.
+- **Reducción Métrica:** `HistorySection.tsx` pasó de 422 a 90 líneas (-78.7%). Se extrajeron 5 subcomponentes especializados (`HistoryEmptyState`, `HistoryTableHead`, `HistoryTableRow`, `HistoryTableFooter`, `HistoryTable`) y se agregaron 5 tests unitarios dedicados en `tests/purchasingHistoryTable.test.tsx`. Listo para proponer siguiente candidato.
 
 
 

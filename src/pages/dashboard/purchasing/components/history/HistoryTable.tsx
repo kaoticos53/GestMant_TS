@@ -3,7 +3,6 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import type {
   PurchaseHistoryColumn,
   PurchaseHistoryRow,
-  PurchaseHistorySortColumn,
 } from "@/lib/purchasing";
 import type { TableSort } from "@/lib/tableSort";
 import { HistoryTableHead } from "./HistoryTableHead";
@@ -25,8 +24,8 @@ export function HistoryTable({
 }: {
   rows: PurchaseHistoryRow[];
   allRowsCount: number;
-  sort: TableSort<PurchaseHistorySortColumn> | null;
-  onSortChange: (column: PurchaseHistorySortColumn) => void;
+  sort: TableSort<PurchaseHistoryColumn> | null;
+  onSortChange: (sort: TableSort<PurchaseHistoryColumn> | null) => void;
   areAllSelected: boolean;
   onToggleAll: () => void;
   isRowSelected: (rowId: string) => boolean;
