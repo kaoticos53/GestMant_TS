@@ -18,20 +18,22 @@
 - [x] `src/pages/auth/components/AuthHeader.tsx`: Logo, títulos y conmutador de método de acceso.
 - [x] `src/pages/auth/components/PasswordAuthForm.tsx`: Formulario de acceso/registro con email y contraseña.
 - [x] `src/pages/auth/components/OtpEmailForm.tsx`: Flujo OTP por correo (paso de solicitud y paso de verificación con InputOTP).
+- [x] `src/pages/auth/hooks/useAuthState.ts`: Hook de orquestación de auth, countdown, steps y submits.
+- [x] `src/pages/Auth.tsx`: Reensamblado a orquestador declarativo de 67 líneas (-84.0%).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios nuevos? 5 tests pasados al 100%.
+- [x] ¿Tests unitarios y de seguridad? 8 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 - [ ] ¿Build de producción Vite? (Fase 4)
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
