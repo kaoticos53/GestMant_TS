@@ -15,6 +15,7 @@ export type IncidentDoc = Omit<Doc<"incidents">, "documents"> & {
 };
 
 export type EquipmentDoc = Doc<"equipment">;
+export type IncidentFilterId = IncidentStatus | "all";
 
 export type IncidentSection = {
   key: string;

@@ -2,7 +2,8 @@ import { Link } from "react-router";
 import { FileDown, Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { INCIDENT_FILTERS, type IncidentFilterId } from "@/lib/workshop";
+import { INCIDENT_FILTERS } from "@/lib/workshop";
+import type { IncidentFilterId } from "../types";
 
 export function IncidentsHeaderBar({
   filter,

@@ -3,9 +3,9 @@ import { SearchX, Siren, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   INCIDENT_STATUS_META,
-  type IncidentFilterId,
   type IncidentStatus,
 } from "@/lib/workshop";
+import type { IncidentFilterId } from "../types";
 
 export function IncidentsEmptyState({
   search,
