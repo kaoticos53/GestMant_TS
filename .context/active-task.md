@@ -1,10 +1,11 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE3-PERMISSIONS-VIEW`
-- **Objetivo:** Fase 3 - Reensamblado de `PermissionsView.tsx` como orquestador limpio y desacoplado.
+- **ID / Nombre de la Tarea:** `REF-FASE4-PERMISSIONS-VIEW`
+- **Objetivo:** Fase 4 - Validación integral, guardrails de seguridad/arquitectura, build de producción y cierre de refactorización de `PermissionsView.tsx`.
 - **Módulo(s) Afectado(s):**
   - `src/pages/dashboard/PermissionsView.tsx`
+  - Subcomponentes y hooks en `src/pages/dashboard/permissions/`
 
 ---
 
@@ -21,15 +22,15 @@
 
 ---
 
-## 3. Comprobaciones de Invariantes Previas
+## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Seguridad / Arquitectura? Preservadas.
+- [x] ¿Tests unitarios y de módulo? 42 tests en verde (`tests/permissionsMatrixHook.test.ts`, `tests/permissionsDraft.test.ts`, `tests/permissions.test.ts`).
+- [x] ¿Suite completa? 152 suites y 1.941 tests pasando en Vitest.
+- [x] ¿Guardrails de Arquitectura y Seguridad? Pasados al 100% (18/18 tests en `tests/arquitectura.test.ts` y `tests/seguridad.test.ts`).
+- [x] ¿Build de producción Vite? Exitoso (`npm run build`).
 
 ---
 
-## 4. Checklist de Ejecución
-- [x] **Paso 1:** Reensamblar `PermissionsView.tsx`.
-- [x] **Paso 2:** Verificar tipos con `npx tsc -b`.
-- [x] **Paso 3:** Ejecutar tests con `npx vitest run tests/permissionsMatrixHook.test.ts tests/permissionsDraft.test.ts tests/permissions.test.ts`.
-- [x] **Paso 4:** Commit atómico de Fase 3.
+## 4. Estado Final
+- **Estado:** ✅ Completado y Verificado. Listo para commit atómico de cierre de Fase 4.
