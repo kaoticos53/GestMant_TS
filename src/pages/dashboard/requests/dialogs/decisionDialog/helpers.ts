@@ -45,7 +45,7 @@ export function clampDeliveryQuantity(
 export function buildIssueBatchLines(
   lines: RequestLine[],
   entrega: Record<string, number>,
-): { sparePartId: string; quantity: number }[] {
+): { sparePartId: RequestLine["sparePartId"]; quantity: number }[] {
   return lines
     .map((line) => ({
       sparePartId: line.sparePartId,

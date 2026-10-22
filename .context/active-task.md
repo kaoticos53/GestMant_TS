@@ -1,18 +1,18 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-DECISION-DIALOG`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de DecisionDialog en decisionDialog/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-DECISION-DIALOG`
+- **Objetivo:** Fase 3 - Extraer hook useDecisionDialogState y reensamblar DecisionDialog como orquestador declarativo.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionStockApprovalPanel.tsx`
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionIssueBatchPanel.tsx`
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionNoteField.tsx`
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionDialogFooter.tsx`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/hooks/useDecisionDialogState.ts`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/helpers.ts`
+  - `src/pages/dashboard/requests/dialogs/DecisionDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de DecisionDialog (`DecisionStockApprovalPanel`, `DecisionIssueBatchPanel`, `DecisionNoteField`, `DecisionDialogFooter`).
+- [x] Hook `useDecisionDialogState.ts` encapsulando mutaciones, queries y estado de decisiones.
+- [x] Reensamblado de `DecisionDialog.tsx` (337 -> 116 líneas, -65.6%).
 
 ---
 
@@ -25,4 +25,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
+- **Estado:** Fase 3 completada exitosamente. Listo para commit atómico 3.
