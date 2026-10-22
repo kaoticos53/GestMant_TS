@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-TABLE-SORT`
-- **Objetivo:** Fase 2 - Crear subcomponentes `SortFlipButton`, `TableSortBar` y `SortableTableHead` con su barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-TABLE-SORT`
+- **Objetivo:** Fase 3 - Reducir y re-exportar limpiamente `src/components/TableSort.tsx` delegando en el módulo modular `./tableSort/index` preservando total retrocompatibilidad y documentación JSDoc.
 - **Módulo(s) Afectado(s):**
-  - `src/components/tableSort/components/SortFlipButton.tsx`
-  - `src/components/tableSort/components/TableSortBar.tsx`
-  - `src/components/tableSort/components/SortableTableHead.tsx`
-  - `src/components/tableSort/index.ts`
+  - `src/components/TableSort.tsx`
 
 ---
 
@@ -19,7 +16,7 @@
 - [x] `src/components/tableSort/components/TableSortBar.tsx`: barra horizontal con selector y reset.
 - [x] `src/components/tableSort/components/SortableTableHead.tsx`: cabecera sortable accesible.
 - [x] `src/components/tableSort/index.ts`: barril unificado.
-- [ ] `src/components/TableSort.tsx`: pendiente Fase 3.
+- [ ] `src/components/TableSort.tsx`: orquestación de alto nivel limpia.
 
 ---
 
@@ -32,4 +29,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
