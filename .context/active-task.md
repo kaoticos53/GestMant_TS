@@ -1,37 +1,29 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-LANDING`
-- **Objetivo:** Fase 4 - Validación integral, guardrails de seguridad/arquitectura, build de producción y cierre de refactorización de `Landing.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-AUDIT-VIEW`
+- **Objetivo:** Fase 1 - Extraer tipos de dominio, hook `useAuditEntries` y tests unitarios de lógica pura para `AuditView.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/Landing.tsx`
-  - Subcomponentes y constantes en `src/pages/landing/`
+  - `src/pages/dashboard/audit/types.ts`
+  - `src/pages/dashboard/audit/hooks/useAuditEntries.ts`
+  - `tests/auditEntriesLogic.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/landing/constants.ts`: Tokens de espaciado, clases de diseño y contenido editorial (`PASOS`).
-- [x] `src/pages/landing/hooks/useLandingStatsSummary.ts`: Hook y función pura de formateo de estadísticas del taller.
-- [x] `tests/landingStatsLogic.test.ts`: Pruebas unitarias para el mapeo y formateo de estadísticas (3 tests).
-- [x] `TechnicalConsolePreview.tsx`: Consola técnica simulada para pantallas grandes.
-- [x] `LandingHeader.tsx`: Cabecera sticky con navegación y estado de sesión.
-- [x] `LandingHero.tsx`: Sección Hero con textos condicionales y botones CTA.
-- [x] `LandingStatsSection.tsx`: Banda '#taller' con estadísticas públicas cuantitativas.
-- [x] `WorkshopDoorsSection.tsx`: Tarjeta dual con puertas de aviso ('#avisar') y seguimiento ('#seguimiento').
-- [x] `LandingFooter.tsx`: Pie de página con versión, copyright y diálogo de bitácora.
-- [x] `Landing.tsx`: Orquestador principal refactorizado, reducido de 600 a 26 líneas (~95% de reducción).
+- [ ] `src/pages/dashboard/audit/types.ts`: Contratos de props y opciones de ordenación del rastro documental.
+- [ ] `src/pages/dashboard/audit/hooks/useAuditEntries.ts`: Custom hook con gestión de filtros, búsqueda, orden, paginación, agrupación y exportación CSV.
+- [ ] `tests/auditEntriesLogic.test.ts`: Pruebas unitarias para filtrado, búsqueda por texto, ordenación por fecha y generación de resumen.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
-- [x] ¿Afecta a `src/lib/`? No.
-- [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de ritmo? 17 tests en verde (`tests/landingRitmo.test.tsx`, `tests/landingStatsLogic.test.ts`).
-- [x] ¿Suite completa? 155 suites y 1.955 tests pasando al 100% en Vitest.
-- [x] ¿Guardrails de Arquitectura y Seguridad? Pasados al 100% (18/18 tests en `tests/arquitectura.test.ts` y `tests/seguridad.test.ts`).
-- [x] ¿Build de producción Vite? Exitoso (`npm run build`).
+- [ ] ¿Afecta a `src/lib/`? No.
+- [ ] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
+- [ ] ¿Tests unitarios? Verificados con Vitest.
+- [ ] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 
 ---
 
 ## 4. Estado Final
-- **Estado:** ✅ Completado y Verificado. Listo para commit atómico de cierre de Fase 4.
+- **Estado:** En progreso (Fase 1).
