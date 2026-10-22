@@ -1,46 +1,33 @@
 import { useMutation, useQuery } from "convex/react";
-import { ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
-import type { Priority } from "@/lib/workshop";
 
-import type { EquipmentDoc, PartDoc } from "../types";
 import { useRequestAttachments } from "../hooks/useRequestAttachments";
 import { useRequestPartsSelection } from "../hooks/useRequestPartsSelection";
 import { useNewRequestForm } from "../hooks/useNewRequestForm";
 import { RequestEquipmentSection } from "./components/RequestEquipmentSection";
 import { RequestAttachmentsSection } from "./components/RequestAttachmentsSection";
 import { RequestPartsSection } from "./components/RequestPartsSection";
+import {
+  RequestHeaderFields,
+  RequestDescriptionField,
+  RequestNotesField,
+  RequestDialogFooter,
+  type NewRequestDialogProps,
+} from "./newRequest";
 
 export function NewRequestDialog({
   parts,
   equipment,
   onClose,
-}: {
-  parts: PartDoc[];
-  equipment: EquipmentDoc[];
-  onClose: () => void;
-}) {
+}: NewRequestDialogProps) {
   const { user } = useAuth();
   const catalogPositions =
     useQuery(api.catalogs.list, { kind: "position" }) ?? [];
@@ -92,44 +79,16 @@ export function NewRequestDialog({
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="requester">Solicitante *</Label>
-            <Input
-              id="requester"
-              value={form.requesterNameValue}
-              onChange={(event) => form.setRequesterName(event.target.value)}
-              placeholder="Nombre y apellido"
-              disabled={form.busy}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="team">Puesto</Label>
-            <AutocompleteInput
-              id="team"
-              value={form.requesterTeamValue}
-              onChange={form.setRequesterTeam}
-              items={catalogPositions}
-              kind="position"
-              placeholder="p. ej. Realización, Audio, Cámaras..."
-              disabled={form.busy}
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="priority">Prioridad</Label>
-            <Select
-              value={form.priority}
-              onValueChange={(value) => form.setPriority(value as Priority)}
-            >
-              <SelectTrigger id="priority" className="w-full" disabled={form.busy}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="urgent">Urgente</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="low">Baja</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <RequestHeaderFields
+            requesterName={form.requesterNameValue}
+            onRequesterNameChange={form.setRequesterName}
+            requesterTeam={form.requesterTeamValue}
+            onRequesterTeamChange={form.setRequesterTeam}
+            catalogPositions={catalogPositions}
+            priority={form.priority}
+            onPriorityChange={form.setPriority}
+            disabled={form.busy}
+          />
 
           <RequestEquipmentSection
             equipment={equipment}
@@ -142,16 +101,11 @@ export function NewRequestDialog({
           />
         </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="description">Descripción de lo que se pide</Label>
-          <RichTextEditor
-            id="description"
-            value={form.description}
-            onChange={form.setDescription}
-            placeholder="Qué necesitas, para qué, cantidades, plazos... (obligatorio si no añades repuestos)"
-            disabled={form.busy}
-          />
-        </div>
+        <RequestDescriptionField
+          value={form.description}
+          onChange={form.setDescription}
+          disabled={form.busy}
+        />
 
         <RequestAttachmentsSection
           files={attachments.files}
@@ -180,44 +134,20 @@ export function NewRequestDialog({
           disabled={form.busy}
         />
 
-        <div className="grid gap-2">
-          <Label htmlFor="notes">Contexto o diagnóstico (opcional)</Label>
-          <RichTextEditor
-            id="notes"
-            value={form.notes}
-            onChange={form.setNotes}
-            placeholder="Síntoma, diagnóstico o cualquier contexto útil"
-            disabled={form.busy}
-          />
-        </div>
+        <RequestNotesField
+          value={form.notes}
+          onChange={form.setNotes}
+          disabled={form.busy}
+        />
 
         {form.error && <p className="text-sm text-destructive">{form.error}</p>}
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={form.busy}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            className="gap-2"
-            onClick={onSubmit}
-            disabled={form.busy || attachments.isUploading}
-          >
-            {form.busy
-              ? "Enviando..."
-              : attachments.isUploading
-                ? "Subiendo archivos..."
-                : "Crear petición"}
-            {!form.busy && !attachments.isUploading && (
-              <ArrowRight className="size-4" />
-            )}
-          </Button>
-        </DialogFooter>
+        <RequestDialogFooter
+          busy={form.busy}
+          isUploading={attachments.isUploading}
+          onClose={onClose}
+          onSubmit={onSubmit}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-NEW-REQUEST-DIALOG`
-- **Objetivo:** Fase 2 - Crear subcomponentes `RequestHeaderFields`, `RequestDescriptionField`, `RequestNotesField` y `RequestDialogFooter` con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-NEW-REQUEST-DIALOG`
+- **Objetivo:** Fase 3 - Reensamblar `NewRequestDialog.tsx` consumiendo el submódulo modular `newRequest/`, reduciendo su tamaño de 225 a ~105 líneas limpias.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/newRequest/components/RequestHeaderFields.tsx`
-  - `src/pages/dashboard/requests/dialogs/newRequest/components/RequestDescriptionField.tsx`
-  - `src/pages/dashboard/requests/dialogs/newRequest/components/RequestNotesField.tsx`
-  - `src/pages/dashboard/requests/dialogs/newRequest/components/RequestDialogFooter.tsx`
-  - `src/pages/dashboard/requests/dialogs/newRequest/index.ts`
+  - `src/pages/dashboard/requests/dialogs/NewRequestDialog.tsx`
 
 ---
 
@@ -21,6 +17,7 @@
 - [x] `newRequest/components/RequestNotesField.tsx`: notas y diagnóstico opcional con RichTextEditor.
 - [x] `newRequest/components/RequestDialogFooter.tsx`: footer accesible con acciones de cancelar y submit.
 - [x] `newRequest/index.ts`: barril unificado.
+- [x] `NewRequestDialog.tsx`: reducción de 225 a ~105 líneas orquestando limpiamente.
 
 ---
 
@@ -33,4 +30,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
