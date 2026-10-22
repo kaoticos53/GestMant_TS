@@ -1,33 +1,33 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-UNUSED-UPLOADS`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales en src/pages/dashboard/settings/unusedUploads/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE1-MAIL-PROVIDER-FIELDS`
+- **Objetivo:** Fase 1 - Extraer tipos, helpers de textos explicativos y tests unitarios para MailProviderSettingsFields.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/unusedUploads/components/ManualPurgeLog.tsx`
-  - `src/pages/dashboard/settings/unusedUploads/components/UnusedImagesList.tsx`
-  - `src/pages/dashboard/settings/unusedUploads/components/ConfirmPurgeDialog.tsx`
+  - `src/pages/dashboard/settings/mail/components/providerFields/types.ts`
+  - `src/pages/dashboard/settings/mail/components/providerFields/helpers.ts`
+  - `tests/mailProviderFieldsHelpers.test.ts`
+  - `src/pages/dashboard/settings/mail/components/MailProviderSettingsFields.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales (`ManualPurgeLog.tsx`, `UnusedImagesList.tsx`, `ConfirmPurgeDialog.tsx`).
-- [x] Hook de estado (`useUnusedUploadsState.ts`).
-- [x] Orquestador declarativo (`UnusedUploadsCard.tsx`, 373 -> 126 líneas, -66.2%).
+- [x] `src/pages/dashboard/settings/mail/components/providerFields/types.ts`: Contratos de props para subcomponentes.
+- [x] `src/pages/dashboard/settings/mail/components/providerFields/helpers.ts`: Funciones puras de textos explicativos.
+- [x] `tests/mailProviderFieldsHelpers.test.ts`: Batería de 8 tests unitarios de helpers de textos (8 tests pasando).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.112 tests pasados al 100% en Vitest (173 suites).
+- [x] ¿Tests unitarios y de seguridad? 8 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] ¿Build de producción Vite? Verificado (dist generado en 4.98s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 4 completada. Componente `UnusedUploadsCard.tsx` modularizado (373 -> 126 líneas, -66.2%) con 100% tests verdes y build limpio.
+- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
 
 
 
