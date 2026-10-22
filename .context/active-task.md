@@ -1,33 +1,32 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-DASHBOARD-CONTENT`
-- **Objetivo:** Fase 4 - Verificación de compilación, suite de pruebas completa y cierre de `DashboardContent`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-DETAIL-SHEET`
+- **Objetivo:** Fase 1 - Creación de helpers puros y test suite unitaria para `IncidentDetailSheet.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/components/DashboardContent.tsx`
-  - `src/pages/dashboard/components/content/`
-  - `tests/dashboardContentHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/IncidentDetailSheet.tsx`
+  - `src/pages/dashboard/incidents/components/detail/helpers.ts`
+  - `tests/incidentDetailSheetHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes modulares, helpers y tipos creados en `src/pages/dashboard/components/content/`.
-- [x] `DashboardContent.tsx` refactorizado de 303 a 73 líneas (-75.9% de reducción).
-- [x] Suite de pruebas y build de producción verificados.
+- [x] `src/pages/dashboard/incidents/components/detail/helpers.ts`: funciones puras `getIncidentNextHint`, `getJourneyNowLabel`, `resolveIncidentDerivedState` y `filterAndSortIncidentRequests`.
+- [x] `tests/incidentDetailSheetHelpers.test.ts`: 18 pruebas unitarias exhaustivas con 100% de ramas cubiertas.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.254 tests pasados (185 archivos pasados, 0 fallos).
+- [x] ¿Tests unitarios y de seguridad? 36 tests pasados (18 unitarios + 9 arquitectura + 9 seguridad).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados y cumplidos.
-- [x] Compilación Vite de producción: Exitosa en 9.96s.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y verificada. Lista para commit atómico de cierre de Fase 4.
+- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+
 
 
 
