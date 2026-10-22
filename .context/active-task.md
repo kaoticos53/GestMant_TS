@@ -1,19 +1,25 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-MANUAL-DETAIL-SHEET`
-- **Objetivo:** Fase 1 - Extracción de tipos, helpers deterministas de presentación y exportación PDF y pruebas unitarias para `ManualDetailSheet`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-MANUAL-DETAIL-SHEET`
+- **Objetivo:** Fase 2 - Creación de subcomponentes desacoplados `ManualDetailHeader`, `ManualExportCard`, `ManualFileCard`, `ManualNotesCard` y `ManualHistoryCard` con barril público.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/manualDetail/types.ts`
-  - `src/pages/dashboard/manualDetail/helpers.ts`
-  - `tests/manualDetailSheetHelpers.test.ts`
+  - `src/pages/dashboard/manualDetail/ManualDetailHeader.tsx`
+  - `src/pages/dashboard/manualDetail/ManualExportCard.tsx`
+  - `src/pages/dashboard/manualDetail/ManualFileCard.tsx`
+  - `src/pages/dashboard/manualDetail/ManualNotesCard.tsx`
+  - `src/pages/dashboard/manualDetail/ManualHistoryCard.tsx`
+  - `src/pages/dashboard/manualDetail/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `manualDetail/types.ts`: interfaces de props y modelos para cabecera, visor de archivo, notas y timeline.
-- [x] `manualDetail/helpers.ts`: funciones puras `findLinkedEquipment`, `getManualScopeDescription`, `getManualSubtitle` y `exportManualPdf`.
-- [x] `tests/manualDetailSheetHelpers.test.ts`: 7 tests unitarios cubriendo alcance de equipo, autor y vinculación.
+- [x] `ManualDetailHeader.tsx`: cabecera semántica con badges de tipo, marca y modelo.
+- [x] `ManualExportCard.tsx`: tarjeta accesible de exportación de ficha a PDF.
+- [x] `ManualFileCard.tsx`: visor y enlace de descarga de archivo adjunto.
+- [x] `ManualNotesCard.tsx`: renderizado seguro de notas del taller con `RichText`.
+- [x] `ManualHistoryCard.tsx`: línea de tiempo de cambios y versiones anteriores.
+- [x] `manualDetail/index.ts`: barril unificado.
 
 ---
 
@@ -26,4 +32,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
