@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-WORKSHOP-DATA-CARD`
-- **Objetivo:** Fase 2 - Crear hook personalizado `useWorkshopDataActions` y subcomponentes visuales (`WorkshopDataHeader`, `WorkshopDataActions`, `WorkshopResetDialog`) con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-WORKSHOP-DATA-CARD`
+- **Objetivo:** Fase 3 - Reensamblar `WorkshopDataCard.tsx` consumiendo el submódulo modular `workshopData/`, reduciendo su tamaño de 223 a ~40 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/workshopData/hooks/useWorkshopDataActions.ts`
-  - `src/pages/dashboard/settings/workshopData/components/WorkshopDataHeader.tsx`
-  - `src/pages/dashboard/settings/workshopData/components/WorkshopDataActions.tsx`
-  - `src/pages/dashboard/settings/workshopData/components/WorkshopResetDialog.tsx`
-  - `src/pages/dashboard/settings/workshopData/index.ts`
+  - `src/pages/dashboard/settings/WorkshopDataCard.tsx`
 
 ---
 
@@ -21,6 +17,7 @@
 - [x] `workshopData/components/WorkshopDataActions.tsx`: botones de carga de datos y vaciado.
 - [x] `workshopData/components/WorkshopResetDialog.tsx`: diálogo modal de confirmación con input VACIAR.
 - [x] `workshopData/index.ts`: barril unificado.
+- [x] `WorkshopDataCard.tsx`: reducción de 223 a ~40 líneas orquestando limpiamente.
 
 ---
 
@@ -33,4 +30,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
