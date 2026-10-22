@@ -1,19 +1,18 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-DECISION-DIALOG`
-- **Objetivo:** Fase 1 - Extraer tipos y funciones auxiliares puras de DecisionDialog en decisionDialog/ con tests unitarios.
+- **ID / Nombre de la Tarea:** `REF-FASE2-DECISION-DIALOG`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de DecisionDialog en decisionDialog/components/.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/types.ts`
-  - `src/pages/dashboard/requests/dialogs/decisionDialog/helpers.ts`
-  - `tests/decisionDialogHelpers.test.ts`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionStockApprovalPanel.tsx`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionIssueBatchPanel.tsx`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionNoteField.tsx`
+  - `src/pages/dashboard/requests/dialogs/decisionDialog/components/DecisionDialogFooter.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/requests/dialogs/decisionDialog/types.ts`
-- [x] `src/pages/dashboard/requests/dialogs/decisionDialog/helpers.ts`
-- [x] `tests/decisionDialogHelpers.test.ts` (8 tests unitarios nuevos)
+- [x] Subcomponentes visuales de DecisionDialog (`DecisionStockApprovalPanel`, `DecisionIssueBatchPanel`, `DecisionNoteField`, `DecisionDialogFooter`).
 
 ---
 
@@ -26,4 +25,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada exitosamente. Listo para commit atómico 1.
+- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
