@@ -1,20 +1,21 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-BARCODE-SCANNER`
-- **Objetivo:** Fase 1 - Creación de helpers, constantes y test suite unitaria para `BarcodeScannerModal.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-BARCODE-SCANNER`
+- **Objetivo:** Fase 2 - Desacoplamiento de visor, retícula industrial y entrada manual en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
-  - `src/components/BarcodeScannerModal.tsx`
-  - `src/components/barcode/types.ts`
-  - `src/components/barcode/helpers.ts`
-  - `tests/barcodeScannerHelpers.test.ts`
+  - `src/components/barcode/ScannerViewport.tsx`
+  - `src/components/barcode/ScannerCameraUnavailable.tsx`
+  - `src/components/barcode/ScannerManualFallback.tsx`
+  - `src/components/barcode/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `barcode/types.ts`: contratos de tipos para detección de códigos y subcomponentes del escáner.
-- [x] `barcode/helpers.ts`: funciones puras `cleanScannedCode`, `isBarcodeDetectorSupported`, `createBarcodeDetector`, `triggerScanHapticFeedback` y formatos estándar `DEFAULT_BARCODE_FORMATS`.
-- [x] `tests/barcodeScannerHelpers.test.ts`: 10 pruebas unitarias verificando instancias seguras, limpieza de códigos y feedback háptico.
+- [x] `ScannerViewport.tsx`: visor de video, retícula industrial con línea láser animada y botón de linterna.
+- [x] `ScannerCameraUnavailable.tsx`: pantalla informativa cuando no hay sensor de cámara o se denegaron permisos.
+- [x] `ScannerManualFallback.tsx`: formulario accesible de respaldo para entrada manual o pistola lectora USB.
+- [x] `barcode/index.ts`: barril unificado del módulo barcode.
 
 ---
 
@@ -27,7 +28,8 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+
 
 
 
