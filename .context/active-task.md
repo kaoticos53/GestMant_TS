@@ -1,18 +1,18 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-REPORTS-DIALOG`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de IncidentReportsDialog en incidentReports/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-INCIDENT-REPORTS-DIALOG`
+- **Objetivo:** Fase 3 - Extraer hook useIncidentReportsState y reensamblar IncidentReportsDialog como orquestador declarativo.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidentReports/components/IncidentReportsPeriodPresets.tsx`
-  - `src/pages/dashboard/incidentReports/components/IncidentReportsDateRangeFields.tsx`
-  - `src/pages/dashboard/incidentReports/components/IncidentReportsSummaryCard.tsx`
-  - `src/pages/dashboard/incidentReports/components/IncidentReportsFooter.tsx`
+  - `src/pages/dashboard/incidentReports/hooks/useIncidentReportsState.ts`
+  - `src/pages/dashboard/incidentReports/types.ts`
+  - `src/pages/dashboard/IncidentReportsDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de IncidentReportsDialog (`IncidentReportsPeriodPresets`, `IncidentReportsDateRangeFields`, `IncidentReportsSummaryCard`, `IncidentReportsFooter`).
+- [x] Hook `useIncidentReportsState.ts` encapsulando queries, periodos, mapas y exportación.
+- [x] Reensamblado de `IncidentReportsDialog.tsx` (348 -> 100 líneas, -71.3%).
 
 ---
 
@@ -25,4 +25,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
+- **Estado:** Fase 3 completada exitosamente. Listo para commit atómico 3.

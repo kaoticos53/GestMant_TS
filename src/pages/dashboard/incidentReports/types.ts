@@ -1,5 +1,9 @@
 import type { Doc } from "@/convex/_generated/dataModel";
-import type { REPORT_PERIODS, ReportPeriodBasis } from "@/lib/report";
+import type {
+  REPORT_PERIODS,
+  ReportPeriodBasis,
+  ReportPeriodId,
+} from "@/lib/report";
 
 export type IncidentDoc = Doc<"incidents">;
 export type EquipmentDoc = Doc<"equipment">;
@@ -15,7 +19,7 @@ export interface IncidentReportsDialogProps {
 }
 
 export interface IncidentReportsPeriodPresetsProps {
-  activePreset: (typeof REPORT_PERIODS)[number]["id"] | null;
+  activePreset: ReportPeriodId | null;
   onSelectPreset: (presetId: (typeof REPORT_PERIODS)[number]["id"]) => void;
 }
 
