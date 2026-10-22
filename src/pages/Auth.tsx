@@ -99,9 +99,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
         setError(
           accountExists
             ? "Ya existe una cuenta con ese correo. Cambia a «Entrar»."
-            : `No se ha podido crear la cuenta (mínimo 8 caracteres de contraseña)${
-                raw ? `: ${raw}` : "."
-              }`,
+            : `No se ha podido crear la cuenta (mínimo 8 caracteres de contraseña)${raw ? `: ${raw}` : "."
+            }`,
         );
       } else if (badSecret) {
         setError("El correo o la contraseña no son correctos.");
@@ -184,11 +183,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     setMethod("password");
                     setError(null);
                   }}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    method === "password"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${method === "password"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Contraseña
                 </button>
@@ -198,11 +196,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     setMethod("email");
                     setError(null);
                   }}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    method === "email"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${method === "email"
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Código por email
                 </button>
@@ -403,15 +400,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             )}
 
             <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
-              Secured by{" "}
-              <a
-                href="https://freebuff.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-primary transition-colors"
-              >
-                freebuff.com
-              </a>
+              ©2026 RGLara
             </div>
           </Card>
         </div>
