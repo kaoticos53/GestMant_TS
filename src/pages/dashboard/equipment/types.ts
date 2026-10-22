@@ -78,3 +78,73 @@ export interface EquipmentDetailSheetProps {
   /** Los diálogos que se abren desde la ficha (manuales), dentro de su árbol. */
   children?: React.ReactNode;
 }
+
+export type EquipmentColumn =
+  | "equipment"
+  | "brand"
+  | "serial"
+  | "location"
+  | "manuals"
+  | "parts";
+
+export interface EquipmentTableProps {
+  columns: Record<EquipmentColumn, { label: string }>;
+  sort: import("@/lib/tableSort").TableSort<EquipmentColumn> | null;
+  onSortChange: (
+    sort: import("@/lib/tableSort").TableSort<EquipmentColumn> | null,
+  ) => void;
+  areaRef: React.RefObject<HTMLDivElement | null>;
+  resetKey: number;
+  visible: EquipmentDoc[];
+  canManage: boolean;
+  reviewOf: (item: EquipmentDoc) => { state: string };
+  manualsOf: (item: EquipmentDoc) => {
+    assigned: ManualDoc[];
+    byModel: ManualDoc[];
+  };
+  compatibleCount: (item: EquipmentDoc) => number;
+  onViewDetail: (item: EquipmentDoc) => void;
+  onDuplicate: (item: EquipmentDoc) => void;
+  onEdit: (item: EquipmentDoc) => void;
+  onDelete: (item: EquipmentDoc) => void;
+}
+
+export interface EquipmentModalsProps {
+  detail: { item: EquipmentDoc; openedAt: number } | null;
+  parts: Doc<"spareParts">[];
+  requests: Doc<"partRequests">[];
+  equipment: EquipmentDoc[];
+  maintenanceRecordsFor: (item: EquipmentDoc) => RecordDoc[];
+  manualsOf: (item: EquipmentDoc) => {
+    assigned: ManualDoc[];
+    byModel: ManualDoc[];
+  };
+  canManage: boolean;
+  canAddManual: boolean;
+  canManageManuals: boolean;
+  rights: ManualRights;
+  formTarget: {
+    item: EquipmentDoc | null;
+    initialValues?: EquipmentFormDialogProps["initialValues"];
+  } | null;
+  deleteTarget: EquipmentDoc | null;
+  manualForm: {
+    manual: ManualDoc | null;
+    equipmentId: Id<"equipment"> | null;
+  } | null;
+  manualDetail: ManualDoc | null;
+  manualDelete: ManualDoc | null;
+  onCloseDetail: () => void;
+  onViewRequests: (equipmentId: string) => void;
+  setManualForm: (
+    target: {
+      manual: ManualDoc | null;
+      equipmentId: Id<"equipment"> | null;
+    } | null,
+  ) => void;
+  setManualDetail: (manual: ManualDoc | null) => void;
+  setManualDelete: (manual: ManualDoc | null) => void;
+  closeForm: () => void;
+  setDeleteTarget: (item: EquipmentDoc | null) => void;
+}
+

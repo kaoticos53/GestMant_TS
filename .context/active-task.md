@@ -1,30 +1,29 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-WEEKLY-REPORT-DIALOG`
-- **Objetivo:** Fase 4 - Verificación de compilación, suite de pruebas completa y cierre de WeeklyReportDialog.
+- **ID / Nombre de la Tarea:** `REF-FASE1-EQUIPMENT-VIEW`
+- **Objetivo:** Fase 1 - Extraer tipos, helpers puros y crear suite de tests unitarios para EquipmentView.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/WeeklyReportDialog.tsx`
-  - `src/pages/dashboard/weeklyReport/`
-  - `tests/weeklyReportDialogHelpers.test.ts`
+  - `src/pages/dashboard/equipment/types.ts`
+  - `src/pages/dashboard/equipment/helpers.ts`
+  - `tests/equipmentViewHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes, helpers, hook y tipos creados en `weeklyReport/`.
-- [x] `WeeklyReportDialog.tsx` refactorizado de 317 a 87 líneas (-72.5%).
-- [x] Suite de pruebas y build de producción verificados.
+- [x] Interfaces `EquipmentTableProps` y `EquipmentModalsProps` añadidas en `equipment/types.ts`.
+- [x] Helpers `getManualRights` y `canAddManualNotes` añadidos en `equipment/helpers.ts`.
+- [x] `tests/equipmentViewHelpers.test.ts` creado con 11 tests unitarios verdes.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.214 tests pasados (182 archivos pasados, 0 fallos).
+- [x] ¿Tests unitarios y de seguridad? 29 tests verdes.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] Compilación Vite de producción: Exitosa en 7.95s.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y verificada. Lista para commit atómico de cierre de Fase 4.
+- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
