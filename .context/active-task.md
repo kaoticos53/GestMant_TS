@@ -1,36 +1,32 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-INVENTORY-VIEW`
-- **Objetivo:** Fase 4 - Verificación integral de compilación, tests unitarios, arquitectura y cierre formal de `InventoryView.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-EQUIPMENT-MODELS-CARD`
+- **Objetivo:** Fase 1 - Extraer tipos de dominio (`types.ts`), helpers puros de conteo de uso, filtrado y validación de borrado (`helpers.ts`) y suite de tests unitarios (`tests/equipmentModelsCardHelpers.test.ts`) para `EquipmentModelsCard.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/InventoryView.tsx`
-  - `src/pages/dashboard/inventory/`
-  - `tests/inventoryHelpers.test.ts`
+  - `src/pages/dashboard/settings/equipmentModels/types.ts`
+  - `src/pages/dashboard/settings/equipmentModels/helpers.ts`
+  - `tests/equipmentModelsCardHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/inventory/types.ts`: Exportar `EquipmentDoc` y definir `FilterInventoryParams`.
-- [x] `src/pages/dashboard/inventory/helpers.ts`: Funciones `filterInventoryParts`, `countLowStockParts`, y `INVENTORY_SORT_COLUMNS`.
-- [x] `tests/inventoryHelpers.test.ts`: 9 tests unitarios pasando.
-- [x] `src/pages/dashboard/inventory/components/`: Subcomponentes modulares de toolbar, tabla, estados vacíos y diálogo de borrado.
-- [x] `src/pages/dashboard/inventory/hooks/useInventoryState.ts`: Custom hook de consultas, filtros, ordenación y paginación.
-- [x] `src/pages/dashboard/InventoryView.tsx`: Reducido de 455 a 148 líneas (-67.5%).
+- [x] `src/pages/dashboard/settings/equipmentModels/types.ts`: Tipos `UsageStats`, `EquipmentModelDoc`, `EquipmentDoc`, `PartDoc`, `ManualDoc`.
+- [x] `src/pages/dashboard/settings/equipmentModels/helpers.ts`: Funciones `computeModelUsageStats`, `filterEquipmentModels`, `getCannotDeleteReason`.
+- [x] `tests/equipmentModelsCardHelpers.test.ts`: 11 tests unitarios pasando.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios? 2.060 tests pasados (100%).
+- [x] ¿Tests unitarios? Verificados con Vitest (11 tests pasados).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] ¿Build de producción Vite? Exitoso (5.84s).
 
 ---
 
 ## 4. Estado Final
-- **Estado:** Completada y Cerrada. Listo para proponer siguiente candidato.
+- **Estado:** Completada Fase 1. Lista para commit.
 
 
 
