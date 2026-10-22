@@ -1,7 +1,4 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,111 +7,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
-import { getErrorMessage } from "@/lib/workshop";
-import { toast } from "sonner";
+import {
+  ModelBasicFields,
+  ModelDetailsFields,
+  useEquipmentModelForm,
+} from "./modelDialog";
+import type {
+  EquipmentModelDialogProps,
+  EquipmentModelDoc,
+} from "./modelDialog";
 
-export type EquipmentModelDoc = Doc<"equipmentModels">;
-
-interface EquipmentModelDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  model: EquipmentModelDoc | null;
-}
+export type { EquipmentModelDoc };
 
 export function EquipmentModelDialog({
   open,
   onOpenChange,
   model,
 }: EquipmentModelDialogProps) {
-  const isEdit = model !== null;
-  const createModel = useMutation(api.equipmentModels.create);
-  const updateModel = useMutation(api.equipmentModels.update);
-
-  const catalogBrands = useQuery(api.catalogs.list, { kind: "brand" }) ?? [];
-  const catalogSuppliers = useQuery(api.catalogs.list, { kind: "supplier" }) ?? [];
-
-  // El formulario nace relleno con el modelo que se va a editar: quien abre la
-  // ficha vuelve a montar el diálogo —lo hace la tarjeta con una `key`—, así que
-  // no hace falta un efecto que lo reinicie después del primer pintado.
-  const [modelCode, setModelCode] = useState(model?.model ?? "");
-  const [name, setName] = useState(model?.name ?? "");
-  const [brand, setBrand] = useState(model?.brand ?? "");
-  const [category, setCategory] = useState(model?.category ?? "");
-  const [defaultSupplier, setDefaultSupplier] = useState(
-    model?.defaultSupplier ?? "",
-  );
-  const [maintenanceInterval, setMaintenanceInterval] = useState(
-    model?.defaultMaintenanceIntervalDays !== undefined
-      ? String(model.defaultMaintenanceIntervalDays)
-      : "",
-  );
-  const [description, setDescription] = useState(model?.description ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    const cleanModel = modelCode.trim();
-    const cleanName = name.trim();
-    if (!cleanModel) {
-      setError("El código o denominación del modelo es obligatorio.");
-      return;
-    }
-    if (!cleanName) {
-      setError("La designación genérica del modelo es obligatoria.");
-      return;
-    }
-
-    let intervalNum: number | undefined = undefined;
-    if (maintenanceInterval.trim()) {
-      const parsed = parseInt(maintenanceInterval.trim(), 10);
-      if (isNaN(parsed) || parsed <= 0) {
-        setError("El intervalo preventivo debe ser un número entero de días mayor a 0.");
-        return;
-      }
-      intervalNum = parsed;
-    }
-
-    setBusy(true);
-    try {
-      if (isEdit && model) {
-        await updateModel({
-          id: model._id,
-          model: cleanModel,
-          name: cleanName,
-          brand: brand.trim() || undefined,
-          category: category.trim() || undefined,
-          defaultSupplier: defaultSupplier.trim() || undefined,
-          defaultMaintenanceIntervalDays: intervalNum,
-          description: description.trim() || undefined,
-        });
-        toast.success(`Modelo «${cleanModel}» actualizado`);
-      } else {
-        await createModel({
-          model: cleanModel,
-          name: cleanName,
-          brand: brand.trim() || undefined,
-          category: category.trim() || undefined,
-          defaultSupplier: defaultSupplier.trim() || undefined,
-          defaultMaintenanceIntervalDays: intervalNum,
-          description: description.trim() || undefined,
-        });
-        toast.success(`Modelo «${cleanModel}» registrado en el catálogo maestro`);
-      }
-      onOpenChange(false);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const {
+    isEdit,
+    modelCode,
+    setModelCode,
+    name,
+    setName,
+    brand,
+    setBrand,
+    category,
+    setCategory,
+    defaultSupplier,
+    setDefaultSupplier,
+    maintenanceInterval,
+    setMaintenanceInterval,
+    description,
+    setDescription,
+    busy,
+    error,
+    catalogBrands,
+    catalogSuppliers,
+    handleSubmit,
+  } = useEquipmentModelForm({
+    model,
+    onOpenChange,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -137,105 +71,29 @@ export function EquipmentModelDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="model-code">
-                Código / Modelo comercial <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="model-code"
-                value={modelCode}
-                onChange={(e) => setModelCode(e.target.value)}
-                placeholder="ej. 8FGF25 o HDC-3500"
-                disabled={busy}
-                autoFocus
-                required
-              />
-            </div>
+          <ModelBasicFields
+            modelCode={modelCode}
+            onModelCodeChange={setModelCode}
+            brand={brand}
+            onBrandChange={setBrand}
+            name={name}
+            onNameChange={setName}
+            catalogBrands={catalogBrands}
+            disabled={busy}
+          />
 
-            <div className="grid gap-2">
-              <Label htmlFor="model-brand">Marca comercial</Label>
-              <AutocompleteInput
-                id="model-brand"
-                value={brand}
-                onChange={setBrand}
-                items={catalogBrands}
-                kind="brand"
-                placeholder="ej. Toyota, Sony, Rexroth..."
-                disabled={busy}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="model-name">
-              Designación genérica <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="model-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ej. Carretilla elevadora diésel 2.5T"
-              disabled={busy}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="model-category">Categoría de equipo</Label>
-              <Input
-                id="model-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="ej. Elevación, Mecanizado, Audiovisual..."
-                disabled={busy}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="model-supplier">Proveedor habitual</Label>
-              <AutocompleteInput
-                id="model-supplier"
-                value={defaultSupplier}
-                onChange={setDefaultSupplier}
-                items={catalogSuppliers}
-                kind="supplier"
-                placeholder="ej. Toyota Material Handling"
-                disabled={busy}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="model-interval">
-              Intervalo preventivo por defecto (días)
-            </Label>
-            <Input
-              id="model-interval"
-              type="number"
-              min="1"
-              value={maintenanceInterval}
-              onChange={(e) => setMaintenanceInterval(e.target.value)}
-              placeholder="ej. 90 (cada 3 meses)"
-              disabled={busy}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Se propondrá automáticamente al dar de alta nuevos equipos físicos de este modelo.
-            </p>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="model-description">Notas técnicas / Especificaciones</Label>
-            <Textarea
-              id="model-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Características destacadas, capacidad de carga, potencia o requisitos..."
-              rows={3}
-              disabled={busy}
-            />
-          </div>
+          <ModelDetailsFields
+            category={category}
+            onCategoryChange={setCategory}
+            defaultSupplier={defaultSupplier}
+            onDefaultSupplierChange={setDefaultSupplier}
+            maintenanceInterval={maintenanceInterval}
+            onMaintenanceIntervalChange={setMaintenanceInterval}
+            description={description}
+            onDescriptionChange={setDescription}
+            catalogSuppliers={catalogSuppliers}
+            disabled={busy}
+          />
 
           <DialogFooter className="pt-2">
             <Button
@@ -247,7 +105,11 @@ export function EquipmentModelDialog({
               Cancelar
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear modelo"}
+              {busy
+                ? "Guardando..."
+                : isEdit
+                  ? "Guardar cambios"
+                  : "Crear modelo"}
             </Button>
           </DialogFooter>
         </form>
