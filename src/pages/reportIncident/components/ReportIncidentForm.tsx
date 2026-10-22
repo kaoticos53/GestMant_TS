@@ -13,7 +13,7 @@ import { EquipmentFields } from "./EquipmentFields";
 import { ReporterFields } from "./ReporterFields";
 
 interface ReportIncidentFormProps {
-  user: { name?: string; email?: string } | null;
+  user: { name?: string; email?: string } | null | undefined;
   isAuthenticated: boolean;
   reporterProps: ComponentProps<typeof ReporterFields>;
   equipmentProps: ComponentProps<typeof EquipmentFields>;

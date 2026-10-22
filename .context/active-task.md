@@ -17,6 +17,8 @@
 - [x] Subcomponentes de cabecera y éxito (`ReportIncidentHeader.tsx`, `ReportIncidentSuccessCard.tsx`).
 - [x] Subcomponentes de campos modulares (`ReporterFields.tsx`, `EquipmentFields.tsx`, `DescriptionField.tsx`).
 - [x] Formulario contenedor (`ReportIncidentForm.tsx`).
+- [x] Custom hook de estado (`useReportIncidentState.ts`).
+- [x] Orquestador declarativo (`ReportIncident.tsx`, 407 -> 57 líneas, -86.0%).
 
 ---
 
@@ -29,7 +31,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
