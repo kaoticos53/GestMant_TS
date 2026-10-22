@@ -17,20 +17,22 @@
 - [x] `src/pages/dashboard/incidents/components/IncidentsEmptyState.tsx`: Estado vacío contextual para IncidentsView.
 - [x] `src/pages/dashboard/incidents/components/IncidentCard.tsx`: Tarjeta individual de incidencia con tags y botón archivar.
 - [x] `src/pages/dashboard/incidents/components/IncidentsList.tsx`: ListArea, agrupaciones de fecha, tarjetas y paginador.
+- [x] `src/pages/dashboard/incidents/hooks/useIncidentsViewState.ts`: Hook de orquestación de queries, mutations y toasts.
+- [x] `src/pages/dashboard/IncidentsView.tsx`: Reensamblado a orquestador declarativo de 98 líneas (-74.5%).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios nuevos? 4 tests pasados al 100%.
+- [x] ¿Tests unitarios y de integración? 26 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 - [ ] ¿Build de producción Vite? (Fase 4)
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
