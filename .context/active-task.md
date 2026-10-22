@@ -18,20 +18,22 @@
 - [x] `src/pages/dashboard/requests/components/RequestsEmptyState.tsx`: Estado vacío contextual con soporte a búsqueda/equipo.
 - [x] `src/pages/dashboard/requests/components/RequestsList.tsx`: ListArea, secciones, RequestCard y TablePagination.
 - [x] `src/pages/dashboard/requests/components/RequestsDialogs.tsx`: Modales de decisión, asociación, detalle y nueva petición.
+- [x] `src/pages/dashboard/requests/hooks/useRequestsState.ts`: Custom hook de consultas, mutaciones, estado y exportación CSV.
+- [x] `src/pages/dashboard/RequestsView.tsx`: Rediseñado a orquestador declarativo de 107 líneas (-75.3%).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios nuevos? 6 tests pasados al 100%.
+- [x] ¿Tests unitarios y de integración? 16 tests de requests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 - [ ] ¿Build de producción Vite? (Fase 4)
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
