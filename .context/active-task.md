@@ -1,17 +1,15 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-ARCHIVE-VIEW`
-- **Objetivo:** Fase 1 - Extracción de funciones puras de mapeo de papelera y partición de archivo con pruebas unitarias.
+- **ID / Nombre de la Tarea:** `REF-FASE2-ARCHIVE-VIEW`
+- **Objetivo:** Fase 2 - Encapsulación de queries Convex, partición de colecciones y resolución de papelera en `useArchiveData`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/helpers/trashRows.ts`
-  - `tests/archiveDataHelpers.test.ts`
+  - `src/pages/dashboard/archive/hooks/useArchiveData.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `archive/helpers/trashRows.ts`: funciones puras `buildTrashedIncidentRows`, `buildTrashedRequestRows` y `partitionByArchived`.
-- [x] `tests/archiveDataHelpers.test.ts`: 6 tests unitarios con tipado estricto verificando permisos condicionales y particionado de colecciones.
+- [x] `archive/hooks/useArchiveData.ts`: hook orquestador que centraliza las consultas de incidencias, peticiones, catálogo, equipos y papelera polimórfica.
 
 ---
 
@@ -24,4 +22,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
