@@ -1,35 +1,29 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-INCIDENT-EQUIPMENT-CARD`
-- **Objetivo:** Fase 4 - Verificación exhaustiva (Typecheck, Vitest, Build de Producción) y cierre de la refactorización modular de `IncidentEquipmentCard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-PART-FORM-DIALOG`
+- **Objetivo:** Fase 1 - Extracción de tipos, helpers puros de catálogo y pruebas unitarias para `PartFormDialog`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/IncidentEquipmentCard.tsx`
-  - `src/pages/dashboard/incidents/components/detail/equipment/`
-  - `tests/incidentEquipmentCardHelpers.test.ts`
+  - `src/pages/dashboard/inventory/dialogs/partForm/types.ts`
+  - `src/pages/dashboard/inventory/dialogs/partForm/helpers.ts`
+  - `tests/partFormDialogHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `equipment/types.ts`: contratos de interfaz para subsecciones de equipo.
-- [x] `equipment/helpers.ts`: helpers puros de cálculo y formato (SAT, moneda EUR, inventario).
-- [x] `tests/incidentEquipmentCardHelpers.test.ts`: 12 tests unitarios con tipado estricto.
-- [x] `equipment/IncidentNotificationSection.tsx`: datos de notificación, equipamiento y descripción.
-- [x] `equipment/IncidentAssignmentSection.tsx`: asignación técnica, entrada a taller y notas.
-- [x] `equipment/IncidentExternalRepairSection.tsx`: gestión de SAT y costes monetarios.
-- [x] `equipment/index.ts`: barril unificado para el submódulo equipment.
-- [x] `IncidentEquipmentCard.tsx`: reducción de 244 a 34 líneas, actuando como orquestador limpio.
+- [x] `partForm/types.ts`: contratos de props para `PartBasicFields` y `PartStockLocationFields`.
+- [x] `partForm/helpers.ts`: función pura `buildPartCategoryOptions` para deduplicar y combinar categorías estándar y personalizadas.
+- [x] `tests/partFormDialogHelpers.test.ts`: 4 tests unitarios cubriendo deduplicación, catálogo vacío y formato.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio sin errores.
-- [x] ¿Tests unitarios y de seguridad? 2.367 tests pasados en 197 suites (0 fallos).
-- [x] ¿Compilación de producción? `npm run build` completado con éxito (5.25s).
-- [x] ¿Vocabulario Ubicuo respetado? Sí (Equipo, Incidencia, Técnico).
+- [x] ¿Tests unitarios y de seguridad? 22 tests pasados (4 helpers + 9 arquitectura + 9 seguridad).
+- [x] ¿Guardrails de Arquitectura y Seguridad? Verificados y cumplidos.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada con éxito. Listo para proponer siguiente candidato.
+- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
