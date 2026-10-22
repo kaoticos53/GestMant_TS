@@ -10,7 +10,7 @@ interface EquipmentMaintenanceSectionProps {
   item: EquipmentDoc;
   maintenance: RecordDoc[];
   requests: Doc<"partRequests">[];
-  review: { state: "overdue" | "ok" | "none"; dueAt?: number };
+  review: { state: "overdue" | "ok" | "none"; dueAt?: number | null };
   canManage?: boolean;
   onNewRecord: () => void;
   onEditRecord: (record: RecordDoc) => void;

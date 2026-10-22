@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import type { ManualRights } from "@/lib/manuals";
 import { BookOpen, Plus } from "lucide-react";
-import type { ManualDoc } from "../../ManualsView";
+import type { ManualDoc } from "@/pages/dashboard/ManualsView";
 import type { EquipmentDoc } from "../../types";
 import { ManualRow } from "../ManualRow";
 
