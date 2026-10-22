@@ -1,19 +1,18 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-REPORTS-DIALOG`
-- **Objetivo:** Fase 1 - Extraer tipos y funciones auxiliares puras de IncidentReportsDialog en incidentReports/ con tests unitarios.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-REPORTS-DIALOG`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de IncidentReportsDialog en incidentReports/components/.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidentReports/types.ts`
-  - `src/pages/dashboard/incidentReports/helpers.ts`
-  - `tests/incidentReportsHelpers.test.ts`
+  - `src/pages/dashboard/incidentReports/components/IncidentReportsPeriodPresets.tsx`
+  - `src/pages/dashboard/incidentReports/components/IncidentReportsDateRangeFields.tsx`
+  - `src/pages/dashboard/incidentReports/components/IncidentReportsSummaryCard.tsx`
+  - `src/pages/dashboard/incidentReports/components/IncidentReportsFooter.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/incidentReports/types.ts`
-- [x] `src/pages/dashboard/incidentReports/helpers.ts`
-- [x] `tests/incidentReportsHelpers.test.ts` (12 tests unitarios nuevos)
+- [x] Subcomponentes visuales de IncidentReportsDialog (`IncidentReportsPeriodPresets`, `IncidentReportsDateRangeFields`, `IncidentReportsSummaryCard`, `IncidentReportsFooter`).
 
 ---
 
@@ -26,4 +25,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada exitosamente. Listo para commit atómico 1.
+- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
