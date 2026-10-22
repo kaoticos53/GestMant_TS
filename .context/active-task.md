@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-MAINTENANCE-DIALOG`
-- **Objetivo:** Fase 2 - Crear hook `useMaintenanceForm` y subcomponentes visuales (`MaintenanceFormFields`, `MaintenanceDialogFooter`) con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-MAINTENANCE-DIALOG`
+- **Objetivo:** Fase 3 - Reensamblar `MaintenanceDialog.tsx` consumiendo el submódulo modular `maintenance/`, reduciendo su tamaño de 218 a ~60 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/equipment/dialogs/maintenance/hooks/useMaintenanceForm.ts`
-  - `src/pages/dashboard/equipment/dialogs/maintenance/components/MaintenanceFormFields.tsx`
-  - `src/pages/dashboard/equipment/dialogs/maintenance/components/MaintenanceDialogFooter.tsx`
-  - `src/pages/dashboard/equipment/dialogs/maintenance/index.ts`
+  - `src/pages/dashboard/equipment/dialogs/MaintenanceDialog.tsx`
 
 ---
 
@@ -19,6 +16,7 @@
 - [x] `maintenance/components/MaintenanceFormFields.tsx`: formulario con tipo, fecha, resumen, técnico, petición y editor.
 - [x] `maintenance/components/MaintenanceDialogFooter.tsx`: footer accesible con acciones de cancelar y submit.
 - [x] `maintenance/index.ts`: barril unificado.
+- [x] `MaintenanceDialog.tsx`: reducción de 218 a ~60 líneas orquestando limpiamente.
 
 ---
 
@@ -31,4 +29,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
