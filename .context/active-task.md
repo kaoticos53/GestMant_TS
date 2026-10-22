@@ -13,6 +13,10 @@
 ## 2. Archivos Modificados / Creados
 - [x] `src/pages/dashboard/incidents/types.ts`: Tipo `IncidentSection`.
 - [x] `tests/incidentsViewFlow.test.tsx`: Batería de 4 tests de renderizado, empty state, filtrado y acción de archivo.
+- [x] `src/pages/dashboard/incidents/components/IncidentsHeaderBar.tsx`: Filtros de estado, informes y reporte.
+- [x] `src/pages/dashboard/incidents/components/IncidentsEmptyState.tsx`: Estado vacío contextual para IncidentsView.
+- [x] `src/pages/dashboard/incidents/components/IncidentCard.tsx`: Tarjeta individual de incidencia con tags y botón archivar.
+- [x] `src/pages/dashboard/incidents/components/IncidentsList.tsx`: ListArea, agrupaciones de fecha, tarjetas y paginador.
 
 ---
 
@@ -26,7 +30,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
+- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
 
 
 
