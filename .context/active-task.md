@@ -1,36 +1,27 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-REQUEST-DETAIL-SHEET`
-- **Objetivo:** Fase 4 - Validación integral, suite completa de pruebas, verificación de build de producción y cierre de la refactorización de `RequestDetailSheet.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-MANUALS-VIEW`
+- **Objetivo:** Fase 1 - Extracción de definición de columnas ordenables y pruebas unitarias para `ManualsView`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/components/RequestDetailSheet.tsx`
-  - `src/pages/dashboard/requests/components/detail/`
-  - `tests/requestDetailSheetHelpers.test.ts`
+  - `src/pages/dashboard/manuals/helpers/columns.ts`
+  - `tests/manualsColumns.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Submódulo desacoplado en `src/pages/dashboard/requests/components/detail/`:
-  - `types.ts`: interfaces de props para banners, notas y recorrido.
-  - `helpers.ts`: funciones puras de resolución de permisos de gestión y cálculo de etiquetas/avisos del recorrido.
-  - `RequestStatusBanners.tsx`: avisos de lectura para peticiones retiradas a papelera o archivadas.
-  - `RequestNotesSection.tsx`: tarjetas con `RichText` para descripción ("Qué pide") y nota del solicitante.
-  - `RequestJourneyCard.tsx`: envoltorio limpio para `JourneySummary`.
-  - `index.ts`: barril unificado.
-- [x] `tests/requestDetailSheetHelpers.test.ts`: 14 tests unitarios cubriendo recorrido, permisos y avisos.
-- [x] `RequestDetailSheet.tsx`: orquestador declarativo reducido de 252 a 198 líneas con composición limpia.
+- [x] `manuals/helpers/columns.ts`: funciones puras `formatManualBrandModel` y constructora tipada `buildManualsSortColumns`.
+- [x] `tests/manualsColumns.test.ts`: 6 tests unitarios cubriendo concatenación de marca/modelo y resolución de cada columna de la tabla.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio sin errores.
-- [x] ¿Suite completa de tests? 2.349 tests pasados en 195 suites de Vitest.
-- [x] ¿Compilación de producción? Vite build completado con éxito (5.18s).
+- [x] ¿Tests unitarios y de seguridad? 24 tests pasados (6 helpers + 9 arquitectura + 9 seguridad).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados y cumplidos.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Tarea completada y cerrada con éxito.
+- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
