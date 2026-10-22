@@ -1,5 +1,6 @@
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { PasswordFlow } from "../types";
@@ -11,6 +12,7 @@ export function PasswordAuthForm({
   onEmailChange,
   password,
   onPasswordChange,
+  error,
   isLoading,
   onSubmit,
 }: {
@@ -20,70 +22,88 @@ export function PasswordAuthForm({
   onEmailChange: (value: string) => void;
   password: string;
   onPasswordChange: (value: string) => void;
+  error: string | null;
   isLoading: boolean;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">Correo electrónico</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          placeholder="tu@empresa.com"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => onEmailChange(e.target.value)}
-          disabled={isLoading}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="password">Contraseña</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete={
-            passwordFlow === "signIn" ? "current-password" : "new-password"
-          }
-          value={password}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          disabled={isLoading}
-        />
-        {passwordFlow === "signUp" && (
-          <p className="text-xs text-muted-foreground">
-            Mínimo 8 caracteres
-          </p>
-        )}
-      </div>
-
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-        {passwordFlow === "signIn" ? "Entrar" : "Crear cuenta"}
-      </Button>
-
-      <div className="text-center">
-        <Button
-          type="button"
-          variant="link"
-          className="text-xs text-muted-foreground"
-          onClick={() =>
-            onPasswordFlowChange(
-              passwordFlow === "signIn" ? "signUp" : "signIn",
-            )
-          }
-          disabled={isLoading}
-        >
-          {passwordFlow === "signIn"
-            ? "¿No tienes cuenta? Regístrate"
-            : "¿Ya tienes cuenta? Inicia sesión"}
+    <form onSubmit={onSubmit}>
+      <CardContent className="grid gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor="login-email">Correo</Label>
+          <Input
+            id="login-email"
+            name="email"
+            placeholder="nombre@empresa.com"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            disabled={isLoading}
+            required
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="login-password">Contraseña</Label>
+          <Input
+            id="login-password"
+            name="password"
+            type="password"
+            autoComplete={
+              passwordFlow === "signUp" ? "new-password" : "current-password"
+            }
+            value={password}
+            onChange={(event) => onPasswordChange(event.target.value)}
+            disabled={isLoading}
+            required
+            minLength={8}
+          />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {passwordFlow === "signUp" ? "Creando cuenta..." : "Entrando..."}
+            </>
+          ) : passwordFlow === "signUp" ? (
+            <>
+              Crear cuenta
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          ) : (
+            <>
+              Entrar
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
         </Button>
-      </div>
+        <p className="text-xs text-center text-muted-foreground">
+          {passwordFlow === "signUp" ? (
+            <>
+              ¿Ya tienes cuenta?{" "}
+              <button
+                type="button"
+                className="text-foreground underline underline-offset-2"
+                onClick={() => onPasswordFlowChange("signIn")}
+              >
+                Entrar
+              </button>
+            </>
+          ) : (
+            <>
+              ¿Primera vez?{" "}
+              <button
+                type="button"
+                className="text-foreground underline underline-offset-2"
+                onClick={() => onPasswordFlowChange("signUp")}
+              >
+                Crear cuenta
+              </button>
+            </>
+          )}
+        </p>
+      </CardContent>
     </form>
   );
 }

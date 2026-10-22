@@ -28,12 +28,12 @@
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
 - [x] ¿Tests unitarios y de seguridad? 8 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [ ] ¿Build de producción Vite? (Fase 4)
+- [x] ¿Build de producción Vite? Verificado (dist generado en 4.96s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
+- **Estado:** Fase 4 completada. Componente `Auth.tsx` modularizado (419 -> 67 líneas, -84.0%) con 100% tests verdes y build limpio.
 
 
 

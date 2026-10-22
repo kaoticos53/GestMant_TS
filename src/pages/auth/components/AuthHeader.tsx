@@ -1,67 +1,58 @@
 import logo from "@/assets/logo.svg";
-import { Button } from "@/components/ui/button";
 import { CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AuthMethod, PasswordFlow } from "../types";
+import type { AuthMethod } from "../types";
 
 export function AuthHeader({
   method,
   onMethodChange,
-  passwordFlow,
+  onLogoClick,
 }: {
   method: AuthMethod;
   onMethodChange: (method: AuthMethod) => void;
-  passwordFlow: PasswordFlow;
+  onLogoClick: () => void;
 }) {
   return (
-    <CardHeader className="space-y-4 text-center">
+    <CardHeader className="text-center">
       <div className="flex justify-center">
         <img
           src={logo}
           alt="Pulso Taller"
-          className="size-16 rounded-2xl border border-border/60 bg-muted/30 p-2 shadow-xs"
+          width={64}
+          height={64}
+          className="rounded-lg mb-4 mt-4 cursor-pointer"
+          onClick={onLogoClick}
         />
       </div>
-      <div className="space-y-1">
-        <CardTitle className="text-2xl font-bold tracking-tight">
-          Pulso Taller
-        </CardTitle>
-        <CardDescription>
-          {method === "password"
-            ? passwordFlow === "signIn"
-              ? "Inicia sesión con tu cuenta"
-              : "Crea una cuenta nueva"
-            : "Recibe un código de acceso temporal en tu correo"}
-        </CardDescription>
-      </div>
+      <CardTitle className="text-xl">Accede a Pulso Taller</CardTitle>
+      <CardDescription>
+        {method === "password"
+          ? "Entra con tu correo y contraseña"
+          : "Introduce tu correo y te enviamos un código"}
+      </CardDescription>
 
-      {/* Selector de método de acceso */}
-      <div
-        role="tablist"
-        aria-label="Método de acceso"
-        className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 text-xs"
-      >
-        <Button
+      <div className="mt-4 inline-flex w-fit rounded-lg border border-border/70 bg-muted/60 p-1 mx-auto">
+        <button
           type="button"
-          role="tab"
-          aria-selected={method === "password"}
-          variant={method === "password" ? "secondary" : "ghost"}
-          size="sm"
-          className="h-8 text-xs font-medium"
           onClick={() => onMethodChange("password")}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            method === "password"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
         >
           Contraseña
-        </Button>
-        <Button
+        </button>
+        <button
           type="button"
-          role="tab"
-          aria-selected={method === "email"}
-          variant={method === "email" ? "secondary" : "ghost"}
-          size="sm"
-          className="h-8 text-xs font-medium"
           onClick={() => onMethodChange("email")}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            method === "email"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
         >
           Código por email
-        </Button>
+        </button>
       </div>
     </CardHeader>
   );

@@ -1,137 +1,139 @@
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
-import { Label } from "@/components/ui/label";
 import type { OtpStep } from "../types";
 
 export function OtpEmailForm({
   step,
-  email,
-  onEmailChange,
   otp,
   onOtpChange,
+  error,
   isLoading,
-  resendCountdown,
-  onRequestCode,
-  onVerifyCode,
-  onResendCode,
-  onChangeEmail,
+  onEmailSubmit,
+  onOtpSubmit,
+  onResetToEmail,
 }: {
   step: OtpStep;
-  email: string;
-  onEmailChange: (value: string) => void;
   otp: string;
   onOtpChange: (value: string) => void;
+  error: string | null;
   isLoading: boolean;
-  resendCountdown: number;
-  onRequestCode: (e: React.FormEvent<HTMLFormElement>) => void;
-  onVerifyCode: (e: React.FormEvent<HTMLFormElement>) => void;
-  onResendCode: () => void;
-  onChangeEmail: () => void;
+  onEmailSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onOtpSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onResetToEmail: () => void;
 }) {
   if (step === "signIn") {
     return (
-      <form onSubmit={onRequestCode} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="otp-email">Correo electrónico</Label>
-          <Input
-            id="otp-email"
-            name="email"
-            type="email"
-            placeholder="tu@empresa.com"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            disabled={isLoading}
-          />
-          <p className="text-xs text-muted-foreground">
-            Te enviaremos un código de 6 dígitos que caduca en 15 minutos
-          </p>
-        </div>
-
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Mail className="mr-2 size-4" />
-          )}
-          Enviar código de acceso
-        </Button>
+      <form onSubmit={onEmailSubmit}>
+        <CardContent className="grid gap-3">
+          <div className="relative flex items-center gap-2">
+            <div className="relative flex-1">
+              <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                name="email"
+                placeholder="nombre@empresa.com"
+                type="email"
+                className="pl-9"
+                disabled={isLoading}
+                required
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              size="icon"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowRight className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </CardContent>
       </form>
     );
   }
 
   return (
-    <form onSubmit={onVerifyCode} className="space-y-4">
-      <div className="space-y-2 text-center">
-        <p className="text-sm text-muted-foreground">
-          Hemos enviado un código de acceso a:
-        </p>
-        <p className="font-mono text-sm font-semibold">{step.email}</p>
-      </div>
+    <form onSubmit={onOtpSubmit}>
+      <CardContent className="grid gap-3 pb-4">
+        <input type="hidden" name="email" value={step.email} />
+        <input type="hidden" name="code" value={otp} />
 
-      <div className="flex justify-center py-2">
-        <InputOTP
-          maxLength={6}
-          value={otp}
-          onChange={onOtpChange}
-          disabled={isLoading}
-          autoFocus
-        >
-          <InputOTPGroup>
-            <InputOTPSlot index={0} />
-            <InputOTPSlot index={1} />
-            <InputOTPSlot index={2} />
-            <InputOTPSlot index={3} />
-            <InputOTPSlot index={4} />
-            <InputOTPSlot index={5} />
-          </InputOTPGroup>
-        </InputOTP>
-      </div>
-
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={isLoading || otp.length !== 6}
-      >
-        {isLoading ? (
-          <Loader2 className="mr-2 size-4 animate-spin" />
-        ) : (
-          <ArrowRight className="mr-2 size-4" />
+        <div className="flex justify-center">
+          <InputOTP
+            value={otp}
+            onChange={onOtpChange}
+            maxLength={6}
+            disabled={isLoading}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && otp.length === 6 && !isLoading) {
+                const form = (e.target as HTMLElement).closest("form");
+                if (form) {
+                  form.requestSubmit();
+                }
+              }
+            }}
+          >
+            <InputOTPGroup>
+              {Array.from({ length: 6 }).map((_, index) => (
+                <InputOTPSlot key={index} index={index} />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
+        </div>
+        {error && (
+          <p className="text-sm text-destructive text-center">
+            {error}
+          </p>
         )}
-        Verificar y entrar
-      </Button>
-
-      <div className="flex flex-col gap-1 text-center">
+        <p className="text-sm text-muted-foreground text-center mt-1">
+          ¿No has recibido el código?{" "}
+          <Button
+            type="button"
+            variant="link"
+            className="p-0 h-auto"
+            onClick={onResetToEmail}
+          >
+            Reenviar
+          </Button>
+        </p>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || otp.length !== 6}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Verificando...
+            </>
+          ) : (
+            <>
+              Verificar código
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="text-xs"
-          disabled={isLoading || resendCountdown > 0}
-          onClick={onResendCode}
-        >
-          {resendCountdown > 0
-            ? `Reenviar código en ${resendCountdown}s`
-            : "¿No te ha llegado? Reenviar código"}
-        </Button>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          className="text-xs text-muted-foreground"
+          onClick={onResetToEmail}
           disabled={isLoading}
-          onClick={onChangeEmail}
+          className="w-full"
         >
           Usar otro correo
         </Button>
-      </div>
+      </CardContent>
     </form>
   );
 }
