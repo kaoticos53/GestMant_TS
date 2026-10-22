@@ -1,19 +1,25 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-LANDING`
-- **Objetivo:** Fase 1 - Extraer tokens de diseño, constantes y hook de estadísticas públicas (`useLandingStatsSummary`) con pruebas unitarias para `Landing.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-LANDING`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales desacoplados (`TechnicalConsolePreview`, `LandingHeader`, `LandingHero`, `LandingStatsSection`, `WorkshopDoorsSection`, `LandingFooter`).
 - **Módulo(s) Afectado(s):**
-  - `src/pages/landing/constants.ts`
-  - `src/pages/landing/hooks/useLandingStatsSummary.ts`
-  - `tests/landingStatsLogic.test.ts`
+  - `src/pages/landing/components/TechnicalConsolePreview.tsx`
+  - `src/pages/landing/components/LandingHeader.tsx`
+  - `src/pages/landing/components/LandingHero.tsx`
+  - `src/pages/landing/components/LandingStatsSection.tsx`
+  - `src/pages/landing/components/WorkshopDoorsSection.tsx`
+  - `src/pages/landing/components/LandingFooter.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/landing/constants.ts`: Tokens de espaciado, clases de diseño y contenido editorial (`PASOS`).
-- [x] `src/pages/landing/hooks/useLandingStatsSummary.ts`: Hook y función pura de formateo de estadísticas del taller.
-- [x] `tests/landingStatsLogic.test.ts`: Pruebas unitarias para el mapeo y formateo de estadísticas (3 tests).
+- [x] `TechnicalConsolePreview.tsx`: Consola técnica simulada para pantallas grandes.
+- [x] `LandingHeader.tsx`: Cabecera sticky con navegación y estado de sesión.
+- [x] `LandingHero.tsx`: Sección Hero con textos condicionales y botones CTA.
+- [x] `LandingStatsSection.tsx`: Banda '#taller' con estadísticas públicas cuantitativas.
+- [x] `WorkshopDoorsSection.tsx`: Tarjeta dual con puertas de aviso ('#avisar') y seguimiento ('#seguimiento').
+- [x] `LandingFooter.tsx`: Pie de página con versión, copyright y diálogo de bitácora.
 
 ---
 
@@ -25,8 +31,6 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `constants.ts` y hook en `src/pages/landing/`.
-- [x] **Paso 2:** Crear test unitario `tests/landingStatsLogic.test.ts`.
-- [x] **Paso 3:** Verificar compilación con `npx tsc -b`.
-- [x] **Paso 4:** Ejecutar pruebas con Vitest (17 tests verdes).
-- [x] **Paso 5:** Commit atómico de Fase 1.
+- [x] **Paso 1:** Crear los 6 subcomponentes en `src/pages/landing/components/`.
+- [x] **Paso 2:** Verificar compilación con `npx tsc -b`.
+- [x] **Paso 3:** Commit atómico de Fase 2.
