@@ -1,34 +1,33 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-MAIL-PROVIDER-FIELDS`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales en src/pages/dashboard/settings/mail/components/providerFields/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-DOCUMENTS`
+- **Objetivo:** Fase 1 - Extraer tipos, helpers de textos y tests unitarios para IncidentDocumentsCard.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/mail/components/providerFields/components/ProviderSelector.tsx`
-  - `src/pages/dashboard/settings/mail/components/providerFields/components/SenderFields.tsx`
-  - `src/pages/dashboard/settings/mail/components/providerFields/components/RelayFields.tsx`
-  - `src/pages/dashboard/settings/mail/components/providerFields/components/CredentialsFields.tsx`
-  - `src/pages/dashboard/settings/mail/components/providerFields/components/ProviderActionsBar.tsx`
+  - `src/pages/dashboard/incidents/components/detail/documents/types.ts`
+  - `src/pages/dashboard/incidents/components/detail/documents/helpers.ts`
+  - `tests/incidentDocumentsCardHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/IncidentDocumentsCard.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de configuración de correo (`ProviderSelector.tsx`, `SenderFields.tsx`, `RelayFields.tsx`, `CredentialsFields.tsx`, `ProviderActionsBar.tsx`).
-- [x] Orquestador declarativo (`MailProviderSettingsFields.tsx`, 387 -> 138 líneas, -64.3%).
+- [x] `src/pages/dashboard/incidents/components/detail/documents/types.ts`: Contratos de props para subcomponentes.
+- [x] `src/pages/dashboard/incidents/components/detail/documents/helpers.ts`: Funciones puras de textos y labels.
+- [x] `tests/incidentDocumentsCardHelpers.test.ts`: Batería de 10 tests unitarios de helpers de textos (10 tests pasando).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.120 tests pasados al 100% en Vitest (174 suites).
+- [x] ¿Tests unitarios y de seguridad? 10 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] ¿Build de producción Vite? Verificado (dist generado en 4.95s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 4 completada. Componente `MailProviderSettingsFields.tsx` modularizado (387 -> 138 líneas, -64.3%) con 100% tests verdes y build limpio.
+- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
 
 
 
