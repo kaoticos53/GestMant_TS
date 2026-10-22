@@ -1,20 +1,20 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-DASHBOARD-CONTENT`
-- **Objetivo:** Fase 1 - Creación de tipos, helpers y test suite unitaria para `DashboardContent.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-DASHBOARD-CONTENT`
+- **Objetivo:** Fase 2 - Desacoplamiento de avisos de invitado, taller vacío y tab router en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
   - `src/pages/dashboard/components/DashboardContent.tsx`
-  - `src/pages/dashboard/components/content/types.ts`
-  - `src/pages/dashboard/components/content/helpers.ts`
-  - `tests/dashboardContentHelpers.test.ts`
+  - `src/pages/dashboard/components/content/`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/components/content/types.ts`: contratos para props de avisos de invitado, taller vacío y router.
-- [x] `src/pages/dashboard/components/content/helpers.ts`: constante `EXEMPT_EMPTY_NOTICE_TABS` y helper `isTabExemptFromEmptyNotice`.
-- [x] `tests/dashboardContentHelpers.test.ts`: 16 pruebas unitarias verificando pestañas exentas y operativas.
+- [x] `DashboardViewSkeleton.tsx`: skeleton con animación de pulso para Suspense.
+- [x] `DashboardGuestNotice.tsx`: card de aviso, buscador de incidencia y acción para sesión de invitado.
+- [x] `DashboardEmptyNotice.tsx`: bienvenida a taller vacío con botón de siembra y arranque vacío.
+- [x] `DashboardTabRouter.tsx`: router declarativo protegido con `ModuleErrorBoundary` y `Suspense`.
+- [x] `index.ts`: exportación modular limpia.
 
 ---
 
@@ -27,5 +27,6 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+
 
