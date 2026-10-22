@@ -92,6 +92,8 @@ beforeEach(() => {
   installMissingDomApis();
 });
 
+const PURGE_DELAY = 250;
+
 afterEach(async () => {
   toast.dismiss();
   await act(async () => {
@@ -99,6 +101,10 @@ afterEach(async () => {
   });
   roots = [];
   document.body.innerHTML = "";
+  // Que la purga del aviso cumpla antes de que el entorno jsdom se vaya.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, PURGE_DELAY));
+  });
 });
 
 describe("Avisos de archivado (archiveToasts)", () => {
