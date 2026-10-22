@@ -1,32 +1,30 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-GLOBAL-SEARCH`
-- **Objetivo:** Fase 1 - Extraer tipos de búsqueda (`types.ts`), helpers puros de normalización y filtrado agrupado (`helpers.ts`) y suite de tests unitarios (`tests/globalSearchHelpers.test.ts`) para `GlobalSearch.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-GLOBAL-SEARCH`
+- **Objetivo:** Fase 2 - Modularizar subcomponentes visuales de entrada de texto (`SearchInput`) y menú flotante de resultados (`SearchResultsDropdown`) para `GlobalSearch.tsx`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/search/types.ts`
-  - `src/pages/dashboard/search/helpers.ts`
-  - `tests/globalSearchHelpers.test.ts`
+  - `src/pages/dashboard/search/components/SearchInput.tsx`
+  - `src/pages/dashboard/search/components/SearchResultsDropdown.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/search/types.ts`: Tipos `SearchHit`, `SearchGroup`, `GlobalSearchProps`, `FilterSearchGroupsParams`.
-- [x] `src/pages/dashboard/search/helpers.ts`: Funciones puras `normalize`, `includesQuery`, `filterSearchGroups`, constante `MAX_PER_GROUP`.
-- [x] `tests/globalSearchHelpers.test.ts`: 10 tests unitarios pasando.
+- [x] `src/pages/dashboard/search/components/SearchInput.tsx`: Campo de búsqueda con icono, badges de atajo Kbd y botón de escaneo.
+- [x] `src/pages/dashboard/search/components/SearchResultsDropdown.tsx`: Dropdown flotante con grupos categorizados, resaltado de índice activo y estado vacío.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios? Verificados con Vitest (10 tests pasados).
+- [x] ¿Tests unitarios? Verificados con Vitest.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 
 ---
 
 ## 4. Estado Final
-- **Estado:** Completada Fase 1. Lista para commit.
+- **Estado:** Completada Fase 2. Lista para commit.
 
 
 
