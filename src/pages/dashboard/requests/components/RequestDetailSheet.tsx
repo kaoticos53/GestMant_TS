@@ -1,10 +1,7 @@
 import { useMemo } from "react";
-import { JourneySummary } from "@/components/JourneySummary";
-import { RichText } from "@/components/RichText";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { canEditRequest, isRequestSettled } from "@/lib/requestFlow";
 import {
-  NEXT_REQUEST_STEP_LABELS,
   blockedJourneySteps,
   nextRequestAction,
   requestJourney,
@@ -12,20 +9,27 @@ import {
 import {
   PRIORITY_META,
   STATUS_META,
-  formatDateTime,
   type Priority,
 } from "@/lib/workshop";
-import { User } from "lucide-react";
 import type { PartDoc, RequestDoc } from "../types";
 import { useRequestLifecycle } from "../hooks/useRequestLifecycle";
 import { useRequestLinesStock } from "../hooks/useRequestLinesStock";
 import { DecisionNotes } from "./DecisionNotes";
 import { DeliveryTrail } from "./DeliveryTrail";
-import { RequestActionsFooter } from "./detail/RequestActionsFooter";
-import { RequestAttachmentsCard } from "./detail/RequestAttachmentsCard";
-import { RequestHeader } from "./detail/RequestHeader";
-import { RequestInfoCard } from "./detail/RequestInfoCard";
-import { RequestLinesCard } from "./detail/RequestLinesCard";
+import {
+  RequestActionsFooter,
+  RequestAttachmentsCard,
+  RequestHeader,
+  RequestInfoCard,
+  RequestJourneyCard,
+  RequestLinesCard,
+  RequestNotesSection,
+  RequestStatusBanners,
+  getRequestNextHint,
+  getRequestNextLabel,
+  getRequestNowLabel,
+  resolveCanManageRequest,
+} from "./detail";
 
 export interface RequestDetailSheetProps {
   request: RequestDoc;
@@ -62,8 +66,9 @@ export function RequestDetailSheet({
 }: RequestDetailSheetProps) {
   const archivedAt = request.archivedAt;
   const withdrawnAt = request.deletedAt;
-  const withdrawn = withdrawnAt !== undefined;
-  const canManage = canManageRequest && archivedAt === undefined && !withdrawn;
+  const isWithdrawn = withdrawnAt !== undefined;
+  const isArchived = archivedAt !== undefined;
+  const canManage = resolveCanManageRequest(canManageRequest, archivedAt, withdrawnAt);
 
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
@@ -94,33 +99,15 @@ export function RequestDetailSheet({
     () =>
       requestJourney(request.status, {
         heldFrom: request.heldFrom,
-        archived: archivedAt !== undefined,
+        archived: isArchived,
       }),
-    [request.status, request.heldFrom, archivedAt],
+    [request.status, request.heldFrom, isArchived],
   );
 
   const nextAction = nextRequestAction(request.status, { canManage });
-  const nextLabel = nextAction
-    ? nextAction === "approve" && noReference
-      ? "Asociar un repuesto y aprobarla"
-      : (NEXT_REQUEST_STEP_LABELS[nextAction] ?? nextAction)
-    : null;
-
-  const nextHint = withdrawn
-    ? "Retirada a la papelera: se consulta en solo lectura hasta recuperarla o borrarla."
-    : archivedAt !== undefined
-      ? "En el archivo: la petición se consulta en solo lectura."
-      : !canManage
-        ? "La tramita quien gestiona los repuestos; desde aquí puedes seguirla."
-        : request.status === "pendingSupplierQuote"
-          ? "Presupuesto pedido al proveedor: cuando llegue el material, entra y se aprueba."
-          : request.status === "issued"
-            ? "Material entregado: la petición se archiva cuando toque."
-            : request.status === "returned"
-              ? "El material se devolvió: si vuelve a hacer falta, se pide de nuevo."
-              : request.status === "rejected" || request.status === "cancelled"
-                ? "Ya está cerrada: no se vuelve a tramitar."
-                : "Sin pasos disponibles ahora mismo.";
+  const nextLabel = getRequestNextLabel(nextAction, noReference);
+  const nextHint = getRequestNextHint(request.status, canManage, isWithdrawn, isArchived);
+  const nowLabel = getRequestNowLabel(status.label, isWithdrawn, isArchived);
 
   const blocked =
     canManage && !isRequestSettled(request.status)
@@ -141,38 +128,20 @@ export function RequestDetailSheet({
         />
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
-          <JourneySummary
-            label="Recorrido de la petición"
+          <RequestJourneyCard
             stages={stages}
-            nowLabel={
-              withdrawn
-                ? `${status.label} · retirada`
-                : archivedAt !== undefined
-                  ? `${status.label} · en el archivo`
-                  : status.label
-            }
+            nowLabel={nowLabel}
             nextLabel={nextLabel}
             nextHint={nextHint}
             blocked={blocked}
           />
 
-          {withdrawnAt !== undefined && (
-            <p className="rounded-lg border border-dashed border-destructive/40 bg-destructive/5 p-3 text-xs leading-5 text-muted-foreground">
-              Retirada el {formatDateTime(withdrawnAt)}
-              {request.deletedBy ? ` por ${request.deletedBy}` : ""}
-              {request.deletedReason ? ` · ${request.deletedReason}` : ""}.
-              Mientras esté en la papelera se consulta en solo lectura; se
-              recupera o se borra desde el módulo Archivo.
-            </p>
-          )}
-
-          {archivedAt !== undefined && !withdrawn && (
-            <p className="rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
-              En el archivo desde el {formatDateTime(archivedAt)}: la petición
-              se consulta en solo lectura y no se trabaja desde la cola. Para
-              volver a tramitarla, recupérala desde el módulo Archivo.
-            </p>
-          )}
+          <RequestStatusBanners
+            withdrawnAt={withdrawnAt}
+            deletedBy={request.deletedBy}
+            deletedReason={request.deletedReason}
+            archivedAt={archivedAt}
+          />
 
           <RequestInfoCard
             requesterName={request.requesterName}
@@ -186,14 +155,10 @@ export function RequestDetailSheet({
             lastDeliveredAt={lastDeliveredAt}
           />
 
-          {request.description && (
-            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Qué pide
-              </p>
-              <RichText value={request.description} className="mt-1.5" />
-            </div>
-          )}
+          <RequestNotesSection
+            description={request.description}
+            notes={request.notes}
+          />
 
           <RequestAttachmentsCard attachments={request.attachments} />
 
@@ -207,16 +172,6 @@ export function RequestDetailSheet({
           />
 
           <DeliveryTrail requestId={request._id} />
-
-          {request.notes && (
-            <div className="rounded-xl border border-border/70 bg-muted/50 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <User className="size-3.5" />
-                Nota del solicitante
-              </p>
-              <RichText value={request.notes} className="mt-1.5" />
-            </div>
-          )}
 
           <DecisionNotes request={request} />
         </div>
