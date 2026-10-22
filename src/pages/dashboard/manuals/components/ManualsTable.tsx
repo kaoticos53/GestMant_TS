@@ -16,7 +16,7 @@ export interface ManualsTableProps {
   columns: ManualsColumns;
   sort: TableSort<ManualColumnId> | null;
   onSortChange: (sort: TableSort<ManualColumnId> | null) => void;
-  areaRef: React.RefObject<HTMLDivElement | null>;
+  areaRef?: React.Ref<HTMLDivElement>;
   resetKey: number;
   visibleManuals: ManualDoc[];
   equipmentOf: (manual: ManualDoc) => EquipmentDoc | undefined;
