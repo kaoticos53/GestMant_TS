@@ -1,20 +1,15 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-ARCHIVE-TRASH-SECTION`
-- **Objetivo:** Fase 2 - Desacoplar subcomponentes modulares de ArchiveTrashSection en trashSection/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-ARCHIVE-TRASH-SECTION`
+- **Objetivo:** Fase 3 - Reensamblar ArchiveTrashSection como orquestador declarativo modular.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/trashSection/components/TrashGroup.tsx`
-  - `src/pages/dashboard/archive/components/trashSection/components/TrashButtons.tsx`
-  - `src/pages/dashboard/archive/components/trashSection/components/TrashedIncidentItem.tsx`
-  - `src/pages/dashboard/archive/components/trashSection/components/TrashedRequestItem.tsx`
-  - `src/pages/dashboard/archive/components/trashSection/components/TrashDeleteDialog.tsx`
-  - `src/pages/dashboard/archive/components/trashSection/components/index.ts`
+  - `src/pages/dashboard/archive/components/ArchiveTrashSection.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de la papelera implementados y exportados.
+- [x] `src/pages/dashboard/archive/components/ArchiveTrashSection.tsx` reensamblado (313 -> 89 líneas, -71.6%).
 
 ---
 
@@ -27,4 +22,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2 y proceder a Fase 3.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3 y proceder a Fase 4.
