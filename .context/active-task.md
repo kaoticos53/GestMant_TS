@@ -1,19 +1,15 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-MESSAGES-CENTER`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales desacoplados (`MessagesListPopover`, `ChatSheet`, `NewMessageDialog`).
+- **ID / Nombre de la Tarea:** `REF-FASE3-MESSAGES-CENTER`
+- **Objetivo:** Fase 3 - Reensamblado de `MessagesCenter.tsx` como orquestador limpio y desacoplado.
 - **Módulo(s) Afectado(s):**
-  - `src/components/messages/components/MessagesListPopover.tsx`
-  - `src/components/messages/components/ChatSheet.tsx`
-  - `src/components/messages/components/NewMessageDialog.tsx`
+  - `src/components/MessagesCenter.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/components/messages/components/MessagesListPopover.tsx`: Popover anclado con lista de hilos y botón de redacción.
-- [x] `src/components/messages/components/ChatSheet.tsx`: Sheet lateral interactivo de conversación en tiempo real.
-- [x] `src/components/messages/components/NewMessageDialog.tsx`: Diálogo modal para iniciar una nueva conversación.
+- [x] `src/components/MessagesCenter.tsx`: Orquestador principal refactorizado, consumiendo los nuevos hooks y subcomponentes (reducido de 584 a 152 líneas, ~74% de reducción).
 
 ---
 
@@ -25,8 +21,7 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `MessagesListPopover.tsx`.
-- [x] **Paso 2:** Crear `ChatSheet.tsx`.
-- [x] **Paso 3:** Crear `NewMessageDialog.tsx`.
-- [x] **Paso 4:** Verificar con `npx tsc -b`.
-- [x] **Paso 5:** Commit atómico de Fase 2.
+- [x] **Paso 1:** Reensamblar `MessagesCenter.tsx`.
+- [x] **Paso 2:** Verificar tipos con `npx tsc -b`.
+- [x] **Paso 3:** Ejecutar suite de pruebas de mensajería con Vitest (22 tests verdes).
+- [x] **Paso 4:** Commit atómico de Fase 3.
