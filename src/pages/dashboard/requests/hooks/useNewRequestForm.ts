@@ -74,14 +74,16 @@ export function buildAttachmentsPayload(files: PendingRequestFile[]) {
     }));
 }
 
-export interface UseNewRequestFormOptions {
-  user: { name?: string; position?: string } | null | undefined;
-  selectedEquipment: EquipmentDoc | undefined;
+export interface SubmitRequestParams {
   lines: RequestLineItem[];
   files: PendingRequestFile[];
   isUploading: boolean;
-  clearFiles: () => void;
-  clearLines: () => void;
+  selectedEquipment: EquipmentDoc | undefined;
+  onSuccess?: () => void;
+}
+
+export interface UseNewRequestFormOptions {
+  user: { name?: string; position?: string } | null | undefined;
   onClose: () => void;
   createMutation: (args: {
     requesterName: string;
@@ -106,12 +108,6 @@ export interface UseNewRequestFormOptions {
 
 export function useNewRequestForm({
   user,
-  selectedEquipment,
-  lines,
-  files,
-  isUploading,
-  clearFiles,
-  clearLines,
   onClose,
   createMutation,
   ensureCatalogItemMutation,
@@ -137,92 +133,96 @@ export function useNewRequestForm({
     setPriority("normal");
     setDescription("");
     setNotes("");
-    clearLines();
-    clearFiles();
     setError(null);
-  }, [clearLines, clearFiles]);
+  }, []);
 
-  const handleSubmit = useCallback(async () => {
-    setError(null);
-
-    const hasAttachments = files.some((file) => file.storageId);
-    const failed = files.find((file) => file.error);
-    const equipmentText = resolveEquipmentText(
-      selectedEquipment,
-      equipmentChoice,
-      equipmentManual,
-    );
-
-    const validationError = validateNewRequest({
-      requesterName: requesterNameValue,
-      hasLines: lines.length > 0,
-      isDescriptionEmpty: richDocIsEmpty(description),
-      hasAttachments,
+  const handleSubmit = useCallback(
+    async ({
+      lines,
+      files,
       isUploading,
-      failedFileName: failed?.file.name,
-      equipmentChoice,
-      equipmentText,
-    });
+      selectedEquipment,
+      onSuccess,
+    }: SubmitRequestParams) => {
+      setError(null);
 
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+      const hasAttachments = files.some((file) => file.storageId);
+      const failed = files.find((file) => file.error);
+      const equipmentText = resolveEquipmentText(
+        selectedEquipment,
+        equipmentChoice,
+        equipmentManual,
+      );
 
-    setBusy(true);
-    try {
-      const descriptionToSend = richDocToStore(description);
-      const notesToSend = richDocToStore(notes);
-      const attachments = buildAttachmentsPayload(files);
-
-      const reference = await createMutation({
-        requesterName: requesterNameValue.trim(),
-        ...(requesterTeamValue.trim()
-          ? { requesterTeam: requesterTeamValue.trim() }
-          : {}),
-        ...(equipmentText ? { equipment: equipmentText } : {}),
-        ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
-        priority,
-        ...(descriptionToSend ? { description: descriptionToSend } : {}),
-        ...(attachments.length > 0 ? { attachments } : {}),
-        ...(notesToSend ? { notes: notesToSend } : {}),
-        lines,
+      const validationError = validateNewRequest({
+        requesterName: requesterNameValue,
+        hasLines: lines.length > 0,
+        isDescriptionEmpty: richDocIsEmpty(description),
+        hasAttachments,
+        isUploading,
+        failedFileName: failed?.file.name,
+        equipmentChoice,
+        equipmentText,
       });
 
-      toast.success(`Petición ${reference} creada`);
-
-      // Registro transparente en catálogo maestro de puestos
-      if (requesterTeamValue.trim() && ensureCatalogItemMutation) {
-        void ensureCatalogItemMutation({
-          kind: "position",
-          name: requesterTeamValue.trim(),
-        }).catch(() => {});
+      if (validationError) {
+        setError(validationError);
+        return;
       }
 
-      reset();
-      onClose();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [
-    files,
-    selectedEquipment,
-    equipmentChoice,
-    equipmentManual,
-    requesterNameValue,
-    lines,
-    description,
-    isUploading,
-    notes,
-    priority,
-    createMutation,
-    requesterTeamValue,
-    ensureCatalogItemMutation,
-    reset,
-    onClose,
-  ]);
+      setBusy(true);
+      try {
+        const descriptionToSend = richDocToStore(description);
+        const notesToSend = richDocToStore(notes);
+        const attachments = buildAttachmentsPayload(files);
+
+        const reference = await createMutation({
+          requesterName: requesterNameValue.trim(),
+          ...(requesterTeamValue.trim()
+            ? { requesterTeam: requesterTeamValue.trim() }
+            : {}),
+          ...(equipmentText ? { equipment: equipmentText } : {}),
+          ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
+          priority,
+          ...(descriptionToSend ? { description: descriptionToSend } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
+          ...(notesToSend ? { notes: notesToSend } : {}),
+          lines,
+        });
+
+        toast.success(`Petición ${reference} creada`);
+
+        // Registro transparente en catálogo maestro de puestos
+        if (requesterTeamValue.trim() && ensureCatalogItemMutation) {
+          void ensureCatalogItemMutation({
+            kind: "position",
+            name: requesterTeamValue.trim(),
+          }).catch(() => {});
+        }
+
+        reset();
+        onSuccess?.();
+        onClose();
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      equipmentChoice,
+      equipmentManual,
+      requesterNameValue,
+      description,
+      notes,
+      priority,
+      createMutation,
+      requesterTeamValue,
+      ensureCatalogItemMutation,
+      reset,
+      onClose,
+    ],
+  );
 
   return {
     requesterName,
