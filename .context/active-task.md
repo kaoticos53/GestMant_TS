@@ -16,20 +16,21 @@
 - [x] `src/pages/dashboard/purchasing/components/history/HistoryTableRow.tsx`: Fila individual con selector y 11 celdas HistoryCell.
 - [x] `src/pages/dashboard/purchasing/components/history/HistoryTableFooter.tsx`: Pie informativo con conteos y leyenda de ayuda.
 - [x] `src/pages/dashboard/purchasing/components/history/HistoryTable.tsx`: Ensamblado de tabla con Card, scroll y selección.
+- [x] `src/pages/dashboard/purchasing/components/HistorySection.tsx`: Reensamblado a orquestador declarativo de 90 líneas (-78.7%).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios nuevos? 5 tests pasados al 100%.
+- [x] ¿Tests unitarios y de compras? 29 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
 - [ ] ¿Build de producción Vite? (Fase 4)
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
