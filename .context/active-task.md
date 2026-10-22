@@ -1,23 +1,19 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-MESSAGES-CENTER`
-- **Objetivo:** Fase 1 - Extraer tipos, hooks de dominio (`useMessageThreads`, `useChatThread`, `useNewMessageForm`) y pruebas unitarias para `MessagesCenter`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-MESSAGES-CENTER`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales desacoplados (`MessagesListPopover`, `ChatSheet`, `NewMessageDialog`).
 - **Módulo(s) Afectado(s):**
-  - `src/components/messages/types.ts`
-  - `src/components/messages/hooks/useMessageThreads.ts`
-  - `src/components/messages/hooks/useChatThread.ts`
-  - `src/components/messages/hooks/useNewMessageForm.ts`
-  - `tests/messagesHooks.test.ts`
+  - `src/components/messages/components/MessagesListPopover.tsx`
+  - `src/components/messages/components/ChatSheet.tsx`
+  - `src/components/messages/components/NewMessageDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/components/messages/types.ts`: Definición de tipos de contacto, resúmenes de hilos y constantes.
-- [x] `src/components/messages/hooks/useMessageThreads.ts`: Agrupación y cálculo de no leídos de hilos.
-- [x] `src/components/messages/hooks/useChatThread.ts`: Hook para ciclo de vida de conversación en Sheet.
-- [x] `src/components/messages/hooks/useNewMessageForm.ts`: Hook para formulario de nuevo mensaje.
-- [x] `tests/messagesHooks.test.ts`: Pruebas unitarias de agrupación y lógica de hilos.
+- [x] `src/components/messages/components/MessagesListPopover.tsx`: Popover anclado con lista de hilos y botón de redacción.
+- [x] `src/components/messages/components/ChatSheet.tsx`: Sheet lateral interactivo de conversación en tiempo real.
+- [x] `src/components/messages/components/NewMessageDialog.tsx`: Diálogo modal para iniciar una nueva conversación.
 
 ---
 
@@ -29,8 +25,8 @@
 ---
 
 ## 4. Checklist de Ejecución
-- [x] **Paso 1:** Crear `types.ts` y hooks en `src/components/messages/`.
-- [x] **Paso 2:** Crear test unitario `tests/messagesHooks.test.ts`.
-- [x] **Paso 3:** Verificar compilación con `npx tsc -b`.
-- [x] **Paso 4:** Ejecutar pruebas con Vitest (10 tests verdes).
-- [x] **Paso 5:** Commit atómico de Fase 1.
+- [x] **Paso 1:** Crear `MessagesListPopover.tsx`.
+- [x] **Paso 2:** Crear `ChatSheet.tsx`.
+- [x] **Paso 3:** Crear `NewMessageDialog.tsx`.
+- [x] **Paso 4:** Verificar con `npx tsc -b`.
+- [x] **Paso 5:** Commit atómico de Fase 2.
