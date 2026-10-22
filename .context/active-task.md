@@ -1,29 +1,25 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-PART-FORM-DIALOG`
-- **Objetivo:** Fase 2 - Desacoplamiento de subcomponentes de campos (`PartBasicFields`, `PartStockLocationFields`) y barril en `partForm/`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-PART-FORM-DIALOG`
+- **Objetivo:** Fase 3 - Reensamblado modular y declarativo de `PartFormDialog.tsx` orquestando `PartBasicFields` y `PartStockLocationFields`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/inventory/dialogs/partForm/PartBasicFields.tsx`
-  - `src/pages/dashboard/inventory/dialogs/partForm/PartStockLocationFields.tsx`
-  - `src/pages/dashboard/inventory/dialogs/partForm/index.ts`
+  - `src/pages/dashboard/inventory/dialogs/PartFormDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `partForm/PartBasicFields.tsx`: campos de código, nombre, categoría autocompletable y unidad.
-- [x] `partForm/PartStockLocationFields.tsx`: campos de stock actual, mínimo, ubicación, proveedor, nº parte, precio y url.
-- [x] `partForm/index.ts`: barril unificado para el submódulo partForm.
+- [x] `PartFormDialog.tsx`: reducción de 228 a 115 líneas delegando los grupos de campos en componentes modulares limpios y reutilizables.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio sin errores.
-- [x] ¿Tests unitarios y de seguridad? 22 tests pasados (4 helpers + 9 arquitectura + 9 seguridad).
+- [x] ¿Tests unitarios y de seguridad? 31 tests pasados (4 helpers + 9 dominio + 9 arquitectura + 9 seguridad).
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados y cumplidos.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+- **Estado:** Fase 3 completada y validada. Lista para commit atómico 3.
