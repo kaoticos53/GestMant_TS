@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { DEFAULT_TRASH_RETENTION_DAYS } from "@/lib/trash";
 import { QueueToolbar, type QueueSortId } from "./QueueToolbar";
 import { ArchiveDetailHost } from "./archive/components/ArchiveDetailHost";
 import { ArchiveFilterTabs } from "./archive/components/ArchiveFilterTabs";
 import { ArchiveListSection } from "./archive/components/ArchiveListSection";
 import { ArchiveTrashSection } from "./archive/components/ArchiveTrashSection";
 import { BulkArchiveCard } from "./archive/components/BulkArchiveCard";
+import { useArchiveData } from "./archive/hooks/useArchiveData";
 import { useArchiveEntries } from "./archive/hooks/useArchiveEntries";
 import { useBulkArchive } from "./archive/hooks/useBulkArchive";
 import { useTrashOperations } from "./archive/hooks/useTrashOperations";
@@ -16,7 +14,6 @@ import {
   SORT_OPTIONS,
   type ArchiveKind,
   type OpenArchivedDoc,
-  type TrashRow,
 } from "./archive/types";
 
 export type { OpenArchivedDoc } from "./archive/types";
@@ -60,50 +57,24 @@ export function ArchiveView({
   initialEntry,
   onOpenSettings,
 }: ArchiveViewProps) {
-  // Carga de colecciones
-  const allIncidents =
-    useQuery(api.incidents.list, { includeArchived: true }) ?? [];
-  const allRequests =
-    useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
-  const parts =
-    useQuery(api.spareParts.list, canViewCatalog ? {} : "skip") ?? [];
-  const equipment =
-    useQuery(api.equipment.list, canViewEquipment ? {} : "skip") ?? [];
-
-  const incidents = allIncidents.filter((row) => row.archivedAt !== undefined);
-  const requests = allRequests.filter((row) => row.archivedAt !== undefined);
-  const activeIncidents = allIncidents.filter(
-    (row) => row.archivedAt === undefined,
-  );
-  const activeRequests = allRequests.filter(
-    (row) => row.archivedAt === undefined,
-  );
-
-  // Consultas de papelera
-  const queryIncidentTrash = useQuery(
-    api.incidents.trash,
-    canArchiveIncidents ? {} : ("skip" as const),
-  );
-  const queryRequestTrash = useQuery(
-    api.partRequests.trash,
-    canArchiveRequests ? {} : ("skip" as const),
-  );
-
-  const trashedIncidents = queryIncidentTrash?.items ?? [];
-  const trashedRequests = queryRequestTrash?.items ?? [];
-  const trashRetentionDays =
-    queryIncidentTrash?.retentionDays ??
-    queryRequestTrash?.retentionDays ??
-    DEFAULT_TRASH_RETENTION_DAYS;
-
-  const trashedIncidentRows: Extract<TrashRow, { kind: "incident" }>[] =
-    canArchiveIncidents
-      ? trashedIncidents.map((item) => ({ kind: "incident" as const, item }))
-      : [];
-  const trashedRequestRows: Extract<TrashRow, { kind: "request" }>[] =
-    canArchiveRequests
-      ? trashedRequests.map((item) => ({ kind: "request" as const, item }))
-      : [];
+  const {
+    allIncidents,
+    allRequests,
+    incidents,
+    requests,
+    activeIncidents,
+    activeRequests,
+    parts,
+    equipment,
+    trashedIncidentRows,
+    trashedRequestRows,
+    trashRetentionDays,
+  } = useArchiveData({
+    canArchiveIncidents,
+    canArchiveRequests,
+    canViewCatalog,
+    canViewEquipment,
+  });
 
   // Estado local de la vista
   const [search, setSearch] = useState("");
