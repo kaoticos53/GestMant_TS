@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-JOURNEY-SUMMARY`
-- **Objetivo:** Fase 2 - Crear subcomponentes `StageDot`, `JourneyStagesList`, `JourneyNowNextStatus` y `JourneyBlockedSteps` con barril unificado.
+- **ID / Nombre de la Tarea:** `REF-FASE3-JOURNEY-SUMMARY`
+- **Objetivo:** Fase 3 - Reducir y orquestar `JourneySummary.tsx` usando los subcomponentes modulares `JourneyStagesList`, `JourneyNowNextStatus` y `JourneyBlockedSteps` junto a la función pura `groupBlockedByStage`.
 - **Módulo(s) Afectado(s):**
-  - `src/components/journeySummary/components/StageDot.tsx`
-  - `src/components/journeySummary/components/JourneyStagesList.tsx`
-  - `src/components/journeySummary/components/JourneyNowNextStatus.tsx`
-  - `src/components/journeySummary/components/JourneyBlockedSteps.tsx`
-  - `src/components/journeySummary/index.ts`
+  - `src/components/JourneySummary.tsx`
 
 ---
 
@@ -21,6 +17,7 @@
 - [x] `journeySummary/components/JourneyNowNextStatus.tsx`: estado actual y paso siguiente.
 - [x] `journeySummary/components/JourneyBlockedSteps.tsx`: bloque descriptivo de motivos bloqueados.
 - [x] `journeySummary/index.ts`: barril unificado.
+- [ ] `src/components/JourneySummary.tsx`: orquestación de alto nivel desacoplada.
 
 ---
 
@@ -33,4 +30,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
