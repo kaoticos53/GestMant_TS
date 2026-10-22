@@ -1,19 +1,17 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-ORDER-SHEET`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de OrderSheet en orderSheet/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-ORDER-SHEET`
+- **Objetivo:** Fase 3 - Extraer hook useOrderSheetState y reensamblar OrderSheet como orquestador declarativo.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/purchasing/dialogs/orderSheet/components/OrderSheetHeader.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/orderSheet/components/OrderSolicitudeCodeCard.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/orderSheet/components/OrderLinesList.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/orderSheet/components/OrderReceptionsList.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/orderSheet/components/OrderSheetFooter.tsx`
+  - `src/pages/dashboard/purchasing/dialogs/orderSheet/hooks/useOrderSheetState.ts`
+  - `src/pages/dashboard/purchasing/dialogs/OrderSheet.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales de OrderSheet (`OrderSheetHeader`, `OrderSolicitudeCodeCard`, `OrderLinesList`, `OrderReceptionsList`, `OrderSheetFooter`).
+- [x] Hook `useOrderSheetState.ts` para encapsular mutaciones y estado de edición.
+- [x] Reensamblado de `OrderSheet.tsx` (343 -> 97 líneas, -71.7%).
 
 ---
 
@@ -26,4 +24,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
+- **Estado:** Fase 3 completada exitosamente. Listo para commit atómico 3.
