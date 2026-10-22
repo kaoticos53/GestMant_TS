@@ -21,10 +21,10 @@ export function getNoteWrittenAt(entry: {
  * Determina si el usuario autenticado tiene permiso temporal para editar una nota.
  */
 export function canUserEditNote(
-  entry: { createdAt?: number; at: number; authorId: string },
+  entry: { createdAt?: number; at: number; authorId?: string | null },
   currentUserId: string | null,
 ): boolean {
-  if (!currentUserId || entry.authorId !== currentUserId) {
+  if (!currentUserId || !entry.authorId || entry.authorId !== currentUserId) {
     return false;
   }
   return isNoteWithinEditWindow(getNoteWrittenAt(entry));

@@ -1,19 +1,18 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-NOTES-CARD`
-- **Objetivo:** Fase 1 - Extraer tipos y funciones auxiliares puras de IncidentNotesCard en notes/ con tests unitarios.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-NOTES-CARD`
+- **Objetivo:** Fase 2 - Extraer subcomponentes visuales modulares de IncidentNotesCard en notes/components/.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/notes/types.ts`
-  - `src/pages/dashboard/incidents/components/detail/notes/helpers.ts`
-  - `tests/incidentNotesCardHelpers.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/notes/components/LiveNotesList.tsx`
+  - `src/pages/dashboard/incidents/components/detail/notes/components/RetiredNotesCollapsible.tsx`
+  - `src/pages/dashboard/incidents/components/detail/notes/components/IncidentNoteDialog.tsx`
+  - `src/pages/dashboard/incidents/components/detail/notes/components/RemoveNoteDialog.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/dashboard/incidents/components/detail/notes/types.ts`
-- [x] `src/pages/dashboard/incidents/components/detail/notes/helpers.ts`
-- [x] `tests/incidentNotesCardHelpers.test.ts` (12 tests unitarios nuevos)
+- [x] Subcomponentes visuales de IncidentNotesCard (`LiveNotesList`, `RetiredNotesCollapsible`, `IncidentNoteDialog`, `RemoveNoteDialog`).
 
 ---
 
@@ -26,4 +25,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada exitosamente. Listo para commit atómico 1.
+- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
