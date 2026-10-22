@@ -1,21 +1,21 @@
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 export interface IncidentDocumentItem {
-  _id: string;
+  _id: Id<"incidentDocuments">;
   name: string;
-  url?: string;
+  url?: string | null;
   note?: string;
   author?: string;
   createdAt: number;
-  storageId?: string;
+  storageId?: Id<"_storage"> | string;
 }
 
 export interface IncidentDocumentsListProps {
   docs: IncidentDocumentItem[];
   canCoordinate: boolean;
   onNewDocument: () => void;
-  onEditDocument: (id: string, name: string, note?: string) => void;
-  onDeleteDocument: (id: string) => void;
+  onEditDocument: (id: Id<"incidentDocuments">, name: string, note?: string) => void;
+  onDeleteDocument: (id: Id<"incidentDocuments">) => void;
 }
 
 export interface IncidentDocumentsTrailProps {
@@ -26,8 +26,8 @@ export interface IncidentDocumentsTrailProps {
 export interface IncidentDocumentDialogProps {
   open: boolean;
   reference: string;
-  editingDocumentId: string | null;
-  editingDocument: { storageId?: string } | null;
+  editingDocumentId: Id<"incidentDocuments"> | null;
+  editingDocument: { storageId?: Id<"_storage"> | string } | null | undefined;
   documentName: string;
   setDocumentName: (name: string) => void;
   documentNote: string;
@@ -41,7 +41,7 @@ export interface IncidentDocumentDialogProps {
 }
 
 export interface RemoveDocumentDialogProps {
-  deletingDocument: { _id: string; name: string } | null;
+  deletingDocument: { _id: Id<"incidentDocuments"> | string; name: string } | null | undefined;
   reference: string;
   removingDoc: boolean;
   onCancel: () => void;

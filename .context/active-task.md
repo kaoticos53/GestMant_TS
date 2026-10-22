@@ -1,18 +1,17 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-DOCUMENTS`
-- **Objetivo:** Fase 2 - Extraer subcomponentes visuales en src/pages/dashboard/incidents/components/detail/documents/components/.
+- **ID / Nombre de la Tarea:** `REF-FASE3-INCIDENT-DOCUMENTS`
+- **Objetivo:** Fase 3 - Reensamblar IncidentDocumentsCard como orquestador declarativo desacoplado en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/documents/components/IncidentDocumentsList.tsx`
-  - `src/pages/dashboard/incidents/components/detail/documents/components/IncidentDocumentsTrail.tsx`
-  - `src/pages/dashboard/incidents/components/detail/documents/components/IncidentDocumentDialog.tsx`
-  - `src/pages/dashboard/incidents/components/detail/documents/components/RemoveDocumentDialog.tsx`
+  - `src/pages/dashboard/incidents/components/detail/IncidentDocumentsCard.tsx`
+  - `src/pages/dashboard/incidents/components/detail/documents/types.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] Subcomponentes visuales (`IncidentDocumentsList.tsx`, `IncidentDocumentsTrail.tsx`, `IncidentDocumentDialog.tsx`, `RemoveDocumentDialog.tsx`).
+- [x] Reensamblado de `IncidentDocumentsCard.tsx` (366 -> 90 líneas, -75.4%).
+- [x] Tipos alineados en `documents/types.ts` con identificadores y storage de Convex.
 
 ---
 
@@ -25,27 +24,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada exitosamente. Listo para commit atómico 2.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+- **Estado:** Fase 3 completada exitosamente. Listo para commit atómico 3.
