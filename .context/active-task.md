@@ -14,6 +14,7 @@
 
 ## 2. Archivos Modificados / Creados
 - [x] Subcomponentes visuales de configuración de correo (`ProviderSelector.tsx`, `SenderFields.tsx`, `RelayFields.tsx`, `CredentialsFields.tsx`, `ProviderActionsBar.tsx`).
+- [x] Orquestador declarativo (`MailProviderSettingsFields.tsx`, 387 -> 138 líneas, -64.3%).
 
 ---
 
@@ -26,7 +27,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada. Listo para commit atómico de Fase 2.
+- **Estado:** Fase 3 completada. Listo para commit atómico de Fase 3.
 
 
 
