@@ -1,20 +1,25 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-REQUEST-CARD`
-- **Objetivo:** Fase 1 - Creación de tipos, helpers y test suite unitaria para `RequestCard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-REQUEST-CARD`
+- **Objetivo:** Fase 2 - Desacoplamiento de cabecera, cuerpo, líneas, adjuntos y pie de `RequestCard.tsx` en subcomponentes modulares.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/requests/components/RequestCard.tsx`
-  - `src/pages/dashboard/requests/components/card/types.ts`
-  - `src/pages/dashboard/requests/components/card/helpers.ts`
-  - `tests/requestCardHelpers.test.ts`
+  - `src/pages/dashboard/requests/components/card/RequestCardHeader.tsx`
+  - `src/pages/dashboard/requests/components/card/RequestCardBody.tsx`
+  - `src/pages/dashboard/requests/components/card/RequestCardLines.tsx`
+  - `src/pages/dashboard/requests/components/card/RequestCardAttachments.tsx`
+  - `src/pages/dashboard/requests/components/card/RequestCardFooter.tsx`
+  - `src/pages/dashboard/requests/components/card/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `card/types.ts`: contratos de props para subcomponentes de RequestCard.
-- [x] `card/helpers.ts`: funciones puras `getRequestUnitsCount`, `getRequestUnitsSummary` y `getRequestActionFlags`.
-- [x] `tests/requestCardHelpers.test.ts`: 9 pruebas unitarias verificando conteo, resúmenes y matriz de acciones del ciclo de vida.
+- [x] `RequestCardHeader.tsx`: distintivos de prioridad, estado, aviso de sin repuesto y fecha relativa.
+- [x] `RequestCardBody.tsx`: solicitante, equipo de trabajo y afectado, descripción rica y texto de decisión.
+- [x] `RequestCardLines.tsx`: píldoras de líneas de repuestos y banner condicional de advertencia.
+- [x] `RequestCardAttachments.tsx`: contadores de adjuntos, fotos y documentos.
+- [x] `RequestCardFooter.tsx`: resumen de piezas/unidades y acciones según ciclo de vida.
+- [x] `card/index.ts`: barril unificado del módulo card.
 
 ---
 
@@ -27,7 +32,8 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada y validada. Lista para commit atómico 1.
+- **Estado:** Fase 2 completada y validada. Lista para commit atómico 2.
+
 
 
 
