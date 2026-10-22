@@ -1,5 +1,5 @@
 import type { Id } from "@/convex/_generated/dataModel";
-import type { AuditFilters, AuditRange } from "@/lib/audit";
+import type { AuditFilters, AuditPresetId, AuditRange } from "@/lib/audit";
 import type { QueueSortOption } from "../QueueToolbar";
 import type { DocumentTrailAction, IncidentStatus } from "@/lib/workshop";
 
@@ -80,6 +80,7 @@ export interface AuditFiltersCardProps {
   onApplyFilters: (
     next: AuditFilters | ((current: AuditFilters) => AuditFilters),
   ) => void;
+  onApplyPreset: (presetId: Exclude<AuditPresetId, "custom">) => void;
   onResetFilters: () => void;
   onExport: () => void;
 }
