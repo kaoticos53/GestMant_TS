@@ -1,39 +1,33 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-AUTH`
-- **Objetivo:** Fase 1 - Extraer tipos, helper de redirección segura (`resolveRedirectAfterAuth`) y tests unitarios para autenticación.
+- **ID / Nombre de la Tarea:** `REF-FASE1-REPORT-INCIDENT`
+- **Objetivo:** Fase 1 - Extraer tipos, funciones puras de fecha, validación de reglas de negocio y tests unitarios para ReportIncident.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/auth/types.ts`
-  - `src/pages/auth/helpers.ts`
-  - `tests/authHelpers.test.ts`
-  - `src/pages/Auth.tsx`
+  - `src/pages/reportIncident/types.ts`
+  - `src/pages/reportIncident/helpers.ts`
+  - `tests/reportIncidentHelpers.test.ts`
+  - `src/pages/ReportIncident.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/pages/auth/types.ts`: Tipos `AuthProps`, `AuthMethod`, `PasswordFlow`, `OtpStep`.
-- [x] `src/pages/auth/helpers.ts`: Función pura `resolveRedirectAfterAuth` con prevención Open Redirect (CWE-601).
-- [x] `tests/authHelpers.test.ts`: Batería de 5 tests unitarios verificando rutas relativas, esquemas bloqueados y fallbacks.
-- [x] `src/pages/auth/components/AuthHeader.tsx`: Logo, títulos y conmutador de método de acceso.
-- [x] `src/pages/auth/components/PasswordAuthForm.tsx`: Formulario de acceso/registro con email y contraseña.
-- [x] `src/pages/auth/components/OtpEmailForm.tsx`: Flujo OTP por correo (paso de solicitud y paso de verificación con InputOTP).
-- [x] `src/pages/auth/hooks/useAuthState.ts`: Hook de orquestación de auth, countdown, steps y submits.
-- [x] `src/pages/Auth.tsx`: Reensamblado a orquestador declarativo de 67 líneas (-84.0%).
+- [x] `src/pages/reportIncident/types.ts`: Tipos del formulario y payload de la mutación.
+- [x] `src/pages/reportIncident/helpers.ts`: Helpers de fechas y validación pura `validateReportIncidentForm`.
+- [x] `tests/reportIncidentHelpers.test.ts`: Batería de tests unitarios de validación y fechas (10 tests pasando).
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`, `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 8 tests pasados al 100%.
+- [x] ¿Tests unitarios y de seguridad? 12 tests pasados al 100%.
 - [x] ¿Guardrails de Arquitectura y Seguridad? Verificados.
-- [x] ¿Build de producción Vite? Verificado (dist generado en 4.96s).
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 4 completada. Componente `Auth.tsx` modularizado (419 -> 67 líneas, -84.0%) con 100% tests verdes y build limpio.
+- **Estado:** Fase 1 completada. Listo para commit atómico de Fase 1.
 
 
 
