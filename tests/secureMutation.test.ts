@@ -139,6 +139,20 @@ describe("secureMutation", () => {
     expect(target?.role).toBe("manager");
   });
 
+  test("el aviso de identidad distingue al invitado de la cuenta dada de baja", async () => {
+    const t = backend();
+    const invitado = await miembro(t, "technician", { isAnonymous: true });
+    const baja = await miembro(t, "technician");
+    await t.run((ctx) => ctx.db.patch(baja.userId, { active: false }));
+
+    expect(
+      await denial(invitado.session.mutation(api.manuals.generateUploadUrl, {})),
+    ).toContain("uso interno del taller");
+    expect(
+      await denial(baja.session.mutation(api.manuals.generateUploadUrl, {})),
+    ).toContain("dada de baja");
+  });
+
   test("la política deja pasar al técnico que tiene la incidencia asignada", async () => {
     const t = backend();
     const gestor = await miembro(t, "manager");
