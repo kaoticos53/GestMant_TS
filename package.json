@@ -31,6 +31,8 @@
     "mail:relay": "node scripts/mail-relay.mjs"
   },
   "dependencies": {
+    "@casl/ability": "^7.0.2",
+    "@casl/react": "^7.0.1",
     "@convex-dev/auth": "^0.0.96",
     "@hookform/resolvers": "^5.9.1",
     "@jridgewell/trace-mapping": "^0.3.31",
