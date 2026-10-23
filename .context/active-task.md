@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-STORAGE-CLEANUP-CARD`
-- **Objetivo:** Fase 2 - Crear hook `useStorageCleanup`, subcomponentes UI `StorageCleanupHeader`, `StorageCleanupRunItem`, `StorageCleanupRunsList` y barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-STORAGE-CLEANUP-CARD`
+- **Objetivo:** Fase 3 - Orquestar `StorageCleanupCard.tsx` delegando en `useStorageCleanup`, `StorageCleanupHeader` y `StorageCleanupRunsList`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/storageCleanup/useStorageCleanup.ts`
-  - `src/pages/dashboard/settings/storageCleanup/components/StorageCleanupHeader.tsx`
-  - `src/pages/dashboard/settings/storageCleanup/components/StorageCleanupRunItem.tsx`
-  - `src/pages/dashboard/settings/storageCleanup/components/StorageCleanupRunsList.tsx`
-  - `src/pages/dashboard/settings/storageCleanup/index.ts`
+  - `src/pages/dashboard/settings/StorageCleanupCard.tsx`
 
 ---
 
@@ -21,7 +17,7 @@
 - [x] `storageCleanup/components/StorageCleanupRunItem.tsx`: fila de pasada con formato limpio.
 - [x] `storageCleanup/components/StorageCleanupRunsList.tsx`: lista de pasadas con soporte de Skeleton.
 - [x] `storageCleanup/index.ts`: barril unificado.
-- [ ] `settings/StorageCleanupCard.tsx`: pendiente Fase 3.
+- [x] `settings/StorageCleanupCard.tsx`: orquestador modular completado (~25 líneas).
 
 ---
 
@@ -34,7 +30,9 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+- **Estado:** Fase 3 completada - Commit atómico 3 listo.
+
+
 
 
 
