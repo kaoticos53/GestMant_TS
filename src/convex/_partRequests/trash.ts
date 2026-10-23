@@ -9,6 +9,7 @@ import {
 import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
 import { trashRetentionDays } from "../trash";
+import { secureMutation } from "../_auth/secureMutation";
 import { actorName, requireDecisionCapability } from "./helpers";
 
 /** Tandas de la pasada nocturna, como en la papelera de incidencias. */
@@ -47,25 +48,40 @@ async function purgeRequest(
  * decisiones, no un paso de su flujo. Retirar dos veces la misma petición no es
  * un error.
  */
-export const withdraw = mutation({
-  args: { requestId: v.id("partRequests"), reason: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(ctx, "retirar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt !== undefined) return;
+const withdrawArgs = {
+  requestId: v.id("partRequests"),
+  reason: v.optional(v.string()),
+};
 
-    const now = Date.now();
-    const reason = args.reason?.trim();
-    await ctx.db.patch(args.requestId, {
-      deletedAt: now,
-      deletedBy: await actorName(ctx, userId),
-      ...(reason ? { deletedReason: reason } : {}),
-      // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
-      // el plazo con el que entró, igual que en la papelera del almacén.
-      purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
-    });
-  },
+export const withdraw = mutation({
+  args: withdrawArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para retirar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    withdrawArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.deletedAt !== undefined) return;
+
+      const now = Date.now();
+      const reason = args.reason?.trim();
+      await ctx.db.patch(args.requestId, {
+        deletedAt: now,
+        deletedBy: await actorName(ctx, userId),
+        ...(reason ? { deletedReason: reason } : {}),
+        // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
+        // el plazo con el que entró, igual que en la papelera del almacén.
+        purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
+      });
+    },
+  ),
 });
 
 /**
@@ -73,21 +89,32 @@ export const withdraw = mutation({
  * ahí salió— tal y como estaba, con sus repuestos asociados, sus decisiones y
  * sus adjuntos.
  */
-export const restore = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "recuperar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt === undefined) return;
+const restoreArgs = { requestId: v.id("partRequests") };
 
-    await ctx.db.patch(args.requestId, {
-      deletedAt: undefined,
-      deletedBy: undefined,
-      deletedReason: undefined,
-      purgeAt: undefined,
-    });
-  },
+export const restore = mutation({
+  args: restoreArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para recuperar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    restoreArgs,
+    async (ctx, args) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.deletedAt === undefined) return;
+
+      await ctx.db.patch(args.requestId, {
+        deletedAt: undefined,
+        deletedBy: undefined,
+        deletedReason: undefined,
+        purgeAt: undefined,
+      });
+    },
+  ),
 });
 
 /**
@@ -96,19 +123,30 @@ export const restore = mutation({
  * pide que la petición esté retirada: lo que no ha pasado por la papelera no se
  * borra de un tirón.
  */
+const deleteNowArgs = { requestId: v.id("partRequests") };
+
 export const deleteNow = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "borrar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.deletedAt === undefined) {
-      throw new ConvexError(
-        "Retira la petición antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
-      );
-    }
-    await purgeRequest(ctx, request);
-  },
+  args: deleteNowArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para borrar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    deleteNowArgs,
+    async (ctx, args) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.deletedAt === undefined) {
+        throw new ConvexError(
+          "Retira la petición antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
+        );
+      }
+      await purgeRequest(ctx, request);
+    },
+  ),
 });
 
 /**
@@ -164,7 +202,6 @@ export const trash = query({
   args: {},
   handler: async (ctx) => {
     await requireDecisionCapability(ctx, "ver la papelera de peticiones");
-
     const rows = await ctx.db
       .query("partRequests")
       .withIndex("by_deletedAt")
@@ -209,7 +246,6 @@ export const withdrawn = query({
   args: { requestId: v.id("partRequests") },
   handler: async (ctx, args) => {
     await requireDecisionCapability(ctx, "ver la papelera de peticiones");
-
     const row = await ctx.db.get(args.requestId);
     if (!row || row.deletedAt === undefined) return null;
     // Con sus adjuntos resueltos, igual que la cola: la ficha los enseña, y sin

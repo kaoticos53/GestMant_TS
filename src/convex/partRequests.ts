@@ -9,7 +9,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { hasCapability, memberOrNull } from "./permissions";
+import { memberOrNull } from "./permissions";
 import { freeReference } from "./references";
 import {
   canEditRequest,
@@ -31,6 +31,7 @@ import {
   type RequestDecision,
 } from "./schema";
 
+import { secureMutation } from "./_auth/secureMutation";
 import {
   actorName,
   attachmentArgs,
@@ -38,8 +39,6 @@ import {
   decisionReason,
   partPayloadArgs,
   reasonOneLine,
-  requireDecisionCapability,
-  requireUser,
 } from "./_partRequests/helpers";
 import {
   holdIncidentForParts,
@@ -78,12 +77,22 @@ function requireRequestStep(
 }
 
 /** URL de subida para fotos y documentos de una petición. */
+const generateUploadUrlArgs = {};
+
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireUser(ctx);
-    return await ctx.storage.generateUploadUrl();
-  },
+  args: generateUploadUrlArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+    },
+    generateUploadUrlArgs,
+    async (ctx) => {
+      return await ctx.storage.generateUploadUrl();
+    },
+  ),
 });
 
 export const list = query({
@@ -299,500 +308,595 @@ async function recordDecision(
   });
 }
 
-export const create = mutation({
-  args: {
-    requesterName: v.string(),
-    requesterTeam: v.optional(v.string()),
-    equipment: v.optional(v.string()),
-    equipmentId: v.optional(v.id("equipment")),
-    priority: priorityValidator,
-    description: v.optional(v.string()),
-    attachments: v.optional(attachmentArgs),
-    notes: v.optional(v.string()),
-    incidentId: v.optional(v.id("incidents")),
-    lines: v.optional(
-      v.array(
-        v.object({
-          sparePartId: v.id("spareParts"),
-          quantity: v.number(),
-        }),
-      ),
+const createArgs = {
+  requesterName: v.string(),
+  requesterTeam: v.optional(v.string()),
+  equipment: v.optional(v.string()),
+  equipmentId: v.optional(v.id("equipment")),
+  priority: priorityValidator,
+  description: v.optional(v.string()),
+  attachments: v.optional(attachmentArgs),
+  notes: v.optional(v.string()),
+  incidentId: v.optional(v.id("incidents")),
+  lines: v.optional(
+    v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        quantity: v.number(),
+      }),
     ),
-  },
-  handler: async (ctx, args) => {
-    const requesterUserId = await requireUser(ctx);
-    const requester = await ctx.db.get(requesterUserId);
-    if (
-      !requester ||
-      !(await hasCapability(ctx, requester, "createRequests"))
-    ) {
-      throw new ConvexError(
+  ),
+};
+
+export const create = mutation({
+  args: createArgs,
+  handler: secureMutation(
+    {
+      capability: "createRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
         "No tienes permisos para crear peticiones. Revisa la configuración de tu rol con el administrador.",
-      );
-    }
-    const requesterName = args.requesterName.trim();
-    if (!requesterName) {
-      throw new ConvexError("Indica quién solicita el repuesto.");
-    }
+    },
+    createArgs,
+    async (ctx, args, actor) => {
+      const requesterUserId = actor._id;
+      const requester = actor;
+      const requesterName = args.requesterName.trim();
+      if (!requesterName) {
+        throw new ConvexError("Indica quién solicita el repuesto.");
+      }
 
-    const requestedLines = args.lines ?? [];
-    // La descripción puede venir del editor como documento (bloques con
-    // formato): lo que cuenta para «hay algo que pedir» es su texto, no su
-    // formato.
-    const description = richDocToStore(args.description);
-    // La nota del solicitante también la escribe el editor, así que se guarda
-    // como documento: su formato no debe perderse por el camino.
-    const notes = richDocToStore(args.notes);
-    const attachments = args.attachments ?? [];
-    if (
-      requestedLines.length === 0 &&
-      !description &&
-      attachments.length === 0
-    ) {
-      throw new ConvexError(
-        "Añade un repuesto del catálogo o describe lo que necesitas (con fotos o documentos si los tienes).",
-      );
-    }
-
-    const lines = [];
-    for (const line of requestedLines) {
-      const quantity = Math.floor(line.quantity);
-      if (quantity < 1) {
+      const requestedLines = args.lines ?? [];
+      // La descripción puede venir del editor como documento (bloques con
+      // formato): lo que cuenta para «hay algo que pedir» es su texto, no su
+      // formato.
+      const description = richDocToStore(args.description);
+      // La nota del solicitante también la escribe el editor, así que se guarda
+      // como documento: su formato no debe perderse por el camino.
+      const notes = richDocToStore(args.notes);
+      const attachments = args.attachments ?? [];
+      if (
+        requestedLines.length === 0 &&
+        !description &&
+        attachments.length === 0
+      ) {
         throw new ConvexError(
-          "Cada repuesto solicitado necesita una cantidad de 1 o más.",
+          "Añade un repuesto del catálogo o describe lo que necesitas (con fotos o documentos si los tienes).",
         );
       }
-      const part = await ctx.db.get(line.sparePartId);
-      if (!part) {
-        throw new ConvexError(
-          "Uno de los repuestos seleccionados ya no existe en el catálogo.",
-        );
-      }
-      lines.push({
-        sparePartId: part._id,
-        code: part.code,
-        name: part.name,
-        quantity,
-      });
-    }
 
-    // La referencia se reparte con la regla de todas las series
-    // (`lib/references`): el número más alto ya usado, más uno. Nunca cuántas
-    // filas hay: la papelera borra de verdad lo retirado, y contando filas la
-    // siguiente petición heredaría una referencia ya gastada —la que quedó libre
-    // al borrar— que además sigue citada en las órdenes de compra que salieron de
-    // ella.
-    const reference = await freeReference(ctx, "partRequest");
-
-    let equipmentText = args.equipment?.trim() ?? "";
-    if (args.equipmentId) {
-      const item = await ctx.db.get(args.equipmentId);
-      if (!item) {
-        throw new ConvexError(
-          "El equipo seleccionado ya no existe en el inventario.",
-        );
-      }
-      if (!equipmentText) equipmentText = `${item.name} ${item.model}`.trim();
-    }
-
-    await ctx.db.insert("partRequests", {
-      reference,
-      requesterName,
-      ...(requesterUserId ? { requesterId: requesterUserId } : {}),
-      ...(args.requesterTeam?.trim()
-        ? { requesterTeam: args.requesterTeam.trim() }
-        : {}),
-      ...(equipmentText ? { equipment: equipmentText } : {}),
-      ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
-      priority: args.priority,
-      status: REQUEST_STATUSES.PENDING,
-      lines,
-      ...(description ? { description } : {}),
-      ...(attachments.length > 0 ? { attachments } : {}),
-      ...(notes ? { notes } : {}),
-      ...(args.incidentId ? { incidentId: args.incidentId } : {}),
-      createdAt: Date.now(),
-    });
-
-    if (args.incidentId) {
-      const incident = await ctx.db.get(args.incidentId);
-      if (incident) {
-        // Pedir material para un caso lo deja esperando: la incidencia no se
-        // trabaja hasta que llegue. El paso y su rastro son de `incidentSync`,
-        // que es quien habla con la máquina de la incidencia.
-        await holdIncidentForParts(ctx, incident, {
-          reference,
-          by: actorLabel(requester, requesterName),
+      const lines = [];
+      for (const line of requestedLines) {
+        const quantity = Math.floor(line.quantity);
+        if (quantity < 1) {
+          throw new ConvexError(
+            "Cada repuesto solicitado necesita una cantidad de 1 o más.",
+          );
+        }
+        const part = await ctx.db.get(line.sparePartId);
+        if (!part) {
+          throw new ConvexError(
+            "Uno de los repuestos seleccionados ya no existe en el catálogo.",
+          );
+        }
+        lines.push({
+          sparePartId: part._id,
+          code: part.code,
+          name: part.name,
+          quantity,
         });
-        const interested = [
-          incident.assigneeId,
-          incident.workshopAssigneeId,
-        ].filter((id): id is NonNullable<typeof id> => Boolean(id));
-        await notifyUsers(
-          ctx,
-          interested,
-          `${reference} creada para la incidencia ${incident.reference}`,
-          incident._id,
-        );
       }
-    }
 
-    return reference;
-  },
+      // La referencia se reparte con la regla de todas las series
+      // (`lib/references`): el número más alto ya usado, más uno. Nunca cuántas
+      // filas hay: la papelera borra de verdad lo retirado, y contando filas la
+      // siguiente petición heredaría una referencia ya gastada —la que quedó libre
+      // al borrar— que además sigue citada en las órdenes de compra que salieron de
+      // ella.
+      const reference = await freeReference(ctx, "partRequest");
+
+      let equipmentText = args.equipment?.trim() ?? "";
+      if (args.equipmentId) {
+        const item = await ctx.db.get(args.equipmentId);
+        if (!item) {
+          throw new ConvexError(
+            "El equipo seleccionado ya no existe en el inventario.",
+          );
+        }
+        if (!equipmentText) equipmentText = `${item.name} ${item.model}`.trim();
+      }
+
+      await ctx.db.insert("partRequests", {
+        reference,
+        requesterName,
+        ...(requesterUserId ? { requesterId: requesterUserId } : {}),
+        ...(args.requesterTeam?.trim()
+          ? { requesterTeam: args.requesterTeam.trim() }
+          : {}),
+        ...(equipmentText ? { equipment: equipmentText } : {}),
+        ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
+        priority: args.priority,
+        status: REQUEST_STATUSES.PENDING,
+        lines,
+        ...(description ? { description } : {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
+        ...(notes ? { notes } : {}),
+        ...(args.incidentId ? { incidentId: args.incidentId } : {}),
+        createdAt: Date.now(),
+      });
+
+      if (args.incidentId) {
+        const incident = await ctx.db.get(args.incidentId);
+        if (incident) {
+          // Pedir material para un caso lo deja esperando: la incidencia no se
+          // trabaja hasta que llegue. El paso y su rastro son de `incidentSync`,
+          // que es quien habla con la máquina de la incidencia.
+          await holdIncidentForParts(ctx, incident, {
+            reference,
+            by: actorLabel(requester, requesterName),
+          });
+          const interested = [
+            incident.assigneeId,
+            incident.workshopAssigneeId,
+          ].filter((id): id is NonNullable<typeof id> => Boolean(id));
+          await notifyUsers(
+            ctx,
+            interested,
+            `${reference} creada para la incidencia ${incident.reference}`,
+            incident._id,
+          );
+        }
+      }
+
+      return reference;
+    },
+  ),
 });
 
 /** Vincula al catálogo un repuesto ya existente. */
+const associateExistingArgs = {
+  requestId: v.id("partRequests"),
+  sparePartId: v.id("spareParts"),
+  quantity: v.optional(v.number()),
+};
+
 export const associateExisting = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    sparePartId: v.id("spareParts"),
-    quantity: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "asociar repuestos a una petición");
-    const request = await assertPending(ctx, args.requestId);
-    const part = await ctx.db.get(args.sparePartId);
-    if (!part) throw new ConvexError("El repuesto seleccionado ya no existe.");
-    if (request.lines.some((line) => line.sparePartId === part._id)) {
-      throw new ConvexError(
-        `${part.code} ya está asociado a ${request.reference}.`,
-      );
-    }
-    const quantity = Math.max(1, Math.floor(args.quantity ?? 1));
-    await ctx.db.patch(args.requestId, {
-      lines: [
-        ...request.lines,
-        { sparePartId: part._id, code: part.code, name: part.name, quantity },
-      ],
-    });
-    return `${part.code} asociado a ${request.reference}`;
-  },
+  args: associateExistingArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para asociar repuestos a una petición. Revisa la configuración de tu rol con el administrador.",
+    },
+    associateExistingArgs,
+    async (ctx, args) => {
+      const request = await assertPending(ctx, args.requestId);
+      const part = await ctx.db.get(args.sparePartId);
+      if (!part)
+        throw new ConvexError("El repuesto seleccionado ya no existe.");
+      if (request.lines.some((line) => line.sparePartId === part._id)) {
+        throw new ConvexError(
+          `${part.code} ya está asociado a ${request.reference}.`,
+        );
+      }
+      const quantity = Math.max(1, Math.floor(args.quantity ?? 1));
+      await ctx.db.patch(args.requestId, {
+        lines: [
+          ...request.lines,
+          { sparePartId: part._id, code: part.code, name: part.name, quantity },
+        ],
+      });
+      return `${part.code} asociado a ${request.reference}`;
+    },
+  ),
 });
 
 /** Crea el repuesto investigado (proveedor, part number...) y lo asocia. */
+const associateNewArgs = {
+  requestId: v.id("partRequests"),
+  quantity: v.optional(v.number()),
+  part: v.object(partPayloadArgs),
+};
+
 export const associateNew = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    quantity: v.optional(v.number()),
-    part: v.object(partPayloadArgs),
-  },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "crear y asociar repuestos");
-    const request = await assertPending(ctx, args.requestId);
+  args: associateNewArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para crear y asociar repuestos. Revisa la configuración de tu rol con el administrador.",
+    },
+    associateNewArgs,
+    async (ctx, args) => {
+      const request = await assertPending(ctx, args.requestId);
 
-    const doc = buildPart(args.part);
-    const clash = await ctx.db
-      .query("spareParts")
-      .withIndex("by_code", (q) => q.eq("code", doc.code))
-      .unique();
-    if (clash) {
-      throw new ConvexError(
-        `Ya existe un repuesto con el código ${doc.code}. Asócialo desde «Catálogo existente» en lugar de crearlo otra vez.`,
-      );
-    }
+      const doc = buildPart(args.part);
+      const clash = await ctx.db
+        .query("spareParts")
+        .withIndex("by_code", (q) => q.eq("code", doc.code))
+        .unique();
+      if (clash) {
+        throw new ConvexError(
+          `Ya existe un repuesto con el código ${doc.code}. Asócialo desde «Catálogo existente» en lugar de crearlo otra vez.`,
+        );
+      }
 
-    const now = Date.now();
-    const sparePartId = await ctx.db.insert("spareParts", {
-      ...doc,
-      createdAt: now,
-      updatedAt: now,
-    });
+      const now = Date.now();
+      const sparePartId = await ctx.db.insert("spareParts", {
+        ...doc,
+        createdAt: now,
+        updatedAt: now,
+      });
 
-    const quantity = Math.max(1, Math.floor(args.quantity ?? 1));
-    await ctx.db.patch(args.requestId, {
-      lines: [
-        ...request.lines,
-        { sparePartId, code: doc.code, name: doc.name, quantity },
-      ],
-    });
-    return `${doc.code} creado y asociado a ${request.reference}`;
-  },
+      const quantity = Math.max(1, Math.floor(args.quantity ?? 1));
+      await ctx.db.patch(args.requestId, {
+        lines: [
+          ...request.lines,
+          { sparePartId, code: doc.code, name: doc.name, quantity },
+        ],
+      });
+      return `${doc.code} creado y asociado a ${request.reference}`;
+    },
+  ),
 });
 
 /** Suspende temporalmente una petición. */
+const onHoldArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const onHold = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const decisionActor = await requireDecisionCapability(
-      ctx,
-      "suspender peticiones",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const held = requireRequestStep(request, "hold", (status) =>
-      status === REQUEST_STATUSES.ON_HOLD
-        ? `La petición ${request.reference} ya está en espera.`
-        : status === REQUEST_STATUSES.CANCELLED
-          ? `La petición ${request.reference} ya estaba cancelada.`
-          : `Solo se pueden poner en espera las peticiones pendientes, aprobadas o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
-    );
-
-    const now = Date.now();
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: held,
-      holdSinceAt: now,
-      // De dónde sale la suspensión: al reanudar se vuelve ahí. Es lo que evita
-      // que una petición aprobada —con el material ya descontado— vuelva a
-      // pendiente y se apruebe otra vez, descontando el material dos veces.
-      heldFrom: request.status,
-      ...(reason ? { holdNote: reason } : {}),
-    });
-
-    if (reason) {
-      await recordDecision(
-        ctx,
-        args.requestId,
-        await actorName(ctx, decisionActor),
-        {
-          reason:
-            request.status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
-              ? "pendingExternalQuote"
-              : "other",
-          note: reasonOneLine(reason),
-        },
+  args: onHoldArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para suspender peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    onHoldArgs,
+    async (ctx, args, actor) => {
+      const decisionActor = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const held = requireRequestStep(request, "hold", (status) =>
+        status === REQUEST_STATUSES.ON_HOLD
+          ? `La petición ${request.reference} ya está en espera.`
+          : status === REQUEST_STATUSES.CANCELLED
+            ? `La petición ${request.reference} ya estaba cancelada.`
+            : `Solo se pueden poner en espera las peticiones pendientes, aprobadas o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
       );
-    }
-  },
+
+      const now = Date.now();
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: held,
+        holdSinceAt: now,
+        // De dónde sale la suspensión: al reanudar se vuelve ahí. Es lo que evita
+        // que una petición aprobada —con el material ya descontado— vuelva a
+        // pendiente y se apruebe otra vez, descontando el material dos veces.
+        heldFrom: request.status,
+        ...(reason ? { holdNote: reason } : {}),
+      });
+
+      if (reason) {
+        await recordDecision(
+          ctx,
+          args.requestId,
+          await actorName(ctx, decisionActor),
+          {
+            reason:
+              request.status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
+                ? "pendingExternalQuote"
+                : "other",
+            note: reasonOneLine(reason),
+          },
+        );
+      }
+    },
+  ),
 });
 
 /** Reanuda una petición que estaba en espera. */
-export const resume = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "reanudar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const resumed = requireRequestStep(
-      request,
-      "resume",
-      () =>
-        `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
-    );
+const resumeArgs = { requestId: v.id("partRequests") };
 
-    await ctx.db.patch(args.requestId, {
-      status: resumed,
-      holdSinceAt: undefined,
-      holdNote: undefined,
-      heldFrom: undefined,
-    });
-  },
+export const resume = mutation({
+  args: resumeArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para reanudar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    resumeArgs,
+    async (ctx, args) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const resumed = requireRequestStep(
+        request,
+        "resume",
+        () =>
+          `Solo se pueden reanudar peticiones en espera (la ${request.reference} está en ${request.status}).`,
+      );
+
+      await ctx.db.patch(args.requestId, {
+        status: resumed,
+        holdSinceAt: undefined,
+        holdNote: undefined,
+        heldFrom: undefined,
+      });
+    },
+  ),
 });
 
 /** Devuelve el material de una petición entregada. */
+const returnMaterialArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const returnMaterial = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const decisionActor = await requireDecisionCapability(
-      ctx,
-      "devolver material",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const returned = requireRequestStep(
-      request,
-      "returnMaterial",
-      (status) =>
-        `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
-    );
+  args: returnMaterialArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para devolver material. Revisa la configuración de tu rol con el administrador.",
+    },
+    returnMaterialArgs,
+    async (ctx, args, actor) => {
+      const decisionActor = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const returned = requireRequestStep(
+        request,
+        "returnMaterial",
+        (status) =>
+          `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
+      );
 
-    const now = Date.now();
-    const name = await actorName(ctx, decisionActor);
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: returned,
-      returnedAt: now,
-      ...(reason ? { returnNote: reason } : {}),
-    });
+      const now = Date.now();
+      const name = await actorName(ctx, decisionActor);
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: returned,
+        returnedAt: now,
+        ...(reason ? { returnNote: reason } : {}),
+      });
 
-    // Devolver el material deja la incidencia, otra vez, sin lo que necesita:
-    // si era la última petición entregada, vuelve a la espera de repuestos.
-    if (request.incidentId) {
-      await syncIncidentWithParts(ctx, request.incidentId, name);
-    }
+      // Devolver el material deja la incidencia, otra vez, sin lo que necesita:
+      // si era la última petición entregada, vuelve a la espera de repuestos.
+      if (request.incidentId) {
+        await syncIncidentWithParts(ctx, request.incidentId, name);
+      }
 
-    await recordDecision(ctx, args.requestId, name, {
-      reason: "materialReturned",
-      note: reasonOneLine(reason) || "Material devuelto por el técnico.",
-    });
-  },
+      await recordDecision(ctx, args.requestId, name, {
+        reason: "materialReturned",
+        note: reasonOneLine(reason) || "Material devuelto por el técnico.",
+      });
+    },
+  ),
 });
 
 /** Cancela una petición que no se va a atender. */
+const cancelArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const cancel = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const decisionActor = await requireDecisionCapability(
-      ctx,
-      "cancelar peticiones",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const cancelled = requireRequestStep(request, "cancel", (status) =>
-      status === REQUEST_STATUSES.CANCELLED
-        ? `La petición ${request.reference} ya estaba cancelada.`
-        : status === REQUEST_STATUSES.ISSUED
-          ? `Antes de cancelar la petición ${request.reference}, devuélvela desde «Devolver material».`
-          : status === REQUEST_STATUSES.APPROVED ||
-              status === REQUEST_STATUSES.RETURNED
-            ? `La petición ${request.reference} tiene material comprometido: para cancelarla primero gestiona la devolución o reintegro de stock.`
-            : `Solo se pueden cancelar las peticiones pendientes, en espera o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
-    );
+  args: cancelArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para cancelar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    cancelArgs,
+    async (ctx, args, actor) => {
+      const decisionActor = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const cancelled = requireRequestStep(request, "cancel", (status) =>
+        status === REQUEST_STATUSES.CANCELLED
+          ? `La petición ${request.reference} ya estaba cancelada.`
+          : status === REQUEST_STATUSES.ISSUED
+            ? `Antes de cancelar la petición ${request.reference}, devuélvela desde «Devolver material».`
+            : status === REQUEST_STATUSES.APPROVED ||
+                status === REQUEST_STATUSES.RETURNED
+              ? `La petición ${request.reference} tiene material comprometido: para cancelarla primero gestiona la devolución o reintegro de stock.`
+              : `Solo se pueden cancelar las peticiones pendientes, en espera o pendientes de presupuesto (la ${request.reference} está en ${status}).`,
+      );
 
-    const now = Date.now();
-    const name = await actorName(ctx, decisionActor);
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: cancelled,
-      cancelledAt: now,
-      ...(reason ? { cancelNote: reason } : {}),
-    });
+      const now = Date.now();
+      const name = await actorName(ctx, decisionActor);
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: cancelled,
+        cancelledAt: now,
+        ...(reason ? { cancelNote: reason } : {}),
+      });
 
-    // Sin material que vaya a llegar, la incidencia no se queda esperando: vuelve
-    // a donde estaba (`partsSettled*`).
-    if (request.incidentId) {
-      await syncIncidentWithParts(ctx, request.incidentId, name);
-    }
+      // Sin material que vaya a llegar, la incidencia no se queda esperando: vuelve
+      // a donde estaba (`partsSettled*`).
+      if (request.incidentId) {
+        await syncIncidentWithParts(ctx, request.incidentId, name);
+      }
 
-    await recordDecision(ctx, args.requestId, name, {
-      reason: "requestCancelled",
-      note: reasonOneLine(reason) || "Cancelada por decisión del responsable.",
-    });
-  },
+      await recordDecision(ctx, args.requestId, name, {
+        reason: "requestCancelled",
+        note:
+          reasonOneLine(reason) || "Cancelada por decisión del responsable.",
+      });
+    },
+  ),
 });
 
 /** Pide presupuesto externo antes de decidir una petición. */
-export const requestQuote = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "pedir presupuesto externo");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const quoted = requireRequestStep(request, "requestQuote", (status) =>
-      status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
-        ? `La petición ${request.reference} ya está en modo presupuesto pendiente.`
-        : `Solo se puede pedir presupuesto externo desde pendiente o en espera (la ${request.reference} está en ${status}).`,
-    );
+const requestQuoteArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
 
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: quoted,
-      quoteRequestedAt: Date.now(),
-      ...(reason ? { decisionNote: reason } : {}),
-    });
-  },
+export const requestQuote = mutation({
+  args: requestQuoteArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para pedir presupuesto externo. Revisa la configuración de tu rol con el administrador.",
+    },
+    requestQuoteArgs,
+    async (ctx, args) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const quoted = requireRequestStep(request, "requestQuote", (status) =>
+        status === REQUEST_STATUSES.PENDING_SUPPLIER_QUOTE
+          ? `La petición ${request.reference} ya está en modo presupuesto pendiente.`
+          : `Solo se puede pedir presupuesto externo desde pendiente o en espera (la ${request.reference} está en ${status}).`,
+      );
+
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: quoted,
+        quoteRequestedAt: Date.now(),
+        ...(reason ? { decisionNote: reason } : {}),
+      });
+    },
+  ),
 });
 
 /** Aprueba la petición: aparta material descontando el stock del catálogo. */
+const approveArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const approve = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(
-      ctx,
-      "aprobar o rechazar peticiones",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    // Pendiente o con el material ya recibido: lo comprado entra en el almacén
-    // y se aprueba desde ahí, que es cuando hay existencias que apartar.
-    const approved = requireRequestStep(
-      request,
-      "approve",
-      () =>
-        `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
-    );
-    if (request.lines.length === 0) {
-      throw new ConvexError(
-        `La petición ${request.reference} no tiene ningún repuesto asociado. Asocia el repuesto (o crea uno nuevo con el proveedor y su nº de parte) antes de aprobar.`,
+  args: approveArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para aprobar o rechazar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    approveArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      // Pendiente o con el material ya recibido: lo comprado entra en el almacén
+      // y se aprueba desde ahí, que es cuando hay existencias que apartar.
+      const approved = requireRequestStep(
+        request,
+        "approve",
+        () =>
+          `La petición ${request.reference} ya fue resuelta y no puede aprobarse.`,
       );
-    }
-
-    const parts = [];
-    for (const line of request.lines) {
-      const part = await ctx.db.get(line.sparePartId);
-      if (!part) {
+      if (request.lines.length === 0) {
         throw new ConvexError(
-          `El repuesto ${line.code} ya no está en el catálogo. Rechaza la petición o restáuralo.`,
+          `La petición ${request.reference} no tiene ningún repuesto asociado. Asocia el repuesto (o crea uno nuevo con el proveedor y su nº de parte) antes de aprobar.`,
         );
       }
-      if (part.stock < line.quantity) {
-        throw new ConvexError(
-          `Stock insuficiente de ${part.code} (${part.name}): hay ${part.stock} ${part.unit} y se solicitan ${line.quantity}.`,
-        );
-      }
-      parts.push(part);
-    }
 
-    const now = Date.now();
-    for (let i = 0; i < request.lines.length; i++) {
-      const part = parts[i];
-      await ctx.db.patch(part._id, {
-        stock: part.stock - request.lines[i].quantity,
-        updatedAt: now,
+      const parts = [];
+      for (const line of request.lines) {
+        const part = await ctx.db.get(line.sparePartId);
+        if (!part) {
+          throw new ConvexError(
+            `El repuesto ${line.code} ya no está en el catálogo. Rechaza la petición o restáuralo.`,
+          );
+        }
+        if (part.stock < line.quantity) {
+          throw new ConvexError(
+            `Stock insuficiente de ${part.code} (${part.name}): hay ${part.stock} ${part.unit} y se solicitan ${line.quantity}.`,
+          );
+        }
+        parts.push(part);
+      }
+
+      const now = Date.now();
+      for (let i = 0; i < request.lines.length; i++) {
+        const part = parts[i];
+        await ctx.db.patch(part._id, {
+          stock: part.stock - request.lines[i].quantity,
+          updatedAt: now,
+        });
+      }
+
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: approved,
+        decidedBy: await actorName(ctx, userId),
+        decidedAt: now,
+        ...(reason ? { decisionNote: reason } : {}),
       });
-    }
-
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: approved,
-      decidedBy: await actorName(ctx, userId),
-      decidedAt: now,
-      ...(reason ? { decisionNote: reason } : {}),
-    });
-  },
+    },
+  ),
 });
 
 /** Rechaza la petición sin tocar el stock. */
+const rejectArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const reject = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(
-      ctx,
-      "aprobar o rechazar peticiones",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    const rejected = requireRequestStep(
-      request,
-      "reject",
-      () =>
-        `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
-    );
+  args: rejectArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para aprobar o rechazar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    rejectArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const rejected = requireRequestStep(
+        request,
+        "reject",
+        () =>
+          `La petición ${request.reference} ya fue resuelta y no puede rechazarse.`,
+      );
 
-    const now = Date.now();
-    const name = await actorName(ctx, userId);
-    const reason = decisionReason(args.note);
-    await ctx.db.patch(args.requestId, {
-      status: rejected,
-      decidedBy: name,
-      decidedAt: now,
-      ...(reason ? { decisionNote: reason } : {}),
-    });
+      const now = Date.now();
+      const name = await actorName(ctx, userId);
+      const reason = decisionReason(args.note);
+      await ctx.db.patch(args.requestId, {
+        status: rejected,
+        decidedBy: name,
+        decidedAt: now,
+        ...(reason ? { decisionNote: reason } : {}),
+      });
 
-    // Un rechazo que deja la incidencia sin peticiones pendientes no la deja
-    // esperando: eso lo decide `incidentSync`.
-    if (request.incidentId) {
-      await syncIncidentWithParts(ctx, request.incidentId, name);
-    }
-  },
+      // Un rechazo que deja la incidencia sin peticiones pendientes no la deja
+      // esperando: eso lo decide `incidentSync`.
+      if (request.incidentId) {
+        await syncIncidentWithParts(ctx, request.incidentId, name);
+      }
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */
@@ -800,55 +904,90 @@ export const reject = mutation({
 /* ------------------------------------------------------------------ */
 
 /** Manda una petición ya decidida al archivo. */
-export const archive = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(ctx, "archivar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.archivedAt !== undefined) return;
-    if (isRequestInMotion(request.status)) {
-      throw new ConvexError(
-        `La petición ${request.reference} sigue en movimiento: resuélvela, aprobárala o cancelala antes de archivarla.`,
-      );
-    }
+const archiveArgs = { requestId: v.id("partRequests") };
 
-    await ctx.db.patch(args.requestId, {
-      archivedAt: Date.now(),
-      archivedBy: await actorName(ctx, userId),
-    });
-  },
+export const archive = mutation({
+  args: archiveArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para archivar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    archiveArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.archivedAt !== undefined) return;
+      if (isRequestInMotion(request.status)) {
+        throw new ConvexError(
+          `La petición ${request.reference} sigue en movimiento: resuélvela, aprobárala o cancelala antes de archivarla.`,
+        );
+      }
+
+      await ctx.db.patch(args.requestId, {
+        archivedAt: Date.now(),
+        archivedBy: await actorName(ctx, userId),
+      });
+    },
+  ),
 });
 
 /** Devuelve una petición del archivo a la cola. */
-export const unarchive = mutation({
-  args: { requestId: v.id("partRequests") },
-  handler: async (ctx, args) => {
-    await requireDecisionCapability(ctx, "recuperar peticiones");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.archivedAt === undefined) return;
+const unarchiveArgs = { requestId: v.id("partRequests") };
 
-    await ctx.db.patch(args.requestId, {
-      archivedAt: undefined,
-      archivedBy: undefined,
-    });
-  },
+export const unarchive = mutation({
+  args: unarchiveArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para recuperar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    unarchiveArgs,
+    async (ctx, args) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.archivedAt === undefined) return;
+
+      await ctx.db.patch(args.requestId, {
+        archivedAt: undefined,
+        archivedBy: undefined,
+      });
+    },
+  ),
 });
 
 /** Archivado masivo a mano de peticiones ya decididas. */
+const archiveDecidedBeforeArgs = { before: v.number() };
+
 export const archiveDecidedBefore = mutation({
-  args: { before: v.number() },
-  handler: async (ctx, args) => {
-    const userId = await requireDecisionCapability(ctx, "archivar peticiones");
-    if (!Number.isFinite(args.before)) {
-      throw new ConvexError("Indica una fecha de corte válida.");
-    }
-    return await archiveDecidedRequestsBefore(ctx, {
-      before: args.before,
-      by: await actorName(ctx, userId),
-    });
-  },
+  args: archiveDecidedBeforeArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para archivar peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    archiveDecidedBeforeArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      if (!Number.isFinite(args.before)) {
+        throw new ConvexError("Indica una fecha de corte válida.");
+      }
+      return await archiveDecidedRequestsBefore(ctx, {
+        before: args.before,
+        by: await actorName(ctx, userId),
+      });
+    },
+  ),
 });
 
 /**
@@ -929,42 +1068,51 @@ async function deliverMaterial(
 }
 
 /** Marca una petición aprobada como entregada al técnico, toda de una vez. */
+const markIssuedArgs = {
+  requestId: v.id("partRequests"),
+  note: v.optional(v.string()),
+};
+
 export const markIssued = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const issuerId = await requireDecisionCapability(
-      ctx,
-      "marcar peticiones como entregadas",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    // El paso se comprueba antes de tocar nada: desde una petición ya entregada
-    // o sin aprobar no hay material que sacar.
-    requireRequestStep(
-      request,
-      "issue",
-      (status) =>
-        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
-    );
-    const entregas = new Map(
-      request.lines
-        .map(
-          (line) =>
-            [line.sparePartId, lineRemaining(line, request.status)] as const,
-        )
-        .filter(([, quantity]) => quantity > 0),
-    );
-    await deliverMaterial(
-      ctx,
-      request,
-      entregas,
-      await actorName(ctx, issuerId),
-      args.note,
-    );
-  },
+  args: markIssuedArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para marcar peticiones como entregadas. Revisa la configuración de tu rol con el administrador.",
+    },
+    markIssuedArgs,
+    async (ctx, args, actor) => {
+      const issuerId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      // El paso se comprueba antes de tocar nada: desde una petición ya entregada
+      // o sin aprobar no hay material que sacar.
+      requireRequestStep(
+        request,
+        "issue",
+        (status) =>
+          `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${status}).`,
+      );
+      const entregas = new Map(
+        request.lines
+          .map(
+            (line) =>
+              [line.sparePartId, lineRemaining(line, request.status)] as const,
+          )
+          .filter(([, quantity]) => quantity > 0),
+      );
+      await deliverMaterial(
+        ctx,
+        request,
+        entregas,
+        await actorName(ctx, issuerId),
+        args.note,
+      );
+    },
+  ),
 });
 
 /**
@@ -982,74 +1130,83 @@ export const markIssued = mutation({
  * se firma con quien la hace, y la nota —si la hay— se guarda con la entrega
  * completa, que es la que cierra la petición.
  */
+const issueLinesArgs = {
+  requestId: v.id("partRequests"),
+  lines: v.array(
+    v.object({
+      sparePartId: v.id("spareParts"),
+      quantity: v.number(),
+    }),
+  ),
+  note: v.optional(v.string()),
+};
+
 export const issueLines = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    lines: v.array(
-      v.object({
-        sparePartId: v.id("spareParts"),
-        quantity: v.number(),
-      }),
-    ),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const issuerId = await requireDecisionCapability(
-      ctx,
-      "marcar peticiones como entregadas",
-    );
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (!canRequestStep(request.status, "issue")) {
-      throw new ConvexError(
-        `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${request.status}).`,
-      );
-    }
-    if (args.lines.length === 0) {
-      throw new ConvexError(
-        "Indica qué repuestos se entregan en esta tanda y cuántas unidades de cada uno.",
-      );
-    }
+  args: issueLinesArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      denyMessage:
+        "No tienes permisos para marcar peticiones como entregadas. Revisa la configuración de tu rol con el administrador.",
+    },
+    issueLinesArgs,
+    async (ctx, args, actor) => {
+      const issuerId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (!canRequestStep(request.status, "issue")) {
+        throw new ConvexError(
+          `Solo se pueden entregar peticiones aprobadas (la ${request.reference} está en estado ${request.status}).`,
+        );
+      }
+      if (args.lines.length === 0) {
+        throw new ConvexError(
+          "Indica qué repuestos se entregan en esta tanda y cuántas unidades de cada uno.",
+        );
+      }
 
-    const entregas = new Map<Id<"spareParts">, number>();
-    for (const entry of args.lines) {
-      const line = request.lines.find(
-        (candidate) => candidate.sparePartId === entry.sparePartId,
-      );
-      if (!line) {
-        throw new ConvexError(
-          "Uno de los repuestos indicados no forma parte de esta petición: actualiza la ficha y vuelve a intentarlo.",
+      const entregas = new Map<Id<"spareParts">, number>();
+      for (const entry of args.lines) {
+        const line = request.lines.find(
+          (candidate) => candidate.sparePartId === entry.sparePartId,
         );
+        if (!line) {
+          throw new ConvexError(
+            "Uno de los repuestos indicados no forma parte de esta petición: actualiza la ficha y vuelve a intentarlo.",
+          );
+        }
+        const quantity = Math.floor(entry.quantity);
+        if (!Number.isFinite(entry.quantity) || quantity < 1) {
+          throw new ConvexError(
+            `Indica cuántas unidades de ${line.code} (${line.name}) se entregan: una o más.`,
+          );
+        }
+        const remaining = lineRemaining(line, request.status);
+        if (remaining === 0) {
+          throw new ConvexError(
+            `De ${line.code} (${line.name}) ya está entregado todo: no queda nada por sacar.`,
+          );
+        }
+        const already = entregas.get(line.sparePartId) ?? 0;
+        if (quantity + already > remaining) {
+          throw new ConvexError(
+            `De ${line.code} (${line.name}) quedan ${remaining} por entregar y se indican ${quantity + already}.`,
+          );
+        }
+        entregas.set(line.sparePartId, already + quantity);
       }
-      const quantity = Math.floor(entry.quantity);
-      if (!Number.isFinite(entry.quantity) || quantity < 1) {
-        throw new ConvexError(
-          `Indica cuántas unidades de ${line.code} (${line.name}) se entregan: una o más.`,
-        );
-      }
-      const remaining = lineRemaining(line, request.status);
-      if (remaining === 0) {
-        throw new ConvexError(
-          `De ${line.code} (${line.name}) ya está entregado todo: no queda nada por sacar.`,
-        );
-      }
-      const already = entregas.get(line.sparePartId) ?? 0;
-      if (quantity + already > remaining) {
-        throw new ConvexError(
-          `De ${line.code} (${line.name}) quedan ${remaining} por entregar y se indican ${quantity + already}.`,
-        );
-      }
-      entregas.set(line.sparePartId, already + quantity);
-    }
 
-    await deliverMaterial(
-      ctx,
-      request,
-      entregas,
-      await actorName(ctx, issuerId),
-      args.note,
-    );
-  },
+      await deliverMaterial(
+        ctx,
+        request,
+        entregas,
+        await actorName(ctx, issuerId),
+        args.note,
+      );
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */
