@@ -1,24 +1,26 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-NOTIFICATION-BELL`
-- **Objetivo:** Fase 1 - Crear contratos de tipos en `notificationBell/types.ts`, helpers puros en `notificationBell/helpers.ts` y tests unitarios en `tests/notificationBellHelpers.test.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-NOTIFICATION-BELL`
+- **Objetivo:** Fase 2 - Crear hook `useNotificationBellDismiss`, subcomponentes `NotificationTriggerButton`, `NotificationItemButton`, `NotificationsPanel` y barril `index.ts`.
 - **Módulo(s) Afectado(s):**
-  - `src/components/notificationBell/types.ts`
-  - `src/components/notificationBell/helpers.ts`
-  - `tests/notificationBellHelpers.test.ts`
+  - `src/components/notificationBell/useNotificationBellDismiss.ts`
+  - `src/components/notificationBell/components/NotificationTriggerButton.tsx`
+  - `src/components/notificationBell/components/NotificationItemButton.tsx`
+  - `src/components/notificationBell/components/NotificationsPanel.tsx`
+  - `src/components/notificationBell/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/components/notificationBell/types.ts`: contratos e interfaces para NotificationBell y sus subcomponentes.
-- [x] `src/components/notificationBell/helpers.ts`: funciones puras `countUnread`, `formatBadgeCount` y `getTriggerAriaLabel`.
+- [x] `src/components/notificationBell/types.ts`: interfaces tipadas.
+- [x] `src/components/notificationBell/helpers.ts`: funciones puras de formato y accesibilidad.
 - [x] `tests/notificationBellHelpers.test.ts`: suite de pruebas unitarias para helpers.
-- [ ] `src/components/notificationBell/useNotificationBellDismiss.ts`: pendiente Fase 2.
-- [ ] `src/components/notificationBell/components/NotificationTriggerButton.tsx`: pendiente Fase 2.
-- [ ] `src/components/notificationBell/components/NotificationItemButton.tsx`: pendiente Fase 2.
-- [ ] `src/components/notificationBell/components/NotificationsPanel.tsx`: pendiente Fase 2.
-- [ ] `src/components/notificationBell/index.ts`: pendiente Fase 2.
+- [x] `src/components/notificationBell/useNotificationBellDismiss.ts`: hook para click outside, Escape y foco.
+- [x] `src/components/notificationBell/components/NotificationTriggerButton.tsx`: botón disparador con badge reactivo.
+- [x] `src/components/notificationBell/components/NotificationItemButton.tsx`: fila de notificación con fecha relativa.
+- [x] `src/components/notificationBell/components/NotificationsPanel.tsx`: panel flotante con cabecera y listado.
+- [x] `src/components/notificationBell/index.ts`: barril unificado.
 - [ ] `src/components/NotificationBell.tsx`: pendiente Fase 3.
 
 ---
@@ -32,4 +34,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 1.
+- **Estado:** En ejecución - Fase 2.
