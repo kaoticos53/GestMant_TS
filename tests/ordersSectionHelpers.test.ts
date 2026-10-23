@@ -4,11 +4,12 @@ import {
   formatOrderRequestRefs,
   formatOrderSubtitle,
 } from "../src/pages/dashboard/purchasing/components/orders/helpers";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { PurchaseOrderDoc } from "@/lib/purchasing";
 
 describe("ordersSectionHelpers", () => {
   const mockOrder: PurchaseOrderDoc = {
-    _id: "ord_1" as any,
+    _id: "ord_1" as Id<"purchaseOrders">,
     _creationTime: 1000,
     reference: "OC-2026-001",
     supplier: "Rodamientos del Norte",
@@ -16,7 +17,7 @@ describe("ordersSectionHelpers", () => {
     status: "ordered",
     lines: [
       {
-        partId: "p_1" as any,
+        partId: "p_1" as Id<"spareParts">,
         partName: "Rodamiento 6204-2RS",
         quantity: 4,
         receivedQuantity: 2,
@@ -24,7 +25,7 @@ describe("ordersSectionHelpers", () => {
     ],
     requestRefs: [
       {
-        requestId: "req_1" as any,
+        requestId: "req_1" as Id<"requests">,
         reference: "PET-001",
         requestedAt: 1773900000000,
       },
@@ -44,7 +45,7 @@ describe("ordersSectionHelpers", () => {
         lines: [
           ...mockOrder.lines,
           {
-            partId: "p_2" as any,
+            partId: "p_2" as Id<"spareParts">,
             partName: "Retén 20x35x7",
             quantity: 2,
             receivedQuantity: 2,
@@ -71,7 +72,7 @@ describe("ordersSectionHelpers", () => {
       const multipleRefs = [
         ...mockOrder.requestRefs,
         {
-          requestId: "req_2" as any,
+          requestId: "req_2" as Id<"requests">,
           reference: "PET-002",
           requestedAt: 1773950000000,
         },

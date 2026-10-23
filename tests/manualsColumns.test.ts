@@ -3,6 +3,7 @@ import {
   buildManualsSortColumns,
   formatManualBrandModel,
 } from "../src/pages/dashboard/manuals/helpers/columns";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { EquipmentDoc, ManualDoc } from "../src/pages/dashboard/manuals/types";
 
 describe("manualsColumns", () => {
@@ -29,7 +30,7 @@ describe("manualsColumns", () => {
 
   describe("buildManualsSortColumns", () => {
     const mockEquipment: EquipmentDoc = {
-      _id: "eq_1" as any,
+      _id: "eq_1" as Id<"equipment">,
       _creationTime: 1000,
       name: "Torno Paralelo",
       location: "Taller A",
@@ -38,14 +39,14 @@ describe("manualsColumns", () => {
     } as unknown as EquipmentDoc;
 
     const mockManual: ManualDoc = {
-      _id: "m_1" as any,
+      _id: "m_1" as Id<"manuals">,
       _creationTime: 1000,
       title: "Manual de Uso Pinacho",
       type: "manual",
       brand: "Pinacho",
       model: "L-1",
       updatedAt: 1774000000000,
-      equipmentId: "eq_1" as any,
+      equipmentId: "eq_1" as Id<"equipment">,
       history: [],
       kind: "file",
       createdAt: 1000,

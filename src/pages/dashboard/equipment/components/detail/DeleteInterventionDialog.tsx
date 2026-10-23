@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { api } from "@/convex/_generated/api";
 import { equipmentLabel, getErrorMessage } from "@/lib/workshop";
 import { useMutation } from "convex/react";
@@ -32,35 +23,24 @@ export function DeleteInterventionDialog({
 
   if (!target) return null;
 
+  const handleDelete = async () => {
+    try {
+      await removeRecord({ id: target._id });
+      toast.success("Intervención borrada del historial");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      onClose();
+    }
+  };
+
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Borrar esta intervención?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Se borrará del historial de {equipmentLabel(item)}. Esta acción no se
-            puede deshacer.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={async () => {
-              try {
-                await removeRecord({ id: target._id });
-                toast.success("Intervención borrada del historial");
-              } catch (error) {
-                toast.error(getErrorMessage(error));
-              } finally {
-                onClose();
-              }
-            }}
-          >
-            Borrar intervención
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onClose}
+      title="¿Borrar esta intervención?"
+      description={`Se borrará del historial de ${equipmentLabel(item)}. Esta acción no se puede deshacer.`}
+      confirmLabel="Borrar intervención"
+      onConfirm={handleDelete}
+    />
   );
 }

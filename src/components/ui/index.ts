@@ -51,6 +51,8 @@ export { HoverCard, HoverCardTrigger, HoverCardContent } from "./hover-card"; //
 export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "./dialog"; // ~6KB - Modal dialogs
 export { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription } from "./sheet"; // ~6KB - Side sheets
 export { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./alert-dialog"; // ~6KB
+export { DestructiveConfirmDialog } from "./destructive-confirm-dialog"; // ~1KB - Confirmación de borrados y retiradas
+export type { DestructiveConfirmDialogProps } from "./destructive-confirm-dialog";
 
 // Menus & Dropdowns
 export { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuGroup, DropdownMenuPortal, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuRadioGroup } from "./dropdown-menu"; // ~7KB

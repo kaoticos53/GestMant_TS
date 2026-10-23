@@ -1,33 +1,34 @@
 # Tarea Activa (`.context/active-task.md`)
 
+*No hay tareas activas en este momento. Todas las fases del plan de modernización han concluido y están verificadas.*
+
+---
+
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-ARCHIVE-LIST-SECTION`
-- **Objetivo:** Fase 4 - Validación completa (2.467 tests de Vitest pasados, build de producción exitoso) y cierre de la refactorización modular de `ArchiveListSection.tsx`.
-- **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/ArchiveListSection.tsx`
-  - `src/pages/dashboard/archive/components/list/`
+- **ID / Nombre de la Tarea:** `[ID-DE-LA-TAREA]`
+- **Objetivo:** [Descripción clara de qué se quiere lograr]
+- **Módulo(s) Afectado(s):** [ej. `src/pages/dashboard/equipment/`]
 
 ---
 
-## 2. Archivos Modificados / Creados
-- [x] `archive/components/list/types.ts`: contratos de tipos.
-- [x] `archive/components/list/helpers.ts`: funciones puras de textos y permisos (`getEmptyStateTitle`, `getEmptyStateDescription`, `canRestoreEntry`).
-- [x] `tests/archiveListHelpers.test.ts`: suite de pruebas unitarias para helpers (8 tests pasados).
-- [x] `archive/components/list/ArchiveEmptyState.tsx`: empty state contextual con botón de reseteo.
-- [x] `archive/components/list/ArchiveEntryCard.tsx`: tarjeta individual de elemento archivado.
-- [x] `archive/components/list/ArchiveDateSection.tsx`: sección agrupada cronológicamente con sticky header.
-- [x] `archive/components/list/index.ts`: barril unificado.
-- [x] `archive/components/ArchiveListSection.tsx`: orquestación de alto nivel reducida de 205 a 85 líneas.
+## 2. Archivos a Modificar / Crear
+- [ ] `ruta/al/archivo1.ts`: [Breve descripción del cambio]
+- [ ] `ruta/al/archivo2.tsx`: [Breve descripción del cambio]
 
 ---
 
-## 3. Comprobaciones de Invariantes y Guardrails
-- [x] ¿Afecta a `src/lib/`? No.
-- [x] ¿TypeScript estricto? Sin `any`. `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.467 tests pasados en Vitest.
-- [x] ¿Vocabulario Ubicuo respetado? Sí.
+## 3. Comprobaciones Previas e Invariantes
+- [ ] ¿Afecta a `src/lib/`? (Si es sí, asegurar NO importar React ni Convex).
+- [ ] ¿Afecta a máquinas de estado? (Usar las existentes en `src/lib/`).
+- [ ] ¿Respeta el Vocabulario Ubicuo de `GLOSARIO.md`?
+- [ ] ¿Requiere nuevos paquetes npm? (Evitar salvo aprobación expresa).
+- [ ] ¿Requiere comprobaciones de identidad/rol en Convex?
 
 ---
 
-## 4. Estado Actual
-- **Estado:** Completada y validada con éxito.
+## 4. Checklist de Validación y Cierre
+- [ ] `npx tsc --noEmit` ejecutado sin errores.
+- [ ] Test unitario del módulo ejecutado con éxito (`npx vitest run <ruta-del-test>`).
+- [ ] Test de arquitectura ejecutado (`npx vitest run tests/arquitectura.test.ts`).
+- [ ] Test de seguridad ejecutado (`npx vitest run tests/seguridad.test.ts`).
+- [ ] Handover registrado en `.context/sessions/` con la plantilla correspondiente.

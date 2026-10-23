@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { api } from "@/convex/_generated/api";
 import { getErrorMessage } from "@/lib/workshop";
 import { useMutation } from "convex/react";
@@ -50,29 +41,19 @@ export function ManualDeleteDialog({
   };
 
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Borrar «{manual.title}»?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {manual.kind === "file"
-              ? "Se borra la ficha, su archivo y las versiones anteriores que guarda su historial: no se puede deshacer."
-              : "Se borra la nota del taller. No se puede deshacer."}
-            {!manual.equipmentId && manual.model
-              ? " Es un manual del modelo: desaparece también de la ficha de los demás equipos con ese modelo."
-              : ""}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={() => handleDelete()}
-          >
-            Borrar manual
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onClose}
+      title={`¿Borrar «${manual.title}»?`}
+      description={
+        (manual.kind === "file"
+          ? "Se borra la ficha, su archivo y las versiones anteriores que guarda su historial: no se puede deshacer."
+          : "Se borra la nota del taller. No se puede deshacer.") +
+        (!manual.equipmentId && manual.model
+          ? " Es un manual del modelo: desaparece también de la ficha de los demás equipos con ese modelo."
+          : "")
+      }
+      confirmLabel="Borrar manual"
+      onConfirm={handleDelete}
+    />
   );
 }

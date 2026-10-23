@@ -2,13 +2,14 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { PurchaseOrderDoc } from "@/lib/purchasing";
 import type { ReceptionDoc } from "@/pages/dashboard/purchasing/types";
 import { useHistoryFilters } from "@/pages/dashboard/purchasing/hooks/useHistoryFilters";
 
 const sampleOrders: PurchaseOrderDoc[] = [
   {
-    _id: "order-1" as any,
+    _id: "order-1" as Id<"purchaseOrders">,
     _creationTime: 1000,
     reference: "OC-0001",
     supplier: "SKF Rodamientos",
@@ -17,7 +18,7 @@ const sampleOrders: PurchaseOrderDoc[] = [
     solicitudeCode: "SOL-101",
     lines: [
       {
-        purchaseRequestId: "req-1" as any,
+        purchaseRequestId: "req-1" as Id<"purchaseRequests">,
         code: "ROD-6204",
         name: "Rodamiento 6204",
         quantity: 10,
@@ -26,7 +27,7 @@ const sampleOrders: PurchaseOrderDoc[] = [
     ],
   },
   {
-    _id: "order-2" as any,
+    _id: "order-2" as Id<"purchaseOrders">,
     _creationTime: 2000,
     reference: "OC-0002",
     supplier: "Festo España",
@@ -35,7 +36,7 @@ const sampleOrders: PurchaseOrderDoc[] = [
     solicitudeCode: "SOL-102",
     lines: [
       {
-        purchaseRequestId: "req-2" as any,
+        purchaseRequestId: "req-2" as Id<"purchaseRequests">,
         code: "VAL-32",
         name: "Válvula neumática",
         quantity: 2,
@@ -47,16 +48,16 @@ const sampleOrders: PurchaseOrderDoc[] = [
 
 const sampleReceptions: ReceptionDoc[] = [
   {
-    _id: "rec-1" as any,
+    _id: "rec-1" as Id<"receptions">,
     _creationTime: 1500,
-    orderId: "order-1" as any,
+    orderId: "order-1" as Id<"purchaseOrders">,
     receivedAt: 1715587200000,
     deliveryNoteReference: "ALB-001",
     deliveryNoteUrl: null,
     lines: [
       {
-        sparePartId: "sp-1" as any,
-        purchaseRequestId: "req-1" as any,
+        sparePartId: "sp-1" as Id<"spareParts">,
+        purchaseRequestId: "req-1" as Id<"purchaseRequests">,
         quantity: 5,
       },
     ],

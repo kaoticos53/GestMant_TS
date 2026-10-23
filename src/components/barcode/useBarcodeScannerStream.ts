@@ -53,13 +53,12 @@ export function useBarcodeScannerStream({
   };
 
   useEffect(() => {
-    if (!open) {
-      stopCamera();
-      return;
-    }
+    // Al cerrar no hay nada que parar aquí: la limpieza del efecto anterior ya
+    // detuvo la cámara y apagó la linterna.
+    if (!open) return;
 
     let active = true;
-    let detector: BarcodeDetectorInstance | null = createBarcodeDetector();
+    const detector: BarcodeDetectorInstance | null = createBarcodeDetector();
     let animationFrameId: number;
 
     async function startCamera() {

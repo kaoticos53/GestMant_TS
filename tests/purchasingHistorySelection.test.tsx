@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { PurchaseHistoryRow } from "@/lib/purchasing";
 import {
   DEFAULT_HISTORY_COLUMNS,
@@ -12,7 +13,7 @@ import { useHistoryExport } from "@/pages/dashboard/purchasing/hooks/useHistoryE
 const sampleRows: PurchaseHistoryRow[] = [
   {
     id: "order-1-req-1-0",
-    orderId: "order-1" as any,
+    orderId: "order-1" as Id<"purchaseOrders">,
     orderReference: "OC-0001",
     solicitudeCode: "SOL-101",
     position: 1,
@@ -27,7 +28,7 @@ const sampleRows: PurchaseHistoryRow[] = [
   },
   {
     id: "order-2-req-2-0",
-    orderId: "order-2" as any,
+    orderId: "order-2" as Id<"purchaseOrders">,
     orderReference: "OC-0002",
     solicitudeCode: "SOL-102",
     position: 1,

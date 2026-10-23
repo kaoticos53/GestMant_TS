@@ -1,6 +1,8 @@
 import { Email } from "@convex-dev/auth/providers/Email";
-import axios from "axios";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
+
+/** Tiempo máximo de espera al gateway de envío de códigos. */
+const EMAIL_OTP_TIMEOUT_MS = 10_000;
 
 export const emailOtp = Email({
   id: "email-otp",
@@ -16,14 +18,22 @@ export const emailOtp = Email({
     return generateRandomString(random, alphabet, 6);
   },
   async sendVerificationRequest({ identifier: email, token }) {
+    let response: Response;
     try {
-      await axios.post(
-        freebuffEmailOtpUrl(),
-        { to: email, otp: token },
-        { headers: freebuffEmailOtpHeaders() },
-      );
+      response = await fetch(freebuffEmailOtpUrl(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...freebuffEmailOtpHeaders(),
+        },
+        body: JSON.stringify({ to: email, otp: token }),
+        signal: AbortSignal.timeout(EMAIL_OTP_TIMEOUT_MS),
+      });
     } catch (error) {
       throw freebuffEmailOtpError(error);
+    }
+    if (!response.ok) {
+      throw await freebuffEmailOtpHttpError(response);
     }
   },
 });
@@ -49,17 +59,21 @@ function freebuffEmailOtpHeaders(): Record<string, string> {
 }
 
 // Never stringify the whole request error: it carries the request headers.
-function freebuffEmailOtpError(error: unknown): Error {
-  const response = (
-    error as { response?: { status?: number; data?: { error?: unknown } } }
-  )?.response;
-  if (response) {
-    const detail =
-      typeof response.data?.error === "string" ? `: ${response.data.error}` : "";
-    return new Error(
-      `Could not send the sign-in code (HTTP ${response.status})${detail}`,
-    );
+async function freebuffEmailOtpHttpError(response: Response): Promise<Error> {
+  let detail = "";
+  try {
+    const body: unknown = await response.json();
+    const reason = (body as { error?: unknown } | null)?.error;
+    if (typeof reason === "string") detail = `: ${reason}`;
+  } catch {
+    // Cuerpo no JSON: se informa solo el código HTTP.
   }
+  return new Error(
+    `Could not send the sign-in code (HTTP ${response.status})${detail}`,
+  );
+}
+
+function freebuffEmailOtpError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   return new Error(`Could not send the sign-in code: ${message}`);
 }

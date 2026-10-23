@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { getErrorMessage } from "@/lib/workshop";
 import { useMutation } from "convex/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import type { PurchaseActionTarget } from "../types";
 
@@ -23,35 +23,45 @@ export interface PurchaseRequestActionDialogProps {
   onSuccess?: () => void;
 }
 
+/** Texto con el que arranca el campo según la acción elegida. */
+function initialText({ request, action }: PurchaseActionTarget): string {
+  if (action === "supplier") return request.supplier;
+  if (action === "note") return request.notes ?? "";
+  return "";
+}
+
 /**
  * Diálogo modal singleton elevado para modificar proveedor, nota o retirar
  * una petición de compra de la cola.
+ *
+ * El cuerpo se remonta con `key` (petición + acción): así el campo arranca con
+ * el valor que toca sin sincronizarlo desde un efecto.
  */
-export function PurchaseRequestActionDialog({
+export function PurchaseRequestActionDialog(
+  props: PurchaseRequestActionDialogProps,
+) {
+  const { target } = props;
+  if (!target) return null;
+  return (
+    <PurchaseRequestActionDialogBody
+      key={`${target.request._id}:${target.action}`}
+      {...props}
+      target={target}
+    />
+  );
+}
+
+function PurchaseRequestActionDialogBody({
   target,
   onClose,
   onSuccess,
-}: PurchaseRequestActionDialogProps) {
+}: PurchaseRequestActionDialogProps & { target: PurchaseActionTarget }) {
   const setSupplier = useMutation(api.purchasing.setSupplier);
   const setNote = useMutation(api.purchasing.setNote);
   const cancelar = useMutation(api.purchasing.cancelPurchaseRequest);
 
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(() => initialText(target));
   const [guardando, setGuardando] = useState(false);
-
-  useEffect(() => {
-    if (!target) return;
-    const { request, action } = target;
-    setTexto(
-      action === "supplier"
-        ? request.supplier
-        : action === "note"
-          ? (request.notes ?? "")
-          : "",
-    );
-  }, [target]);
-
-  if (!target) return null;
 
   const { request, action } = target;
 
@@ -85,7 +95,7 @@ export function PurchaseRequestActionDialog({
   const isSubmitDisabled = guardando || (action !== "note" && !texto.trim());
 
   return (
-    <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>

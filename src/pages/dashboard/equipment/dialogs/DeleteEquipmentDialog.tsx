@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { api } from "@/convex/_generated/api";
 import { equipmentLabel, getErrorMessage } from "@/lib/workshop";
 import { useMutation } from "convex/react";
@@ -42,27 +33,12 @@ export function DeleteEquipmentDialog({
   };
 
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            ¿Borrar {equipmentLabel(item)}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            Se borrará del inventario. Las peticiones que lo mencionen
-            conservan su texto, pero dejarán de estar vinculadas.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={() => void handleDelete()}
-          >
-            Borrar equipo
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onClose}
+      title={`¿Borrar ${equipmentLabel(item)}?`}
+      description="Se borrará del inventario. Las peticiones que lo mencionen conservan su texto, pero dejarán de estar vinculadas."
+      confirmLabel="Borrar equipo"
+      onConfirm={handleDelete}
+    />
   );
 }

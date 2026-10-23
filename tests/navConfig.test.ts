@@ -7,6 +7,7 @@ import {
   computeNavBadges,
   getHeadingInfo,
   isSummaryHidden,
+  type WorkshopSummaryData,
 } from "../src/pages/dashboard/constants/navConfig";
 
 describe("navConfig", () => {
@@ -66,7 +67,7 @@ describe("navConfig", () => {
         equipment: 12,
         manuals: 7,
         parts: { total: 40, lowStock: 3 },
-      } as any;
+      } as unknown as WorkshopSummaryData;
 
       const badges = computeNavBadges(summary);
       expect(badges.incidents).toBe(5);
@@ -90,7 +91,7 @@ describe("navConfig", () => {
       const summary = {
         requests: { pending: 2, urgent: 1, withoutReference: 1, issued: 4, active: 2 },
         parts: { lowStock: 2, total: 20 },
-      } as any;
+      } as unknown as WorkshopSummaryData;
 
       const openRequests = vi.fn();
       const openInventory = vi.fn();
@@ -130,7 +131,7 @@ describe("navConfig", () => {
 
       const userHeading = getHeadingInfo("incidents", false, {
         incidents: { reported: 8 },
-      } as any);
+      } as unknown as WorkshopSummaryData);
       expect(userHeading.title).toBe("Incidencias");
       expect(userHeading.count).toBe(8);
     });

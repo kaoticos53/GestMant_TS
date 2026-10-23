@@ -1,4 +1,5 @@
 import { evaluatePurchaseSelection } from "@/pages/dashboard/purchasing/components/pending/hooks/usePendingPurchaseSelection";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { PurchaseRequestDoc } from "@/lib/purchasing";
 import { describe, expect, it } from "vitest";
 
@@ -8,7 +9,7 @@ function buildMockPurchaseRequest(
   status: "pending" | "ordered" | "received" | "cancelled" = "pending",
 ): PurchaseRequestDoc {
   return {
-    _id: id as any,
+    _id: id as Id<"purchaseRequests">,
     reference: `PC-${id}`,
     code: `REP-${id}`,
     name: `Pieza ${id}`,

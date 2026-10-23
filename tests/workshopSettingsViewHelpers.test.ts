@@ -1,3 +1,4 @@
+import { Boxes } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import {
   getAvailableTabs,
@@ -61,9 +62,9 @@ describe("workshopSettingsView helpers", () => {
 
   describe("resolveActiveTabId", () => {
     const sampleTabs: WorkshopTabItem[] = [
-      { id: "catalogs", label: "Catálogos", icon: () => null as any },
-      { id: "models", label: "Modelos", icon: () => null as any },
-      { id: "storage", label: "Almacén", icon: () => null as any },
+      { id: "catalogs", label: "Catálogos", icon: Boxes },
+      { id: "models", label: "Modelos", icon: Boxes },
+      { id: "storage", label: "Almacén", icon: Boxes },
     ];
 
     it("selecciona currentTab si está disponible", () => {

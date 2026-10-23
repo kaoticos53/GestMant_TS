@@ -38,7 +38,7 @@ const mockNavItems: NavItem[] = [
   { id: "inventory", label: "Repuestos", icon: Boxes, badge: 0 },
 ];
 
-function setupNav(canFn = (_cap: string) => true) {
+function setupNav(canFn = () => true) {
   let current!: ReturnType<typeof useDashboardNavigation>;
   function TestComp() {
     current = useDashboardNavigation(canFn as never, mockNavItems);

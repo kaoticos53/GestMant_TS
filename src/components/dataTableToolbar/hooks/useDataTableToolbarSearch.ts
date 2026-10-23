@@ -13,10 +13,13 @@ export function useDataTableToolbarSearch({
   debounceMs = 0,
 }: UseDataTableToolbarSearchParams) {
   const [localSearch, setLocalSearch] = useState(search);
+  const [prevSearch, setPrevSearch] = useState(search);
 
-  useEffect(() => {
+  // Si el valor externo cambia, el campo local lo sigue en el mismo render.
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setLocalSearch(search);
-  }, [search]);
+  }
 
   useEffect(() => {
     if (debounceMs <= 0) return;

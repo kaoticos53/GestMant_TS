@@ -4,12 +4,13 @@ import {
   getManualScopeDescription,
   getManualSubtitle,
 } from "../src/pages/dashboard/manualDetail/helpers";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { EquipmentDoc, ManualDoc } from "../src/pages/dashboard/manualDetail/types";
 
 describe("manualDetailSheetHelpers", () => {
   const mockEquipment: EquipmentDoc[] = [
     {
-      _id: "eq_1" as any,
+      _id: "eq_1" as Id<"equipment">,
       _creationTime: 1000,
       name: "Torno Paralelo",
       location: "Área de Mecanizado",
@@ -17,7 +18,7 @@ describe("manualDetailSheetHelpers", () => {
       status: "operational",
     } as unknown as EquipmentDoc,
     {
-      _id: "eq_2" as any,
+      _id: "eq_2" as Id<"equipment">,
       _creationTime: 2000,
       name: "Fresadora Universal",
       location: "Área de Fresado",
@@ -26,7 +27,7 @@ describe("manualDetailSheetHelpers", () => {
   ];
 
   const baseManual: ManualDoc = {
-    _id: "man_1" as any,
+    _id: "man_1" as Id<"manuals">,
     _creationTime: 1000,
     title: "Manual de Operación Torno",
     kind: "file",

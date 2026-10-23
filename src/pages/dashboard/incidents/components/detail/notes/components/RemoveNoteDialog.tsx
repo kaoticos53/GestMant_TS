@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import type { RemoveNoteDialogProps } from "../types";
 
 export function RemoveNoteDialog({
@@ -20,37 +11,14 @@ export function RemoveNoteDialog({
   if (!open) return null;
 
   return (
-    <AlertDialog
-      open
-      onOpenChange={(isOpen) => {
-        if (!isOpen && !removingNote) onCancel();
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Retirar la nota?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Sale del cuaderno de {reference}, pero no se pierde: podrás
-            recuperarla desde la propia ficha si te has equivocado. El resto de
-            notas y el historial de estados no cambian.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={removingNote} onClick={onCancel}>
-            Cancelar
-          </AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            disabled={removingNote}
-            onClick={(event) => {
-              event.preventDefault();
-              onConfirm();
-            }}
-          >
-            {removingNote ? "Retirando..." : "Retirar nota"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onCancel}
+      busy={removingNote}
+      title="¿Retirar la nota?"
+      description={`Sale del cuaderno de ${reference}, pero no se pierde: podrás recuperarla desde la propia ficha si te has equivocado. El resto de notas y el historial de estados no cambian.`}
+      confirmLabel="Retirar nota"
+      busyLabel="Retirando..."
+      onConfirm={onConfirm}
+    />
   );
 }

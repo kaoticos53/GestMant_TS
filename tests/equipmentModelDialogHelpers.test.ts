@@ -3,11 +3,12 @@ import {
   getInitialModelFormValues,
   validateEquipmentModelForm,
 } from "../src/pages/dashboard/settings/modelDialog/helpers";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { EquipmentModelDoc } from "../src/pages/dashboard/settings/modelDialog/types";
 
 describe("equipmentModelDialogHelpers", () => {
   const existingModel: EquipmentModelDoc = {
-    _id: "mod_1" as any,
+    _id: "mod_1" as Id<"equipmentModels">,
     _creationTime: 1000,
     model: "8FGF25",
     name: "Carretilla elevadora diésel",

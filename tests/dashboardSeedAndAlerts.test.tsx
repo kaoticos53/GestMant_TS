@@ -16,7 +16,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: () => undefined,
-  useMutation: (mutation: unknown) => {
+  useMutation: () => {
     return saveWorkAlertDismissalMock;
   },
   useAction: () => {

@@ -1,19 +1,10 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import type { PartDoc } from "../types";
 
 export interface InventoryDeleteDialogProps {
   part: PartDoc | null;
   onClose: () => void;
-  onConfirm: (part: PartDoc) => void;
+  onConfirm: (part: PartDoc) => void | Promise<unknown>;
 }
 
 export function InventoryDeleteDialog({
@@ -24,25 +15,12 @@ export function InventoryDeleteDialog({
   if (!part) return null;
 
   return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>¿Borrar {part.name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Se quitará del catálogo ({part.code}). Las peticiones históricas
-            conservan su código y su nombre.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={() => onConfirm(part)}
-          >
-            Borrar repuesto
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onClose}
+      title={`¿Borrar ${part.name}?`}
+      description={`Se quitará del catálogo (${part.code}). Las peticiones históricas conservan su código y su nombre.`}
+      confirmLabel="Borrar repuesto"
+      onConfirm={() => onConfirm(part)}
+    />
   );
 }

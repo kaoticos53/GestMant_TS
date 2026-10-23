@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import { compressImageFile } from "../src/lib/imageCompress";
 
 describe("Web Worker de compresión de imágenes (compress.worker.ts)", () => {

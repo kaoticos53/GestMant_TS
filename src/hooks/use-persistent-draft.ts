@@ -56,7 +56,18 @@ export function usePersistentDraft<T>({
 }: PersistentDraftOptions<T>): PersistentDraftReturn<T> {
   const storage = getStorage(storageType);
 
-  const [isRestored, setIsRestored] = useState(false);
+  // Se calcula una sola vez al montar: si había un borrador previo distinto del
+  // valor inicial, se considera restaurado. Sin efecto ni segundo render.
+  const [isRestored, setIsRestored] = useState(() => {
+    if (!storage) return false;
+    try {
+      const raw = storage.getItem(key);
+      return raw !== null && !isEqual(JSON.parse(raw) as T, initialValue);
+    } catch {
+      // Ignorar fallo de parseo
+      return false;
+    }
+  });
   const [draft, setDraft] = useState<T>(() => {
     if (!storage) return initialValue;
     try {
@@ -71,30 +82,20 @@ export function usePersistentDraft<T>({
     return initialValue;
   });
 
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(() => {
-    return !isEqual(draft, initialValue);
-  });
+  // `clearDraft` declara "ya guardado" el borrador actual sin tocarlo: se guarda
+  // su referencia, y en cuanto `draft` cambie vuelve a contar como pendiente.
+  const [clearedDraft, setClearedDraft] = useState<{ value: T } | null>(null);
 
-  // Marca si se restauró un borrador previo al primer render
-  useEffect(() => {
-    if (storage) {
-      try {
-        const raw = storage.getItem(key);
-        if (raw !== null && !isEqual(JSON.parse(raw), initialValue)) {
-          setIsRestored(true);
-        }
-      } catch {
-        // Ignorar fallo de parseo
-      }
-    }
-  }, [key, storage, initialValue, isEqual]);
+  // Estado derivado: no necesita useState ni useEffect.
+  const hasUnsavedChanges =
+    !(clearedDraft !== null && Object.is(clearedDraft.value, draft)) &&
+    !isEqual(draft, initialValue);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sincronización debounced con el almacenamiento
   useEffect(() => {
     const isDirty = !isEqual(draft, initialValue);
-    setHasUnsavedChanges(isDirty);
 
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -147,9 +148,9 @@ export function usePersistentDraft<T>({
         // Ignorar fallo de almacenamiento
       }
     }
-    setHasUnsavedChanges(false);
+    setClearedDraft({ value: draft });
     setIsRestored(false);
-  }, [key, storage]);
+  }, [key, storage, draft]);
 
   const resetToInitial = useCallback(() => {
     clearDraft();

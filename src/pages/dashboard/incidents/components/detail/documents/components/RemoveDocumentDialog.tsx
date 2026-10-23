@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import type { RemoveDocumentDialogProps } from "../types";
 
 export function RemoveDocumentDialog({
@@ -20,38 +11,14 @@ export function RemoveDocumentDialog({
   if (!deletingDocument) return null;
 
   return (
-    <AlertDialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !removingDoc) onCancel();
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>
-            ¿Quitar «{deletingDocument.name}» del expediente?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            Dejará de estar en la ficha de {reference}. El rastro de
-            cambios conserva quién lo quitó, cuándo y con qué nombre estaba.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={removingDoc} onClick={onCancel}>
-            Cancelar
-          </AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            disabled={removingDoc}
-            onClick={(event) => {
-              event.preventDefault();
-              onConfirm();
-            }}
-          >
-            {removingDoc ? "Quitando..." : "Quitar documento"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <DestructiveConfirmDialog
+      onClose={onCancel}
+      busy={removingDoc}
+      title={`¿Quitar «${deletingDocument.name}» del expediente?`}
+      description={`Dejará de estar en la ficha de ${reference}. El rastro de cambios conserva quién lo quitó, cuándo y con qué nombre estaba.`}
+      confirmLabel="Quitar documento"
+      busyLabel="Quitando..."
+      onConfirm={onConfirm}
+    />
   );
 }

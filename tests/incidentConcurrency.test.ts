@@ -1,5 +1,4 @@
 import { backend } from "./backend";
-import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 
