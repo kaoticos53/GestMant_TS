@@ -48,8 +48,8 @@ export function formatRunNowResultToast(result: {
 export function formatArchiveFooter(
   enabled: boolean,
   autoCutoff: number,
-  lastRunAt?: number,
-  lastRunArchived?: number,
+  lastRunAt?: number | null,
+  lastRunArchived?: number | null,
 ): string {
   const base = enabled
     ? `Corte automático: anterior al ${formatDate(autoCutoff)}`

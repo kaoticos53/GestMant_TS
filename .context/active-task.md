@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-AUTOMATIC-ARCHIVE-CARD`
-- **Objetivo:** Fase 2 - Crear hook `useAutomaticArchive`, subcomponentes `AutomaticArchiveHeader`, `AutomaticArchiveControls` y barril `automaticArchive/index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-AUTOMATIC-ARCHIVE-CARD`
+- **Objetivo:** Fase 3 - Orquestar `AutomaticArchiveCard.tsx` delegando en `useAutomaticArchive`, `AutomaticArchiveHeader`, `AutomaticArchiveControls` y `formatArchiveFooter`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/automaticArchive/useAutomaticArchive.ts`
-  - `src/pages/dashboard/settings/automaticArchive/components/AutomaticArchiveHeader.tsx`
-  - `src/pages/dashboard/settings/automaticArchive/components/AutomaticArchiveControls.tsx`
-  - `src/pages/dashboard/settings/automaticArchive/index.ts`
+  - `src/pages/dashboard/settings/AutomaticArchiveCard.tsx`
 
 ---
 
@@ -19,7 +16,7 @@
 - [x] `automaticArchive/components/AutomaticArchiveHeader.tsx`: cabecera descriptiva con switch de activación.
 - [x] `automaticArchive/components/AutomaticArchiveControls.tsx`: selector de antigüedad y botón ejecutar ahora.
 - [x] `automaticArchive/index.ts`: barril unificado.
-- [ ] `settings/AutomaticArchiveCard.tsx`: pendiente Fase 3.
+- [x] `settings/AutomaticArchiveCard.tsx`: orquestador modular completado (~65 líneas).
 
 ---
 
@@ -32,5 +29,7 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+- **Estado:** Fase 3 completada - Commit atómico 3 listo.
+
+
 
