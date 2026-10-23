@@ -2,7 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
-import { hasCapability, memberOrNull } from "./permissions";
+import { secureMutation } from "./_auth/secureMutation";
+import { memberOrNull } from "./permissions";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 
 /** Longitud máxima del texto de un mensaje (lo que se lee, sin su formato). */
@@ -127,79 +128,95 @@ export const thread = query({
 });
 
 /** Envía un mensaje directo. */
-export const send = mutation({
-  args: {
-    recipientId: v.id("users"),
-    text: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const me = await requireActor(ctx);
-    if (!(await hasCapability(ctx, me, "sendMessages"))) {
-      throw new ConvexError(
-        "No tienes permisos para enviar mensajes. Revisa la configuración de tu rol con el administrador.",
-      );
-    }
-    // Lo que se guarda es el documento del editor (o el texto plano de un
-    // mensaje de siempre, que se guarda tal cual) y lo que se mide es su texto:
-    // el formato no cuenta para el límite, que es el mismo que ya valida el
-    // compositor. Un mensaje en blanco —o con formato pero sin nada escrito—
-    // no es un mensaje.
-    const text = richDocToStore(args.text);
-    if (!text) {
-      throw new ConvexError("Escribe un mensaje antes de enviarlo.");
-    }
-    if (richDocToPlainText(text).length > MAX_TEXT) {
-      throw new ConvexError(
-        `Los mensajes no pueden superar los ${MAX_TEXT} caracteres.`,
-      );
-    }
-    if (text.length > MAX_DOC) {
-      throw new ConvexError(
-        `El mensaje lleva demasiado formato: los mensajes no pueden superar los ${MAX_TEXT} caracteres.`,
-      );
-    }
-    if (args.recipientId === me._id) {
-      throw new ConvexError("No puedes enviarte un mensaje a ti mismo.");
-    }
-    const recipient = await ctx.db.get(args.recipientId);
-    if (!recipient) {
-      throw new ConvexError("El destinatario ya no existe.");
-    }
-    if (recipient.active === false) {
-      throw new ConvexError(
-        `No puedes escribir a ${actorName(recipient)}: está dado de baja.`,
-      );
-    }
+const sendArgs = {
+  recipientId: v.id("users"),
+  text: v.string(),
+};
 
-    await ctx.db.insert("messages", {
-      senderId: me._id,
-      senderName: actorName(me),
-      recipientId: recipient._id,
-      recipientName: actorName(recipient),
-      text,
-      read: false,
-      createdAt: Date.now(),
-    });
-  },
+export const send = mutation({
+  args: sendArgs,
+  handler: secureMutation(
+    {
+      capability: "sendMessages",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para usar la mensajería.",
+      denyMessage:
+        "No tienes permisos para enviar mensajes. Revisa la configuración de tu rol con el administrador.",
+    },
+    sendArgs,
+    async (ctx, args, actor) => {
+      const me = actor;
+      // Lo que se guarda es el documento del editor (o el texto plano de un
+      // mensaje de siempre, que se guarda tal cual) y lo que se mide es su texto:
+      // el formato no cuenta para el límite, que es el mismo que ya valida el
+      // compositor. Un mensaje en blanco —o con formato pero sin nada escrito—
+      // no es un mensaje.
+      const text = richDocToStore(args.text);
+      if (!text) {
+        throw new ConvexError("Escribe un mensaje antes de enviarlo.");
+      }
+      if (richDocToPlainText(text).length > MAX_TEXT) {
+        throw new ConvexError(
+          `Los mensajes no pueden superar los ${MAX_TEXT} caracteres.`,
+        );
+      }
+      if (text.length > MAX_DOC) {
+        throw new ConvexError(
+          `El mensaje lleva demasiado formato: los mensajes no pueden superar los ${MAX_TEXT} caracteres.`,
+        );
+      }
+      if (args.recipientId === me._id) {
+        throw new ConvexError("No puedes enviarte un mensaje a ti mismo.");
+      }
+      const recipient = await ctx.db.get(args.recipientId);
+      if (!recipient) {
+        throw new ConvexError("El destinatario ya no existe.");
+      }
+      if (recipient.active === false) {
+        throw new ConvexError(
+          `No puedes escribir a ${actorName(recipient)}: está dado de baja.`,
+        );
+      }
+
+      await ctx.db.insert("messages", {
+        senderId: me._id,
+        senderName: actorName(me),
+        recipientId: recipient._id,
+        recipientName: actorName(recipient),
+        text,
+        read: false,
+        createdAt: Date.now(),
+      });
+    },
+  ),
 });
 
 /** Marca como leídos los mensajes que me envió ese usuario. */
+const markThreadReadArgs = { userId: v.id("users") };
+
 export const markThreadRead = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const me = await requireActor(ctx);
-    const inbound = await ctx.db
-      .query("messages")
-      .withIndex("by_recipient", (q) => q.eq("recipientId", me._id))
-      .collect();
-    const now = Date.now();
-    let updated = 0;
-    for (const message of inbound) {
-      if (message.senderId === args.userId && !message.read) {
-        await ctx.db.patch(message._id, { read: true, readAt: now });
-        updated += 1;
+  args: markThreadReadArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para usar la mensajería.",
+    },
+    markThreadReadArgs,
+    async (ctx, args, actor) => {
+      const me = actor;
+      const inbound = await ctx.db
+        .query("messages")
+        .withIndex("by_recipient", (q) => q.eq("recipientId", me._id))
+        .collect();
+      const now = Date.now();
+      let updated = 0;
+      for (const message of inbound) {
+        if (message.senderId === args.userId && !message.read) {
+          await ctx.db.patch(message._id, { read: true, readAt: now });
+          updated += 1;
+        }
       }
-    }
-    return updated;
-  },
+      return updated;
+    },
+  ),
 });
