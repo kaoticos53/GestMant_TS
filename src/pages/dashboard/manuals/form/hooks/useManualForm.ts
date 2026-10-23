@@ -31,7 +31,11 @@ export function useManualForm({
   const generateUploadUrl = useMutation(api.manuals.generateUploadUrl);
   const verifyManualPdf = useAction(api.manuals.verifyManualPdf);
   const ensureModel = useMutation(api.equipmentModels.ensureModel);
-  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+  const catalogModelsQuery = useQuery(api.equipmentModels.list);
+  const catalogModels = useMemo(
+    () => catalogModelsQuery ?? [],
+    [catalogModelsQuery],
+  );
 
   const isEdit = manual !== null;
   const initialKind: ManualKind = manual?.kind ?? (canManage ? "file" : "note");

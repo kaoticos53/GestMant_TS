@@ -12,22 +12,26 @@ import {
   getAvailableMergeTargets,
   validateCatalogItemName,
 } from "../helpers";
-import type {
-  EditingCatalogItem,
-  MergingCatalogItem,
-} from "../types";
+import type { EditingCatalogItem, MergingCatalogItem } from "../types";
 
 export function useCatalogsState() {
   const [selectedKind, setSelectedKind] = useState<CatalogKind>("brand");
   const [search, setSearch] = useState("");
-  const [editingItem, setEditingItem] = useState<EditingCatalogItem | null>(null);
-  const [mergingItem, setMergingItem] = useState<MergingCatalogItem | null>(null);
+  const [editingItem, setEditingItem] = useState<EditingCatalogItem | null>(
+    null,
+  );
+  const [mergingItem, setMergingItem] = useState<MergingCatalogItem | null>(
+    null,
+  );
   const [targetMergeId, setTargetMergeId] = useState<string>("");
   const [newItemName, setNewItemName] = useState("");
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"catalogs"> | null>(null);
 
-  const rawItems = useQuery(api.catalogs.list, { kind: selectedKind }) ?? [];
+  const rawItemsQuery = useQuery(api.catalogs.list, { kind: selectedKind });
+  // El filtrado y los destinos de fusión se recalculan con esta lista: si el
+  // respaldo fuera un `[]` nuevo en cada render, se reharían siempre.
+  const rawItems = useMemo(() => rawItemsQuery ?? [], [rawItemsQuery]);
   const ensureItem = useMutation(api.catalogs.ensureItem);
   const updateItem = useMutation(api.catalogs.update);
   const removeItem = useMutation(api.catalogs.remove);

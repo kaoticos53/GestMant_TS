@@ -22,9 +22,25 @@ export function useEquipmentForm({
 }: EquipmentFormDialogProps) {
   const create = useMutation(api.equipment.create);
   const update = useMutation(api.equipment.update);
-  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
-  const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
-  const allEquipment = useQuery(api.equipment.list, {}) ?? [];
+  // Los resultados de Convex llegan un turno después de montar. El respaldo se
+  // guarda en su propio `useMemo` para que sea siempre la misma lista vacía:
+  // dentro del render sería un array nuevo cada vez y todas las cuentas que
+  // dependen de él se reharían en balde (`react-hooks/exhaustive-deps`).
+  const catalogModelsQuery = useQuery(api.equipmentModels.list);
+  const catalogModels = useMemo(
+    () => catalogModelsQuery ?? [],
+    [catalogModelsQuery],
+  );
+  const inventoryModelsQuery = useQuery(api.equipment.uniqueModels, {});
+  const inventoryModels = useMemo(
+    () => inventoryModelsQuery ?? [],
+    [inventoryModelsQuery],
+  );
+  const allEquipmentQuery = useQuery(api.equipment.list, {});
+  const allEquipment = useMemo(
+    () => allEquipmentQuery ?? [],
+    [allEquipmentQuery],
+  );
   const autoCode = useQuery(api.equipment.nextCode);
   const catalogBrands = useQuery(api.catalogs.list, { kind: "brand" }) ?? [];
   const catalogLocations =
@@ -196,13 +212,21 @@ export function useEquipmentForm({
 
       // Registro transparente en los catálogos maestros para futuros autocompletados
       if (brand.trim()) {
-        void ensureCatalogItem({ kind: "brand", name: brand.trim() }).catch(() => {});
+        void ensureCatalogItem({ kind: "brand", name: brand.trim() }).catch(
+          () => {},
+        );
       }
       if (location.trim()) {
-        void ensureCatalogItem({ kind: "equipmentLocation", name: location.trim() }).catch(() => {});
+        void ensureCatalogItem({
+          kind: "equipmentLocation",
+          name: location.trim(),
+        }).catch(() => {});
       }
       if (supplier.trim()) {
-        void ensureCatalogItem({ kind: "supplier", name: supplier.trim() }).catch(() => {});
+        void ensureCatalogItem({
+          kind: "supplier",
+          name: supplier.trim(),
+        }).catch(() => {});
       }
 
       onClose();

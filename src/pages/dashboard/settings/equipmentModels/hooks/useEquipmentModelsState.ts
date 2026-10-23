@@ -13,18 +13,28 @@ import {
 } from "../helpers";
 
 export function useEquipmentModelsState() {
-  const models = useQuery(api.equipmentModels.list) ?? [];
-  const equipment = useQuery(api.equipment.list) ?? [];
-  const parts = useQuery(api.spareParts.list) ?? [];
-  const manuals = useQuery(api.manuals.list) ?? [];
+  // Los respaldos, estables: las cuentas de uso de cada modelo dependen de las
+  // cuatro listas y no pueden rehacerse por un array vacío nuevo.
+  const modelsQuery = useQuery(api.equipmentModels.list);
+  const models = useMemo(() => modelsQuery ?? [], [modelsQuery]);
+  const equipmentQuery = useQuery(api.equipment.list);
+  const equipment = useMemo(() => equipmentQuery ?? [], [equipmentQuery]);
+  const partsQuery = useQuery(api.spareParts.list);
+  const parts = useMemo(() => partsQuery ?? [], [partsQuery]);
+  const manualsQuery = useQuery(api.manuals.list);
+  const manuals = useMemo(() => manualsQuery ?? [], [manualsQuery]);
 
   const removeModel = useMutation(api.equipmentModels.remove);
 
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogSession, setDialogSession] = useState(0);
-  const [editingModel, setEditingModel] = useState<EquipmentModelDoc | null>(null);
-  const [deletingModel, setDeletingModel] = useState<EquipmentModelDoc | null>(null);
+  const [editingModel, setEditingModel] = useState<EquipmentModelDoc | null>(
+    null,
+  );
+  const [deletingModel, setDeletingModel] = useState<EquipmentModelDoc | null>(
+    null,
+  );
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Mapeos de conteo de uso por modelo

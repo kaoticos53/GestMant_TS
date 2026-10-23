@@ -18,15 +18,37 @@ import {
  * Aquí solo se ajusta, no se trabaja: el día a día sigue en sus respectivos módulos.
  */
 export function WorkshopSettingsView(props: WorkshopSettingsViewProps) {
-  const { defaultTab } = props;
-  const availableTabs = useMemo(() => getAvailableTabs(props), [
-    props.canManageAlert,
-    props.canManageAudit,
-    props.canManageArchive,
-    props.canPurgeUploads,
-    props.canManageMail,
-    props.canManageData,
-  ]);
+  const {
+    defaultTab,
+    canManageAlert,
+    canManageAudit,
+    canManageArchive,
+    canPurgeUploads,
+    canManageMail,
+    canManageData,
+  } = props;
+  // La lista de pestañas se decide con seis casillas: se pasan sueltas para que
+  // el `useMemo` dependa de lo que de verdad cambia y no del objeto de props
+  // entero, que es nuevo en cada render del panel.
+  const availableTabs = useMemo(
+    () =>
+      getAvailableTabs({
+        canManageAlert,
+        canManageAudit,
+        canManageArchive,
+        canPurgeUploads,
+        canManageMail,
+        canManageData,
+      }),
+    [
+      canManageAlert,
+      canManageAudit,
+      canManageArchive,
+      canPurgeUploads,
+      canManageMail,
+      canManageData,
+    ],
+  );
 
   const [selectedTab, setSelectedTab] = useState<string>(() =>
     resolveActiveTabId(availableTabs, defaultTab, defaultTab),

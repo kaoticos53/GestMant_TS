@@ -22,7 +22,12 @@ export function useEquipmentDerivedData({
   requests,
   maintenance = [],
 }: UseEquipmentDerivedDataOptions) {
-  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+  // Mismo motivo que en el formulario: el respaldo, estable entre renders.
+  const catalogModelsQuery = useQuery(api.equipmentModels.list);
+  const catalogModels = useMemo(
+    () => catalogModelsQuery ?? [],
+    [catalogModelsQuery],
+  );
 
   const related = useMemo(
     () => requests.filter((request) => requestMatchesEquipment(request, item)),
@@ -41,7 +46,9 @@ export function useEquipmentDerivedData({
   const compatible = useMemo(
     () =>
       parts.filter((part) =>
-        Boolean(resolvedModelId && part.compatibleModels?.includes(resolvedModelId)),
+        Boolean(
+          resolvedModelId && part.compatibleModels?.includes(resolvedModelId),
+        ),
       ),
     [parts, resolvedModelId],
   );
@@ -50,11 +57,7 @@ export function useEquipmentDerivedData({
 
   const review = useMemo(
     () =>
-      nextReview(
-        maintenance,
-        item.maintenanceIntervalDays,
-        item.purchaseDate,
-      ),
+      nextReview(maintenance, item.maintenanceIntervalDays, item.purchaseDate),
     [maintenance, item.maintenanceIntervalDays, item.purchaseDate],
   );
 

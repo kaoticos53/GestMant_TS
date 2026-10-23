@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
@@ -67,17 +67,25 @@ export function useEquipmentListState({
     maintenance.filter((record) => record.equipmentId === item._id);
 
   /** Conteo de repuestos compatibles con el equipo resuelto por modelo. */
-  const compatibleCount = (item: EquipmentDoc) => {
-    const resolvedModelId =
-      item.modelId ??
-      catalogModels.find(
-        (m) => m.model.trim().toLowerCase() === item.model.trim().toLowerCase(),
-      )?._id;
-    return parts.filter(
-      (part) =>
-        Boolean(resolvedModelId && part.compatibleModels?.includes(resolvedModelId)),
-    ).length;
-  };
+  // Las dos cuentas que la tabla usa por celda se estabilizan con `useCallback`:
+  // si se recrearan en cada render, las columnas se reharían siempre y el
+  // `useMemo` no serviría de nada.
+  const compatibleCount = useCallback(
+    (item: EquipmentDoc) => {
+      const resolvedModelId =
+        item.modelId ??
+        catalogModels.find(
+          (m) =>
+            m.model.trim().toLowerCase() === item.model.trim().toLowerCase(),
+        )?._id;
+      return parts.filter((part) =>
+        Boolean(
+          resolvedModelId && part.compatibleModels?.includes(resolvedModelId),
+        ),
+      ).length;
+    },
+    [catalogModels, parts],
+  );
 
   /** Estado de revisión preventiva del equipo. */
   const reviewOf = (item: EquipmentDoc) =>
@@ -88,7 +96,10 @@ export function useEquipmentListState({
     );
 
   /** Manuales asignados al equipo y de su modelo. */
-  const manualsOf = (item: EquipmentDoc) => manualsForEquipment(manuals, item);
+  const manualsOf = useCallback(
+    (item: EquipmentDoc) => manualsForEquipment(manuals, item),
+    [manuals],
+  );
 
   const columns = useMemo(
     () =>
@@ -121,7 +132,7 @@ export function useEquipmentListState({
           value: (item: EquipmentDoc) => compatibleCount(item),
         },
       }) as const,
-    [manuals, parts, catalogModels],
+    [compatibleCount, manualsOf],
   );
 
   const [sort, setSort] = useTableSort({
@@ -132,11 +143,7 @@ export function useEquipmentListState({
 
   const rows = useMemo(
     () =>
-      sortRows(
-        filtered,
-        (item, column) => columns[column].value(item),
-        sort,
-      ),
+      sortRows(filtered, (item, column) => columns[column].value(item), sort),
     [filtered, columns, sort],
   );
 
