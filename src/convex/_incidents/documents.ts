@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import { type MutationCtx, type QueryCtx, mutation, query } from "../_generated/server";
+import {
+  type MutationCtx,
+  type QueryCtx,
+  mutation,
+  query,
+} from "../_generated/server";
 import { notifyUsers } from "../notify";
 import { hasCapability } from "../permissions";
 import { documentMoveAlert, summarizeAudit } from "../../lib/audit";
@@ -11,6 +16,7 @@ import {
   documentActionValidator,
   type DocumentAction,
 } from "../schema";
+import { secureMutation } from "../_auth/secureMutation";
 import {
   type Actor,
   actorName,
@@ -20,6 +26,11 @@ import {
   requireActor,
 } from "./helpers";
 
+/**
+ * Quien lee el rastro del expediente es el mismo que lo gestiona. Las consultas
+ * no pasan por `secureMutation` —ese envoltorio es de las mutaciones—, así que
+ * la comprobación sigue viviendo aquí, hecha una vez.
+ */
 async function requireDocumentEditor(
   ctx: QueryCtx | MutationCtx,
 ): Promise<Actor> {
@@ -33,7 +44,6 @@ async function requireDocumentEditor(
   }
   return actor;
 }
-
 
 async function logDocumentChange(
   ctx: MutationCtx,
@@ -98,13 +108,25 @@ async function notifyDocumentMove(
   );
 }
 
+const generateUploadUrlArgs = {};
 
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireDocumentEditor(ctx);
-    return await ctx.storage.generateUploadUrl();
-  },
+  args: generateUploadUrlArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede adjuntar, editar o quitar documentos de una incidencia.",
+    },
+    generateUploadUrlArgs,
+    async (ctx) => {
+      return await ctx.storage.generateUploadUrl();
+    },
+  ),
 });
 
 /**
@@ -116,182 +138,220 @@ export const generateUploadUrl = mutation({
  * solo nombre (la muestra y las pruebas del expediente): los que adjunta la
  * aplicación siempre suben uno antes.
  */
+const attachDocumentArgs = {
+  incidentId: v.id("incidents"),
+  name: v.string(),
+  storageId: v.optional(v.id("_storage")),
+  note: v.optional(v.string()),
+};
+
 export const attachDocument = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    name: v.string(),
-    storageId: v.optional(v.id("_storage")),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireDocumentEditor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    const author = actorName(actor);
-    // Una sola marca de tiempo para la fila y para la copia de la ficha: si no,
-    // pueden quedar separadas por un milisegundo y no cuadrar entre sí.
-    const now = Date.now();
-    const id = await ctx.db.insert("incidentDocuments", {
-      incidentId: args.incidentId,
-      name: args.name.trim(),
-      ...(args.storageId ? { storageId: args.storageId } : {}),
-      note: richDocToStore(args.note),
-      author,
-      createdAt: now,
-    });
-    await ctx.db.patch(args.incidentId, {
-      updatedAt: now,
-      documents: [
-        ...(incident.documents ?? []),
-        {
-          _id: id,
-          name: args.name.trim(),
-          ...(args.storageId ? { storageId: args.storageId } : {}),
-          note: richDocToStore(args.note),
-          author,
-          createdAt: now,
-        },
-      ],
-    });
-    await logDocumentChange(ctx, {
-      incidentId: args.incidentId,
-      documentId: id,
-      action: DOCUMENT_ACTIONS.ATTACHED,
-      name: args.name.trim(),
-      actor,
-      at: now,
-    });
-    await notifyDocumentMove(ctx, {
-      incident,
-      action: DOCUMENT_ACTIONS.ATTACHED,
-      name: args.name.trim(),
-    });
-    return id;
-  },
-});
-
-
-export const updateDocument = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    documentId: v.id("incidentDocuments"),
-    name: v.optional(v.string()),
-    note: v.optional(v.string()),
-    /** Archivo nuevo que sustituye al del documento. */
-    storageId: v.optional(v.id("_storage")),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireDocumentEditor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    const doc = (incident.documents ?? []).find(
-      (item) => item._id === args.documentId,
-    );
-    if (!doc) {
-      throw new ConvexError("Ese documento no pertenece a esta incidencia.");
-    }
-    const newName = args.name?.trim() || doc.name;
-    const newNote = richDocToStore(args.note);
-    if (!newName) {
-      throw new ConvexError("El nombre del documento es obligatorio.");
-    }
-    // Volver a mandar el mismo archivo no es reemplazarlo: el cambio real es
-    // que el documento pase a apuntar a otro.
-    const replacedFile =
-      args.storageId !== undefined && args.storageId !== doc.storageId;
-    const newStorageId = args.storageId ?? doc.storageId;
-    const now = Date.now();
-    await ctx.db.patch(args.documentId, {
-      name: newName,
-      note: newNote,
-      ...(newStorageId ? { storageId: newStorageId } : {}),
-    });
-    await ctx.db.patch(args.incidentId, {
-      updatedAt: now,
-      documents: (incident.documents ?? []).map((item) =>
-        item._id === args.documentId
-          ? {
-              ...item,
-              name: newName,
-              note: newNote,
-              ...(newStorageId ? { storageId: newStorageId } : {}),
-            }
-          : item,
-      ),
-    });
-    // Con el archivo nuevo ya enlazado, el sustituido se va del almacén. Del
-    // que estuvo queda su movimiento en el rastro y, si el reemplazo vino con
-    // un renombrado, el nombre con el que se adjuntó.
-    if (replacedFile && doc.storageId) {
-      await ctx.storage.delete(doc.storageId);
-    }
-    // Guardar sin cambiar nada no deja rastro: el registro es de cambios
-    // reales, no de pulsaciones del botón.
-    if (replacedFile || newName !== doc.name || newNote !== doc.note) {
-      const action = replacedFile
-        ? DOCUMENT_ACTIONS.REPLACED
-        : DOCUMENT_ACTIONS.EDITED;
+  args: attachDocumentArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede adjuntar, editar o quitar documentos de una incidencia.",
+    },
+    attachDocumentArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      const author = actorName(actor);
+      // Una sola marca de tiempo para la fila y para la copia de la ficha: si no,
+      // pueden quedar separadas por un milisegundo y no cuadrar entre sí.
+      const now = Date.now();
+      const id = await ctx.db.insert("incidentDocuments", {
+        incidentId: args.incidentId,
+        name: args.name.trim(),
+        ...(args.storageId ? { storageId: args.storageId } : {}),
+        note: richDocToStore(args.note),
+        author,
+        createdAt: now,
+      });
+      await ctx.db.patch(args.incidentId, {
+        updatedAt: now,
+        documents: [
+          ...(incident.documents ?? []),
+          {
+            _id: id,
+            name: args.name.trim(),
+            ...(args.storageId ? { storageId: args.storageId } : {}),
+            note: richDocToStore(args.note),
+            author,
+            createdAt: now,
+          },
+        ],
+      });
       await logDocumentChange(ctx, {
         incidentId: args.incidentId,
-        documentId: args.documentId,
-        action,
-        name: newName,
-        // Solo cuando cambió el nombre visible: así el rastro distingue un
-        // renombrado de una corrección de la nota del adjunto.
-        ...(newName !== doc.name ? { previousName: doc.name } : {}),
+        documentId: id,
+        action: DOCUMENT_ACTIONS.ATTACHED,
+        name: args.name.trim(),
         actor,
         at: now,
       });
       await notifyDocumentMove(ctx, {
         incident,
-        action,
-        name: newName,
-        ...(newName !== doc.name ? { previousName: doc.name } : {}),
+        action: DOCUMENT_ACTIONS.ATTACHED,
+        name: args.name.trim(),
       });
-    }
-  },
+      return id;
+    },
+  ),
+});
+
+const updateDocumentArgs = {
+  incidentId: v.id("incidents"),
+  documentId: v.id("incidentDocuments"),
+  name: v.optional(v.string()),
+  note: v.optional(v.string()),
+  /** Archivo nuevo que sustituye al del documento. */
+  storageId: v.optional(v.id("_storage")),
+};
+
+export const updateDocument = mutation({
+  args: updateDocumentArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede adjuntar, editar o quitar documentos de una incidencia.",
+    },
+    updateDocumentArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      const doc = (incident.documents ?? []).find(
+        (item) => item._id === args.documentId,
+      );
+      if (!doc) {
+        throw new ConvexError("Ese documento no pertenece a esta incidencia.");
+      }
+      const newName = args.name?.trim() || doc.name;
+      const newNote = richDocToStore(args.note);
+      if (!newName) {
+        throw new ConvexError("El nombre del documento es obligatorio.");
+      }
+      // Volver a mandar el mismo archivo no es reemplazarlo: el cambio real es
+      // que el documento pase a apuntar a otro.
+      const replacedFile =
+        args.storageId !== undefined && args.storageId !== doc.storageId;
+      const newStorageId = args.storageId ?? doc.storageId;
+      const now = Date.now();
+      await ctx.db.patch(args.documentId, {
+        name: newName,
+        note: newNote,
+        ...(newStorageId ? { storageId: newStorageId } : {}),
+      });
+      await ctx.db.patch(args.incidentId, {
+        updatedAt: now,
+        documents: (incident.documents ?? []).map((item) =>
+          item._id === args.documentId
+            ? {
+                ...item,
+                name: newName,
+                note: newNote,
+                ...(newStorageId ? { storageId: newStorageId } : {}),
+              }
+            : item,
+        ),
+      });
+      // Con el archivo nuevo ya enlazado, el sustituido se va del almacén. Del
+      // que estuvo queda su movimiento en el rastro y, si el reemplazo vino con
+      // un renombrado, el nombre con el que se adjuntó.
+      if (replacedFile && doc.storageId) {
+        await ctx.storage.delete(doc.storageId);
+      }
+      // Guardar sin cambiar nada no deja rastro: el registro es de cambios
+      // reales, no de pulsaciones del botón.
+      if (replacedFile || newName !== doc.name || newNote !== doc.note) {
+        const action = replacedFile
+          ? DOCUMENT_ACTIONS.REPLACED
+          : DOCUMENT_ACTIONS.EDITED;
+        await logDocumentChange(ctx, {
+          incidentId: args.incidentId,
+          documentId: args.documentId,
+          action,
+          name: newName,
+          // Solo cuando cambió el nombre visible: así el rastro distingue un
+          // renombrado de una corrección de la nota del adjunto.
+          ...(newName !== doc.name ? { previousName: doc.name } : {}),
+          actor,
+          at: now,
+        });
+        await notifyDocumentMove(ctx, {
+          incident,
+          action,
+          name: newName,
+          ...(newName !== doc.name ? { previousName: doc.name } : {}),
+        });
+      }
+    },
+  ),
 });
 
 /** Quita un documento adjunto sin borrar notas ni el resto de la incidencia. */
+const removeDocumentArgs = {
+  incidentId: v.id("incidents"),
+  documentId: v.id("incidentDocuments"),
+};
+
 export const removeDocument = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    documentId: v.id("incidentDocuments"),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireDocumentEditor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    const doc = (incident.documents ?? []).find(
-      (item) => item._id === args.documentId,
-    );
-    if (!doc) {
-      throw new ConvexError("Ese documento ya no está en esta incidencia.");
-    }
-    const now = Date.now();
-    await ctx.db.delete(args.documentId);
-    await ctx.db.patch(args.incidentId, {
-      updatedAt: now,
-      documents: (incident.documents ?? []).filter(
-        (item) => item._id !== args.documentId,
-      ),
-    });
-    // El archivo se va con la ficha: retirar un documento del expediente es
-    // dejarlo fuera, no esconderlo. Lo que queda es su movimiento en el rastro,
-    // que es la constancia de quién lo quitó y con qué nombre estuvo.
-    if (doc.storageId) await ctx.storage.delete(doc.storageId);
-    // Al rastro se le da el nombre que tenía: es lo único que quedará de él.
-    await logDocumentChange(ctx, {
-      incidentId: args.incidentId,
-      documentId: args.documentId,
-      action: DOCUMENT_ACTIONS.REMOVED,
-      name: doc.name,
-      actor,
-      at: now,
-    });
-    await notifyDocumentMove(ctx, {
-      incident,
-      action: DOCUMENT_ACTIONS.REMOVED,
-      name: doc.name,
-    });
-  },
+  args: removeDocumentArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede adjuntar, editar o quitar documentos de una incidencia.",
+    },
+    removeDocumentArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      const doc = (incident.documents ?? []).find(
+        (item) => item._id === args.documentId,
+      );
+      if (!doc) {
+        throw new ConvexError("Ese documento ya no está en esta incidencia.");
+      }
+      const now = Date.now();
+      await ctx.db.delete(args.documentId);
+      await ctx.db.patch(args.incidentId, {
+        updatedAt: now,
+        documents: (incident.documents ?? []).filter(
+          (item) => item._id !== args.documentId,
+        ),
+      });
+      // El archivo se va con la ficha: retirar un documento del expediente es
+      // dejarlo fuera, no esconderlo. Lo que queda es su movimiento en el rastro,
+      // que es la constancia de quién lo quitó y con qué nombre estuvo.
+      if (doc.storageId) await ctx.storage.delete(doc.storageId);
+      // Al rastro se le da el nombre que tenía: es lo único que quedará de él.
+      await logDocumentChange(ctx, {
+        incidentId: args.incidentId,
+        documentId: args.documentId,
+        action: DOCUMENT_ACTIONS.REMOVED,
+        name: doc.name,
+        actor,
+        at: now,
+      });
+      await notifyDocumentMove(ctx, {
+        incident,
+        action: DOCUMENT_ACTIONS.REMOVED,
+        name: doc.name,
+      });
+    },
+  ),
 });
 
 /**

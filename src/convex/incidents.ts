@@ -9,14 +9,10 @@ import {
 } from "./_generated/server";
 import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { registerIncidentIntake } from "./incidentIntake";
+import { secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
 import { admitPublicLookup } from "./publicLookupLimits";
-import {
-  hasAnyCapability,
-  hasCapability,
-  memberOrNull,
-  moderatorIds,
-} from "./permissions";
+import { memberOrNull, moderatorIds } from "./permissions";
 import {
   canAdvanceIncident,
   incidentStepStatus,
@@ -36,9 +32,8 @@ import {
   assertIncidentNotModified,
   getIncident,
   historyEntry,
+  incidentWorkerPolicy,
   isModerator,
-  requireActor,
-  requireEquipmentEditor,
 } from "./_incidents/helpers";
 
 /**
@@ -368,59 +363,65 @@ export const byReference = query({
 });
 
 /** El coordinador elige a qué técnico asignar (solo coordinadores). */
+const assignArgs = {
+  incidentId: v.id("incidents"),
+  assigneeId: v.id("users"),
+  expectedUpdatedAt: v.optional(v.number()),
+};
+
 export const assign = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    assigneeId: v.id("users"),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
-      throw new ConvexError(
+  args: assignArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para asignar incidencias. Revisa la configuración de tu rol con el administrador."
           : "Solo el coordinador puede asignar incidencias a otros técnicos. Los técnicos pueden autoasignarse las pendientes.",
+    },
+    assignArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+      const assigned = requireIncidentStep(
+        incident,
+        "assign",
+        () => "Solo se puede asignar una incidencia pendiente o ya en curso.",
       );
-    }
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    const assigned = requireIncidentStep(
-      incident,
-      "assign",
-      () => "Solo se puede asignar una incidencia pendiente o ya en curso.",
-    );
-    const assignee = await ctx.db.get(args.assigneeId);
-    if (!assignee)
-      throw new ConvexError("El técnico seleccionado ya no existe.");
+      const assignee = await ctx.db.get(args.assigneeId);
+      if (!assignee)
+        throw new ConvexError("El técnico seleccionado ya no existe.");
 
-    const now = Date.now();
-    const assigneeName = actorName(assignee);
-    await ctx.db.patch(args.incidentId, {
-      status: assigned,
-      assigneeId: assignee._id,
-      assigneeName,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(
-          assigned,
-          now,
-          actorName(actor),
-          `Asignada a ${assigneeName}`,
-        ),
-      ],
-    });
-    await scheduleReporterEmail(ctx, incident, assigned);
-    await scheduleStaffEmail(ctx, incident, assigned);
-    await notifyUsers(
-      ctx,
-      [assignee._id],
-      `${incident.reference} asignada a ti${incident.location ? ` · ${incident.location}` : ""}`,
-      incident._id,
-      actor._id,
-    );
-  },
+      const now = Date.now();
+      const assigneeName = actorName(assignee);
+      await ctx.db.patch(args.incidentId, {
+        status: assigned,
+        assigneeId: assignee._id,
+        assigneeName,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(
+            assigned,
+            now,
+            actorName(actor),
+            `Asignada a ${assigneeName}`,
+          ),
+        ],
+      });
+      await scheduleReporterEmail(ctx, incident, assigned);
+      await scheduleStaffEmail(ctx, incident, assigned);
+      await notifyUsers(
+        ctx,
+        [assignee._id],
+        `${incident.reference} asignada a ti${incident.location ? ` · ${incident.location}` : ""}`,
+        incident._id,
+        actor._id,
+      );
+    },
+  ),
 });
 
 /**
@@ -429,53 +430,54 @@ export const assign = mutation({
  * «ver la cola de incidencias» ni «gestionar incidencias» el rol no puede
  * llevarse trabajo aunque no tenga el módulo en el menú.
  */
-export const selfAssign = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    if (
-      !(await hasAnyCapability(ctx, actor, [
-        "viewIncidents",
-        "manageIncidents",
-      ]))
-    ) {
-      throw new ConvexError(
-        "Solo quien ve la cola de incidencias puede autoasignarse las pendientes. Revisa la configuración de tu rol con el administrador.",
-      );
-    }
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    const assigned = requireIncidentStep(incident, "selfAssign", () =>
-      incident.assigneeName
-        ? `Ya está asignada a ${incident.assigneeName}.`
-        : "Esta incidencia ya no está pendiente de asignación.",
-    );
+const selfAssignArgs = {
+  incidentId: v.id("incidents"),
+  expectedUpdatedAt: v.optional(v.number()),
+};
 
-    const now = Date.now();
-    const name = actorName(actor);
-    await ctx.db.patch(args.incidentId, {
-      status: assigned,
-      assigneeId: actor._id,
-      assigneeName: name,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(assigned, now, name, "Autoasignada por el técnico"),
-      ],
-    });
-    await scheduleReporterEmail(ctx, incident, assigned);
-    await scheduleStaffEmail(ctx, incident, assigned);
-    await notifyUsers(
-      ctx,
-      await moderatorIds(ctx),
-      `${incident.reference} autoasignada por ${name}`,
-      incident._id,
-      actor._id,
-    );
-  },
+export const selfAssign = mutation({
+  args: selfAssignArgs,
+  handler: secureMutation(
+    {
+      capabilities: ["viewIncidents", "manageIncidents"],
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage:
+        "Solo quien ve la cola de incidencias puede autoasignarse las pendientes. Revisa la configuración de tu rol con el administrador.",
+    },
+    selfAssignArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+      const assigned = requireIncidentStep(incident, "selfAssign", () =>
+        incident.assigneeName
+          ? `Ya está asignada a ${incident.assigneeName}.`
+          : "Esta incidencia ya no está pendiente de asignación.",
+      );
+
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        status: assigned,
+        assigneeId: actor._id,
+        assigneeName: name,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(assigned, now, name, "Autoasignada por el técnico"),
+        ],
+      });
+      await scheduleReporterEmail(ctx, incident, assigned);
+      await scheduleStaffEmail(ctx, incident, assigned);
+      await notifyUsers(
+        ctx,
+        await moderatorIds(ctx),
+        `${incident.reference} autoasignada por ${name}`,
+        incident._id,
+        actor._id,
+      );
+    },
+  ),
 });
 
 /** El paso que corresponde a lo que se elige en el diálogo de verificación. */
@@ -493,149 +495,150 @@ const VERIFY_STEPS = {
  * Al cerrar (in situ o sin resolución) y haber equipo relacionado, se crea la
  * ficha de historial en el equipo.
  */
+const verifyArgs = {
+  incidentId: v.id("incidents"),
+  // «onsite» no es un estado: es dónde acaba el paso. Los otros dos sí —el
+  // cierre deja la incidencia en ellos tal cual—, así que se nombran por su
+  // tabla.
+  outcome: v.union(
+    v.literal("onsite"),
+    v.literal(INCIDENT_STATUSES.WORKSHOP),
+    v.literal(INCIDENT_STATUSES.UNRESOLVED),
+  ),
+  equipmentId: v.optional(v.id("equipment")),
+  notes: v.optional(v.string()),
+  expectedUpdatedAt: v.optional(v.number()),
+};
+
 export const verify = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    // «onsite» no es un estado: es dónde acaba el paso. Los otros dos sí —el
-    // cierre deja la incidencia en ellos tal cual—, así que se nombran por su
-    // tabla.
-    outcome: v.union(
-      v.literal("onsite"),
-      v.literal(INCIDENT_STATUSES.WORKSHOP),
-      v.literal(INCIDENT_STATUSES.UNRESOLVED),
-    ),
-    equipmentId: v.optional(v.id("equipment")),
-    notes: v.optional(v.string()),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
-    if (
-      !canCoordinate &&
-      incident.assigneeId !== actor._id &&
-      incident.workshopAssigneeId !== actor._id
-    ) {
-      throw new ConvexError(
+  args: verifyArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
         "Solo el técnico asignado o el coordinador pueden verificar esta incidencia.",
-      );
-    }
-    // El paso se comprueba antes de nada: verificar solo se puede desde una
-    // incidencia asignada o en reparación, y a dónde lleva cada uno lo dice la
-    // máquina.
-    if (!canAdvanceIncident(incident.status, VERIFY_STEPS[args.outcome])) {
-      throw new ConvexError(
-        "La incidencia debe estar asignada para verificarla.",
-      );
-    }
-    // Verificar es el cierre del trabajo en el sitio. El estado «en reparación»
-    // no dice dónde está el equipo —eso lo dice su entrada a taller abierta—, así
-    // que con la orden abierta el trabajo se cierra desde ahí y no por aquí.
-    if (isIncidentInWorkshop(incident)) {
-      throw new ConvexError(
-        "El equipo está en el taller: el trabajo se cierra desde la orden de taller.",
-      );
-    }
-    if (args.equipmentId) {
-      const equipment = await ctx.db.get(args.equipmentId);
-      if (!equipment)
-        throw new ConvexError("El equipo seleccionado ya no existe.");
-    }
+      ),
+    },
+    verifyArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+      // El paso se comprueba antes de nada: verificar solo se puede desde una
+      // incidencia asignada o en reparación, y a dónde lleva cada uno lo dice la
+      // máquina.
+      if (!canAdvanceIncident(incident.status, VERIFY_STEPS[args.outcome])) {
+        throw new ConvexError(
+          "La incidencia debe estar asignada para verificarla.",
+        );
+      }
+      // Verificar es el cierre del trabajo en el sitio. El estado «en reparación»
+      // no dice dónde está el equipo —eso lo dice su entrada a taller abierta—, así
+      // que con la orden abierta el trabajo se cierra desde ahí y no por aquí.
+      if (isIncidentInWorkshop(incident)) {
+        throw new ConvexError(
+          "El equipo está en el taller: el trabajo se cierra desde la orden de taller.",
+        );
+      }
+      if (args.equipmentId) {
+        const equipment = await ctx.db.get(args.equipmentId);
+        if (!equipment)
+          throw new ConvexError("El equipo seleccionado ya no existe.");
+      }
 
-    const notes = richDocToStore(args.notes);
-    const now = Date.now();
-    const name = actorName(actor);
+      const notes = richDocToStore(args.notes);
+      const now = Date.now();
+      const name = actorName(actor);
 
-    if (args.outcome === INCIDENT_STATUSES.WORKSHOP) {
-      const workshopStatus = incidentStepStatus("verifyWorkshop");
+      if (args.outcome === INCIDENT_STATUSES.WORKSHOP) {
+        const workshopStatus = incidentStepStatus("verifyWorkshop");
+        await ctx.db.patch(args.incidentId, {
+          status: workshopStatus,
+          workshopAssigneeId: actor._id,
+          workshopAssigneeName: name,
+          ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
+          updatedAt: now,
+          history: [
+            ...incident.history,
+            historyEntry(
+              workshopStatus,
+              now,
+              name,
+              notes ? `Derivada a taller · ${notes}` : "Derivada a taller",
+            ),
+          ],
+        });
+        await notifyUsers(
+          ctx,
+          [
+            ...(await moderatorIds(ctx)),
+            ...(incident.assigneeId ? [incident.assigneeId] : []),
+          ],
+          `${incident.reference} derivada a taller (${name})`,
+          incident._id,
+          actor._id,
+        );
+        await scheduleReporterEmail(ctx, incident, workshopStatus);
+        return;
+      }
+
+      // Cierre in situ o sin resolución: se crea la ficha si hay equipo. El estado
+      // lo trae el paso correspondiente, no una cuenta a mano.
+      const status = incidentStepStatus(
+        args.outcome === "onsite" ? "verifyOnsite" : "verifyUnresolved",
+      );
+      const equipmentId = args.equipmentId ?? incident.equipmentId;
+      const maintenanceId = equipmentId
+        ? await createHistorySheet(ctx, {
+            incident,
+            equipmentId,
+            status,
+            notes,
+            technician: name,
+            closedAt: now,
+          })
+        : undefined;
+
       await ctx.db.patch(args.incidentId, {
-        status: workshopStatus,
-        workshopAssigneeId: actor._id,
-        workshopAssigneeName: name,
+        status,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
+        ...(notes ? { notes } : {}),
+        closedAt: now,
+        ...(maintenanceId ? { maintenanceId } : {}),
         updatedAt: now,
         history: [
           ...incident.history,
           historyEntry(
-            workshopStatus,
+            status,
             now,
             name,
-            notes ? `Derivada a taller · ${notes}` : "Derivada a taller",
+            args.outcome === "onsite"
+              ? notes
+                ? `Resuelta in situ · ${notes}`
+                : "Resuelta in situ"
+              : notes
+                ? `Cerrada sin resolución · ${notes}`
+                : "Cerrada sin resolución",
           ),
         ],
       });
+
+      const label =
+        status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
       await notifyUsers(
         ctx,
         [
           ...(await moderatorIds(ctx)),
           ...(incident.assigneeId ? [incident.assigneeId] : []),
         ],
-        `${incident.reference} derivada a taller (${name})`,
+        `${incident.reference} cerrada ${label} por ${name}`,
         incident._id,
         actor._id,
       );
-      await scheduleReporterEmail(ctx, incident, workshopStatus);
-      return;
-    }
-
-    // Cierre in situ o sin resolución: se crea la ficha si hay equipo. El estado
-    // lo trae el paso correspondiente, no una cuenta a mano.
-    const status = incidentStepStatus(
-      args.outcome === "onsite" ? "verifyOnsite" : "verifyUnresolved",
-    );
-    const equipmentId = args.equipmentId ?? incident.equipmentId;
-    const maintenanceId = equipmentId
-      ? await createHistorySheet(ctx, {
-          incident,
-          equipmentId,
-          status,
-          notes,
-          technician: name,
-          closedAt: now,
-        })
-      : undefined;
-
-    await ctx.db.patch(args.incidentId, {
-      status,
-      ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
-      ...(notes ? { notes } : {}),
-      closedAt: now,
-      ...(maintenanceId ? { maintenanceId } : {}),
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(
-          status,
-          now,
-          name,
-          args.outcome === "onsite"
-            ? notes
-              ? `Resuelta in situ · ${notes}`
-              : "Resuelta in situ"
-            : notes
-              ? `Cerrada sin resolución · ${notes}`
-              : "Cerrada sin resolución",
-        ),
-      ],
-    });
-
-    const label =
-      status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
-    await notifyUsers(
-      ctx,
-      [
-        ...(await moderatorIds(ctx)),
-        ...(incident.assigneeId ? [incident.assigneeId] : []),
-      ],
-      `${incident.reference} cerrada ${label} por ${name}`,
-      incident._id,
-      actor._id,
-    );
-    await scheduleReporterEmail(ctx, incident, status);
-    await scheduleStaffEmail(ctx, incident, status);
-  },
+      await scheduleReporterEmail(ctx, incident, status);
+      await scheduleStaffEmail(ctx, incident, status);
+    },
+  ),
 });
 
 /**
@@ -644,368 +647,378 @@ export const verify = mutation({
  * caso: sigue en taller, esperando material o reparándose, y solo cambia quién lo
  * lleva.
  */
-export const assignWorkshop = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    assigneeId: v.id("users"),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
-    if (!canCoordinate && incident.workshopAssigneeId !== actor._id) {
-      throw new ConvexError(
-        "Solo el coordinador o el técnico de la orden pueden reasignar la entrada a taller.",
-      );
-    }
-    // Cambiar el técnico de taller no mueve el caso: vale con el equipo en el
-    // taller —derivado, esperando material o ya reparándose— y la incidencia se
-    // queda en el estado en el que está. El estado no dice dónde está el equipo,
-    // así que una espera o una reparación en el sitio no tienen orden que
-    // reasignar y se rechazan aquí, como el cierre en el sitio desde taller.
-    if (!canAdvanceIncident(incident.status, "reassignWorkshop")) {
-      throw new ConvexError(
-        "La incidencia no está en taller, ni esperando repuestos, ni en reparación: no hay orden de taller que reasignar.",
-      );
-    }
-    if (!isIncidentInWorkshop(incident)) {
-      throw new ConvexError(
-        "El equipo no está en el taller: no hay orden de taller que reasignar.",
-      );
-    }
-    const assignee = await ctx.db.get(args.assigneeId);
-    if (!assignee)
-      throw new ConvexError("El técnico seleccionado ya no existe.");
+const assignWorkshopArgs = {
+  incidentId: v.id("incidents"),
+  assigneeId: v.id("users"),
+  expectedUpdatedAt: v.optional(v.number()),
+};
 
-    const now = Date.now();
-    const assigneeName = actorName(assignee);
-    await ctx.db.patch(args.incidentId, {
-      workshopAssigneeId: assignee._id,
-      workshopAssigneeName: assigneeName,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        // El rastro queda con el estado en el que está el caso —esperando
-        // material, reparándose o en taller—, no con «en taller» de prestado: el
-        // paso cambia quién lo lleva, no dónde está.
-        historyEntry(
-          incident.status,
-          now,
-          actorName(actor),
-          `Orden de taller asignada a ${assigneeName}`,
-        ),
-      ],
-    });
-    await notifyUsers(
-      ctx,
-      [assignee._id],
-      `Orden de taller de ${incident.reference} asignada a ti`,
-      incident._id,
-      actor._id,
-    );
-  },
+export const assignWorkshop = mutation({
+  args: assignWorkshopArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
+        "Solo el coordinador o el técnico de la orden pueden reasignar la entrada a taller.",
+        "order",
+      ),
+    },
+    assignWorkshopArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+      // Cambiar el técnico de taller no mueve el caso: vale con el equipo en el
+      // taller —derivado, esperando material o ya reparándose— y la incidencia se
+      // queda en el estado en el que está. El estado no dice dónde está el equipo,
+      // así que una espera o una reparación en el sitio no tienen orden que
+      // reasignar y se rechazan aquí, como el cierre en el sitio desde taller.
+      if (!canAdvanceIncident(incident.status, "reassignWorkshop")) {
+        throw new ConvexError(
+          "La incidencia no está en taller, ni esperando repuestos, ni en reparación: no hay orden de taller que reasignar.",
+        );
+      }
+      if (!isIncidentInWorkshop(incident)) {
+        throw new ConvexError(
+          "El equipo no está en el taller: no hay orden de taller que reasignar.",
+        );
+      }
+      const assignee = await ctx.db.get(args.assigneeId);
+      if (!assignee)
+        throw new ConvexError("El técnico seleccionado ya no existe.");
+
+      const now = Date.now();
+      const assigneeName = actorName(assignee);
+      await ctx.db.patch(args.incidentId, {
+        workshopAssigneeId: assignee._id,
+        workshopAssigneeName: assigneeName,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          // El rastro queda con el estado en el que está el caso —esperando
+          // material, reparándose o en taller—, no con «en taller» de prestado: el
+          // paso cambia quién lo lleva, no dónde está.
+          historyEntry(
+            incident.status,
+            now,
+            actorName(actor),
+            `Orden de taller asignada a ${assigneeName}`,
+          ),
+        ],
+      });
+      await notifyUsers(
+        ctx,
+        [assignee._id],
+        `Orden de taller de ${incident.reference} asignada a ti`,
+        incident._id,
+        actor._id,
+      );
+    },
+  ),
 });
 
 /**
  * Cierre de la entrada de taller: resuelta o sin resolución, con los datos
  * del técnico. Si hay equipo relacionado se crea la ficha de historial.
  */
+const closeArgs = {
+  incidentId: v.id("incidents"),
+  outcome: v.union(
+    v.literal(INCIDENT_STATUSES.RESOLVED),
+    v.literal(INCIDENT_STATUSES.UNRESOLVED),
+  ),
+  equipmentId: v.optional(v.id("equipment")),
+  notes: v.optional(v.string()),
+  expectedUpdatedAt: v.optional(v.number()),
+};
+
 export const close = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    outcome: v.union(
-      v.literal(INCIDENT_STATUSES.RESOLVED),
-      v.literal(INCIDENT_STATUSES.UNRESOLVED),
-    ),
-    equipmentId: v.optional(v.id("equipment")),
-    notes: v.optional(v.string()),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
-    if (
-      !canCoordinate &&
-      incident.workshopAssigneeId !== actor._id &&
-      incident.assigneeId !== actor._id
-    ) {
-      throw new ConvexError(
+  args: closeArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
         "Solo el técnico de la orden o el coordinador pueden cerrar esta incidencia.",
+      ),
+    },
+    closeArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+      const closed = requireIncidentStep(
+        incident,
+        args.outcome === INCIDENT_STATUSES.RESOLVED
+          ? "closeResolved"
+          : "closeUnresolved",
+        () => "La incidencia no tiene una entrada de taller abierta.",
       );
-    }
-    const closed = requireIncidentStep(
-      incident,
-      args.outcome === INCIDENT_STATUSES.RESOLVED
-        ? "closeResolved"
-        : "closeUnresolved",
-      () => "La incidencia no tiene una entrada de taller abierta.",
-    );
-    // Cerrar el trabajo de taller pide una orden abierta (salvo si viene de
-    // reparación externa, que puede cerrarse directamente al recibir el dictamen).
-    if (
-      !isIncidentInWorkshop(incident) &&
-      incident.status !== INCIDENT_STATUSES.EXTERNAL_REPAIR
-    ) {
-      throw new ConvexError(
-        "La incidencia no tiene una entrada de taller abierta: su cierre es la verificación en el sitio.",
+      // Cerrar el trabajo de taller pide una orden abierta (salvo si viene de
+      // reparación externa, que puede cerrarse directamente al recibir el dictamen).
+      if (
+        !isIncidentInWorkshop(incident) &&
+        incident.status !== INCIDENT_STATUSES.EXTERNAL_REPAIR
+      ) {
+        throw new ConvexError(
+          "La incidencia no tiene una entrada de taller abierta: su cierre es la verificación en el sitio.",
+        );
+      }
+      if (args.equipmentId) {
+        const equipment = await ctx.db.get(args.equipmentId);
+        if (!equipment)
+          throw new ConvexError("El equipo seleccionado ya no existe.");
+      }
+
+      const notes = richDocToStore(args.notes);
+      const now = Date.now();
+      const name = actorName(actor);
+      const status = closed;
+      const equipmentId = args.equipmentId ?? incident.equipmentId;
+      const maintenanceId = equipmentId
+        ? await createHistorySheet(ctx, {
+            incident,
+            equipmentId,
+            status,
+            notes,
+            technician: name,
+            closedAt: now,
+          })
+        : undefined;
+
+      await ctx.db.patch(args.incidentId, {
+        status,
+        ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
+        ...(notes ? { notes } : {}),
+        closedAt: now,
+        ...(maintenanceId ? { maintenanceId } : {}),
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(
+            status,
+            now,
+            name,
+            notes
+              ? `Trabajo en taller finalizado · ${notes}`
+              : "Trabajo en taller finalizado",
+          ),
+        ],
+      });
+
+      const label =
+        status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
+      await notifyUsers(
+        ctx,
+        [
+          ...(await moderatorIds(ctx)),
+          ...(incident.assigneeId ? [incident.assigneeId] : []),
+          ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
+        ],
+        `${incident.reference} cerrada ${label} por ${name}`,
+        incident._id,
+        actor._id,
       );
-    }
-    if (args.equipmentId) {
-      const equipment = await ctx.db.get(args.equipmentId);
-      if (!equipment)
-        throw new ConvexError("El equipo seleccionado ya no existe.");
-    }
-
-    const notes = richDocToStore(args.notes);
-    const now = Date.now();
-    const name = actorName(actor);
-    const status = closed;
-    const equipmentId = args.equipmentId ?? incident.equipmentId;
-    const maintenanceId = equipmentId
-      ? await createHistorySheet(ctx, {
-          incident,
-          equipmentId,
-          status,
-          notes,
-          technician: name,
-          closedAt: now,
-        })
-      : undefined;
-
-    await ctx.db.patch(args.incidentId, {
-      status,
-      ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
-      ...(notes ? { notes } : {}),
-      closedAt: now,
-      ...(maintenanceId ? { maintenanceId } : {}),
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(
-          status,
-          now,
-          name,
-          notes
-            ? `Trabajo en taller finalizado · ${notes}`
-            : "Trabajo en taller finalizado",
-        ),
-      ],
-    });
-
-    const label =
-      status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
-    await notifyUsers(
-      ctx,
-      [
-        ...(await moderatorIds(ctx)),
-        ...(incident.assigneeId ? [incident.assigneeId] : []),
-        ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
-      ],
-      `${incident.reference} cerrada ${label} por ${name}`,
-      incident._id,
-      actor._id,
-    );
-    await scheduleReporterEmail(ctx, incident, status);
-    await scheduleStaffEmail(ctx, incident, status);
-  },
+      await scheduleReporterEmail(ctx, incident, status);
+      await scheduleStaffEmail(ctx, incident, status);
+    },
+  ),
 });
 
 /**
  * Enviar el equipo a reparación a una empresa o servicio técnico externo:
  * cuando la avería no es reparable en el taller interno.
  */
+const sendToExternalRepairArgs = {
+  incidentId: v.id("incidents"),
+  companyName: v.string(),
+  contactName: v.optional(v.string()),
+  contactPhone: v.optional(v.string()),
+  defectNotes: v.string(),
+  dispatchNotes: v.optional(v.string()),
+  includedAccessories: v.optional(v.string()),
+};
+
 export const sendToExternalRepair = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    companyName: v.string(),
-    contactName: v.optional(v.string()),
-    contactPhone: v.optional(v.string()),
-    defectNotes: v.string(),
-    dispatchNotes: v.optional(v.string()),
-    includedAccessories: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
-    if (
-      !canCoordinate &&
-      incident.workshopAssigneeId !== actor._id &&
-      incident.assigneeId !== actor._id
-    ) {
-      throw new ConvexError(
+  args: sendToExternalRepairArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
         "Solo el técnico asignado, el técnico de taller o el coordinador pueden enviar el equipo a reparación externa.",
+      ),
+    },
+    sendToExternalRepairArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+
+      const nextStatus = requireIncidentStep(
+        incident,
+        "sendExternal",
+        () =>
+          "La incidencia no se puede enviar a reparación externa desde su estado actual.",
       );
-    }
 
-    const nextStatus = requireIncidentStep(
-      incident,
-      "sendExternal",
-      () =>
-        "La incidencia no se puede enviar a reparación externa desde su estado actual.",
-    );
+      const now = Date.now();
+      const name = actorName(actor);
 
-    const now = Date.now();
-    const name = actorName(actor);
+      // Instantánea del equipo al enviarse
+      let equipmentSnapshot = {
+        name: incident.equipmentKind ?? "Equipo",
+        model: incident.model ?? "Sin modelo",
+        brand: undefined as string | undefined,
+        serialNumber: incident.serialNumber,
+        code: undefined as string | undefined,
+        includedAccessories: args.includedAccessories?.trim() || undefined,
+      };
 
-    // Instantánea del equipo al enviarse
-    let equipmentSnapshot = {
-      name: incident.equipmentKind ?? "Equipo",
-      model: incident.model ?? "Sin modelo",
-      brand: undefined as string | undefined,
-      serialNumber: incident.serialNumber,
-      code: undefined as string | undefined,
-      includedAccessories: args.includedAccessories?.trim() || undefined,
-    };
-
-    if (incident.equipmentId) {
-      const eq = await ctx.db.get(incident.equipmentId);
-      if (eq) {
-        equipmentSnapshot = {
-          name: eq.name,
-          model: eq.model,
-          brand: eq.brand,
-          serialNumber: eq.serialNumber ?? incident.serialNumber,
-          code: eq.code,
-          includedAccessories: args.includedAccessories?.trim() || undefined,
-        };
+      if (incident.equipmentId) {
+        const eq = await ctx.db.get(incident.equipmentId);
+        if (eq) {
+          equipmentSnapshot = {
+            name: eq.name,
+            model: eq.model,
+            brand: eq.brand,
+            serialNumber: eq.serialNumber ?? incident.serialNumber,
+            code: eq.code,
+            includedAccessories: args.includedAccessories?.trim() || undefined,
+          };
+        }
       }
-    }
 
-    const companyName = args.companyName.trim();
-    if (!companyName) {
-      throw new ConvexError("Indica el nombre de la empresa externa o SAT.");
-    }
-    const defectNotes = richDocToStore(args.defectNotes) ?? args.defectNotes.trim();
-    const dispatchNotes = args.dispatchNotes?.trim() || undefined;
+      const companyName = args.companyName.trim();
+      if (!companyName) {
+        throw new ConvexError("Indica el nombre de la empresa externa o SAT.");
+      }
+      const defectNotes =
+        richDocToStore(args.defectNotes) ?? args.defectNotes.trim();
+      const dispatchNotes = args.dispatchNotes?.trim() || undefined;
 
-    await ctx.db.patch(args.incidentId, {
-      status: nextStatus,
-      updatedAt: now,
-      externalRepair: {
-        sentAt: now,
-        companyName,
-        contactName: args.contactName?.trim() || undefined,
-        contactPhone: args.contactPhone?.trim() || undefined,
-        defectNotes,
-        dispatchNotes,
-        sentById: actor._id,
-        sentByName: name,
-        equipmentSnapshot,
-      },
-      history: [
-        ...incident.history,
-        historyEntry(
-          nextStatus,
-          now,
-          name,
-          `Enviado a reparación externa · ${companyName}`,
-        ),
-      ],
-    });
+      await ctx.db.patch(args.incidentId, {
+        status: nextStatus,
+        updatedAt: now,
+        externalRepair: {
+          sentAt: now,
+          companyName,
+          contactName: args.contactName?.trim() || undefined,
+          contactPhone: args.contactPhone?.trim() || undefined,
+          defectNotes,
+          dispatchNotes,
+          sentById: actor._id,
+          sentByName: name,
+          equipmentSnapshot,
+        },
+        history: [
+          ...incident.history,
+          historyEntry(
+            nextStatus,
+            now,
+            name,
+            `Enviado a reparación externa · ${companyName}`,
+          ),
+        ],
+      });
 
-    await notifyUsers(
-      ctx,
-      [
-        ...(await moderatorIds(ctx)),
-        ...(incident.assigneeId ? [incident.assigneeId] : []),
-        ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
-      ],
-      `${incident.reference} enviada a reparación externa (${companyName}) por ${name}`,
-      incident._id,
-      actor._id,
-    );
+      await notifyUsers(
+        ctx,
+        [
+          ...(await moderatorIds(ctx)),
+          ...(incident.assigneeId ? [incident.assigneeId] : []),
+          ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
+        ],
+        `${incident.reference} enviada a reparación externa (${companyName}) por ${name}`,
+        incident._id,
+        actor._id,
+      );
 
-    await scheduleReporterEmail(ctx, incident, nextStatus);
-  },
+      await scheduleReporterEmail(ctx, incident, nextStatus);
+    },
+  ),
 });
 
 /**
  * Registrar el retorno del equipo desde la empresa externa de vuelta al taller.
  */
+const receiveFromExternalRepairArgs = {
+  incidentId: v.id("incidents"),
+  repairNotes: v.optional(v.string()),
+  workshopNotes: v.optional(v.string()),
+  cost: v.optional(v.number()),
+  deliveryNoteNumber: v.optional(v.string()),
+  deliveryNoteStorageId: v.optional(v.id("_storage")),
+};
+
 export const receiveFromExternalRepair = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    repairNotes: v.optional(v.string()),
-    workshopNotes: v.optional(v.string()),
-    cost: v.optional(v.number()),
-    deliveryNoteNumber: v.optional(v.string()),
-    deliveryNoteStorageId: v.optional(v.id("_storage")),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    const canCoordinate = await hasCapability(ctx, actor, "manageIncidents");
-    if (
-      !canCoordinate &&
-      incident.workshopAssigneeId !== actor._id &&
-      incident.assigneeId !== actor._id
-    ) {
-      throw new ConvexError(
+  args: receiveFromExternalRepairArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
         "Solo el técnico asignado, el técnico de taller o el coordinador pueden registrar la recepción de la reparación externa.",
+      ),
+    },
+    receiveFromExternalRepairArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+
+      const nextStatus = requireIncidentStep(
+        incident,
+        "returnExternal",
+        () => "La incidencia no está en reparación externa.",
       );
-    }
 
-    const nextStatus = requireIncidentStep(
-      incident,
-      "returnExternal",
-      () => "La incidencia no está en reparación externa.",
-    );
+      if (!incident.externalRepair) {
+        throw new ConvexError(
+          "La incidencia no tiene datos de envío a reparación externa.",
+        );
+      }
 
-    if (!incident.externalRepair) {
-      throw new ConvexError(
-        "La incidencia no tiene datos de envío a reparación externa.",
+      const now = Date.now();
+      const name = actorName(actor);
+      const repairNotes = args.repairNotes?.trim() || undefined;
+      const workshopNotes = args.workshopNotes?.trim() || undefined;
+
+      await ctx.db.patch(args.incidentId, {
+        status: nextStatus,
+        updatedAt: now,
+        externalRepair: {
+          ...incident.externalRepair,
+          receivedAt: now,
+          receivedById: actor._id,
+          receivedByName: name,
+          repairNotes,
+          workshopNotes,
+          cost: args.cost,
+          deliveryNoteNumber: args.deliveryNoteNumber?.trim() || undefined,
+          deliveryNoteStorageId: args.deliveryNoteStorageId,
+        },
+        history: [
+          ...incident.history,
+          historyEntry(
+            nextStatus,
+            now,
+            name,
+            `Recibido de reparación externa (${incident.externalRepair.companyName})`,
+          ),
+        ],
+      });
+
+      await notifyUsers(
+        ctx,
+        [
+          ...(await moderatorIds(ctx)),
+          ...(incident.assigneeId ? [incident.assigneeId] : []),
+          ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
+        ],
+        `${incident.reference} recibida de reparación externa por ${name}`,
+        incident._id,
+        actor._id,
       );
-    }
 
-    const now = Date.now();
-    const name = actorName(actor);
-    const repairNotes = args.repairNotes?.trim() || undefined;
-    const workshopNotes = args.workshopNotes?.trim() || undefined;
-
-    await ctx.db.patch(args.incidentId, {
-      status: nextStatus,
-      updatedAt: now,
-      externalRepair: {
-        ...incident.externalRepair,
-        receivedAt: now,
-        receivedById: actor._id,
-        receivedByName: name,
-        repairNotes,
-        workshopNotes,
-        cost: args.cost,
-        deliveryNoteNumber: args.deliveryNoteNumber?.trim() || undefined,
-        deliveryNoteStorageId: args.deliveryNoteStorageId,
-      },
-      history: [
-        ...incident.history,
-        historyEntry(
-          nextStatus,
-          now,
-          name,
-          `Recibido de reparación externa (${incident.externalRepair.companyName})`,
-        ),
-      ],
-    });
-
-    await notifyUsers(
-      ctx,
-      [
-        ...(await moderatorIds(ctx)),
-        ...(incident.assigneeId ? [incident.assigneeId] : []),
-        ...(incident.workshopAssigneeId ? [incident.workshopAssigneeId] : []),
-      ],
-      `${incident.reference} recibida de reparación externa por ${name}`,
-      incident._id,
-      actor._id,
-    );
-
-    await scheduleReporterEmail(ctx, incident, nextStatus);
-  },
+      await scheduleReporterEmail(ctx, incident, nextStatus);
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */
@@ -1031,87 +1044,97 @@ export const receiveFromExternalRepair = mutation({
  * la máquina en su historial, y el formulario de notificación tampoco lo admite
  * en blanco.
  */
+const updateEquipmentArgs = {
+  incidentId: v.id("incidents"),
+  equipmentId: v.optional(v.id("equipment")),
+  model: v.optional(v.string()),
+  serialNumber: v.optional(v.string()),
+  expectedUpdatedAt: v.optional(v.number()),
+};
+
 export const updateEquipment = mutation({
-  args: {
-    incidentId: v.id("incidents"),
-    equipmentId: v.optional(v.id("equipment")),
-    model: v.optional(v.string()),
-    serialNumber: v.optional(v.string()),
-    expectedUpdatedAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const actor = await requireActor(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    assertIncidentNotModified(incident, args.expectedUpdatedAt);
-    await requireEquipmentEditor(ctx, actor, incident);
+  args: updateEquipmentArgs,
+  handler: secureMutation(
+    {
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      authorize: incidentWorkerPolicy(
+        "Solo el técnico asignado o quien coordina la incidencia pueden corregir los datos del equipo.",
+      ),
+    },
+    updateEquipmentArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
 
-    const equipmentId = args.equipmentId ?? incident.equipmentId;
-    let linkedEq = null;
-    if (args.equipmentId) {
-      linkedEq = await ctx.db.get(args.equipmentId);
-      if (!linkedEq)
+      const equipmentId = args.equipmentId ?? incident.equipmentId;
+      let linkedEq = null;
+      if (args.equipmentId) {
+        linkedEq = await ctx.db.get(args.equipmentId);
+        if (!linkedEq)
+          throw new ConvexError(
+            "El equipo seleccionado no existe en el inventario.",
+          );
+      }
+
+      const model =
+        args.model !== undefined
+          ? args.model.trim() || undefined
+          : linkedEq
+            ? linkedEq.model.trim()
+            : incident.model;
+      if (model === undefined) {
         throw new ConvexError(
-          "El equipo seleccionado no existe en el inventario.",
+          "Escribe el modelo del equipo: es lo que identifica la máquina en su historial.",
         );
-    }
+      }
+      const serialNumber =
+        args.serialNumber !== undefined
+          ? args.serialNumber.trim() || undefined
+          : linkedEq
+            ? linkedEq.serialNumber?.trim() || undefined
+            : incident.serialNumber;
 
-    const model =
-      args.model !== undefined
-        ? args.model.trim() || undefined
-        : linkedEq
-          ? linkedEq.model.trim()
-          : incident.model;
-    if (model === undefined) {
-      throw new ConvexError(
-        "Escribe el modelo del equipo: es lo que identifica la máquina en su historial.",
-      );
-    }
-    const serialNumber =
-      args.serialNumber !== undefined
-        ? args.serialNumber.trim() || undefined
-        : linkedEq
-          ? linkedEq.serialNumber?.trim() || undefined
-          : incident.serialNumber;
+      const sameEquipment = equipmentId === incident.equipmentId;
+      const sameModel = model === incident.model;
+      const sameSerial = serialNumber === incident.serialNumber;
+      if (sameEquipment && sameModel && sameSerial) {
+        throw new ConvexError(
+          "Esos son los datos que ya tiene la incidencia: no hay cambios que guardar.",
+        );
+      }
 
-    const sameEquipment = equipmentId === incident.equipmentId;
-    const sameModel = model === incident.model;
-    const sameSerial = serialNumber === incident.serialNumber;
-    if (sameEquipment && sameModel && sameSerial) {
-      throw new ConvexError(
-        "Esos son los datos que ya tiene la incidencia: no hay cambios que guardar.",
-      );
-    }
+      const now = Date.now();
+      const name = actorName(actor);
+      // El rastro dice qué cambió, no solo que cambió: es lo que permite leer la
+      // ficha de un vistazo y saber de dónde salió el dato que hay ahora.
+      const changes = [
+        ...(args.equipmentId && args.equipmentId !== incident.equipmentId
+          ? [`vinculado a ${linkedEq?.code ?? linkedEq?.model ?? "inventario"}`]
+          : []),
+        ...(model !== incident.model ? [`modelo ${model}`] : []),
+        ...(serialNumber !== incident.serialNumber
+          ? [serialNumber ? `nº de serie ${serialNumber}` : "sin nº de serie"]
+          : []),
+      ];
 
-    const now = Date.now();
-    const name = actorName(actor);
-    // El rastro dice qué cambió, no solo que cambió: es lo que permite leer la
-    // ficha de un vistazo y saber de dónde salió el dato que hay ahora.
-    const changes = [
-      ...(args.equipmentId && args.equipmentId !== incident.equipmentId
-        ? [`vinculado a ${linkedEq?.code ?? linkedEq?.model ?? "inventario"}`]
-        : []),
-      ...(model !== incident.model ? [`modelo ${model}`] : []),
-      ...(serialNumber !== incident.serialNumber
-        ? [serialNumber ? `nº de serie ${serialNumber}` : "sin nº de serie"]
-        : []),
-    ];
-
-    await ctx.db.patch(args.incidentId, {
-      ...(equipmentId ? { equipmentId } : {}),
-      model,
-      serialNumber,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(
-          incident.status,
-          now,
-          name,
-          `Datos del equipo actualizados · ${changes.join(" · ")}`,
-        ),
-      ],
-    });
-  },
+      await ctx.db.patch(args.incidentId, {
+        ...(equipmentId ? { equipmentId } : {}),
+        model,
+        serialNumber,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(
+            incident.status,
+            now,
+            name,
+            `Datos del equipo actualizados · ${changes.join(" · ")}`,
+          ),
+        ],
+      });
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */

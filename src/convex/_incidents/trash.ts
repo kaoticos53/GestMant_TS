@@ -8,14 +8,14 @@ import {
 } from "../_generated/server";
 import { archiveClosedIncidentsBefore } from "../archive";
 import { scheduleReporterEmail } from "../incidentMail";
-import { hasCapability } from "../permissions";
 import { trashRetentionDays } from "../trash";
 import { INCIDENT_WITHDRAWN_NOTICE } from "../../lib/incidentMail";
 import { isClosedIncident } from "../../lib/incidentFlow";
 import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
+import { hasCapability } from "../permissions";
+import { secureMutation } from "../_auth/secureMutation";
 import {
-  type Actor,
   actorName,
   getIncident,
   historyEntry,
@@ -23,78 +23,105 @@ import {
   requireActor,
 } from "./helpers";
 
-async function requireArchiveCapability(ctx: MutationCtx): Promise<Actor> {
-  const actor = await requireActor(ctx);
-  if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
-    throw new ConvexError(
-      isModerator(actor)
-        ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
-        : "Solo el coordinador puede archivar incidencias. Pídeselo al responsable del taller.",
-    );
-  }
-  return actor;
-}
+const archiveArgs = { incidentId: v.id("incidents") };
 
 export const archive = mutation({
-  args: { incidentId: v.id("incidents") },
-  handler: async (ctx, args) => {
-    const actor = await requireArchiveCapability(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    if (incident.archivedAt !== undefined) return;
-    if (!isClosedIncident(incident.status)) {
-      throw new ConvexError(
-        "Solo se pueden archivar incidencias cerradas (resueltas o sin resolución).",
-      );
-    }
+  args: archiveArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede archivar incidencias. Pídeselo al responsable del taller..",
+    },
+    archiveArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (incident.archivedAt !== undefined) return;
+      if (!isClosedIncident(incident.status)) {
+        throw new ConvexError(
+          "Solo se pueden archivar incidencias cerradas (resueltas o sin resolución).",
+        );
+      }
 
-    const now = Date.now();
-    const name = actorName(actor);
-    await ctx.db.patch(args.incidentId, {
-      archivedAt: now,
-      archivedBy: name,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(incident.status, now, name, "Archivada"),
-      ],
-    });
-  },
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        archivedAt: now,
+        archivedBy: name,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(incident.status, now, name, "Archivada"),
+        ],
+      });
+    },
+  ),
 });
 
 /** Devuelve una incidencia del archivo a la cola, con su traza. */
-export const unarchive = mutation({
-  args: { incidentId: v.id("incidents") },
-  handler: async (ctx, args) => {
-    const actor = await requireArchiveCapability(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    if (incident.archivedAt === undefined) return;
+const unarchiveArgs = { incidentId: v.id("incidents") };
 
-    const now = Date.now();
-    const name = actorName(actor);
-    await ctx.db.patch(args.incidentId, {
-      archivedAt: undefined,
-      archivedBy: undefined,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(incident.status, now, name, "Recuperada del archivo"),
-      ],
-    });
-  },
+export const unarchive = mutation({
+  args: unarchiveArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede archivar incidencias. Pídeselo al responsable del taller..",
+    },
+    unarchiveArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (incident.archivedAt === undefined) return;
+
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        archivedAt: undefined,
+        archivedBy: undefined,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(incident.status, now, name, "Recuperada del archivo"),
+        ],
+      });
+    },
+  ),
 });
 
+const archiveClosedBeforeArgs = { before: v.number() };
+
 export const archiveClosedBefore = mutation({
-  args: { before: v.number() },
-  handler: async (ctx, args) => {
-    const actor = await requireArchiveCapability(ctx);
-    if (!Number.isFinite(args.before)) {
-      throw new ConvexError("Indica una fecha de corte válida.");
-    }
-    return await archiveClosedIncidentsBefore(ctx, {
-      before: args.before,
-      by: actorName(actor),
-    });
-  },
+  args: archiveClosedBeforeArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede archivar incidencias. Pídeselo al responsable del taller..",
+    },
+    archiveClosedBeforeArgs,
+    async (ctx, args, actor) => {
+      if (!Number.isFinite(args.before)) {
+        throw new ConvexError("Indica una fecha de corte válida.");
+      }
+      return await archiveClosedIncidentsBefore(ctx, {
+        before: args.before,
+        by: actorName(actor),
+      });
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */
@@ -102,18 +129,6 @@ export const archiveClosedBefore = mutation({
 /* ------------------------------------------------------------------ */
 
 /** Retirar una incidencia es tarea de coordinación, como archivarla. */
-async function requireWithdrawCapability(ctx: MutationCtx): Promise<Actor> {
-  const actor = await requireActor(ctx);
-  if (!(await hasCapability(ctx, actor, "manageIncidents"))) {
-    throw new ConvexError(
-      isModerator(actor)
-        ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
-        : "Solo el coordinador puede retirar una incidencia. Pídeselo al responsable del taller.",
-    );
-  }
-  return actor;
-}
-
 /**
  * Tope de una pasada de la papelera: no borra de golpe todo lo que haya
  * caducado. Como las demás pasadas, si queda más, la siguiente sigue por donde
@@ -154,35 +169,56 @@ async function purgeIncident(
   await ctx.db.delete(incident._id);
 }
 
+const withdrawArgs = {
+  incidentId: v.id("incidents"),
+  reason: v.optional(v.string()),
+};
+
 export const withdraw = mutation({
-  args: { incidentId: v.id("incidents"), reason: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const actor = await requireWithdrawCapability(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    if (incident.deletedAt !== undefined) return;
+  args: withdrawArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede retirar una incidencia. Pídeselo al responsable del taller..",
+    },
+    withdrawArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (incident.deletedAt !== undefined) return;
 
-    const now = Date.now();
-    const name = actorName(actor);
-    const reason = args.reason?.trim();
-    await ctx.db.patch(args.incidentId, {
-      deletedAt: now,
-      deletedBy: name,
-      ...(reason ? { deletedReason: reason } : {}),
-      // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
-      // el plazo con el que entró, igual que en la papelera del almacén.
-      purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(incident.status, now, name, "Retirada a la papelera"),
-      ],
-    });
+      const now = Date.now();
+      const name = actorName(actor);
+      const reason = args.reason?.trim();
+      await ctx.db.patch(args.incidentId, {
+        deletedAt: now,
+        deletedBy: name,
+        ...(reason ? { deletedReason: reason } : {}),
+        // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
+        // el plazo con el que entró, igual que en la papelera del almacén.
+        purgeAt: trashPurgeAt(now, await trashRetentionDays(ctx)),
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(incident.status, now, name, "Retirada a la papelera"),
+        ],
+      });
 
-    // Y se le cuenta a quien notificó: su referencia deja de seguir el caso, y
-    // eso no puede descubrirlo mirando. Sale con la fecha de la retirada, que es
-    // lo que distingue este aviso del de un cambio de estado.
-    await scheduleReporterEmail(ctx, incident, INCIDENT_WITHDRAWN_NOTICE, now);
-  },
+      // Y se le cuenta a quien notificó: su referencia deja de seguir el caso, y
+      // eso no puede descubrirlo mirando. Sale con la fecha de la retirada, que es
+      // lo que distingue este aviso del de un cambio de estado.
+      await scheduleReporterEmail(
+        ctx,
+        incident,
+        INCIDENT_WITHDRAWN_NOTICE,
+        now,
+      );
+    },
+  ),
 });
 
 /**
@@ -190,27 +226,40 @@ export const withdraw = mutation({
  * ahí salió— tal y como estaba, con su expediente y sus notas, y su referencia
  * vuelve a seguir el caso.
  */
-export const restore = mutation({
-  args: { incidentId: v.id("incidents") },
-  handler: async (ctx, args) => {
-    const actor = await requireWithdrawCapability(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    if (incident.deletedAt === undefined) return;
+const restoreArgs = { incidentId: v.id("incidents") };
 
-    const now = Date.now();
-    const name = actorName(actor);
-    await ctx.db.patch(args.incidentId, {
-      deletedAt: undefined,
-      deletedBy: undefined,
-      deletedReason: undefined,
-      purgeAt: undefined,
-      updatedAt: now,
-      history: [
-        ...incident.history,
-        historyEntry(incident.status, now, name, "Recuperada de la papelera"),
-      ],
-    });
-  },
+export const restore = mutation({
+  args: restoreArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede retirar una incidencia. Pídeselo al responsable del taller..",
+    },
+    restoreArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (incident.deletedAt === undefined) return;
+
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        deletedAt: undefined,
+        deletedBy: undefined,
+        deletedReason: undefined,
+        purgeAt: undefined,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(incident.status, now, name, "Recuperada de la papelera"),
+        ],
+      });
+    },
+  ),
 });
 
 /**
@@ -219,18 +268,31 @@ export const restore = mutation({
  * pide que la incidencia esté retirada: lo que no ha pasado por la papelera no
  * se borra de un tirón.
  */
+const deleteNowArgs = { incidentId: v.id("incidents") };
+
 export const deleteNow = mutation({
-  args: { incidentId: v.id("incidents") },
-  handler: async (ctx, args) => {
-    await requireWithdrawCapability(ctx);
-    const incident = await getIncident(ctx, args.incidentId);
-    if (incident.deletedAt === undefined) {
-      throw new ConvexError(
-        "Retira la incidencia antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
-      );
-    }
-    await purgeIncident(ctx, incident);
-  },
+  args: deleteNowArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      denyMessage: (actor) =>
+        isModerator(actor)
+          ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
+          : "Solo el coordinador puede retirar una incidencia. Pídeselo al responsable del taller..",
+    },
+    deleteNowArgs,
+    async (ctx, args) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (incident.deletedAt === undefined) {
+        throw new ConvexError(
+          "Retira la incidencia antes de borrarla: lo que no pasa por la papelera no se puede recuperar.",
+        );
+      }
+      await purgeIncident(ctx, incident);
+    },
+  ),
 });
 
 /**
