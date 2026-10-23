@@ -1,21 +1,23 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-INCIDENT-ACTION-BUTTONS`
-- **Objetivo:** Fase 1 - Crear contratos de tipos segregados en `actionButtonsTypes.ts` y tests unitarios de visibilidad en `tests/incidentActionButtonsVisibility.test.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-INCIDENT-ACTION-BUTTONS`
+- **Objetivo:** Fase 2 - Crear subcomponentes `IncidentAssignmentActions`, `IncidentWorkflowActions`, `IncidentLogisticsActions` e `IncidentLifecycleActions`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/components/detail/actions/components/actionButtonsTypes.ts`
-  - `tests/incidentActionButtonsVisibility.test.ts`
+  - `src/pages/dashboard/incidents/components/detail/actions/components/IncidentAssignmentActions.tsx`
+  - `src/pages/dashboard/incidents/components/detail/actions/components/IncidentWorkflowActions.tsx`
+  - `src/pages/dashboard/incidents/components/detail/actions/components/IncidentLogisticsActions.tsx`
+  - `src/pages/dashboard/incidents/components/detail/actions/components/IncidentLifecycleActions.tsx`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `actions/components/actionButtonsTypes.ts`: interfaces segregadas para grupos de botones de acción (`AssignmentActionsProps`, `WorkflowActionsProps`, `LogisticsActionsProps`, `LifecycleActionsProps`).
-- [x] `tests/incidentActionButtonsVisibility.test.ts`: tests unitarios de reglas de visibilidad de acciones.
-- [ ] `actions/components/IncidentAssignmentActions.tsx`: pendiente Fase 2.
-- [ ] `actions/components/IncidentWorkflowActions.tsx`: pendiente Fase 2.
-- [ ] `actions/components/IncidentLogisticsActions.tsx`: pendiente Fase 2.
-- [ ] `actions/components/IncidentLifecycleActions.tsx`: pendiente Fase 2.
+- [x] `actions/components/actionButtonsTypes.ts`: interfaces segregadas.
+- [x] `tests/incidentActionButtonsVisibility.test.ts`: tests unitarios de visibilidad.
+- [x] `actions/components/IncidentAssignmentActions.tsx`: autoasignación y asignación técnica / orden taller.
+- [x] `actions/components/IncidentWorkflowActions.tsx`: verificación y finalización de orden.
+- [x] `actions/components/IncidentLogisticsActions.tsx`: peticiones de repuesto y servicio externo.
+- [x] `actions/components/IncidentLifecycleActions.tsx`: cerrar, archivar y retirar.
 - [ ] `actions/components/IncidentActionButtons.tsx`: pendiente Fase 3.
 
 ---
@@ -29,4 +31,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 1.
+- **Estado:** En ejecución - Fase 2.

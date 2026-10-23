@@ -33,7 +33,6 @@ export interface IncidentLifecycleActionsProps {
   showArchive: boolean;
   canCoordinate: boolean;
   busy: boolean;
-  onClose: () => void;
   onArchive: () => void;
   onOpenWithdraw: () => void;
 }
