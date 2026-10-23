@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, type Plugin } from "vitest/config";
+import { VitePWA } from "vite-plugin-pwa";
 
 /**
  * El hueco que la CSP deja donde va la dirección pública de la API, y el archivo
@@ -111,7 +112,63 @@ export default defineConfig({
      */
     pool: "threads",
   },
-  plugins: [react(), vlyPlugin(), tailwindcss(), apiCspPlugin()],
+  plugins: [
+    react(),
+    vlyPlugin(),
+    tailwindcss(),
+    apiCspPlugin(),
+    /**
+     * La app instalable del taller y su service worker.
+     *
+     * El service worker no se escribe a mano: Workbox lo compone al compilar con
+     * la lista de archivos de esta compilación —los nombres llevan hash—, así que
+     * una versión nueva no puede servir los trozos de la anterior. `autoUpdate`
+     * activa `skipWaiting` y `clientsClaim`: al desplegar, la pestaña que se
+     * quede abierta carga la versión nueva sin que nadie borre la caché a mano.
+     *
+     * Se precachea el armazón (HTML, CSS, JS, iconos) para que la aplicación abra
+     * sin red. Lo que se consulta a demanda —las fichas, los manuales en PDF— se
+     * cachea la primera vez que se abre: los archivos del almacenamiento del
+     * taller son direcciones `/api/storage/…` que no cambian de contenido, así
+     * que `CacheFirst` los sirve del dispositivo y solo los pide una vez.
+     */
+    VitePWA({
+      registerType: "autoUpdate",
+      // El manifiesto ya está escrito a mano en `public/`: el plugin solo tiene
+      // que copiarlo y no inventarse otro.
+      manifest: false,
+      includeAssets: ["logo.svg", "manifest.webmanifest"],
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2}"],
+        navigateFallback: "/index.html",
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            // Manuales, partes y fotos: mismo camino en el almacenamiento del
+            // taller. Se guardan en el dispositivo para poder abrirlos en un
+            // sótano sin cobertura.
+            urlPattern: ({ url }) =>
+              url.pathname.includes("/api/storage/") ||
+              /\.pdf$/i.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "archivos-taller",
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//i,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "tipografias" },
+          },
+        ],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

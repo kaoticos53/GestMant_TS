@@ -388,6 +388,11 @@ const schema = defineSchema({
     // columna no lo tienen: se les reparte uno la primera vez que hace falta
     // (`ensurePublicCode`).
     publicCode: v.optional(v.string()), // "A7K2QX9M"
+    // Marca del aviso que se escribió sin conexión y se envió después: si el
+    // mismo borrador llega dos veces —la respuesta se perdió al recuperar la
+    // red—, el alta se reconoce por esta marca y no se duplica. Opcional porque
+    // los avisos de siempre no la traen.
+    clientDraftId: v.optional(v.string()),
     // Datos de quien notifica (no tiene por qué estar registrado)
     reporterName: v.string(), // nombre y apellidos
     reporterRole: v.optional(v.string()), // puesto
@@ -588,7 +593,10 @@ const schema = defineSchema({
     .index("by_reference", ["reference"])
     // Por código: es la única puerta de quien no es del taller, y por eso el
     // índice no vale para enumerar nada —los códigos no van en orden—.
-    .index("by_publicCode", ["publicCode"]),
+    .index("by_publicCode", ["publicCode"])
+    // Por la marca del borrador sin conexión: es como se reconoce un envío
+    // repetido antes de crear la incidencia otra vez.
+    .index("by_clientDraftId", ["clientDraftId"]),
 
   // Notificaciones in-app a los interesados de cada incidencia
   notifications: defineTable({

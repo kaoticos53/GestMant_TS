@@ -65,12 +65,33 @@ export const report = mutation({
     serialNumber: v.optional(v.string()),
     description: v.string(),
     reportedAt: v.number(),
+    // Marca del borrador guardado sin conexión (`lib/offlineDrafts`): el mismo
+    // aviso que se reintenta al volver la red llega con la misma marca y el alta
+    // se reconoce en vez de duplicarse.
+    clientDraftId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const clientDraftId = args.clientDraftId?.trim() || undefined;
+
+    // El mismo aviso, otra vez: se devuelve el caso que ya entró. Quien lo
+    // escribe ve su código igual que la primera vez, y el taller no recibe dos
+    // incidencias por un envío que se cortó a medias.
+    if (clientDraftId) {
+      const already = await ctx.db
+        .query("incidents")
+        .withIndex("by_clientDraftId", (q) =>
+          q.eq("clientDraftId", clientDraftId),
+        )
+        .first();
+      if (already) {
+        return { reference: already.reference, code: already.publicCode ?? "" };
+      }
+    }
+
     // Ni una regla aquí: el caso de uso y su adaptador están a un salto
     // (`lib/incidentIntake` y `convex/incidentIntake`). Esta puerta solo existe
     // para que el formulario público tenga a quién llamar.
-    return await registerIncidentIntake(ctx, args);
+    return await registerIncidentIntake(ctx, args, { clientDraftId });
   },
 });
 

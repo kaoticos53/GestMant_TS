@@ -5,6 +5,7 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import { registerSW } from "virtual:pwa-register";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
@@ -148,11 +149,10 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
-if (typeof window !== "undefined" && "serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // Ignorar errores de registro en entornos con restricciones de origen
-    });
-  });
+// El service worker lo genera `vite-plugin-pwa` al compilar (ver
+// `vite.config.ts`); aquí solo se le pide que se registre. Con `autoUpdate`, la
+// próxima carga ya trae la versión nueva: no hay caché vieja que borrar a mano.
+if (import.meta.env.PROD) {
+  void registerSW({ immediate: true });
 }
 

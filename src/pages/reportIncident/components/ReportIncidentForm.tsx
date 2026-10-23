@@ -6,7 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowRight, Loader2, Siren, UserCheck } from "lucide-react";
+import { ArrowRight, Loader2, Siren, UserCheck, WifiOff } from "lucide-react";
+import { pendingDraftsNotice } from "@/lib/offlineDrafts";
 import type { ComponentProps } from "react";
 import { DescriptionField } from "./DescriptionField";
 import { EquipmentFields } from "./EquipmentFields";
@@ -21,6 +22,16 @@ interface ReportIncidentFormProps {
   error: string | null;
   busy: boolean;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  /**
+   * Cómo está la red y qué se ha guardado sin ella. Sin este dato el formulario
+   * se porta como siempre —enviar y esperar—, que es lo que quieren las pruebas
+   * y cualquier sitio que lo monte sin el enganche del aviso público.
+   */
+  connectivity?: {
+    online: boolean;
+    pending: number;
+    notice: string | null;
+  };
 }
 
 export function ReportIncidentForm({
@@ -32,7 +43,10 @@ export function ReportIncidentForm({
   error,
   busy,
   onSubmit,
+  connectivity = { online: true, pending: 0, notice: null },
 }: ReportIncidentFormProps) {
+  const pendingNotice = pendingDraftsNotice(connectivity.pending);
+
   return (
     <Card className="shadow-md">
       <CardHeader>
@@ -55,13 +69,42 @@ export function ReportIncidentForm({
             <div className="flex items-center gap-2.5 rounded-lg border border-signal/25 bg-signal/10 px-3.5 py-2.5 text-xs text-foreground">
               <UserCheck className="size-4 shrink-0 text-signal" />
               <span>
-                Sesión iniciada: datos de contacto autocompletados desde tu perfil (
+                Sesión iniciada: datos de contacto autocompletados desde tu
+                perfil (
                 <strong className="font-semibold">
                   {user.name || user.email}
                 </strong>
                 ). Puedes modificarlos si lo requieres.
               </span>
             </div>
+          )}
+
+          {!connectivity.online && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs text-foreground">
+              <WifiOff className="size-4 shrink-0 text-amber-600" />
+              <span>
+                Sin conexión. Puedes redactar el aviso igual: se guarda en este
+                dispositivo y se envía solo cuando vuelva la red.
+              </span>
+            </div>
+          )}
+
+          {connectivity.notice && (
+            <p
+              role="status"
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-foreground"
+            >
+              {connectivity.notice}
+            </p>
+          )}
+
+          {pendingNotice && (
+            <p
+              role="status"
+              className="rounded-lg border border-border/70 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground"
+            >
+              {pendingNotice} Se envían solos en cuanto haya red.
+            </p>
           )}
 
           {/* Bloque 1: Datos de quien notifica */}

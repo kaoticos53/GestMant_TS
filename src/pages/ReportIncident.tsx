@@ -17,6 +17,7 @@ export default function ReportIncident() {
     reset,
     busy,
     error,
+    connectivity,
     handleSubmit,
     reporterProps,
     equipmentProps,
@@ -44,6 +45,7 @@ export default function ReportIncident() {
             descriptionProps={descriptionProps}
             error={error}
             busy={busy}
+            connectivity={connectivity}
             onSubmit={handleSubmit}
           />
         )}

@@ -58,6 +58,10 @@ const RECENT_INTAKES = 100;
 export async function registerIncidentIntake(
   ctx: MutationCtx,
   input: IncidentIntakeInput,
+  options: {
+    /** Marca del borrador sin conexión, para reconocer un envío repetido. */
+    clientDraftId?: string;
+  } = {},
 ): Promise<{ reference: string; code: string }> {
   // Las últimas notificadas, solo para el freno: antes de repartir referencia
   // ninguna se mira si quien avisa acaba de avisar.
@@ -86,6 +90,14 @@ export async function registerIncidentIntake(
     "incidents",
     incidentIntakeRecord(intake, { now, reference, publicCode }),
   );
+
+  // La marca del borrador se apunta en la ficha ya creada: así el reintento de
+  // mañana —o el de dentro de un minuto, si la red va y viene— encuentra el caso
+  // por ella y no crea otro. No entra en el registro del alta porque no es un
+  // dato del caso: es la forma de reconocer este envío.
+  if (options.clientDraftId) {
+    await ctx.db.patch(incidentId, { clientDraftId: options.clientDraftId });
+  }
 
   // Aviso a los interesados: coordinadores del taller. Se excluye a quien notifica
   // si resulta ser del taller (una cuenta de dentro también puede avisar algo).
