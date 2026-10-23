@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-COMPATIBLE-MODELS-SECTION`
-- **Objetivo:** Fase 2 - Crear hook `useCompatibleModels`, subcomponentes UI `CompatibleModelsSearchResults`, `CreateNewModelButton`, `CompatibleModelsBadgeList` y barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-COMPATIBLE-MODELS-SECTION`
+- **Objetivo:** Fase 3 - Orquestar `CompatibleModelsSection.tsx` delegando en `useCompatibleModels`, `CompatibleModelsSearchResults`, `CreateNewModelButton` y `CompatibleModelsBadgeList`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/inventory/components/compatibleModels/useCompatibleModels.ts`
-  - `src/pages/dashboard/inventory/components/compatibleModels/components/CompatibleModelsSearchResults.tsx`
-  - `src/pages/dashboard/inventory/components/compatibleModels/components/CreateNewModelButton.tsx`
-  - `src/pages/dashboard/inventory/components/compatibleModels/components/CompatibleModelsBadgeList.tsx`
-  - `src/pages/dashboard/inventory/components/compatibleModels/index.ts`
+  - `src/pages/dashboard/inventory/components/CompatibleModelsSection.tsx`
 
 ---
 
@@ -21,7 +17,7 @@
 - [x] `compatibleModels/components/CreateNewModelButton.tsx`: botón para alta al vuelo con icono Sparkles.
 - [x] `compatibleModels/components/CompatibleModelsBadgeList.tsx`: lista de badges con botón X.
 - [x] `compatibleModels/index.ts`: barril unificado.
-- [ ] `inventory/components/CompatibleModelsSection.tsx`: pendiente Fase 3.
+- [x] `inventory/components/CompatibleModelsSection.tsx`: orquestador modular completado (~80 líneas).
 
 ---
 
@@ -34,7 +30,9 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+- **Estado:** Fase 3 completada - Commit atómico 3 listo.
+
+
 
 
 
