@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-RECEIVE-DIALOG`
-- **Objetivo:** Fase 2 - Crear hook `useReceiveDialogForm`, subcomponentes `ReceiveLinesInputs`, `ReceiveDeliveryNoteInput` y barril `receive/index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-RECEIVE-DIALOG`
+- **Objetivo:** Fase 3 - Reducir y orquestar limpiamente `ReceiveDialog.tsx` componiendo `useReceiveDialogForm`, `ReceiveLinesInputs` y `ReceiveDeliveryNoteInput`, reduciendo el diálogo de 193 a ~75 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/purchasing/dialogs/receive/useReceiveDialogForm.ts`
-  - `src/pages/dashboard/purchasing/dialogs/receive/components/ReceiveLinesInputs.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/receive/components/ReceiveDeliveryNoteInput.tsx`
-  - `src/pages/dashboard/purchasing/dialogs/receive/index.ts`
+  - `src/pages/dashboard/purchasing/dialogs/ReceiveDialog.tsx`
 
 ---
 
@@ -19,7 +16,7 @@
 - [x] `receive/components/ReceiveLinesInputs.tsx`: inputs numéricos de cantidades por línea pendiente.
 - [x] `receive/components/ReceiveDeliveryNoteInput.tsx`: campo de subida de albarán con validación de límite.
 - [x] `receive/index.ts`: barril unificado.
-- [ ] `dialogs/ReceiveDialog.tsx`: pendiente Fase 3.
+- [ ] `dialogs/ReceiveDialog.tsx`: orquestación de alto nivel limpia.
 
 ---
 
@@ -32,4 +29,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
