@@ -1,5 +1,5 @@
 import type { Capability } from "@/lib/permissions";
-import type { NavId } from "../../types";
+import type { NavId } from "@/pages/dashboard/types";
 
 export interface TabAccessContext {
   can: (capability: Capability) => boolean;
