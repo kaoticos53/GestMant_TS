@@ -1,4 +1,4 @@
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 export interface SendToExternalFormValues {
   companyName: string;
@@ -26,7 +26,7 @@ export interface ExternalCompanyFieldsProps {
   setContactName: (value: string) => void;
   contactPhone: string;
   setContactPhone: (value: string) => void;
-  workshopSuggestions: string[];
+  catalogWorkshops: Doc<"catalogs">[];
   disabled?: boolean;
 }
 
