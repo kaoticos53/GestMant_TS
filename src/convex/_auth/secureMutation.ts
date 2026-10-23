@@ -3,7 +3,12 @@ import { ConvexError } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import type { Capability } from "../../lib/permissions";
 import type { MutationCtx } from "../_generated/server";
-import { hasAnyCapability, hasCapability, memberOrNull } from "../permissions";
+import type { IdentityIssue } from "../permissions";
+import {
+  hasAnyCapability,
+  hasCapability,
+  memberStatus,
+} from "../permissions";
 
 /**
  * La puerta que comparten las mutaciones del taller.
@@ -66,9 +71,11 @@ export interface SecureMutationConfig<T extends PropertyValidators> {
   /**
    * El aviso de quien no ha entrado —o tiene la cuenta de baja—. Sin esto vería
    * el aviso de permisos de un rol que ni siquiera tiene; con esto se le dice lo
-   * único que puede hacer: iniciar sesión.
+   * único que puede hacer: iniciar sesión. Los módulos que distinguían al
+   * invitado, la cuenta de baja y quien no ha entrado pueden pasar una función y
+   * recibir el motivo.
    */
-  identityMessage?: string;
+  identityMessage?: string | ((issue: IdentityIssue) => string);
   /**
    * La parte que no cabe en una capacidad: propiedad de la ficha, quién la
    * lleva, un requisito de contexto. Devuelve el aviso que se le enseña a quien
@@ -89,20 +96,15 @@ const DEFAULT_DENY_MESSAGE =
 
 interface DenialTrace {
   denyMessage?: string | ((actor: Doc<"users"> | null) => string);
-  identityMessage?: string;
 }
 
 /** El aviso que se le enseña a quien se queda fuera. */
 function denialMessage(
   config: DenialTrace,
   actor: Doc<"users"> | null,
-  reason: "sin_sesion" | "sin_capacidad" | "sin_politica",
   message?: string,
 ): string {
   if (message) return message;
-  if (reason === "sin_sesion" && config.identityMessage) {
-    return config.identityMessage;
-  }
   const denyMessage = config.denyMessage;
   if (typeof denyMessage === "function") return denyMessage(actor);
   return denyMessage ?? DEFAULT_DENY_MESSAGE;
@@ -124,9 +126,16 @@ export function secureMutation<T extends PropertyValidators, R>(
   ) => Promise<R>,
 ): (ctx: MutationCtx, args: ObjectType<T>) => Promise<R> {
   return async (ctx, args) => {
-    const actor = await memberOrNull(ctx);
-    if (actor === null) {
-      throw new ConvexError(denialMessage(config, null, "sin_sesion"));
+    const { user: actor, issue } = await memberStatus(ctx);
+    if (actor === null || issue !== null) {
+      // El aviso de identidad puede depender del motivo: un invitado no lee lo
+      // mismo que quien no ha entrado, y una cuenta de baja tiene su propio
+      // texto en los módulos que ya lo distinguían.
+      const identity =
+        typeof config.identityMessage === "function"
+          ? config.identityMessage(issue ?? "sin_sesion")
+          : config.identityMessage;
+      throw new ConvexError(denialMessage(config, actor, identity));
     }
 
     const required = config.capability
@@ -141,16 +150,14 @@ export function secureMutation<T extends PropertyValidators, R>(
           ? await hasCapability(ctx, actor, required[0])
           : await hasAnyCapability(ctx, actor, required);
       if (!allowed) {
-        throw new ConvexError(denialMessage(config, actor, "sin_capacidad"));
+        throw new ConvexError(denialMessage(config, actor));
       }
     }
 
     if (config.authorize) {
       const denial = await config.authorize(ctx, actor, args);
       if (denial !== null) {
-        throw new ConvexError(
-          denialMessage(config, actor, "sin_politica", denial),
-        );
+        throw new ConvexError(denialMessage(config, actor, denial));
       }
     }
 

@@ -151,7 +151,9 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
         "utf8",
       );
 
-      expect(codigo).toContain("memberOrNull");
+      // `memberStatus` es la lectura de identidad: usuario o el motivo por el
+      // que no lo es (sin sesión, de baja o invitado).
+      expect(codigo).toContain("memberStatus");
       expect(codigo).toContain("hasCapability");
       expect(codigo).toContain("hasAnyCapability");
       expect(codigo).toContain("authorize");

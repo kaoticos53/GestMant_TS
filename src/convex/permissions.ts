@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { secureMutation } from "./_auth/secureMutation";
 import { ConvexError, v } from "convex/values";
 import {
   CAPABILITIES,
@@ -249,6 +250,30 @@ export async function memberOrNull(ctx: Ctx): Promise<Doc<"users"> | null> {
   return user;
 }
 
+/**
+ * Por qué una sesión no es de taller. La puerta de las mutaciones lo necesita
+ * para no decirle a un invitado lo que le diría a quien ni siquiera ha entrado:
+ * cada módulo conserva el aviso que daba antes de pasar por la puerta.
+ */
+export type IdentityIssue = "sin_sesion" | "inactiva" | "anonima";
+
+/**
+ * El usuario de la sesión o, si no lo es del taller, el motivo. A diferencia de
+ * `memberOrNull`, distingue las tres formas de quedarse fuera, y a diferencia de
+ * `requireActor`, no lanza.
+ */
+export async function memberStatus(
+  ctx: Ctx,
+): Promise<{ user: Doc<"users"> | null; issue: IdentityIssue | null }> {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) return { user: null, issue: "sin_sesion" };
+  const user = await ctx.db.get(userId);
+  if (!user) return { user: null, issue: "sin_sesion" };
+  if (user.active === false) return { user, issue: "inactiva" };
+  if (user.isAnonymous === true) return { user, issue: "anonima" };
+  return { user, issue: null };
+}
+
 /** Usuario autenticado o error. */
 async function requireActor(ctx: Ctx): Promise<Doc<"users">> {
   const userId = await getAuthUserId(ctx);
@@ -421,54 +446,75 @@ export const listRoles = query({
   },
 });
 
-/** Guarda los permisos de un rol (solo administrador; su rol no se toca). */
-export const setRolePermissions = mutation({
-  args: {
-    role: roleValidator,
-    grants: v.record(v.string(), v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
-    if (args.role === ROLES.ADMIN) {
-      throw new ConvexError(
-        "El administrador siempre tiene todos los permisos.",
-      );
-    }
-    if (!(await roleExists(ctx, args.role))) {
-      throw new ConvexError("Ese rol ya no existe.");
-    }
-    const unknown = Object.keys(args.grants).filter(
-      (key) => !isKnownCapability(key),
-    );
-    if (unknown.length > 0) {
-      throw new ConvexError(`Capacidad desconocida: ${unknown.join(", ")}.`);
-    }
+/** Lo que se le dice a quien no administra el taller. */
+const PERMISSIONS_DENY =
+  "Solo el administrador puede gestionar roles y permisos.";
 
-    const grants = effectiveGrants(args.role, args.grants);
-    const now = Date.now();
-    const existing = await getRoleRow(ctx, args.role);
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        grants,
-        updatedAt: now,
-        updatedBy: admin._id,
-      });
-    } else {
-      // Un rol del sistema sin fila: se materializa con sus datos de código.
-      const fallback = fallbackLabel(args.role);
-      await ctx.db.insert("roles", {
-        key: args.role,
-        label: fallback.label,
-        description: fallback.description,
-        kind: "system",
-        grants,
-        createdAt: now,
-        updatedAt: now,
-        updatedBy: admin._id,
-      });
-    }
-    return true;
-  },
+/** El aviso de quien no ha entrado, según lo que le pase a su sesión. */
+const PERMISSIONS_IDENTITY = (issue: IdentityIssue): string =>
+  issue === "inactiva"
+    ? "Esta cuenta ha sido dada de baja o no está activa."
+    : issue === "anonima"
+      ? PERMISSIONS_DENY
+      : "Debes iniciar sesión para ver los permisos.";
+
+/** Guarda los permisos de un rol (solo administrador; su rol no se toca). */
+const setRolePermissionsArgs = {
+  role: roleValidator,
+  grants: v.record(v.string(), v.boolean()),
+};
+
+export const setRolePermissions = mutation({
+  args: setRolePermissionsArgs,
+  handler: secureMutation(
+    {
+      capability: "configurePermissions",
+      identityMessage: PERMISSIONS_IDENTITY,
+      denyMessage: PERMISSIONS_DENY,
+    },
+    setRolePermissionsArgs,
+    async (ctx, args, actor) => {
+      if (args.role === ROLES.ADMIN) {
+        throw new ConvexError(
+          "El administrador siempre tiene todos los permisos.",
+        );
+      }
+      if (!(await roleExists(ctx, args.role))) {
+        throw new ConvexError("Ese rol ya no existe.");
+      }
+      const unknown = Object.keys(args.grants).filter(
+        (key) => !isKnownCapability(key),
+      );
+      if (unknown.length > 0) {
+        throw new ConvexError(`Capacidad desconocida: ${unknown.join(", ")}.`);
+      }
+
+      const grants = effectiveGrants(args.role, args.grants);
+      const now = Date.now();
+      const existing = await getRoleRow(ctx, args.role);
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          grants,
+          updatedAt: now,
+          updatedBy: actor._id,
+        });
+      } else {
+        // Un rol del sistema sin fila: se materializa con sus datos de código.
+        const fallback = fallbackLabel(args.role);
+        await ctx.db.insert("roles", {
+          key: args.role,
+          label: fallback.label,
+          description: fallback.description,
+          kind: "system",
+          grants,
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: actor._id,
+        });
+      }
+      return true;
+    },
+  ),
 });
 
 /** Valida el nombre visible de un rol y lo devuelve recortado. */
@@ -487,115 +533,142 @@ function validLabel(label: string): string {
  * Crea un rol personalizado a partir de una plantilla (otro rol). Devuelve
  * la clave generada a partir del nombre.
  */
-export const createRole = mutation({
-  args: {
-    label: v.string(),
-    description: v.optional(v.string()),
-    templateKey: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
-    const label = validLabel(args.label);
-    const key = slugify(label);
-    if (!key) {
-      throw new ConvexError("El nombre del rol debe contener letras o números.");
-    }
-    if (isSystemKey(key)) {
-      throw new ConvexError(
-        `«${key}» es una clave reservada del sistema: elige otro nombre.`,
-      );
-    }
-    if (await getRoleRow(ctx, key)) {
-      throw new ConvexError(
-        "Ya existe un rol con un nombre similar. Elige otro.",
-      );
-    }
+const createRoleArgs = {
+  label: v.string(),
+  description: v.optional(v.string()),
+  templateKey: v.optional(v.string()),
+};
 
-    let grants: Record<Capability, boolean>;
-    if (args.templateKey !== undefined) {
-      if (args.templateKey === ROLES.ADMIN) {
+export const createRole = mutation({
+  args: createRoleArgs,
+  handler: secureMutation(
+    {
+      capability: "configurePermissions",
+      identityMessage: PERMISSIONS_IDENTITY,
+      denyMessage: PERMISSIONS_DENY,
+    },
+    createRoleArgs,
+    async (ctx, args, actor) => {
+      const label = validLabel(args.label);
+      const key = slugify(label);
+      if (!key) {
+        throw new ConvexError("El nombre del rol debe contener letras o números.");
+      }
+      if (isSystemKey(key)) {
         throw new ConvexError(
-          "El administrador siempre tiene todos los permisos: elige otro rol de partida.",
+          `«${key}» es una clave reservada del sistema: elige otro nombre.`,
         );
       }
-      if (!(await roleExists(ctx, args.templateKey))) {
-        throw new ConvexError("El rol de partida ya no existe.");
+      if (await getRoleRow(ctx, key)) {
+        throw new ConvexError(
+          "Ya existe un rol con un nombre similar. Elige otro.",
+        );
       }
-      grants = await grantsForRole(ctx, args.templateKey);
-    } else {
-      grants = await grantsForRole(ctx, DEFAULT_ROLE);
-    }
 
-    const now = Date.now();
-    await ctx.db.insert("roles", {
-      key,
-      label,
-      description: args.description?.trim() ?? "",
-      kind: "custom",
-      grants,
-      createdAt: now,
-      updatedAt: now,
-      updatedBy: admin._id,
-    });
-    return key;
-  },
+      let grants: Record<Capability, boolean>;
+      if (args.templateKey !== undefined) {
+        if (args.templateKey === ROLES.ADMIN) {
+          throw new ConvexError(
+            "El administrador siempre tiene todos los permisos: elige otro rol de partida.",
+          );
+        }
+        if (!(await roleExists(ctx, args.templateKey))) {
+          throw new ConvexError("El rol de partida ya no existe.");
+        }
+        grants = await grantsForRole(ctx, args.templateKey);
+      } else {
+        grants = await grantsForRole(ctx, DEFAULT_ROLE);
+      }
+
+      const now = Date.now();
+      await ctx.db.insert("roles", {
+        key,
+        label,
+        description: args.description?.trim() ?? "",
+        kind: "custom",
+        grants,
+        createdAt: now,
+        updatedAt: now,
+        updatedBy: actor._id,
+      });
+      return key;
+    },
+  ),
 });
 
 /** Renombra un rol personalizado (la clave, que es la que se guarda, no cambia). */
+const updateRoleArgs = {
+  key: v.string(),
+  label: v.string(),
+  description: v.optional(v.string()),
+};
+
 export const updateRole = mutation({
-  args: {
-    key: v.string(),
-    label: v.string(),
-    description: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
-    if (isSystemKey(args.key)) {
-      throw new ConvexError(
-        "Los roles del sistema no se pueden renombrar.",
-      );
-    }
-    const row = await getRoleRow(ctx, args.key);
-    if (!row) throw new ConvexError("Ese rol ya no existe.");
-    const label = validLabel(args.label);
-    await ctx.db.patch(row._id, {
-      label,
-      // Argumento omitido = no tocar; cadena vacía = limpiar la descripción.
-      ...(args.description !== undefined
-        ? { description: args.description.trim() }
-        : {}),
-      updatedAt: Date.now(),
-      updatedBy: admin._id,
-    });
-    return true;
-  },
+  args: updateRoleArgs,
+  handler: secureMutation(
+    {
+      capability: "configurePermissions",
+      identityMessage: PERMISSIONS_IDENTITY,
+      denyMessage: PERMISSIONS_DENY,
+    },
+    updateRoleArgs,
+    async (ctx, args, actor) => {
+      if (isSystemKey(args.key)) {
+        throw new ConvexError(
+          "Los roles del sistema no se pueden renombrar.",
+        );
+      }
+      const row = await getRoleRow(ctx, args.key);
+      if (!row) throw new ConvexError("Ese rol ya no existe.");
+      const label = validLabel(args.label);
+      await ctx.db.patch(row._id, {
+        label,
+        // Argumento omitido = no tocar; cadena vacía = limpiar la descripción.
+        ...(args.description !== undefined
+          ? { description: args.description.trim() }
+          : {}),
+        updatedAt: Date.now(),
+        updatedBy: actor._id,
+      });
+      return true;
+    },
+  ),
 });
 
 /**
  * Borra un rol personalizado. Solo si nadie lo tiene asignado: primero hay
  * que reasignar a esas personas desde el módulo de usuarios.
  */
-export const deleteRole = mutation({
-  args: { key: v.string() },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    if (isSystemKey(args.key)) {
-      throw new ConvexError("Los roles del sistema no se pueden borrar.");
-    }
-    const row = await getRoleRow(ctx, args.key);
-    if (!row) throw new ConvexError("Ese rol ya no existe.");
+const deleteRoleArgs = { key: v.string() };
 
-    const users = await ctx.db.query("users").collect();
-    const assigned = users.filter((user) => user.role === args.key).length;
-    if (assigned > 0) {
-      throw new ConvexError(
-        `Hay ${assigned} ${assigned === 1 ? "persona" : "personas"} con este rol: ` +
-          "reasígnalas desde el módulo de usuarios antes de borrarlo.",
-      );
-    }
-    await ctx.db.delete(row._id);
-    return true;
-  },
+export const deleteRole = mutation({
+  args: deleteRoleArgs,
+  handler: secureMutation(
+    {
+      capability: "configurePermissions",
+      identityMessage: PERMISSIONS_IDENTITY,
+      denyMessage: PERMISSIONS_DENY,
+    },
+    deleteRoleArgs,
+    async (ctx, args) => {
+      if (isSystemKey(args.key)) {
+        throw new ConvexError("Los roles del sistema no se pueden borrar.");
+      }
+      const row = await getRoleRow(ctx, args.key);
+      if (!row) throw new ConvexError("Ese rol ya no existe.");
+
+      const users = await ctx.db.query("users").collect();
+      const assigned = users.filter((user) => user.role === args.key).length;
+      if (assigned > 0) {
+        throw new ConvexError(
+          `Hay ${assigned} ${assigned === 1 ? "persona" : "personas"} con este rol: ` +
+            "reasígnalas desde el módulo de usuarios antes de borrarlo.",
+        );
+      }
+      await ctx.db.delete(row._id);
+      return true;
+    },
+  ),
 });
 
 /** Catálogo de capacidades (etiquetas para pintar la matriz en el cliente). */
