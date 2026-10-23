@@ -1,5 +1,6 @@
 import { Siren } from "lucide-react";
 import { Link } from "react-router";
+import { prefetchTab } from "../content/router/lazyViews";
 import { getNavButtonClass, getNavPillClass } from "./helpers";
 import type { SidebarNavListProps } from "./types";
 
@@ -39,12 +40,18 @@ export function SidebarNavList({
             key={item.id}
             type="button"
             onClick={() => onSelectTab(item.id)}
+            // Con el ratón encima o el foco del teclado, el trozo de la vista
+            // empieza a bajar: al pulsar ya está en el navegador.
+            onMouseEnter={() => prefetchTab(item.id)}
+            onFocus={() => prefetchTab(item.id)}
             aria-current={active ? "page" : undefined}
             className={getNavButtonClass(active)}
           >
             <item.icon className="size-4 shrink-0" />
             <span className="flex-1 truncate">{item.label}</span>
-            {badge > 0 && <span className={getNavPillClass(active)}>{badge}</span>}
+            {badge > 0 && (
+              <span className={getNavPillClass(active)}>{badge}</span>
+            )}
           </button>
         );
       })}
