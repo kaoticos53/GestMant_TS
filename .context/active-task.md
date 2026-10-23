@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-WORK-ALERT-SETTINGS-CARD`
-- **Objetivo:** Fase 2 - Crear hook `useWorkAlertSettings`, subcomponentes UI `WorkAlertHeader`, `WorkAlertDaysField`, `WorkAlertRolesList` y barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-WORK-ALERT-SETTINGS-CARD`
+- **Objetivo:** Fase 3 - Orquestar `WorkAlertSettingsCard.tsx` delegando en `useWorkAlertSettings`, `WorkAlertHeader`, `WorkAlertDaysField` y `WorkAlertRolesList`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/workAlertSettings/useWorkAlertSettings.ts`
-  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertHeader.tsx`
-  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertDaysField.tsx`
-  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertRolesList.tsx`
-  - `src/pages/dashboard/settings/workAlertSettings/index.ts`
+  - `src/pages/dashboard/settings/WorkAlertSettingsCard.tsx`
 
 ---
 
@@ -21,7 +17,7 @@
 - [x] `workAlertSettings/components/WorkAlertDaysField.tsx`: campo numérico con validación.
 - [x] `workAlertSettings/components/WorkAlertRolesList.tsx`: lista de roles con switch y resumen.
 - [x] `workAlertSettings/index.ts`: barril unificado.
-- [ ] `settings/WorkAlertSettingsCard.tsx`: pendiente Fase 3.
+- [x] `settings/WorkAlertSettingsCard.tsx`: orquestador modular completado (~55 líneas).
 
 ---
 
@@ -34,7 +30,9 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+- **Estado:** Fase 3 completada - Commit atómico 3 listo.
+
+
 
 
 
