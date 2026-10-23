@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-BULK-ARCHIVE-CARD`
-- **Objetivo:** Fase 2 - Crear subcomponentes `BulkArchiveHeader`, `BulkArchiveActions`, `BulkArchiveConfirmDialog` y barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-BULK-ARCHIVE-CARD`
+- **Objetivo:** Fase 3 - Orquestar `BulkArchiveCard.tsx` delegando en `BulkArchiveHeader`, `BulkArchiveActions`, `BulkArchiveConfirmDialog` y `formatPendingDetail`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/bulkArchive/components/BulkArchiveHeader.tsx`
-  - `src/pages/dashboard/archive/components/bulkArchive/components/BulkArchiveActions.tsx`
-  - `src/pages/dashboard/archive/components/bulkArchive/components/BulkArchiveConfirmDialog.tsx`
-  - `src/pages/dashboard/archive/components/bulkArchive/index.ts`
+  - `src/pages/dashboard/archive/components/BulkArchiveCard.tsx`
 
 ---
 
@@ -19,7 +16,7 @@
 - [x] `bulkArchive/components/BulkArchiveActions.tsx`: botones de acción y ajustes.
 - [x] `bulkArchive/components/BulkArchiveConfirmDialog.tsx`: diálogo de confirmación accesible.
 - [x] `bulkArchive/index.ts`: barril unificado.
-- [ ] `archive/components/BulkArchiveCard.tsx`: pendiente Fase 3.
+- [x] `archive/components/BulkArchiveCard.tsx`: orquestador modular completado (~60 líneas).
 
 ---
 
@@ -32,7 +29,9 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+- **Estado:** Fase 3 completada - Commit atómico 3 listo.
+
+
 
 
 
