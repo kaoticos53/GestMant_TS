@@ -1,12 +1,14 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-WORK-ALERT-SETTINGS-CARD`
-- **Objetivo:** Fase 1 - Crear `types.ts`, `helpers.ts` y suite de pruebas unitarias `tests/workAlertSettingsCardHelpers.test.ts` para `WorkAlertSettingsCard.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-WORK-ALERT-SETTINGS-CARD`
+- **Objetivo:** Fase 2 - Crear hook `useWorkAlertSettings`, subcomponentes UI `WorkAlertHeader`, `WorkAlertDaysField`, `WorkAlertRolesList` y barril `index.ts`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/workAlertSettings/types.ts`
-  - `src/pages/dashboard/settings/workAlertSettings/helpers.ts`
-  - `tests/workAlertSettingsCardHelpers.test.ts`
+  - `src/pages/dashboard/settings/workAlertSettings/useWorkAlertSettings.ts`
+  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertHeader.tsx`
+  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertDaysField.tsx`
+  - `src/pages/dashboard/settings/workAlertSettings/components/WorkAlertRolesList.tsx`
+  - `src/pages/dashboard/settings/workAlertSettings/index.ts`
 
 ---
 
@@ -14,11 +16,11 @@
 - [x] `workAlertSettings/types.ts`: contratos de tipos para roles, ajustes y props.
 - [x] `workAlertSettings/helpers.ts`: funciones puras de validación de días, filtrado de audiencia y textos informativos.
 - [x] `tests/workAlertSettingsCardHelpers.test.ts`: suite de 16 pruebas unitarias para helpers.
-- [ ] `workAlertSettings/useWorkAlertSettings.ts`: pendiente Fase 2.
-- [ ] `workAlertSettings/components/WorkAlertHeader.tsx`: pendiente Fase 2.
-- [ ] `workAlertSettings/components/WorkAlertDaysField.tsx`: pendiente Fase 2.
-- [ ] `workAlertSettings/components/WorkAlertRolesList.tsx`: pendiente Fase 2.
-- [ ] `workAlertSettings/index.ts`: pendiente Fase 2.
+- [x] `workAlertSettings/useWorkAlertSettings.ts`: hook de consulta, seeding y guardado.
+- [x] `workAlertSettings/components/WorkAlertHeader.tsx`: cabecera descriptiva con icono BellRing.
+- [x] `workAlertSettings/components/WorkAlertDaysField.tsx`: campo numérico con validación.
+- [x] `workAlertSettings/components/WorkAlertRolesList.tsx`: lista de roles con switch y resumen.
+- [x] `workAlertSettings/index.ts`: barril unificado.
 - [ ] `settings/WorkAlertSettingsCard.tsx`: pendiente Fase 3.
 
 ---
@@ -26,11 +28,13 @@
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
 - [x] ¿TypeScript estricto? Sin `any`.
-- [x] ¿Tests unitarios y de seguridad? 16 tests de helpers y arquitectura aprobados.
+- [x] ¿Tests unitarios y de seguridad? Vitest ejecutado sin fallos.
 - [x] ¿Vocabulario Ubicuo respetado? Sí.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Fase 1 completada - Commit atómico 1 listo.
+- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+
+
 
