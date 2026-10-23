@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
+import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { PartFormDialog } from "./inventory/dialogs/PartFormDialog";
 import { StockDialog } from "./inventory/dialogs/StockDialog";
@@ -13,6 +15,8 @@ import {
 import { InventoryTable } from "./inventory/components/InventoryTable";
 import { InventoryDeleteDialog } from "./inventory/components/InventoryDeleteDialog";
 import { useInventoryState } from "./inventory/hooks/useInventoryState";
+import { partLabel as buildPartLabel } from "@/lib/labelGenerator";
+import type { PartDoc } from "./inventory/types";
 import type { InventoryViewProps } from "./inventory/types";
 
 export type { InventoryViewProps } from "./inventory/types";
@@ -23,6 +27,10 @@ export function InventoryView({
   initialSearch = "",
   initialLowStockOnly = false,
 }: InventoryViewProps) {
+  const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
+  const origin =
+    typeof window === "undefined" ? "" : window.location.origin;
+
   const {
     parts,
     equipment,
@@ -118,6 +126,7 @@ export function InventoryView({
             onEdit={(part) => setFormTarget({ part })}
             onStockAdjust={setStockTarget}
             onDelete={setDeleteTarget}
+            onPrintLabel={setLabelTarget}
           />
         )}
 
@@ -151,6 +160,11 @@ export function InventoryView({
         part={deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
+      />
+
+      <PrintLabelDialog
+        label={labelTarget === null ? null : buildPartLabel(labelTarget, origin)}
+        onClose={() => setLabelTarget(null)}
       />
     </div>
   );

@@ -64,7 +64,19 @@ export function useDashboardState() {
 
   // Configuración de módulos según permisos y navegación
   const navItems = buildNavItems({ can, adminOk, isGuest, canSeePurchasing });
-  const navigation = useDashboardNavigation(can, navItems);
+  // El QR de una etiqueta abre el panel con el código ya escrito en el buscador
+  // del módulo que toca: `?equipo=` lleva a los equipos y `?repuesto=` al
+  // almacén. Se lee una sola vez, al montar; después manda la navegación.
+  const [initialTarget] = useState(() => {
+    const equipment = searchParams.get("equipo")?.trim();
+    const part = searchParams.get("repuesto")?.trim();
+    if (equipment) {
+      return { tab: "equipment" as const, equipmentSearch: equipment };
+    }
+    if (part) return { tab: "inventory" as const, inventorySearch: part };
+    return {};
+  });
+  const navigation = useDashboardNavigation(can, navItems, initialTarget);
   const {
     activeTab,
     goToTab,

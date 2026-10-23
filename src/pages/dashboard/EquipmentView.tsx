@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
+import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
+import { equipmentLabel as buildEquipmentLabel } from "@/lib/labelGenerator";
 import { Plus } from "lucide-react";
 import {
   EquipmentEmptyState,
@@ -34,6 +37,12 @@ export function EquipmentView({
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
 }) {
+  const [labelTarget, setLabelTarget] = useState<
+    Parameters<typeof buildEquipmentLabel>[0] | null
+  >(null);
+  const origin =
+    typeof window === "undefined" ? "" : window.location.origin;
+
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const parts = useQuery(api.spareParts.list) ?? [];
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
@@ -134,6 +143,7 @@ export function EquipmentView({
             manualsOf={manualsOf}
             compatibleCount={compatibleCount}
             onViewDetail={openDetail}
+            onPrintLabel={setLabelTarget}
             onDuplicate={openDuplicateForm}
             onEdit={openEditForm}
             onDelete={setDeleteTarget}
@@ -177,6 +187,15 @@ export function EquipmentView({
         setManualDelete={setManualDelete}
         closeForm={closeForm}
         setDeleteTarget={setDeleteTarget}
+      />
+
+      <PrintLabelDialog
+        label={
+          labelTarget === null
+            ? null
+            : buildEquipmentLabel(labelTarget, origin)
+        }
+        onClose={() => setLabelTarget(null)}
       />
     </div>
   );

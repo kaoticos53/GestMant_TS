@@ -1,4 +1,11 @@
-import { Minus, Pencil, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  Minus,
+  Pencil,
+  Plus,
+  Printer,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -15,6 +22,12 @@ export interface PartRowProps {
   onEdit: (part: PartDoc) => void;
   onStockAdjust: (part: PartDoc) => void;
   onDelete: (part: PartDoc) => void;
+  /** Abre la etiqueta imprimible del repuesto. */
+  onPrintLabel: (part: PartDoc) => void;
+  /** Índice en la página, para que el virtualizador sepa qué fila mide. */
+  rowIndex?: number;
+  /** Referencia de la fila, para medirla cuando la tabla se virtualiza. */
+  rowRef?: (node: HTMLTableRowElement | null) => void;
 }
 
 export function PartRow({
@@ -25,12 +38,15 @@ export function PartRow({
   onEdit,
   onStockAdjust,
   onDelete,
+  onPrintLabel,
+  rowIndex,
+  rowRef,
 }: PartRowProps) {
   const state = stockState(part.stock, part.minStock);
   const meta = STOCK_META[state];
 
   return (
-    <TableRow className="hover:bg-muted/40">
+    <TableRow className="hover:bg-muted/40" data-index={rowIndex} ref={rowRef}>
       <TableCell className="max-w-[16rem]">
         <span className="block font-mono text-xs text-muted-foreground">
           {part.code}
@@ -88,61 +104,73 @@ export function PartRow({
           : "—"}
       </TableCell>
       <TableCell>
-        {canManage && (
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10"
-              onClick={() => onQuickAdjust(part, -1)}
-              disabled={part.stock <= 0}
-              aria-label={`Quitar una unidad de ${part.code}`}
-            >
-              <Minus className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10"
-              onClick={() => onQuickAdjust(part, 1)}
-              aria-label={`Añadir una unidad de ${part.code}`}
-            >
-              <Plus className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10"
-              onClick={() => onEdit(part)}
-              aria-label={`Editar ${part.code}`}
-            >
-              <Pencil className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10 text-muted-foreground hover:text-destructive"
-              onClick={() => onStockAdjust(part)}
-              aria-label={`Ajustar stock de ${part.code}`}
-            >
-              <SlidersHorizontal className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-10 text-muted-foreground hover:text-destructive"
-              onClick={() => onDelete(part)}
-              aria-label={`Borrar ${part.code}`}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-10 text-muted-foreground hover:text-foreground"
+            onClick={() => onPrintLabel(part)}
+            aria-label={`Imprimir la etiqueta de ${part.code}`}
+          >
+            <Printer className="size-4" />
+          </Button>
+          {canManage && (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10"
+                onClick={() => onQuickAdjust(part, -1)}
+                disabled={part.stock <= 0}
+                aria-label={`Quitar una unidad de ${part.code}`}
+              >
+                <Minus className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10"
+                onClick={() => onQuickAdjust(part, 1)}
+                aria-label={`Añadir una unidad de ${part.code}`}
+              >
+                <Plus className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10"
+                onClick={() => onEdit(part)}
+                aria-label={`Editar ${part.code}`}
+              >
+                <Pencil className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 text-muted-foreground hover:text-destructive"
+                onClick={() => onStockAdjust(part)}
+                aria-label={`Ajustar stock de ${part.code}`}
+              >
+                <SlidersHorizontal className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 text-muted-foreground hover:text-destructive"
+                onClick={() => onDelete(part)}
+                aria-label={`Borrar ${part.code}`}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

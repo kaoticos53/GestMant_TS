@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { equipmentLabel } from "@/lib/workshop";
-import { BookOpen, Copy, Eye, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Eye, Pencil, Printer, Trash2 } from "lucide-react";
 import type { EquipmentDoc } from "../types";
 
 interface EquipmentTableRowProps {
@@ -13,9 +13,14 @@ interface EquipmentTableRowProps {
   manualsCount: { assigned: number; byModel: number; total: number };
   compatibleCount: number;
   onViewDetail: (item: EquipmentDoc) => void;
+  onPrintLabel: (item: EquipmentDoc) => void;
   onDuplicate: (item: EquipmentDoc) => void;
   onEdit: (item: EquipmentDoc) => void;
   onDelete: (item: EquipmentDoc) => void;
+  /** Índice en la página, para que el virtualizador sepa qué fila mide. */
+  rowIndex?: number;
+  /** Referencia de la fila, para medirla cuando la tabla se virtualiza. */
+  rowRef?: (node: HTMLTableRowElement | null) => void;
 }
 
 /**
@@ -28,12 +33,15 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
   manualsCount,
   compatibleCount,
   onViewDetail,
+  onPrintLabel,
   onDuplicate,
   onEdit,
   onDelete,
+  rowIndex,
+  rowRef,
 }: EquipmentTableRowProps) {
   return (
-    <TableRow className="hover:bg-muted/40">
+    <TableRow className="hover:bg-muted/40" data-index={rowIndex} ref={rowRef}>
       <TableCell className="max-w-[18rem]">
         <span className="block font-mono text-xs text-muted-foreground">
           {item.code}
@@ -91,6 +99,17 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
             aria-label={`Ver detalle de ${item.model}`}
           >
             <Eye className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            onClick={() => onPrintLabel(item)}
+            title={`Imprimir la etiqueta de ${item.code ?? item.model}`}
+            aria-label={`Imprimir la etiqueta de ${item.code ?? item.model}`}
+          >
+            <Printer className="size-4" />
           </Button>
           {canManage && (
             <>

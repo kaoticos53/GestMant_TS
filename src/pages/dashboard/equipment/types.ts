@@ -93,7 +93,8 @@ export interface EquipmentTableProps {
   onSortChange: (
     sort: import("@/lib/tableSort").TableSort<EquipmentColumn> | null,
   ) => void;
-  areaRef: React.Ref<HTMLDivElement>;
+  /** La referencia que va en el área de la lista (`useRowsThatFit`). */
+  areaRef: (element: HTMLDivElement | null) => void;
   resetKey: number;
   visible: EquipmentDoc[];
   canManage: boolean;
@@ -104,6 +105,8 @@ export interface EquipmentTableProps {
   };
   compatibleCount: (item: EquipmentDoc) => number;
   onViewDetail: (item: EquipmentDoc) => void;
+  /** Abre la etiqueta imprimible del equipo. */
+  onPrintLabel: (item: EquipmentDoc) => void;
   onDuplicate: (item: EquipmentDoc) => void;
   onEdit: (item: EquipmentDoc) => void;
   onDelete: (item: EquipmentDoc) => void;

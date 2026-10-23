@@ -21,8 +21,19 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
 export function useDashboardNavigation(
   can: (capability: Capability) => boolean,
   navItems: NavItem[],
+  /**
+   * Dónde empieza el panel. Lo usan los enlaces que traen una búsqueda puesta
+   * —el QR de una etiqueta llega con `?equipo=…`—: se aplica una sola vez, al
+   * montar, para que moverse después por el panel no vuelva a abrir el
+   * buscador. Sin él, se entra por la cola de incidencias como siempre.
+   */
+  initialTarget: Partial<NavigationTarget> = {},
 ) {
-  const [target, setTarget] = useState<NavigationTarget>(INITIAL_NAVIGATION_TARGET);
+  const [target, setTarget] = useState<NavigationTarget>(() => ({
+    ...INITIAL_NAVIGATION_TARGET,
+    ...initialTarget,
+    timestamp: Date.now(),
+  }));
   const [viewKeys, setViewKeys] = useState({
     incidents: 0,
     requests: 0,
