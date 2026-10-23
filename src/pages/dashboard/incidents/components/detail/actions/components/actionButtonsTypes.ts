@@ -1,4 +1,5 @@
 import type { Id } from "@/convex/_generated/dataModel";
+import type { IncidentDoc } from "../../../../types";
 import type { AssignTargetMode } from "../types";
 
 export interface IncidentAssignmentActionsProps {
@@ -12,6 +13,8 @@ export interface IncidentAssignmentActionsProps {
 }
 
 export interface IncidentWorkflowActionsProps {
+  /** La ficha: las reglas de autorización se preguntan por ella. */
+  incident: IncidentDoc;
   showVerify: boolean;
   showCloseResolved: boolean;
   canCoordinate: boolean;

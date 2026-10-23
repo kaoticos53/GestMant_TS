@@ -58,13 +58,16 @@ export function IncidentActionsBar(props: IncidentActionsBarProps) {
             preparingPdf={exportState.preparingPdf}
             preparingPackage={exportState.preparingPackage}
             onDownloadReport={exportState.handleDownloadReport}
-            onDownloadReportPdf={() => void exportState.handleDownloadReportPdf()}
+            onDownloadReportPdf={() =>
+              void exportState.handleDownloadReportPdf()
+            }
             onDownloadReportPackage={() =>
               void exportState.handleDownloadReportPackage()
             }
           />
 
           <IncidentActionButtons
+            incident={incident}
             status={incident.status}
             currentUserId={currentUserId}
             canWork={canWork}

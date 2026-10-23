@@ -37,11 +37,7 @@ export function IncidentLogisticsActions({
       )}
 
       {showReturnExternal && (
-        <Button
-          type="button"
-          className="gap-2"
-          onClick={onOpenReceiveExternal}
-        >
+        <Button type="button" className="gap-2" onClick={onOpenReceiveExternal}>
           <Truck className="size-4" />
           Registrar retorno
         </Button>

@@ -26,8 +26,6 @@ export function IncidentActionsFootnote({
   if (!footnote) return null;
 
   return (
-    <p className="mt-2 text-right text-xs text-muted-foreground">
-      {footnote}
-    </p>
+    <p className="mt-2 text-right text-xs text-muted-foreground">{footnote}</p>
   );
 }

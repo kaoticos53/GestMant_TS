@@ -58,6 +58,10 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       "getAdminActor",
       "auth.getUserId",
       "registerIncidentIntake", // Formulario público de intake
+      // La puerta central (`_auth/secureMutation`): exige miembro del taller y la
+      // capacidad declarada, y apunta la denegación antes de rechazar. Se nombra
+      // el envoltorio, no un `require` suelto, porque es él quien decide.
+      "secureMutation",
     ];
 
     test("ninguna mutación pública carece de comprobación de identidad o sesión", () => {
@@ -137,6 +141,24 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
         "Se encontraron mutaciones públicas sin comprobación de identidad (getAuthUserId / requireUser / requireAdmin):\n\n" +
           informe,
       ).toBe("");
+    });
+
+    test("la puerta central exige identidad, capacidad y política de ficha", () => {
+      // Las mutaciones que delegan en `secureMutation` ya no llevan su propio
+      // `requireUser` delante; la comprobación tiene que estar aquí.
+      const codigo = readFileSync(
+        join(DIR_BACKEND, "_auth", "secureMutation.ts"),
+        "utf8",
+      );
+
+      expect(codigo).toContain("memberOrNull");
+      expect(codigo).toContain("hasCapability");
+      expect(codigo).toContain("hasAnyCapability");
+      expect(codigo).toContain("authorize");
+      expect(codigo).toContain("ConvexError");
+      // Y no finge auditar la denegación dentro de la mutación: Convex revierte
+      // la transacción al lanzar, así que ese registro nunca persistiría.
+      expect(codigo).not.toContain("logSecurityEvent");
     });
   });
 

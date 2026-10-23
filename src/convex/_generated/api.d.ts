@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _auth_secureMutation from "../_auth/secureMutation.js";
 import type * as _incidents_documents from "../_incidents/documents.js";
 import type * as _incidents_helpers from "../_incidents/helpers.js";
 import type * as _incidents_notes from "../_incidents/notes.js";
@@ -68,6 +69,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_auth/secureMutation": typeof _auth_secureMutation;
   "_incidents/documents": typeof _incidents_documents;
   "_incidents/helpers": typeof _incidents_helpers;
   "_incidents/notes": typeof _incidents_notes;

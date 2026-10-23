@@ -54,10 +54,7 @@ export function IncidentExportDropdown({
         <DropdownMenuItem onSelect={onDownloadReport}>
           Markdown, para leerlo o editarlo
         </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={isPreparing}
-          onSelect={onDownloadReportPdf}
-        >
+        <DropdownMenuItem disabled={isPreparing} onSelect={onDownloadReportPdf}>
           {preparingPdf ? "Preparando PDF…" : "PDF, listo para entregar"}
         </DropdownMenuItem>
         <DropdownMenuItem

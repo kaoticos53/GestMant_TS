@@ -1,11 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { QueryCtx, mutation, query } from "./_generated/server";
-import {
-  hasAnyCapability,
-  hasCapability,
-  memberOrNull,
-} from "./permissions";
+import { secureMutation } from "./_auth/secureMutation";
+import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 
 /** El inventario de equipos requiere sesión iniciada. */
@@ -25,18 +22,6 @@ async function requireUser(ctx: QueryCtx) {
   return userId;
 }
 
-/** Escrituras en el inventario: capacidad «manageEquipment» (admin siempre). */
-async function requireManager(ctx: QueryCtx) {
-  const userId = await requireUser(ctx);
-  const user = await ctx.db.get(userId);
-  if (!user || !(await hasCapability(ctx, user, "manageEquipment"))) {
-    throw new ConvexError(
-      "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
-    );
-  }
-  return userId;
-}
-
 /**
  * Inventario completo, ordenado por modelo. Se lee desde el módulo de equipos,
  * desde el formulario de peticiones (equipo afectado) y desde la verificación
@@ -51,7 +36,7 @@ export const list = query({
   handler: async (ctx) => {
     // Invitado o cuenta de baja: vacío en vez de error. El panel pide esta lista
     // al montar y sus consumidores degradan a «sin opciones»; las escrituras
-    // siguen exigiendo una cuenta con `requireManager`.
+    // pasan por `secureMutation`, que exige identidad y «manageEquipment».
     const me = await memberOrNull(ctx);
     if (
       !me ||
@@ -165,7 +150,9 @@ async function codeClash(ctx: QueryCtx, code: string, excludeId?: string) {
  * Genera el siguiente código de inventario libre y único para un equipo («EQ-001», «EQ-002»...).
  * Inspecciona los equipos existentes, calcula el correlativo más alto y busca el primer código libre.
  */
-export async function generateFreeEquipmentCode(ctx: QueryCtx): Promise<string> {
+export async function generateFreeEquipmentCode(
+  ctx: QueryCtx,
+): Promise<string> {
   const all = await ctx.db.query("equipment").collect();
   let highest = 0;
   for (const item of all) {
@@ -211,77 +198,86 @@ export const nextCode = query({
 
 export const create = mutation({
   args: equipmentArgs,
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    let code = args.code?.trim().toUpperCase() || "";
-    if (!code) {
-      code = await generateFreeEquipmentCode(ctx);
-    }
-    validate(code, args.name, args.model);
-    validateDates(
-      args.purchaseDate,
-      args.decommissionDate,
-      args.warrantyEndDate,
-    );
-    validateInterval(args.maintenanceIntervalDays);
-    if (await codeClash(ctx, code)) {
-      throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
-    }
-
-    // Resolver modelId si no vino explícito, asegurando su existencia en equipmentModels
-    let modelId = args.modelId;
-    if (!modelId) {
-      const found = await ctx.db
-        .query("equipmentModels")
-        .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
-        .first();
-      if (found) {
-        modelId = found._id;
-      } else {
-        modelId = await ctx.db.insert("equipmentModels", {
-          model: args.model.trim(),
-          name: args.name.trim(),
-          ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      denyMessage:
+        "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    equipmentArgs,
+    async (ctx, args) => {
+      let code = args.code?.trim().toUpperCase() || "";
+      if (!code) {
+        code = await generateFreeEquipmentCode(ctx);
       }
-    }
+      validate(code, args.name, args.model);
+      validateDates(
+        args.purchaseDate,
+        args.decommissionDate,
+        args.warrantyEndDate,
+      );
+      validateInterval(args.maintenanceIntervalDays);
+      if (await codeClash(ctx, code)) {
+        throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
+      }
 
-    const now = Date.now();
-    // La descripción es la nota del equipo y se escribe con formato: se guarda
-    // su documento tal cual (y sin restos cuando se queda vacía). Una nota de
-    // antes, escrita en texto plano, se guarda igual que estaba.
-    const description = richDocToStore(args.description);
-    const id = await ctx.db.insert("equipment", {
-      code,
-      ...(modelId ? { modelId } : {}),
-      ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
-      name: args.name.trim(),
-      model: args.model.trim(),
-      ...(args.location?.trim() ? { location: args.location.trim() } : {}),
-      ...(description ? { description } : {}),
-      ...(args.serialNumber?.trim()
-        ? { serialNumber: args.serialNumber.trim() }
-        : {}),
-      ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
-      ...(args.purchaseDate !== undefined
-        ? { purchaseDate: args.purchaseDate }
-        : {}),
-      ...(args.decommissionDate !== undefined
-        ? { decommissionDate: args.decommissionDate }
-        : {}),
-      ...(args.warrantyEndDate !== undefined
-        ? { warrantyEndDate: args.warrantyEndDate }
-        : {}),
-      ...(args.maintenanceIntervalDays !== undefined
-        ? { maintenanceIntervalDays: args.maintenanceIntervalDays }
-        : {}),
-      createdAt: now,
-      updatedAt: now,
-    });
-    return id;
-  },
+      // Resolver modelId si no vino explícito, asegurando su existencia en equipmentModels
+      let modelId = args.modelId;
+      if (!modelId) {
+        const found = await ctx.db
+          .query("equipmentModels")
+          .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
+          .first();
+        if (found) {
+          modelId = found._id;
+        } else {
+          modelId = await ctx.db.insert("equipmentModels", {
+            model: args.model.trim(),
+            name: args.name.trim(),
+            ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+
+      const now = Date.now();
+      // La descripción es la nota del equipo y se escribe con formato: se guarda
+      // su documento tal cual (y sin restos cuando se queda vacía). Una nota de
+      // antes, escrita en texto plano, se guarda igual que estaba.
+      const description = richDocToStore(args.description);
+      const id = await ctx.db.insert("equipment", {
+        code,
+        ...(modelId ? { modelId } : {}),
+        ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
+        name: args.name.trim(),
+        model: args.model.trim(),
+        ...(args.location?.trim() ? { location: args.location.trim() } : {}),
+        ...(description ? { description } : {}),
+        ...(args.serialNumber?.trim()
+          ? { serialNumber: args.serialNumber.trim() }
+          : {}),
+        ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
+        ...(args.purchaseDate !== undefined
+          ? { purchaseDate: args.purchaseDate }
+          : {}),
+        ...(args.decommissionDate !== undefined
+          ? { decommissionDate: args.decommissionDate }
+          : {}),
+        ...(args.warrantyEndDate !== undefined
+          ? { warrantyEndDate: args.warrantyEndDate }
+          : {}),
+        ...(args.maintenanceIntervalDays !== undefined
+          ? { maintenanceIntervalDays: args.maintenanceIntervalDays }
+          : {}),
+        createdAt: now,
+        updatedAt: now,
+      });
+      return id;
+    },
+  ),
 });
 
 export const update = mutation({
@@ -289,62 +285,71 @@ export const update = mutation({
     id: v.id("equipment"),
     ...equipmentArgs,
   },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const item = await ctx.db.get(args.id);
-    if (!item) throw new ConvexError("El equipo ya no existe.");
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      denyMessage:
+        "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    { ...equipmentArgs, id: v.id("equipment") },
+    async (ctx, args) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) throw new ConvexError("El equipo ya no existe.");
 
-    const code = args.code?.trim().toUpperCase() || "";
-    validate(code, args.name, args.model);
-    validateDates(
-      args.purchaseDate,
-      args.decommissionDate,
-      args.warrantyEndDate,
-    );
-    validateInterval(args.maintenanceIntervalDays);
-    if (await codeClash(ctx, code, args.id)) {
-      throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
-    }
-
-    let modelId = args.modelId ?? item.modelId;
-    if (!modelId) {
-      const found = await ctx.db
-        .query("equipmentModels")
-        .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
-        .first();
-      if (found) {
-        modelId = found._id;
-      } else {
-        modelId = await ctx.db.insert("equipmentModels", {
-          model: args.model.trim(),
-          name: args.name.trim(),
-          ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        });
+      const code = args.code?.trim().toUpperCase() || "";
+      validate(code, args.name, args.model);
+      validateDates(
+        args.purchaseDate,
+        args.decommissionDate,
+        args.warrantyEndDate,
+      );
+      validateInterval(args.maintenanceIntervalDays);
+      if (await codeClash(ctx, code, args.id)) {
+        throw new ConvexError(`Ya existe un equipo con el código ${code}.`);
       }
-    }
 
-    await ctx.db.patch(args.id, {
-      code,
-      modelId: modelId || undefined,
-      brand: args.brand?.trim() || undefined,
-      name: args.name.trim(),
-      model: args.model.trim(),
-      location: args.location?.trim() || undefined,
-      // `undefined` aquí borra la nota: una descripción vacía deja el equipo
-      // sin ella, y el documento del editor se guarda tal cual llega.
-      description: richDocToStore(args.description),
-      serialNumber: args.serialNumber?.trim() || undefined,
-      supplier: args.supplier?.trim() || undefined,
-      // `undefined` en patch elimina el campo: así se borran fechas vacías
-      purchaseDate: args.purchaseDate,
-      decommissionDate: args.decommissionDate,
-      warrantyEndDate: args.warrantyEndDate,
-      maintenanceIntervalDays: args.maintenanceIntervalDays,
-      updatedAt: Date.now(),
-    });
-  },
+      let modelId = args.modelId ?? item.modelId;
+      if (!modelId) {
+        const found = await ctx.db
+          .query("equipmentModels")
+          .withIndex("by_model", (q) => q.eq("model", args.model.trim()))
+          .first();
+        if (found) {
+          modelId = found._id;
+        } else {
+          modelId = await ctx.db.insert("equipmentModels", {
+            model: args.model.trim(),
+            name: args.name.trim(),
+            ...(args.brand?.trim() ? { brand: args.brand.trim() } : {}),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+
+      await ctx.db.patch(args.id, {
+        code,
+        modelId: modelId || undefined,
+        brand: args.brand?.trim() || undefined,
+        name: args.name.trim(),
+        model: args.model.trim(),
+        location: args.location?.trim() || undefined,
+        // `undefined` aquí borra la nota: una descripción vacía deja el equipo
+        // sin ella, y el documento del editor se guarda tal cual llega.
+        description: richDocToStore(args.description),
+        serialNumber: args.serialNumber?.trim() || undefined,
+        supplier: args.supplier?.trim() || undefined,
+        // `undefined` en patch elimina el campo: así se borran fechas vacías
+        purchaseDate: args.purchaseDate,
+        decommissionDate: args.decommissionDate,
+        warrantyEndDate: args.warrantyEndDate,
+        maintenanceIntervalDays: args.maintenanceIntervalDays,
+        updatedAt: Date.now(),
+      });
+    },
+  ),
 });
 
 /**
@@ -354,32 +359,41 @@ export const update = mutation({
  */
 export const remove = mutation({
   args: { id: v.id("equipment") },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const item = await ctx.db.get(args.id);
-    if (!item) throw new ConvexError("El equipo ya no existe.");
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      denyMessage:
+        "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    { id: v.id("equipment") },
+    async (ctx, args) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) throw new ConvexError("El equipo ya no existe.");
 
-    const requests = await ctx.db.query("partRequests").collect();
-    for (const request of requests) {
-      if (request.equipmentId === args.id) {
-        await ctx.db.patch(request._id, { equipmentId: undefined });
+      const requests = await ctx.db.query("partRequests").collect();
+      for (const request of requests) {
+        if (request.equipmentId === args.id) {
+          await ctx.db.patch(request._id, { equipmentId: undefined });
+        }
       }
-    }
 
-    // Los manuales del equipo no se borran con él: un manual es documentación
-    // del modelo y sigue valiendo para los demás equipos, así que se quedan
-    // sin equipo asignado y con su marca y modelo, que es su clasificación.
-    const manuals = await ctx.db
-      .query("manuals")
-      .withIndex("by_equipment", (q) => q.eq("equipmentId", args.id))
-      .collect();
-    for (const manual of manuals) {
-      await ctx.db.patch(manual._id, {
-        equipmentId: undefined,
-        updatedAt: Date.now(),
-      });
-    }
+      // Los manuales del equipo no se borran con él: un manual es documentación
+      // del modelo y sigue valiendo para los demás equipos, así que se quedan
+      // sin equipo asignado y con su marca y modelo, que es su clasificación.
+      const manuals = await ctx.db
+        .query("manuals")
+        .withIndex("by_equipment", (q) => q.eq("equipmentId", args.id))
+        .collect();
+      for (const manual of manuals) {
+        await ctx.db.patch(manual._id, {
+          equipmentId: undefined,
+          updatedAt: Date.now(),
+        });
+      }
 
-    await ctx.db.delete(args.id);
-  },
+      await ctx.db.delete(args.id);
+    },
+  ),
 });

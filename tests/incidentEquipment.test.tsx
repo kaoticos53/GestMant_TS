@@ -43,9 +43,11 @@ vi.mock("convex/react", async () => {
   };
 });
 
+import { AbilityProvider } from "@casl/react";
 import { MemoryRouter } from "react-router";
 
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { defineAbilityFor } from "@/lib/abilities";
 import { IncidentsView } from "@/pages/dashboard/IncidentsView";
 
 const TECNICO = "user-tec" as Id<"users">;
@@ -147,12 +149,21 @@ async function abrirFicha(
 ) {
   // La cola que va a leer la vista es la que se le sirve al backend de mentira.
   COLA.incidents = incidents;
+  // Los botones de la ficha preguntan por permisos (`<Can>`): fuera del panel no
+  // hay `AbilityProvider` al que preguntar, así que se le da el de un técnico
+  // que coordina, que es el caso que esta prueba ejercita.
+  const ability = defineAbilityFor(
+    { id: currentUserId ?? TECNICO, role: "technician" },
+    { manageIncidents: true },
+  );
   await act(async () => {
     // La cola trae sus enlaces al formulario público: sin router no se pinta
     root.render(
-      <MemoryRouter>
-        <IncidentsView currentUserId={currentUserId} />
-      </MemoryRouter>,
+      <AbilityProvider value={ability}>
+        <MemoryRouter>
+          <IncidentsView currentUserId={currentUserId} />
+        </MemoryRouter>
+      </AbilityProvider>,
     );
   });
   await settle();

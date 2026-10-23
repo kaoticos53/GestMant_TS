@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import type { Id } from "@/convex/_generated/dataModel";
+import type { IncidentDoc } from "../../../../types";
 import type { IncidentStatus } from "@/lib/workshop";
 import { computeIncidentActionStates } from "../helpers";
 import type { AssignTargetMode } from "../types";
@@ -9,6 +10,8 @@ import { IncidentLogisticsActions } from "./IncidentLogisticsActions";
 import { IncidentWorkflowActions } from "./IncidentWorkflowActions";
 
 export interface IncidentActionButtonsProps {
+  /** La ficha a la que se refieren los botones. */
+  incident: IncidentDoc;
   status: IncidentStatus;
   currentUserId: Id<"users"> | null;
   canWork: boolean;
@@ -29,6 +32,7 @@ export interface IncidentActionButtonsProps {
 }
 
 export function IncidentActionButtons({
+  incident,
   status,
   currentUserId,
   canWork,
@@ -71,6 +75,7 @@ export function IncidentActionButtons({
       />
 
       <IncidentWorkflowActions
+        incident={incident}
         showVerify={states.showVerify}
         showCloseResolved={states.showCloseResolved}
         canCoordinate={canCoordinate}
