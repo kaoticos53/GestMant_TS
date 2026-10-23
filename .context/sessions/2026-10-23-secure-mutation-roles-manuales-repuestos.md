@@ -54,4 +54,15 @@ Cerrar el tercer bloque de la deuda de la fase 4: migrar a `secureMutation` las 
 - [ ] Solo quedan con guardas locales las mutaciones que **no pueden** usar la puerta: acciones (`members.createUser`, `members.setActive`, `manuals.verifyManualPdf`, `workshopReset.resetWorkshop`), internas y `members.ensureRole` (necesita dejar entrar a la sesión anónima).
 - [ ] El resto de módulos ya migrados pueden adoptar la forma de función de `identityMessage` si se quiere recuperar la distinción entre invitado y cuenta de baja (ver el traspaso anterior).
 - [ ] Ampliar `<Can>` a peticiones y compras (la UI aún solo lo usa en el flujo de incidencias).
-- ⚠️ Los cambios están **sin commitear** en el árbol de trabajo.
+- ✅ Los cambios se commitearon en seis pasos: `74e2c06` (puerta y roles), `4408cf0` (modelos), `f68057a` (repuestos), `c40a40c` (manuales), `500cc2b` (vaciado) y `3f40866` (docs).
+
+---
+
+## 6. Seguimiento: el aviso de cuenta dada de baja vuelve a todos los módulos
+
+La puerta solo diferenciaba el motivo en los módulos nuevos. Se extendió a los ya migrados con `identityNotice(general, inactive?)`, un ayudante de `_auth/secureMutation` que devuelve el aviso general salvo para `inactiva`, que devuelve «Esta cuenta ha sido dada de baja o no está activa.».
+
+- **Archivos:** los doce módulos del primer y segundo bloque (incidencias, notas, documentos, papeleras, peticiones, compras, equipos, usuarios, mensajería y catálogos). Cada `identityMessage: "…"` pasó a `identityMessage: identityNotice("…")`; ningún aviso general cambió.
+- **El ayudante resuelve la constante al llamar, no al construirse:** hay ciclos de importación (catálogos → esquema → catálogos) y leer la constante en el valor por defecto lanzaba un `ReferenceError` al cargar el módulo.
+- **Pruebas nuevas:** `identityNotice` separa los tres motivos y admite un texto de baja propio; y una petición de repuesto con la cuenta de baja responde «dada de baja» y no «iniciar sesión».
+- **Verificación:** `tsc -b` limpio, lint 0 errores, suite completa en verde (231 archivos, 2628 pruebas) y build correcto.
