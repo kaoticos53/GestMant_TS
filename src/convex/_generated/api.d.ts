@@ -30,6 +30,7 @@ import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as equipment from "../equipment.js";
 import type * as equipmentModels from "../equipmentModels.js";
+import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as incidentIntake from "../incidentIntake.js";
 import type * as incidentMail from "../incidentMail.js";
@@ -89,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   equipment: typeof equipment;
   equipmentModels: typeof equipmentModels;
+  health: typeof health;
   http: typeof http;
   incidentIntake: typeof incidentIntake;
   incidentMail: typeof incidentMail;

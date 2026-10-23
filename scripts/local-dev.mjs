@@ -295,6 +295,20 @@ async function httpStatus(url, timeoutMs = 2500) {
   }
 }
 
+/** `fetch` con techo de tiempo y cuerpo JSON: lo que necesita una sonda de salud. */
+async function httpJson(url, timeoutMs = 2500) {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: "manual",
+    });
+    const body = await response.json().catch(() => null);
+    return { status: response.status, body };
+  } catch {
+    return null;
+  }
+}
+
 /** Espera acotada: reintenta `probe` hasta que devuelva algo o se agote el tiempo. */
 async function waitFor(probe, { timeoutMs = 120000, intervalMs = 1000 } = {}) {
   const deadline = Date.now() + timeoutMs;
@@ -1757,6 +1771,27 @@ async function runChecks() {
       );
     }
     return "sonda sobre incidents:list correcta";
+  });
+
+  // Las sondas del taller, por el mismo camino que las mira un contenedor o un
+  // proxy: sin sesión y por las acciones HTTP (el 3211, no el 3210 de la API).
+  // `healthz` dice que el proceso atiende; `readyz` que además puede leer la
+  // base, que es lo único que se cae sin avisar y deja la app inservible.
+  await check("health", "Sondas `/healthz` y `/readyz` responden", async () => {
+    for (const [path, expected] of [
+      ["healthz", "healthy"],
+      ["readyz", "ready"],
+    ]) {
+      const probe = await httpJson(`${ACTIONS_URL}/${path}`);
+      if (probe === null) throw new Error(`/${path}: sin respuesta`);
+      if (probe.status !== 200) {
+        throw new Error(`/${path}: HTTP ${probe.status}`);
+      }
+      if (probe.body?.status !== expected) {
+        throw new Error(`/${path}: respuesta inesperada`);
+      }
+    }
+    return "HTTP 200 · 2 sondas";
   });
 
   // Sin observador, las funciones que hay desplegadas siguen valiendo, pero

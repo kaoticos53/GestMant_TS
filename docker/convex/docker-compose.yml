@@ -64,9 +64,21 @@ services:
       - S3_STORAGE_SEARCH_BUCKET
       - S3_STORAGE_SNAPSHOT_IMPORTS_BUCKET
     healthcheck:
+      # Lo que se mira aquí es que el **contenedor** esté vivo, y eso se
+      # pregunta al backend, que existe antes de que haya funciones desplegadas
+      # (`/version` es suyo y no del código de la app).
+      #
+      # Las sondas del taller —`/healthz` y `/readyz`— las sirve el código ya
+      # desplegado, en el *site origin* (`http://127.0.0.1:3211`), no en el
+      # 3210: usarlas aquí dejaría el contenedor «unhealthy» hasta que el CLI
+      # subiera las funciones, y `dashboard` y el propio arranque no llegarían a
+      # esperar a un backend que sí está bien. Para Nginx, Proxmox o un monitor
+      # externo, la sonda es `curl -f http://127.0.0.1:3211/healthz`.
       test: curl -f http://localhost:3210/version
       interval: 5s
+      timeout: 3s
       start_period: 10s
+      retries: 5
 
   dashboard:
     image: ghcr.io/get-convex/convex-dashboard:latest
