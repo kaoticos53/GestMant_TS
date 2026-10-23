@@ -44,6 +44,21 @@ afterEach(async () => {
   document.body.innerHTML = "";
 });
 
+/**
+ * El editor llega en su propio trozo (ver `RichTextEditor`): montarlo es pedir
+ * el trozo y esperar a que esté, no a que pasen unos turnos. Se espera a que el
+ * hueco de carga desaparezca.
+ */
+async function waitForEditor(): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (!document.querySelector('[aria-busy="true"]')) return;
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  throw new Error("el editor no ha terminado de cargarse");
+}
+
 async function mount(node: ReactNode): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -52,6 +67,7 @@ async function mount(node: ReactNode): Promise<HTMLElement> {
   await act(async () => {
     root.render(<>{node}</>);
   });
+  await waitForEditor();
   await settle();
   return container;
 }
