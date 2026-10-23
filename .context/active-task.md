@@ -1,13 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-ARCHIVE-LIST-SECTION`
-- **Objetivo:** Fase 2 - Crear subcomponentes `ArchiveEmptyState`, `ArchiveEntryCard`, `ArchiveDateSection` y barril `list/index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-ARCHIVE-LIST-SECTION`
+- **Objetivo:** Fase 3 - Reducir y orquestar limpiamente `ArchiveListSection.tsx` componiendo `ArchiveEmptyState`, `ArchiveDateSection` y `TablePagination`, reduciendo el archivo de 205 a ~60 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/archive/components/list/ArchiveEmptyState.tsx`
-  - `src/pages/dashboard/archive/components/list/ArchiveEntryCard.tsx`
-  - `src/pages/dashboard/archive/components/list/ArchiveDateSection.tsx`
-  - `src/pages/dashboard/archive/components/list/index.ts`
+  - `src/pages/dashboard/archive/components/ArchiveListSection.tsx`
 
 ---
 
@@ -19,7 +16,7 @@
 - [x] `archive/components/list/ArchiveEntryCard.tsx`: tarjeta individual de elemento archivado.
 - [x] `archive/components/list/ArchiveDateSection.tsx`: sección agrupada cronológicamente con sticky header.
 - [x] `archive/components/list/index.ts`: barril unificado.
-- [ ] `archive/components/ArchiveListSection.tsx`: pendiente Fase 3.
+- [ ] `archive/components/ArchiveListSection.tsx`: orquestación de alto nivel limpia.
 
 ---
 
@@ -32,4 +29,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
