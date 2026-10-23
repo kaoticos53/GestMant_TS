@@ -1,43 +1,23 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
-import {
-  hasAnyCapability,
-  hasCapability,
-  memberOrNull,
-} from "./permissions";
+import { secureMutation } from "./_auth/secureMutation";
+import type { IdentityIssue } from "./permissions";
+import { hasAnyCapability, memberOrNull } from "./permissions";
 
-/** Toda la gestión de repuestos requiere sesión iniciada. */
-async function requireUser(ctx: QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) {
-    throw new ConvexError("Debes iniciar sesión para gestionar los repuestos.");
-  }
-  const user = await ctx.db.get(userId);
-  if (!user || user.active === false || user.isAnonymous === true) {
-    throw new ConvexError(
-      user?.active === false
-        ? "Esta cuenta ha sido dada de baja o no está activa."
-        : "Debes iniciar sesión con una cuenta registrada para gestionar los repuestos.",
-    );
-  }
-  return userId;
-}
+/** Lo que se le dice a quien no puede tocar el catálogo. */
+const PART_DENY =
+  "No tienes permisos para gestionar el catálogo. Revisa la configuración de tu rol con el administrador.";
 
-/** Escrituras en el catálogo: capacidad «manageInventory» (admin siempre). */
-async function requireManager(ctx: QueryCtx) {
-  const userId = await requireUser(ctx);
-  const user = await ctx.db.get(userId);
-  if (!user || !(await hasCapability(ctx, user, "manageInventory"))) {
-    throw new ConvexError(
-      "No tienes permisos para gestionar el catálogo. Revisa la configuración de tu rol con el administrador.",
-    );
-  }
-  return userId;
-}
+/** El aviso de quien no ha entrado, según lo que le pase a su sesión. */
+const PART_IDENTITY = (issue: IdentityIssue): string =>
+  issue === "anonima"
+    ? "Debes iniciar sesión con una cuenta registrada para gestionar los repuestos."
+    : issue === "inactiva"
+      ? "Esta cuenta ha sido dada de baja o no está activa."
+      : "Debes iniciar sesión para gestionar los repuestos.";
 
 /** Valida que los equipos existan y devuelve sus ids. */
 async function compatibleIds(
@@ -109,7 +89,7 @@ export const list = query({
   handler: async (ctx) => {
     // Invitado o cuenta de baja: vacío en vez de error. El panel pide esta lista
     // al montar, así que lanzar aquí rompía la entrada como invitado; las
-    // escrituras siguen exigiendo una cuenta con `requireManager`.
+    // escrituras siguen exigiendo una cuenta con `manageInventory`.
     const me = await memberOrNull(ctx);
     if (
       !me ||
@@ -196,166 +176,202 @@ export const paginatedList = query({
   },
 });
 
+const createPartArgs = {
+  code: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  category: v.string(),
+  unit: v.string(),
+  stock: v.number(),
+  minStock: v.number(),
+  location: v.optional(v.string()),
+  supplier: v.optional(v.string()),
+  partNumber: v.optional(v.string()),
+  unitPrice: v.optional(v.number()),
+  purchaseUrl: v.optional(v.string()),
+  compatibleWith: v.optional(v.array(v.id("equipment"))),
+  compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
+};
+
 export const create = mutation({
-  args: {
-    code: v.string(),
-    name: v.string(),
-    description: v.optional(v.string()),
-    category: v.string(),
-    unit: v.string(),
-    stock: v.number(),
-    minStock: v.number(),
-    location: v.optional(v.string()),
-    supplier: v.optional(v.string()),
-    partNumber: v.optional(v.string()),
-    unitPrice: v.optional(v.number()),
-    purchaseUrl: v.optional(v.string()),
-    compatibleWith: v.optional(v.array(v.id("equipment"))),
-    compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
-  },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const code = args.code.trim().toUpperCase();
-    const name = args.name.trim();
-    if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
-    if (!name) throw new ConvexError("El nombre del repuesto es obligatorio.");
+  args: createPartArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    createPartArgs,
+    async (ctx, args) => {
+        const code = args.code.trim().toUpperCase();
+      const name = args.name.trim();
+      if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
+      if (!name) throw new ConvexError("El nombre del repuesto es obligatorio.");
 
-    const existing = await ctx.db
-      .query("spareParts")
-      .withIndex("by_code", (q) => q.eq("code", code))
-      .unique();
-    if (existing) {
-      throw new ConvexError(`Ya existe un repuesto con el código ${code}.`);
-    }
+      const existing = await ctx.db
+        .query("spareParts")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .unique();
+      if (existing) {
+        throw new ConvexError(`Ya existe un repuesto con el código ${code}.`);
+      }
 
-    // La descripción llega del editor enriquecido como bloques con formato: se
-    // guarda el documento ya normalizado (recortado de párrafos vacíos) y se
-    // omite cuando no dice nada. Una descripción escrita en un campo de texto
-    // plano —de las de antes— se guarda tal cual se escribió.
-    const description = richDocToStore(args.description);
-    const now = Date.now();
-    return await ctx.db.insert("spareParts", {
-      code,
-      name,
-      ...(description ? { description } : {}),
-      category: args.category,
-      unit: args.unit.trim() || "ud",
-      stock: Math.max(0, Math.floor(args.stock)),
-      minStock: Math.max(0, Math.floor(args.minStock)),
-      ...(args.location?.trim() ? { location: args.location.trim().toUpperCase() } : {}),
-      ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
-      ...(args.partNumber?.trim() ? { partNumber: args.partNumber.trim() } : {}),
-      ...(typeof args.unitPrice === "number" && args.unitPrice >= 0
-        ? { unitPrice: args.unitPrice }
-        : {}),
-      ...(args.purchaseUrl?.trim() ? { purchaseUrl: args.purchaseUrl.trim() } : {}),
-      ...(await compatibleDocs(ctx, args.compatibleWith, args.compatibleModels)),
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
+      // La descripción llega del editor enriquecido como bloques con formato: se
+      // guarda el documento ya normalizado (recortado de párrafos vacíos) y se
+      // omite cuando no dice nada. Una descripción escrita en un campo de texto
+      // plano —de las de antes— se guarda tal cual se escribió.
+      const description = richDocToStore(args.description);
+      const now = Date.now();
+      return await ctx.db.insert("spareParts", {
+        code,
+        name,
+        ...(description ? { description } : {}),
+        category: args.category,
+        unit: args.unit.trim() || "ud",
+        stock: Math.max(0, Math.floor(args.stock)),
+        minStock: Math.max(0, Math.floor(args.minStock)),
+        ...(args.location?.trim() ? { location: args.location.trim().toUpperCase() } : {}),
+        ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
+        ...(args.partNumber?.trim() ? { partNumber: args.partNumber.trim() } : {}),
+        ...(typeof args.unitPrice === "number" && args.unitPrice >= 0
+          ? { unitPrice: args.unitPrice }
+          : {}),
+        ...(args.purchaseUrl?.trim() ? { purchaseUrl: args.purchaseUrl.trim() } : {}),
+        ...(await compatibleDocs(ctx, args.compatibleWith, args.compatibleModels)),
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+  ),
 });
 
+const updatePartArgs = {
+  id: v.id("spareParts"),
+  code: v.optional(v.string()),
+  name: v.optional(v.string()),
+  description: v.optional(v.string()),
+  category: v.optional(v.string()),
+  unit: v.optional(v.string()),
+  stock: v.optional(v.number()),
+  minStock: v.optional(v.number()),
+  location: v.optional(v.string()),
+  supplier: v.optional(v.string()),
+  partNumber: v.optional(v.string()),
+  unitPrice: v.optional(v.number()),
+  purchaseUrl: v.optional(v.string()),
+  compatibleWith: v.optional(v.array(v.id("equipment"))),
+  compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
+};
+
 export const update = mutation({
-  args: {
-    id: v.id("spareParts"),
-    code: v.optional(v.string()),
-    name: v.optional(v.string()),
-    description: v.optional(v.string()),
-    category: v.optional(v.string()),
-    unit: v.optional(v.string()),
-    stock: v.optional(v.number()),
-    minStock: v.optional(v.number()),
-    location: v.optional(v.string()),
-    supplier: v.optional(v.string()),
-    partNumber: v.optional(v.string()),
-    unitPrice: v.optional(v.number()),
-    purchaseUrl: v.optional(v.string()),
-    compatibleWith: v.optional(v.array(v.id("equipment"))),
-    compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
-  },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const part = await ctx.db.get(args.id);
-    if (!part) throw new ConvexError("El repuesto ya no existe.");
+  args: updatePartArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    updatePartArgs,
+    async (ctx, args) => {
+        const part = await ctx.db.get(args.id);
+      if (!part) throw new ConvexError("El repuesto ya no existe.");
 
-    const patch: Partial<Doc<"spareParts">> = {};
-    if (args.code !== undefined) {
-      const code = args.code.trim().toUpperCase();
-      if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
-      if (code !== part.code) {
-        const clash = await ctx.db
-          .query("spareParts")
-          .withIndex("by_code", (q) => q.eq("code", code))
-          .unique();
-        if (clash) throw new ConvexError(`Ya existe un repuesto con el código ${code}.`);
+      const patch: Partial<Doc<"spareParts">> = {};
+      if (args.code !== undefined) {
+        const code = args.code.trim().toUpperCase();
+        if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
+        if (code !== part.code) {
+          const clash = await ctx.db
+            .query("spareParts")
+            .withIndex("by_code", (q) => q.eq("code", code))
+            .unique();
+          if (clash) throw new ConvexError(`Ya existe un repuesto con el código ${code}.`);
+        }
+        patch.code = code;
       }
-      patch.code = code;
-    }
-    if (args.name !== undefined) {
-      const name = args.name.trim();
-      if (!name) throw new ConvexError("El nombre del repuesto es obligatorio.");
-      patch.name = name;
-    }
-    // Mismo trato que en el alta: lo que emite el editor, normalizado. Si se
-    // borra la descripción, el repuesto queda sin nota (en blanco), como hasta
-    // ahora.
-    if (args.description !== undefined)
-      patch.description = richDocToStore(args.description) ?? "";
-    if (args.category !== undefined) patch.category = args.category;
-    if (args.unit !== undefined) patch.unit = args.unit.trim() || "ud";
-    if (args.stock !== undefined) patch.stock = Math.max(0, Math.floor(args.stock));
-    if (args.minStock !== undefined) patch.minStock = Math.max(0, Math.floor(args.minStock));
-    if (args.location !== undefined) patch.location = args.location.trim().toUpperCase();
-    if (args.supplier !== undefined) patch.supplier = args.supplier.trim();
-    if (args.partNumber !== undefined) patch.partNumber = args.partNumber.trim();
-    if (args.purchaseUrl !== undefined) patch.purchaseUrl = args.purchaseUrl.trim();
-    if (args.compatibleWith !== undefined) {
-      patch.compatibleWith = await compatibleIds(ctx, args.compatibleWith);
-    }
-    if (args.compatibleModels !== undefined) {
-      patch.compatibleModels = await compatibleModelIds(ctx, args.compatibleModels);
-    } else if (args.compatibleWith !== undefined) {
-      const derived = new Set<Id<"equipmentModels">>();
-      for (const eqId of patch.compatibleWith ?? []) {
-        const eq = await ctx.db.get(eqId);
-        if (eq?.modelId) derived.add(eq.modelId);
+      if (args.name !== undefined) {
+        const name = args.name.trim();
+        if (!name) throw new ConvexError("El nombre del repuesto es obligatorio.");
+        patch.name = name;
       }
-      if (derived.size > 0) {
-        patch.compatibleModels = Array.from(derived);
+      // Mismo trato que en el alta: lo que emite el editor, normalizado. Si se
+      // borra la descripción, el repuesto queda sin nota (en blanco), como hasta
+      // ahora.
+      if (args.description !== undefined)
+        patch.description = richDocToStore(args.description) ?? "";
+      if (args.category !== undefined) patch.category = args.category;
+      if (args.unit !== undefined) patch.unit = args.unit.trim() || "ud";
+      if (args.stock !== undefined) patch.stock = Math.max(0, Math.floor(args.stock));
+      if (args.minStock !== undefined) patch.minStock = Math.max(0, Math.floor(args.minStock));
+      if (args.location !== undefined) patch.location = args.location.trim().toUpperCase();
+      if (args.supplier !== undefined) patch.supplier = args.supplier.trim();
+      if (args.partNumber !== undefined) patch.partNumber = args.partNumber.trim();
+      if (args.purchaseUrl !== undefined) patch.purchaseUrl = args.purchaseUrl.trim();
+      if (args.compatibleWith !== undefined) {
+        patch.compatibleWith = await compatibleIds(ctx, args.compatibleWith);
       }
-    }
-    if (args.unitPrice !== undefined) {
-      if (args.unitPrice < 0) throw new ConvexError("El precio no puede ser negativo.");
-      patch.unitPrice = args.unitPrice;
-    }
+      if (args.compatibleModels !== undefined) {
+        patch.compatibleModels = await compatibleModelIds(ctx, args.compatibleModels);
+      } else if (args.compatibleWith !== undefined) {
+        const derived = new Set<Id<"equipmentModels">>();
+        for (const eqId of patch.compatibleWith ?? []) {
+          const eq = await ctx.db.get(eqId);
+          if (eq?.modelId) derived.add(eq.modelId);
+        }
+        if (derived.size > 0) {
+          patch.compatibleModels = Array.from(derived);
+        }
+      }
+      if (args.unitPrice !== undefined) {
+        if (args.unitPrice < 0) throw new ConvexError("El precio no puede ser negativo.");
+        patch.unitPrice = args.unitPrice;
+      }
 
-    await ctx.db.patch(args.id, { ...patch, updatedAt: Date.now() });
-  },
+      await ctx.db.patch(args.id, { ...patch, updatedAt: Date.now() });
+    },
+  ),
 });
 
 /** Ajuste rápido de stock desde la tabla (+/- unidades). */
+const adjustStockArgs = {
+  id: v.id("spareParts"),
+  delta: v.number(),
+};
+
 export const adjustStock = mutation({
-  args: {
-    id: v.id("spareParts"),
-    delta: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const part = await ctx.db.get(args.id);
-    if (!part) throw new ConvexError("El repuesto ya no existe.");
-    const next = Math.max(0, part.stock + Math.trunc(args.delta));
-    if (next === part.stock) return;
-    await ctx.db.patch(args.id, { stock: next, updatedAt: Date.now() });
-  },
+  args: adjustStockArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    adjustStockArgs,
+    async (ctx, args) => {
+        const part = await ctx.db.get(args.id);
+      if (!part) throw new ConvexError("El repuesto ya no existe.");
+      const next = Math.max(0, part.stock + Math.trunc(args.delta));
+      if (next === part.stock) return;
+      await ctx.db.patch(args.id, { stock: next, updatedAt: Date.now() });
+    },
+  ),
 });
 
+const removePartArgs = { id: v.id("spareParts") };
+
 export const remove = mutation({
-  args: { id: v.id("spareParts") },
-  handler: async (ctx, args) => {
-    await requireManager(ctx);
-    const part = await ctx.db.get(args.id);
-    if (!part) throw new ConvexError("El repuesto ya no existe.");
-    await ctx.db.delete(args.id);
-  },
+  args: removePartArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    removePartArgs,
+    async (ctx, args) => {
+        const part = await ctx.db.get(args.id);
+      if (!part) throw new ConvexError("El repuesto ya no existe.");
+      await ctx.db.delete(args.id);
+    },
+  ),
 });
