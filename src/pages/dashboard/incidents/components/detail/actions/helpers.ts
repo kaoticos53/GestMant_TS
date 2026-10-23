@@ -89,3 +89,40 @@ export function canShowCloseResolvedAction(
 ): boolean {
   return canAdvanceIncident(status, "closeResolved") && canWork && inWorkshop;
 }
+
+export interface IncidentActionStatesInput {
+  status: IncidentStatus;
+  canWork: boolean;
+  canCoordinate: boolean;
+  inWorkshop: boolean;
+}
+
+export interface IncidentActionStates {
+  showSelfAssign: boolean;
+  showVerify: boolean;
+  showPartRequests: boolean;
+  showArchive: boolean;
+  showSendExternal: boolean;
+  showReturnExternal: boolean;
+  showCloseResolved: boolean;
+}
+
+/**
+ * Calcula de forma centralizada todos los estados de visibilidad de las acciones de una incidencia.
+ */
+export function computeIncidentActionStates({
+  status,
+  canWork,
+  canCoordinate,
+  inWorkshop,
+}: IncidentActionStatesInput): IncidentActionStates {
+  return {
+    showSelfAssign: canShowSelfAssignAction(status),
+    showVerify: canShowVerifyAction(status, canWork, inWorkshop),
+    showPartRequests: canShowPartRequestsAction(status, canWork),
+    showArchive: canShowArchiveAction(status, canCoordinate),
+    showSendExternal: canShowSendExternalAction(status, canWork),
+    showReturnExternal: canShowReturnExternalAction(status, canWork),
+    showCloseResolved: canShowCloseResolvedAction(status, canWork, inWorkshop),
+  };
+}
