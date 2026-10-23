@@ -160,6 +160,12 @@ export const logResetAudit = internalMutation({
   },
 });
 
+/**
+ * Vaciado del taller. Es una **action** —parte en tandas con `runMutation`—,
+ * así que no pasa por `secureMutation`, que es la puerta de las mutaciones:
+ * comprueba la sesión a mano y delega el rol en `checkResetPermission`. Sus
+ * ayudantes internos tampoco la usan porque nadie los llama desde un cliente.
+ */
 export const resetWorkshop = action({
   args: {},
   handler: async (ctx): Promise<{ deleted: number; passes: number }> => {
