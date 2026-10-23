@@ -243,7 +243,7 @@ export function computeNavBadges(
     incidents: summary?.incidents.reported ?? 0,
     requests: summary?.requests.pending ?? 0,
     purchasing: summary?.purchasing.pending ?? 0,
-    inventory: 0,
+    inventory: summary?.parts.total ?? 0,
     equipment: summary?.equipment ?? 0,
     manuals: summary?.manuals ?? 0,
     machines: 0,

@@ -75,7 +75,7 @@ describe("navConfig", () => {
       expect(badges.purchasing).toBe(2);
       expect(badges.equipment).toBe(12);
       expect(badges.manuals).toBe(7);
-      expect(badges.inventory).toBe(0);
+      expect(badges.inventory).toBe(40);
     });
 
     it("devuelve ceros cuando el summary es undefined", () => {
