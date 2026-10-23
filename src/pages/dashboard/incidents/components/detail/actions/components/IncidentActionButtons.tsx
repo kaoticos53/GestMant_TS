@@ -1,27 +1,14 @@
 import { Button } from "@/components/ui/button";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { IncidentStatus } from "@/lib/workshop";
-import {
-  Archive,
-  Check,
-  PackagePlus,
-  Trash2,
-  Truck,
-  UserPlus,
-  Wrench,
-} from "lucide-react";
-import {
-  canShowArchiveAction,
-  canShowCloseResolvedAction,
-  canShowPartRequestsAction,
-  canShowReturnExternalAction,
-  canShowSelfAssignAction,
-  canShowSendExternalAction,
-  canShowVerifyAction,
-} from "../helpers";
+import { computeIncidentActionStates } from "../helpers";
 import type { AssignTargetMode } from "../types";
+import { IncidentAssignmentActions } from "./IncidentAssignmentActions";
+import { IncidentLifecycleActions } from "./IncidentLifecycleActions";
+import { IncidentLogisticsActions } from "./IncidentLogisticsActions";
+import { IncidentWorkflowActions } from "./IncidentWorkflowActions";
 
-interface IncidentActionButtonsProps {
+export interface IncidentActionButtonsProps {
   status: IncidentStatus;
   currentUserId: Id<"users"> | null;
   canWork: boolean;
@@ -60,13 +47,12 @@ export function IncidentActionButtons({
   onOpenReceiveExternal,
   onOpenClose,
 }: IncidentActionButtonsProps) {
-  const showSelfAssign = canShowSelfAssignAction(status);
-  const showVerify = canShowVerifyAction(status, canWork, inWorkshop);
-  const showPartRequests = canShowPartRequestsAction(status, canWork);
-  const showArchive = canShowArchiveAction(status, canCoordinate);
-  const showSendExternal = canShowSendExternalAction(status, canWork);
-  const showReturnExternal = canShowReturnExternalAction(status, canWork);
-  const showCloseResolved = canShowCloseResolvedAction(status, canWork, inWorkshop);
+  const states = computeIncidentActionStates({
+    status,
+    canWork,
+    canCoordinate,
+    inWorkshop,
+  });
 
   return (
     <>
@@ -74,139 +60,41 @@ export function IncidentActionButtons({
         Cerrar
       </Button>
 
-      {showSelfAssign && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2"
-            onClick={onSelfAssign}
-            disabled={busy || !currentUserId}
-          >
-            <UserPlus className="size-4" />
-            Autoasignarme
-          </Button>
-          {canCoordinate && (
-            <Button
-              type="button"
-              className="gap-2"
-              onClick={() => onOpenAssign("assign")}
-            >
-              <UserPlus className="size-4" />
-              Asignar a un técnico
-            </Button>
-          )}
-        </>
-      )}
+      <IncidentAssignmentActions
+        showSelfAssign={states.showSelfAssign}
+        canCoordinate={canCoordinate}
+        canReassignWorkshop={canReassignWorkshop}
+        busy={busy}
+        currentUserId={currentUserId}
+        onSelfAssign={onSelfAssign}
+        onOpenAssign={onOpenAssign}
+      />
 
-      {showVerify && (
-        <>
-          {canCoordinate && (
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => onOpenAssign("assign")}
-            >
-              <UserPlus className="size-4" />
-              Reasignar
-            </Button>
-          )}
-          <Button
-            type="button"
-            className="gap-2"
-            onClick={onOpenVerify}
-          >
-            <Check className="size-4" />
-            Verificar incidencia
-          </Button>
-        </>
-      )}
+      <IncidentWorkflowActions
+        showVerify={states.showVerify}
+        showCloseResolved={states.showCloseResolved}
+        canCoordinate={canCoordinate}
+        onOpenAssign={onOpenAssign}
+        onOpenVerify={onOpenVerify}
+        onOpenClose={onOpenClose}
+      />
 
-      {showPartRequests && (
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2"
-          onClick={onOpenRequest}
-        >
-          <PackagePlus className="size-4" />
-          Petición de repuestos
-        </Button>
-      )}
+      <IncidentLogisticsActions
+        showPartRequests={states.showPartRequests}
+        showSendExternal={states.showSendExternal}
+        showReturnExternal={states.showReturnExternal}
+        onOpenRequest={onOpenRequest}
+        onOpenSendExternal={onOpenSendExternal}
+        onOpenReceiveExternal={onOpenReceiveExternal}
+      />
 
-      {showArchive && (
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2"
-          disabled={busy}
-          onClick={onArchive}
-        >
-          <Archive className="size-4" />
-          Archivar
-        </Button>
-      )}
-
-      {canCoordinate && (
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2 text-destructive hover:text-destructive"
-          disabled={busy}
-          onClick={onOpenWithdraw}
-          title="Se guarda unos días en la papelera antes de borrarse de verdad"
-        >
-          <Trash2 className="size-4" />
-          Retirar
-        </Button>
-      )}
-
-      {canReassignWorkshop && (
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2"
-          onClick={() => onOpenAssign("workshop")}
-        >
-          <UserPlus className="size-4" />
-          Asignar orden
-        </Button>
-      )}
-
-      {showSendExternal && (
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2"
-          onClick={onOpenSendExternal}
-        >
-          <Truck className="size-4" />
-          Reparación externa
-        </Button>
-      )}
-
-      {showReturnExternal && (
-        <Button
-          type="button"
-          className="gap-2"
-          onClick={onOpenReceiveExternal}
-        >
-          <Truck className="size-4" />
-          Registrar retorno
-        </Button>
-      )}
-
-      {showCloseResolved && (
-        <Button
-          type="button"
-          className="gap-2"
-          onClick={onOpenClose}
-        >
-          <Wrench className="size-4" />
-          Finalizar trabajo
-        </Button>
-      )}
+      <IncidentLifecycleActions
+        showArchive={states.showArchive}
+        canCoordinate={canCoordinate}
+        busy={busy}
+        onArchive={onArchive}
+        onOpenWithdraw={onOpenWithdraw}
+      />
     </>
   );
 }
