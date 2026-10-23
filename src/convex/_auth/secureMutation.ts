@@ -20,7 +20,8 @@ import {
  * 1. **Identidad.** Sin sesión, con la cuenta dada de baja o desde una sesión
  *    anónima no se pasa. `identityMessage` es el aviso de ese caso, porque a
  *    quien no ha entrado no se le puede hablar de los permisos de un rol que no
- *    tiene.
+ *    tiene; los módulos que distinguían la cuenta dada de baja lo hacen con
+ *    `identityNotice`.
  * 2. **Capacidad.** La que se declare, con `hasCapability` —las habilidades del
  *    rol tal y como el administrador las configura—. Sin `capability`, basta con
  *    ser del taller; con `capabilities`, basta con tener una de ellas.
@@ -88,6 +89,26 @@ export interface SecureMutationConfig<T extends PropertyValidators> {
     actor: Doc<"users">,
     args: ObjectType<T>,
   ) => Promise<string | null>;
+}
+
+/** El aviso de una cuenta dada de baja, igual en todo el taller. */
+export const INACTIVE_ACCOUNT_MESSAGE =
+  "Esta cuenta ha sido dada de baja o no está activa.";
+
+/**
+ * El aviso de identidad de siempre, pero sin tratar igual a una cuenta dada de
+ * baja —existe y no puede entrar— que a quien no ha iniciado sesión o entra
+ * como invitado. Los módulos con un texto propio para la baja pasan el suyo.
+ */
+export function identityNotice(
+  general: string,
+  inactive?: string,
+): (issue: IdentityIssue) => string {
+  // El aviso de baja se resuelve al llamar, no al construir el módulo: hay
+  // ciclos de importación (catálogos → esquema → catálogos) y una constante
+  // todavía no inicializada no puede leerse desde aquí arriba.
+  return (issue) =>
+    issue === "inactiva" ? (inactive ?? INACTIVE_ACCOUNT_MESSAGE) : general;
 }
 
 /** El mensaje de siempre cuando el rol no llega. */

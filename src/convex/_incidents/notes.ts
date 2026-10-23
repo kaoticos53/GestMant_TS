@@ -6,7 +6,7 @@ import {
   NOTE_EDIT_WINDOW_MS,
   isNoteWithinEditWindow,
 } from "../../lib/workshop";
-import { secureMutation } from "../_auth/secureMutation";
+import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import {
   type Actor,
   type LifecycleNote,
@@ -77,8 +77,9 @@ export const addNote = mutation({
   args: addNoteArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico asignado o quien coordina la incidencia pueden añadir notas.",
       ),
@@ -138,8 +139,9 @@ export const updateNote = mutation({
   args: updateNoteArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
     },
     updateNoteArgs,
     async (ctx, args, actor) => {
@@ -209,8 +211,9 @@ export const restoreNoteVersion = mutation({
   args: restoreNoteVersionArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
     },
     restoreNoteVersionArgs,
     async (ctx, args, actor) => {
@@ -266,8 +269,9 @@ export const removeNote = mutation({
   args: removeNoteArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
     },
     removeNoteArgs,
     async (ctx, args, actor) => {
@@ -308,8 +312,9 @@ export const restoreNote = mutation({
   args: restoreNoteArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
     },
     restoreNoteArgs,
     async (ctx, args, actor) => {

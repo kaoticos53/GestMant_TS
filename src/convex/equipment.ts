@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { QueryCtx, mutation, query } from "./_generated/server";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 
@@ -201,8 +201,9 @@ export const create = mutation({
   handler: secureMutation(
     {
       capability: "manageEquipment",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
       denyMessage:
         "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
     },
@@ -288,8 +289,9 @@ export const update = mutation({
   handler: secureMutation(
     {
       capability: "manageEquipment",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
       denyMessage:
         "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
     },
@@ -362,8 +364,9 @@ export const remove = mutation({
   handler: secureMutation(
     {
       capability: "manageEquipment",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
       denyMessage:
         "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
     },

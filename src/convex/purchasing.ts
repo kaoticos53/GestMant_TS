@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
 import { freeReference } from "./references";
 import {
@@ -117,8 +117,9 @@ export const requestPurchase = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para generar peticiones de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -190,8 +191,9 @@ export const requestPurchases = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para generar peticiones de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -265,8 +267,9 @@ export const setSupplier = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para cambiar el proveedor de una compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -299,8 +302,9 @@ export const setNote = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para anotar una petición de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -335,8 +339,9 @@ export const cancelPurchaseRequest = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para retirar una petición de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -387,8 +392,9 @@ export const createOrder = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para crear órdenes de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -494,8 +500,9 @@ export const setSolicitudeCode = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para cambiar el código de la solicitud de compra. Revisa la configuración de tu rol con el administrador.",
     },
@@ -524,8 +531,9 @@ export const setLineNote = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para anotar un artículo de una orden. Revisa la configuración de tu rol con el administrador.",
     },
@@ -587,8 +595,9 @@ export const receive = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para recepcionar material. Revisa la configuración de tu rol con el administrador.",
     },
@@ -638,8 +647,9 @@ export const cancelOrder = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para anular órdenes de compra. Revisa la configuración de tu rol con el administrador.",
     },

@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { normalizeCatalogString } from "../lib/catalogs";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 
@@ -103,9 +103,11 @@ export const ensureItem = mutation({
   args: ensureItemArgs,
   handler: secureMutation(
     {
-      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
-      // lee quien no ha entrado, solo dónde se comprueba.
-      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+      // Los avisos de siempre en los catálogos: la puerta no cambia lo que
+      // leen quien no ha entrado, el invitado ni la cuenta de baja.
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para consultar catálogos.",
+      ),
     },
     ensureItemArgs,
     async (ctx, args) => {
@@ -318,9 +320,11 @@ export const update = mutation({
   args: updateArgs,
   handler: secureMutation(
     {
-      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
-      // lee quien no ha entrado, solo dónde se comprueba.
-      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+      // Los avisos de siempre en los catálogos: la puerta no cambia lo que
+      // leen quien no ha entrado, el invitado ni la cuenta de baja.
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para consultar catálogos.",
+      ),
     },
     updateArgs,
     async (ctx, args) => {
@@ -375,9 +379,11 @@ export const remove = mutation({
   args: removeArgs,
   handler: secureMutation(
     {
-      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
-      // lee quien no ha entrado, solo dónde se comprueba.
-      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+      // Los avisos de siempre en los catálogos: la puerta no cambia lo que
+      // leen quien no ha entrado, el invitado ni la cuenta de baja.
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para consultar catálogos.",
+      ),
     },
     removeArgs,
     async (ctx, args) => {
@@ -403,9 +409,11 @@ export const mergeDuplicates = mutation({
   args: mergeDuplicatesArgs,
   handler: secureMutation(
     {
-      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
-      // lee quien no ha entrado, solo dónde se comprueba.
-      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+      // Los avisos de siempre en los catálogos: la puerta no cambia lo que
+      // leen quien no ha entrado, el invitado ni la cuenta de baja.
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para consultar catálogos.",
+      ),
     },
     mergeDuplicatesArgs,
     async (ctx, args) => {
@@ -450,9 +458,11 @@ export const migrateLegacyLocations = mutation({
   args: migrateLegacyLocationsArgs,
   handler: secureMutation(
     {
-      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
-      // lee quien no ha entrado, solo dónde se comprueba.
-      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+      // Los avisos de siempre en los catálogos: la puerta no cambia lo que
+      // leen quien no ha entrado, el invitado ni la cuenta de baja.
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para consultar catálogos.",
+      ),
     },
     migrateLegacyLocationsArgs,
     async (ctx) => {

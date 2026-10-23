@@ -9,7 +9,7 @@ import { clampSidebarWidth } from "../lib/sidebar";
 import { dismissalOf } from "../lib/workAlert";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasCapability, roleExists } from "./permissions";
 import {
   QueryCtx,
@@ -127,7 +127,9 @@ export const updateProfile = mutation({
   args: profileArgs,
   handler: secureMutation(
     {
-      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
     },
     profileArgs,
     async (ctx, args, actor) => {
@@ -162,7 +164,9 @@ export const saveSidebarLayout = mutation({
   args: saveSidebarLayoutArgs,
   handler: secureMutation(
     {
-      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
     },
     saveSidebarLayoutArgs,
     async (ctx, args, actor) => {
@@ -199,7 +203,9 @@ export const saveWorkAlertDismissal = mutation({
   args: saveWorkAlertDismissalArgs,
   handler: secureMutation(
     {
-      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
     },
     saveWorkAlertDismissalArgs,
     async (ctx, args, actor) => {
@@ -230,7 +236,9 @@ export const updateUser = mutation({
   handler: secureMutation(
     {
       capability: "manageUsers",
-      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
       denyMessage: "Solo el administrador puede gestionar usuarios y roles.",
     },
     updateUserArgs,
@@ -483,7 +491,9 @@ export const setRole = mutation({
   handler: secureMutation(
     {
       capability: "manageUsers",
-      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
       denyMessage: "Solo el administrador puede gestionar usuarios y roles.",
     },
     setRoleArgs,

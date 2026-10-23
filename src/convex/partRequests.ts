@@ -31,7 +31,7 @@ import {
   type RequestDecision,
 } from "./schema";
 
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import {
   actorName,
   attachmentArgs,
@@ -83,8 +83,9 @@ export const generateUploadUrl = mutation({
   args: generateUploadUrlArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
     },
@@ -333,8 +334,9 @@ export const create = mutation({
   handler: secureMutation(
     {
       capability: "createRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para crear peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -466,8 +468,9 @@ export const associateExisting = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para asociar repuestos a una petición. Revisa la configuración de tu rol con el administrador.",
     },
@@ -506,8 +509,9 @@ export const associateNew = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para crear y asociar repuestos. Revisa la configuración de tu rol con el administrador.",
     },
@@ -556,8 +560,9 @@ export const onHold = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para suspender peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -612,8 +617,9 @@ export const resume = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para reanudar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -649,8 +655,9 @@ export const returnMaterial = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para devolver material. Revisa la configuración de tu rol con el administrador.",
     },
@@ -700,8 +707,9 @@ export const cancel = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para cancelar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -756,8 +764,9 @@ export const requestQuote = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para pedir presupuesto externo. Revisa la configuración de tu rol con el administrador.",
     },
@@ -792,8 +801,9 @@ export const approve = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para aprobar o rechazar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -863,8 +873,9 @@ export const reject = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para aprobar o rechazar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -911,8 +922,9 @@ export const archive = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para archivar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -944,8 +956,9 @@ export const unarchive = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para recuperar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -971,8 +984,9 @@ export const archiveDecidedBefore = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para archivar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -1078,8 +1092,9 @@ export const markIssued = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para marcar peticiones como entregadas. Revisa la configuración de tu rol con el administrador.",
     },
@@ -1146,8 +1161,9 @@ export const issueLines = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para marcar peticiones como entregadas. Revisa la configuración de tu rol con el administrador.",
     },

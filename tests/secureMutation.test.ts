@@ -2,6 +2,7 @@ import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
+import { identityNotice } from "../src/convex/_auth/secureMutation";
 
 /**
  * La puerta central (`convex/_auth/secureMutation`) hace tres comprobaciones y
@@ -151,6 +152,30 @@ describe("secureMutation", () => {
     expect(
       await denial(baja.session.mutation(api.manuals.generateUploadUrl, {})),
     ).toContain("dada de baja");
+  });
+
+  test("identityNotice separa la cuenta de baja del resto de motivos", () => {
+    const aviso = identityNotice("Debes iniciar sesión.");
+    expect(aviso("sin_sesion")).toBe("Debes iniciar sesión.");
+    expect(aviso("anonima")).toBe("Debes iniciar sesión.");
+    expect(aviso("inactiva")).toContain("dada de baja");
+
+    // Y un módulo puede dar su propio texto de baja.
+    expect(identityNotice("Entra.", "Baja propia.")("inactiva")).toBe(
+      "Baja propia.",
+    );
+  });
+
+  test("los módulos del primer bloque recuperan el aviso de cuenta dada de baja", async () => {
+    const t = backend();
+    const baja = await miembro(t, "technician");
+    await t.run((ctx) => ctx.db.patch(baja.userId, { active: false }));
+
+    const mensaje = await denial(
+      baja.session.mutation(api.partRequests.generateUploadUrl, {}),
+    );
+    expect(mensaje).toContain("dada de baja");
+    expect(mensaje).not.toContain("iniciar sesión");
   });
 
   test("la política deja pasar al técnico que tiene la incidencia asignada", async () => {

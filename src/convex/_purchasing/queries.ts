@@ -7,7 +7,7 @@ import {
   purchaseOrderStatusValidator,
   purchaseRequestStatusValidator,
 } from "../schema";
-import { secureMutation } from "../_auth/secureMutation";
+import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import { requireReading } from "./helpers";
 
 /**
@@ -189,8 +189,9 @@ export const generateUploadUrl = mutation({
   handler: secureMutation(
     {
       capability: "managePurchasing",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
       denyMessage:
         "No tienes permisos para adjuntar albaranes. Revisa la configuración de tu rol con el administrador.",
     },

@@ -9,7 +9,7 @@ import {
 } from "./_generated/server";
 import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { registerIncidentIntake } from "./incidentIntake";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
 import { admitPublicLookup } from "./publicLookupLimits";
 import { memberOrNull, moderatorIds } from "./permissions";
@@ -374,8 +374,9 @@ export const assign = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para asignar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -440,8 +441,9 @@ export const selfAssign = mutation({
   handler: secureMutation(
     {
       capabilities: ["viewIncidents", "manageIncidents"],
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage:
         "Solo quien ve la cola de incidencias puede autoasignarse las pendientes. Revisa la configuración de tu rol con el administrador.",
     },
@@ -514,8 +516,9 @@ export const verify = mutation({
   args: verifyArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico asignado o el coordinador pueden verificar esta incidencia.",
       ),
@@ -657,8 +660,9 @@ export const assignWorkshop = mutation({
   args: assignWorkshopArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el coordinador o el técnico de la orden pueden reasignar la entrada a taller.",
         "order",
@@ -736,8 +740,9 @@ export const close = mutation({
   args: closeArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico de la orden o el coordinador pueden cerrar esta incidencia.",
       ),
@@ -842,8 +847,9 @@ export const sendToExternalRepair = mutation({
   args: sendToExternalRepairArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico asignado, el técnico de taller o el coordinador pueden enviar el equipo a reparación externa.",
       ),
@@ -952,8 +958,9 @@ export const receiveFromExternalRepair = mutation({
   args: receiveFromExternalRepairArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico asignado, el técnico de taller o el coordinador pueden registrar la recepción de la reparación externa.",
       ),
@@ -1056,8 +1063,9 @@ export const updateEquipment = mutation({
   args: updateEquipmentArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       authorize: incidentWorkerPolicy(
         "Solo el técnico asignado o quien coordina la incidencia pueden corregir los datos del equipo.",
       ),

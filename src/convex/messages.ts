@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
-import { secureMutation } from "./_auth/secureMutation";
+import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { memberOrNull } from "./permissions";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
 
@@ -138,8 +138,9 @@ export const send = mutation({
   handler: secureMutation(
     {
       capability: "sendMessages",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para usar la mensajería.",
+      ),
       denyMessage:
         "No tienes permisos para enviar mensajes. Revisa la configuración de tu rol con el administrador.",
     },
@@ -198,8 +199,9 @@ export const markThreadRead = mutation({
   args: markThreadReadArgs,
   handler: secureMutation(
     {
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para usar la mensajería.",
+      ),
     },
     markThreadReadArgs,
     async (ctx, args, actor) => {

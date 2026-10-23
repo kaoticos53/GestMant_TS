@@ -9,7 +9,7 @@ import {
 import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
 import { trashRetentionDays } from "../trash";
-import { secureMutation } from "../_auth/secureMutation";
+import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import { actorName, requireDecisionCapability } from "./helpers";
 
 /** Tandas de la pasada nocturna, como en la papelera de incidencias. */
@@ -58,8 +58,9 @@ export const withdraw = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para retirar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -96,8 +97,9 @@ export const restore = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para recuperar peticiones. Revisa la configuración de tu rol con el administrador.",
     },
@@ -130,8 +132,9 @@ export const deleteNow = mutation({
   handler: secureMutation(
     {
       capability: "decideRequests",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
       denyMessage:
         "No tienes permisos para borrar peticiones. Revisa la configuración de tu rol con el administrador.",
     },

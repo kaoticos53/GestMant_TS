@@ -16,7 +16,7 @@ import {
   documentActionValidator,
   type DocumentAction,
 } from "../schema";
-import { secureMutation } from "../_auth/secureMutation";
+import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import {
   type Actor,
   actorName,
@@ -115,8 +115,9 @@ export const generateUploadUrl = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
@@ -150,8 +151,9 @@ export const attachDocument = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
@@ -218,8 +220,9 @@ export const updateDocument = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."
@@ -308,8 +311,9 @@ export const removeDocument = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para gestionar los documentos de una incidencia. Revisa la configuración de tu rol con el administrador."

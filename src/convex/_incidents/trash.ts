@@ -14,7 +14,7 @@ import { isClosedIncident } from "../../lib/incidentFlow";
 import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
 import { hasCapability } from "../permissions";
-import { secureMutation } from "../_auth/secureMutation";
+import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import {
   actorName,
   getIncident,
@@ -30,8 +30,9 @@ export const archive = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -70,8 +71,9 @@ export const unarchive = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -104,8 +106,9 @@ export const archiveClosedBefore = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para archivar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -179,8 +182,9 @@ export const withdraw = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -233,8 +237,9 @@ export const restore = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
@@ -275,8 +280,9 @@ export const deleteNow = mutation({
   handler: secureMutation(
     {
       capability: "manageIncidents",
-      identityMessage:
+      identityMessage: identityNotice(
         "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
       denyMessage: (actor) =>
         isModerator(actor)
           ? "No tienes permisos para retirar incidencias. Revisa la configuración de tu rol con el administrador."
