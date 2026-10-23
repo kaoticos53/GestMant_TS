@@ -1,33 +1,35 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-TABLE-SORT`
-- **Objetivo:** Fase 4 - Validación completa (2.447 tests de Vitest pasados, build de producción exitoso) y cierre de la refactorización modular de `TableSort.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-NOTIFICATION-BELL`
+- **Objetivo:** Fase 1 - Crear contratos de tipos en `notificationBell/types.ts`, helpers puros en `notificationBell/helpers.ts` y tests unitarios en `tests/notificationBellHelpers.test.ts`.
 - **Módulo(s) Afectado(s):**
-  - `src/components/TableSort.tsx`
-  - `src/components/tableSort/`
+  - `src/components/notificationBell/types.ts`
+  - `src/components/notificationBell/helpers.ts`
+  - `tests/notificationBellHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `src/components/tableSort/types.ts`: interfaces tipadas estrictas.
-- [x] `src/components/tableSort/helpers.ts`: funciones puras de accesibilidad y metadatos (`getSortNextDescription`, `getSortButtonTitle`, `getSortButtonAriaLabel`, `getFlipButtonMeta`, `getAriaSort`).
-- [x] `tests/tableSortUiHelpers.test.ts`: suite de pruebas unitarias para helpers (9 tests pasados).
-- [x] `src/components/tableSort/components/SortFlipButton.tsx`: botón para invertir sentido con icono reactivo.
-- [x] `src/components/tableSort/components/TableSortBar.tsx`: barra horizontal con selector y reset.
-- [x] `src/components/tableSort/components/SortableTableHead.tsx`: cabecera sortable accesible.
-- [x] `src/components/tableSort/index.ts`: barril unificado.
-- [x] `src/components/TableSort.tsx`: orquestación de alto nivel reducida de 210 a 35 líneas.
+- [x] `src/components/notificationBell/types.ts`: contratos e interfaces para NotificationBell y sus subcomponentes.
+- [x] `src/components/notificationBell/helpers.ts`: funciones puras `countUnread`, `formatBadgeCount` y `getTriggerAriaLabel`.
+- [x] `tests/notificationBellHelpers.test.ts`: suite de pruebas unitarias para helpers.
+- [ ] `src/components/notificationBell/useNotificationBellDismiss.ts`: pendiente Fase 2.
+- [ ] `src/components/notificationBell/components/NotificationTriggerButton.tsx`: pendiente Fase 2.
+- [ ] `src/components/notificationBell/components/NotificationItemButton.tsx`: pendiente Fase 2.
+- [ ] `src/components/notificationBell/components/NotificationsPanel.tsx`: pendiente Fase 2.
+- [ ] `src/components/notificationBell/index.ts`: pendiente Fase 2.
+- [ ] `src/components/NotificationBell.tsx`: pendiente Fase 3.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
-- [x] ¿TypeScript estricto? Sin `any`. `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.447 tests pasados en Vitest.
+- [x] ¿TypeScript estricto? Sin `any`.
+- [x] ¿Tests unitarios y de seguridad? Vitest ejecutado sin fallos.
 - [x] ¿Vocabulario Ubicuo respetado? Sí.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y validada con éxito.
+- **Estado:** En ejecución - Fase 1.
