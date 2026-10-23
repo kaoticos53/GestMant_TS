@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import type { Ref } from "react";
 import { Users } from "lucide-react";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { SortState } from "@/lib/tableSort";
+import type { TableSort } from "@/lib/tableSort";
 import type { Paging } from "@/lib/pagination";
 import type { Id } from "@/convex/_generated/dataModel";
 import { UserTableRow } from "./UserTableRow";
@@ -23,9 +23,9 @@ import {
 
 export interface UsersTableProps {
   columns: UserTableColumns;
-  sort: SortState<UserColumnKey>;
-  onSortChange: (sort: SortState<UserColumnKey>) => void;
-  areaRef: RefObject<HTMLDivElement | null>;
+  sort: TableSort<UserColumnKey> | null;
+  onSortChange: (sort: TableSort<UserColumnKey> | null) => void;
+  areaRef?: Ref<HTMLDivElement>;
   paging: Paging & { setPage: (page: number) => void };
   visibleMembers: Member[];
   currentUserId: Id<"users"> | null | undefined;

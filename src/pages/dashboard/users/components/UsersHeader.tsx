@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { UserPlus } from "lucide-react";
 
-interface UsersHeaderProps {
+export interface UsersHeaderProps {
   onCreateUser: () => void;
 }
 

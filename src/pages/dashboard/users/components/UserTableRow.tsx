@@ -14,7 +14,7 @@ import { Pencil, UserCheck, UserX } from "lucide-react";
 import { memo } from "react";
 import type { Member, RoleOption } from "../types";
 
-interface UserTableRowProps {
+export interface UserTableRowProps {
   member: Member;
   isSelf: boolean;
   roleOptions: RoleOption[];
