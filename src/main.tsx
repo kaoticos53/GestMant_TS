@@ -1,10 +1,10 @@
 import { Toaster } from "@/components/ui/sonner";
 import { ApiAddressNotice } from "@/components/ApiAddressNotice";
 import { RequireAuth } from "@/components/RequireAuth";
-import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
+import { ModuleErrorBoundary } from "@/components/ModuleErrorBoundary";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
-import React, { StrictMode, useEffect, lazy, Suspense } from "react";
+import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { registerSW } from "virtual:pwa-register";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
@@ -27,61 +27,24 @@ function RouteLoading() {
   );
 }
 
-/** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
- *  crashing the whole app (e.g. hook errors in the browser runtime). */
-class ToolbarErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(err: Error) {
-    console.warn("[VlyToolbar] Caught error, toolbar disabled:", err.message);
-  }
-  render() {
-    return this.state.hasError ? null : this.props.children;
-  }
-}
-
-/** Hard guard so runtime errors never leave the preview as a blank page. */
-class RootErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; message: string; stack: string }
-> {
-  state = { hasError: false, message: "", stack: "" };
-  static getDerivedStateFromError(error: Error) {
-    return {
-      hasError: true,
-      message: error.message || "Unknown runtime error",
-      stack: error.stack || "",
-    };
-  }
-  componentDidCatch(err: Error) {
-    console.error("[Preview] Root crash:", err);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
-          <div className="max-w-lg text-center">
-            <p className="text-sm font-semibold">Preview runtime error</p>
-            <p className="mt-2 text-xs text-muted-foreground break-words">
-              {this.state.message}
-            </p>
-            {this.state.stack && (
-              <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
-                {this.state.stack}
-              </pre>
-            )}
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+/**
+ * La barra de previsualización del entorno de diseño, y no del taller.
+ *
+ * Antes se importaba de forma estática: entraba en el grafo de todos los
+ * arranques —también en producción— y, como ese archivo exporta el componente y
+ * además utilidades de anotación, saltaba el aviso de Fast Refresh en cada
+ * guardado. Ahora se pide solo si es desarrollo y si alguien la enciende con
+ * `VITE_VLY_TOOLBAR=true`; así el editor no la carga, el panel no la arrastra y
+ * cuando hace falta aparece sin tocar el resto de la aplicación.
+ */
+const VlyToolbar =
+  import.meta.env.DEV && import.meta.env.VITE_VLY_TOOLBAR === "true"
+    ? lazy(() =>
+        import("../vly-toolbar-readonly.tsx").then((m) => ({
+          default: m.VlyToolbar,
+        })),
+      )
+    : null;
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -110,10 +73,25 @@ function RouteSyncer() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RootErrorBoundary>
-      <ToolbarErrorBoundary>
-        <VlyToolbar />
-      </ToolbarErrorBoundary>
+    {/*
+      Los dos límites son el mismo componente que ya protege los módulos del
+      panel (`components/ModuleErrorBoundary`): uno para que un fallo de la
+      barra de previsualización no tumbe la aplicación —y ahí no se pinta nada,
+      que la barra es una ayuda, no la app— y otro para que un error de
+      renderizado no deje la pantalla en blanco sin decir qué pasó.
+    */}
+    <ModuleErrorBoundary
+      moduleName="la aplicación"
+      title="Algo ha fallado al abrir el taller"
+      onReset={() => window.location.reload()}
+    >
+      {VlyToolbar && (
+        <ModuleErrorBoundary moduleName="la barra de herramientas" fallback={null}>
+          <Suspense fallback={null}>
+            <VlyToolbar />
+          </Suspense>
+        </ModuleErrorBoundary>
+      )}
       <ConvexAuthProvider client={convex}>
         {/* Va aquí, fuera de las rutas y del `RequireAuth`: si la dirección
             pública de la API no responde, quien se queda fuera es justo quien no
@@ -145,7 +123,7 @@ createRoot(document.getElementById("root")!).render(
         </BrowserRouter>
         <Toaster />
       </ConvexAuthProvider>
-    </RootErrorBoundary>
+    </ModuleErrorBoundary>
   </StrictMode>,
 );
 
@@ -155,4 +133,3 @@ createRoot(document.getElementById("root")!).render(
 if (import.meta.env.PROD) {
   void registerSW({ immediate: true });
 }
-
