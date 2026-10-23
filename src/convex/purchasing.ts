@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, type MutationCtx } from "./_generated/server";
+import { secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
 import { freeReference } from "./references";
 import {
@@ -12,17 +13,9 @@ import {
   nextPurchaseRequestStatus,
 } from "../lib/purchaseFlow";
 import { canBuyForRequest } from "../lib/requestFlow";
-import {
-  PURCHASE_ORDER_STATUSES,
-  PURCHASE_REQUEST_STATUSES,
-} from "./schema";
+import { PURCHASE_ORDER_STATUSES, PURCHASE_REQUEST_STATUSES } from "./schema";
 
-import {
-  actorName,
-  applyReception,
-  missingLines,
-  requirePurchasing,
-} from "./_purchasing/helpers";
+import { actorName, applyReception, missingLines } from "./_purchasing/helpers";
 
 /* ------------------------------------------------------------------ */
 /* Re-exportaciones de sub-módulos CQS (queries y subida)             */
@@ -110,57 +103,69 @@ async function apartarLineas(
  * Si de una línea ya había una petición de compra viva, no se repite: se cuenta
  * aparte, para poder decir «de estas dos ya se estaba ocupando alguien».
  */
+const requestPurchaseArgs = {
+  requestId: v.id("partRequests"),
+  /** Solo estas líneas (por repuesto); sin esto, todas las que falten. */
+  sparePartIds: v.optional(v.array(v.id("spareParts"))),
+  /** Proveedor para todas las líneas, cuando no es el del catálogo. */
+  supplier: v.optional(v.string()),
+  notes: v.optional(v.string()),
+};
+
 export const requestPurchase = mutation({
-  args: {
-    requestId: v.id("partRequests"),
-    /** Solo estas líneas (por repuesto); sin esto, todas las que falten. */
-    sparePartIds: v.optional(v.array(v.id("spareParts"))),
-    /** Proveedor para todas las líneas, cuando no es el del catálogo. */
-    supplier: v.optional(v.string()),
-    notes: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requirePurchasing(ctx, "generar peticiones de compra");
-    const request = await ctx.db.get(args.requestId);
-    if (!request) throw new ConvexError("La petición ya no existe.");
-    if (request.archivedAt !== undefined) {
-      throw new ConvexError(
-        `La petición ${request.reference} está archivada: recupérala antes de comprar nada para ella.`,
-      );
-    }
-    // Para qué peticiones se puede comprar lo dice la máquina de la petición
-    // (`lib/requestFlow`): las que aún esperan decisión.
-    if (!canBuyForRequest(request.status)) {
-      throw new ConvexError(
-        `La petición ${request.reference} ya está resuelta (${request.status}): no hay nada que comprar para ella.`,
-      );
-    }
+  args: requestPurchaseArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para generar peticiones de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    requestPurchaseArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      if (request.archivedAt !== undefined) {
+        throw new ConvexError(
+          `La petición ${request.reference} está archivada: recupérala antes de comprar nada para ella.`,
+        );
+      }
+      // Para qué peticiones se puede comprar lo dice la máquina de la petición
+      // (`lib/requestFlow`): las que aún esperan decisión.
+      if (!canBuyForRequest(request.status)) {
+        throw new ConvexError(
+          `La petición ${request.reference} ya está resuelta (${request.status}): no hay nada que comprar para ella.`,
+        );
+      }
 
-    const missing = await missingLines(ctx, request, args.sparePartIds);
-    if (missing.length === 0) {
-      throw new ConvexError(
-        `El almacén cubre todo lo que pide ${request.reference}: no hace falta comprar nada.`,
-      );
-    }
+      const missing = await missingLines(ctx, request, args.sparePartIds);
+      if (missing.length === 0) {
+        throw new ConvexError(
+          `El almacén cubre todo lo que pide ${request.reference}: no hace falta comprar nada.`,
+        );
+      }
 
-    if (args.supplier !== undefined && !args.supplier.trim()) {
-      throw new ConvexError("Escribe el proveedor o déjalo en blanco.");
-    }
+      if (args.supplier !== undefined && !args.supplier.trim()) {
+        throw new ConvexError("Escribe el proveedor o déjalo en blanco.");
+      }
 
-    const { created, repeated } = await apartarLineas(ctx, request, userId, {
-      sparePartIds: args.sparePartIds,
-      supplier: args.supplier,
-      notes: args.notes,
-    });
+      const { created, repeated } = await apartarLineas(ctx, request, userId, {
+        sparePartIds: args.sparePartIds,
+        supplier: args.supplier,
+        notes: args.notes,
+      });
 
-    if (created.length === 0) {
-      throw new ConvexError(
-        `Ya había una petición de compra viva para todo lo que falta de ${request.reference}.`,
-      );
-    }
+      if (created.length === 0) {
+        throw new ConvexError(
+          `Ya había una petición de compra viva para todo lo que falta de ${request.reference}.`,
+        );
+      }
 
-    return { references: created, repeated };
-  },
+      return { references: created, repeated };
+    },
+  ),
 });
 
 /**
@@ -176,104 +181,143 @@ export const requestPurchase = mutation({
  * Todo va en una sola mutación: o entran todas las que se pueden, o no entra
  * ninguna (Convex la revierte entera si algo falla de verdad).
  */
+const requestPurchasesArgs = {
+  requestIds: v.array(v.id("partRequests")),
+};
+
 export const requestPurchases = mutation({
-  args: {
-    requestIds: v.array(v.id("partRequests")),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requirePurchasing(ctx, "generar peticiones de compra");
-    const ids = [...new Set(args.requestIds)];
-    if (ids.length === 0) {
-      throw new ConvexError("Elige al menos una petición para comprar.");
-    }
-
-    const references: string[] = [];
-    const skipped: { reference: string; reason: string }[] = [];
-    let requests = 0;
-    let repeated = 0;
-
-    for (const id of ids) {
-      const request = await ctx.db.get(id);
-      if (!request) {
-        skipped.push({ reference: id, reason: "ya no existe" });
-        continue;
-      }
-      if (request.archivedAt !== undefined) {
-        skipped.push({
-          reference: request.reference,
-          reason: "está archivada: recupérala antes de comprar nada para ella",
-        });
-        continue;
-      }
-      // Para qué peticiones se puede comprar lo dice la máquina (`lib/requestFlow`).
-      if (!canBuyForRequest(request.status)) {
-        skipped.push({
-          reference: request.reference,
-          reason: `ya está resuelta (${request.status}): no hay nada que comprar para ella`,
-        });
-        continue;
-      }
-      if ((await missingLines(ctx, request)).length === 0) {
-        skipped.push({
-          reference: request.reference,
-          reason: "el almacén ya cubre lo que pide",
-        });
-        continue;
+  args: requestPurchasesArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para generar peticiones de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    requestPurchasesArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const ids = [...new Set(args.requestIds)];
+      if (ids.length === 0) {
+        throw new ConvexError("Elige al menos una petición para comprar.");
       }
 
-      const result = await apartarLineas(ctx, request, userId, {});
-      repeated += result.repeated;
-      if (result.created.length === 0) {
-        skipped.push({
-          reference: request.reference,
-          reason: "ya había una petición de compra viva para todo lo que falta",
-        });
-        continue;
-      }
-      references.push(...result.created);
-      requests += 1;
-    }
+      const references: string[] = [];
+      const skipped: { reference: string; reason: string }[] = [];
+      let requests = 0;
+      let repeated = 0;
 
-    return { references, requests, repeated, skipped };
-  },
+      for (const id of ids) {
+        const request = await ctx.db.get(id);
+        if (!request) {
+          skipped.push({ reference: id, reason: "ya no existe" });
+          continue;
+        }
+        if (request.archivedAt !== undefined) {
+          skipped.push({
+            reference: request.reference,
+            reason:
+              "está archivada: recupérala antes de comprar nada para ella",
+          });
+          continue;
+        }
+        // Para qué peticiones se puede comprar lo dice la máquina (`lib/requestFlow`).
+        if (!canBuyForRequest(request.status)) {
+          skipped.push({
+            reference: request.reference,
+            reason: `ya está resuelta (${request.status}): no hay nada que comprar para ella`,
+          });
+          continue;
+        }
+        if ((await missingLines(ctx, request)).length === 0) {
+          skipped.push({
+            reference: request.reference,
+            reason: "el almacén ya cubre lo que pide",
+          });
+          continue;
+        }
+
+        const result = await apartarLineas(ctx, request, userId, {});
+        repeated += result.repeated;
+        if (result.created.length === 0) {
+          skipped.push({
+            reference: request.reference,
+            reason:
+              "ya había una petición de compra viva para todo lo que falta",
+          });
+          continue;
+        }
+        references.push(...result.created);
+        requests += 1;
+      }
+
+      return { references, requests, repeated, skipped };
+    },
+  ),
 });
 
 /** Cambia el proveedor de una petición de compra sin tratar (para agruparla). */
+const setSupplierArgs = { id: v.id("purchaseRequests"), supplier: v.string() };
+
 export const setSupplier = mutation({
-  args: { id: v.id("purchaseRequests"), supplier: v.string() },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "cambiar el proveedor de una compra");
-    const row = await ctx.db.get(args.id);
-    if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    if (!isPurchaseRequestUntreated(row.status)) {
-      throw new ConvexError(
-        `La petición de compra ${row.reference} ya está en una orden: su proveedor no se cambia desde aquí.`,
-      );
-    }
-    const supplier = args.supplier.trim();
-    if (!supplier) {
-      throw new ConvexError("Indica el proveedor con el que se agrupa.");
-    }
-    await ctx.db.patch(args.id, { supplier });
-  },
+  args: setSupplierArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para cambiar el proveedor de una compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    setSupplierArgs,
+    async (ctx, args) => {
+      const row = await ctx.db.get(args.id);
+      if (!row) throw new ConvexError("La petición de compra ya no existe.");
+      if (!isPurchaseRequestUntreated(row.status)) {
+        throw new ConvexError(
+          `La petición de compra ${row.reference} ya está en una orden: su proveedor no se cambia desde aquí.`,
+        );
+      }
+      const supplier = args.supplier.trim();
+      if (!supplier) {
+        throw new ConvexError("Indica el proveedor con el que se agrupa.");
+      }
+      await ctx.db.patch(args.id, { supplier });
+    },
+  ),
 });
 
 /** La nota de una petición de compra mientras espera o está en una orden. */
+const setNoteArgs = {
+  id: v.id("purchaseRequests"),
+  notes: v.optional(v.string()),
+};
+
 export const setNote = mutation({
-  args: { id: v.id("purchaseRequests"), notes: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "anotar una petición de compra");
-    const row = await ctx.db.get(args.id);
-    if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    if (isPurchaseRequestClosed(row.status)) {
-      throw new ConvexError(
-        `La petición de compra ${row.reference} ya está cerrada: su nota no se toca.`,
-      );
-    }
-    await ctx.db.patch(args.id, {
-      notes: args.notes?.trim() ? args.notes.trim() : undefined,
-    });
-  },
+  args: setNoteArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para anotar una petición de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    setNoteArgs,
+    async (ctx, args) => {
+      const row = await ctx.db.get(args.id);
+      if (!row) throw new ConvexError("La petición de compra ya no existe.");
+      if (isPurchaseRequestClosed(row.status)) {
+        throw new ConvexError(
+          `La petición de compra ${row.reference} ya está cerrada: su nota no se toca.`,
+        );
+      }
+      await ctx.db.patch(args.id, {
+        notes: args.notes?.trim() ? args.notes.trim() : undefined,
+      });
+    },
+  ),
 });
 
 /**
@@ -281,29 +325,43 @@ export const setNote = mutation({
  * compra. Lo que esté dentro de una orden no se retira desde aquí (para eso se
  * anula la orden, que devuelve sus peticiones a la cola).
  */
+const cancelPurchaseRequestArgs = {
+  id: v.id("purchaseRequests"),
+  note: v.optional(v.string()),
+};
+
 export const cancelPurchaseRequest = mutation({
-  args: { id: v.id("purchaseRequests"), note: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "retirar una petición de compra");
-    const row = await ctx.db.get(args.id);
-    if (!row) throw new ConvexError("La petición de compra ya no existe.");
-    const cancelled = nextPurchaseRequestStatus(row.status, "cancel");
-    if (cancelled === null) {
-      throw new ConvexError(
-        `La petición de compra ${row.reference} ya no está sin tratar: quítala desde su orden, o déjala como está.`,
-      );
-    }
-    if (!args.note?.trim()) {
-      throw new ConvexError(
-        "Escribe por qué se retira: es lo que queda en la ficha de la compra.",
-      );
-    }
-    await ctx.db.patch(args.id, {
-      status: cancelled,
-      cancelledAt: Date.now(),
-      cancelNote: args.note.trim(),
-    });
-  },
+  args: cancelPurchaseRequestArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para retirar una petición de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    cancelPurchaseRequestArgs,
+    async (ctx, args) => {
+      const row = await ctx.db.get(args.id);
+      if (!row) throw new ConvexError("La petición de compra ya no existe.");
+      const cancelled = nextPurchaseRequestStatus(row.status, "cancel");
+      if (cancelled === null) {
+        throw new ConvexError(
+          `La petición de compra ${row.reference} ya no está sin tratar: quítala desde su orden, o déjala como está.`,
+        );
+      }
+      if (!args.note?.trim()) {
+        throw new ConvexError(
+          "Escribe por qué se retira: es lo que queda en la ficha de la compra.",
+        );
+      }
+      await ctx.db.patch(args.id, {
+        status: cancelled,
+        cancelledAt: Date.now(),
+        cancelNote: args.note.trim(),
+      });
+    },
+  ),
 });
 
 /* ------------------------------------------------------------------ */
@@ -316,152 +374,186 @@ export const cancelPurchaseRequest = mutation({
  * falta. La orden queda con su número y su fecha, y con las peticiones que la
  * han generado dentro (cada una con la suya).
  */
+const createOrderArgs = {
+  purchaseRequestIds: v.array(v.id("purchaseRequests")),
+  solicitudeCode: v.optional(v.string()),
+  notes: v.optional(v.string()),
+  /** Nota de cada artículo, por petición de compra. */
+  lineNotes: v.optional(v.record(v.string(), v.string())),
+};
+
 export const createOrder = mutation({
-  args: {
-    purchaseRequestIds: v.array(v.id("purchaseRequests")),
-    solicitudeCode: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    /** Nota de cada artículo, por petición de compra. */
-    lineNotes: v.optional(v.record(v.string(), v.string())),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requirePurchasing(ctx, "crear órdenes de compra");
-    const ids = [...new Set(args.purchaseRequestIds)];
-    if (ids.length === 0) {
-      throw new ConvexError(
-        "Elige al menos una petición de compra para la orden.",
-      );
-    }
-
-    const rows = [];
-    for (const id of ids) {
-      const row = await ctx.db.get(id);
-      if (!row) {
+  args: createOrderArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para crear órdenes de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    createOrderArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const ids = [...new Set(args.purchaseRequestIds)];
+      if (ids.length === 0) {
         throw new ConvexError(
-          "Una de las peticiones de compra ya no existe: vuelve a mirar el grupo.",
+          "Elige al menos una petición de compra para la orden.",
         );
       }
-      if (nextPurchaseRequestStatus(row.status, "order") === null) {
+
+      const rows = [];
+      for (const id of ids) {
+        const row = await ctx.db.get(id);
+        if (!row) {
+          throw new ConvexError(
+            "Una de las peticiones de compra ya no existe: vuelve a mirar el grupo.",
+          );
+        }
+        if (nextPurchaseRequestStatus(row.status, "order") === null) {
+          throw new ConvexError(
+            `La petición de compra ${row.reference} ya está en una orden o cerrada.`,
+          );
+        }
+        rows.push(row);
+      }
+
+      const suppliers = [...new Set(rows.map((row) => row.supplier))];
+      if (suppliers.length > 1) {
         throw new ConvexError(
-          `La petición de compra ${row.reference} ya está en una orden o cerrada.`,
+          `Una orden es de un solo proveedor y has mezclado ${suppliers.join(", ")}.`,
         );
       }
-      rows.push(row);
-    }
+      const supplier = suppliers[0];
 
-    const suppliers = [...new Set(rows.map((row) => row.supplier))];
-    if (suppliers.length > 1) {
-      throw new ConvexError(
-        `Una orden es de un solo proveedor y has mezclado ${suppliers.join(", ")}.`,
-      );
-    }
-    const supplier = suppliers[0];
-
-    const now = Date.now();
-    const reference = await freeReference(ctx, "purchaseOrder");
-    const by = await actorName(ctx, userId);
-    const orderId = await ctx.db.insert("purchaseOrders", {
-      reference,
-      supplier,
-      status: PURCHASE_ORDER_STATUSES.PENDING,
-      orderedAt: now,
-      orderedBy: by,
-      requestRefs: [
-        ...new Map(
-          rows.map((row) => [
-            row.requestReference,
-            { reference: row.requestReference, requestedAt: row.requestDate },
-          ]),
-        ).values(),
-      ].sort((a, b) => a.requestedAt - b.requestedAt),
-      lines: rows.map((row) => ({
-        purchaseRequestId: row._id,
-        requestId: row.requestId,
-        requestReference: row.requestReference,
-        requestDate: row.requestDate,
-        sparePartId: row.sparePartId,
-        code: row.code,
-        name: row.name,
-        unit: row.unit,
-        quantity: row.quantity,
-        receivedQuantity: 0,
-        ...(args.lineNotes?.[row._id]?.trim()
-          ? { note: args.lineNotes[row._id].trim() }
-          : row.notes?.trim()
-            ? { note: row.notes.trim() }
-            : {}),
-      })),
-      ...(args.solicitudeCode?.trim()
-        ? { solicitudeCode: args.solicitudeCode.trim() }
-        : {}),
-      ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    for (const row of rows) {
-      await ctx.db.patch(row._id, {
-        // Lo que acaba de comprobarse arriba: desde «sin tratar» se entra en una
-        // orden (`lib/purchaseFlow`).
-        status: nextPurchaseRequestStatus(row.status, "order") ?? row.status,
-        orderId,
+      const now = Date.now();
+      const reference = await freeReference(ctx, "purchaseOrder");
+      const by = await actorName(ctx, userId);
+      const orderId = await ctx.db.insert("purchaseOrders", {
+        reference,
+        supplier,
+        status: PURCHASE_ORDER_STATUSES.PENDING,
         orderedAt: now,
+        orderedBy: by,
+        requestRefs: [
+          ...new Map(
+            rows.map((row) => [
+              row.requestReference,
+              { reference: row.requestReference, requestedAt: row.requestDate },
+            ]),
+          ).values(),
+        ].sort((a, b) => a.requestedAt - b.requestedAt),
+        lines: rows.map((row) => ({
+          purchaseRequestId: row._id,
+          requestId: row.requestId,
+          requestReference: row.requestReference,
+          requestDate: row.requestDate,
+          sparePartId: row.sparePartId,
+          code: row.code,
+          name: row.name,
+          unit: row.unit,
+          quantity: row.quantity,
+          receivedQuantity: 0,
+          ...(args.lineNotes?.[row._id]?.trim()
+            ? { note: args.lineNotes[row._id].trim() }
+            : row.notes?.trim()
+              ? { note: row.notes.trim() }
+              : {}),
+        })),
+        ...(args.solicitudeCode?.trim()
+          ? { solicitudeCode: args.solicitudeCode.trim() }
+          : {}),
+        ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
+        createdAt: now,
+        updatedAt: now,
       });
-    }
 
-    return { reference, orderId, lines: rows.length };
-  },
+      for (const row of rows) {
+        await ctx.db.patch(row._id, {
+          // Lo que acaba de comprobarse arriba: desde «sin tratar» se entra en una
+          // orden (`lib/purchaseFlow`).
+          status: nextPurchaseRequestStatus(row.status, "order") ?? row.status,
+          orderId,
+          orderedAt: now,
+        });
+      }
+
+      return { reference, orderId, lines: rows.length };
+    },
+  ),
 });
 
 /** Cambia el código de solicitud de compra externa de una orden. */
+const setSolicitudeCodeArgs = {
+  orderId: v.id("purchaseOrders"),
+  solicitudeCode: v.optional(v.string()),
+};
+
 export const setSolicitudeCode = mutation({
-  args: {
-    orderId: v.id("purchaseOrders"),
-    solicitudeCode: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "cambiar el código de la solicitud de compra");
-    const order = await ctx.db.get(args.orderId);
-    if (!order) throw new ConvexError("La orden ya no existe.");
-    const code = args.solicitudeCode?.trim();
-    await ctx.db.patch(args.orderId, {
-      solicitudeCode: code ? code : undefined,
-      updatedAt: Date.now(),
-    });
-  },
+  args: setSolicitudeCodeArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para cambiar el código de la solicitud de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    setSolicitudeCodeArgs,
+    async (ctx, args) => {
+      const order = await ctx.db.get(args.orderId);
+      if (!order) throw new ConvexError("La orden ya no existe.");
+      const code = args.solicitudeCode?.trim();
+      await ctx.db.patch(args.orderId, {
+        solicitudeCode: code ? code : undefined,
+        updatedAt: Date.now(),
+      });
+    },
+  ),
 });
 
 /** Anota un artículo de una orden (mientras no esté cerrada). */
+const setLineNoteArgs = {
+  orderId: v.id("purchaseOrders"),
+  purchaseRequestId: v.id("purchaseRequests"),
+  note: v.optional(v.string()),
+};
+
 export const setLineNote = mutation({
-  args: {
-    orderId: v.id("purchaseOrders"),
-    purchaseRequestId: v.id("purchaseRequests"),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "anotar un artículo de una orden");
-    const order = await ctx.db.get(args.orderId);
-    if (!order) throw new ConvexError("La orden ya no existe.");
-    if (isPurchaseOrderClosed(order.status)) {
-      throw new ConvexError(
-        `La orden ${order.reference} está cerrada: sus artículos ya no se tocan.`,
+  args: setLineNoteArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para anotar un artículo de una orden. Revisa la configuración de tu rol con el administrador.",
+    },
+    setLineNoteArgs,
+    async (ctx, args) => {
+      const order = await ctx.db.get(args.orderId);
+      if (!order) throw new ConvexError("La orden ya no existe.");
+      if (isPurchaseOrderClosed(order.status)) {
+        throw new ConvexError(
+          `La orden ${order.reference} está cerrada: sus artículos ya no se tocan.`,
+        );
+      }
+      const note = args.note?.trim();
+      const lines = order.lines.map((line) =>
+        line.purchaseRequestId === args.purchaseRequestId
+          ? { ...line, note: note ? note : undefined }
+          : line,
       );
-    }
-    const note = args.note?.trim();
-    const lines = order.lines.map((line) =>
-      line.purchaseRequestId === args.purchaseRequestId
-        ? { ...line, note: note ? note : undefined }
-        : line,
-    );
-    if (
-      !lines.some((line) => line.purchaseRequestId === args.purchaseRequestId)
-    ) {
-      throw new ConvexError(
-        `Ese artículo no está en la orden ${order.reference}.`,
-      );
-    }
-    await ctx.db.patch(args.orderId, { lines, updatedAt: Date.now() });
-  },
+      if (
+        !lines.some((line) => line.purchaseRequestId === args.purchaseRequestId)
+      ) {
+        throw new ConvexError(
+          `Ese artículo no está en la orden ${order.reference}.`,
+        );
+      }
+      await ctx.db.patch(args.orderId, { lines, updatedAt: Date.now() });
+    },
+  ),
 });
 
 /**
@@ -474,51 +566,63 @@ export const setLineNote = mutation({
  * lo comprado pasan a «material recibido», que es lo que las desatasca. Todo eso
  * está en `applyReception`, que es también lo que usa la muestra de compras.
  */
-export const receive = mutation({
-  args: {
-    orderId: v.id("purchaseOrders"),
-    items: v.array(
-      v.object({
-        purchaseRequestId: v.id("purchaseRequests"),
-        quantity: v.number(),
-      }),
-    ),
-    deliveryNote: v.object({
-      storageId: v.id("_storage"),
-      name: v.string(),
-      kind: v.union(v.literal("image"), v.literal("document")),
+const receiveArgs = {
+  orderId: v.id("purchaseOrders"),
+  items: v.array(
+    v.object({
+      purchaseRequestId: v.id("purchaseRequests"),
+      quantity: v.number(),
     }),
-    note: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requirePurchasing(ctx, "recepcionar material");
+  ),
+  deliveryNote: v.object({
+    storageId: v.id("_storage"),
+    name: v.string(),
+    kind: v.union(v.literal("image"), v.literal("document")),
+  }),
+  note: v.optional(v.string()),
+};
 
-    const { status, received, materialReceived, requesterIds } =
-      await applyReception(ctx, {
-        orderId: args.orderId,
-        items: args.items,
-        deliveryNote: args.deliveryNote,
-        note: args.note,
-        receivedBy: await actorName(ctx, userId),
-        at: Date.now(),
-      });
+export const receive = mutation({
+  args: receiveArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para recepcionar material. Revisa la configuración de tu rol con el administrador.",
+    },
+    receiveArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
 
-    if (materialReceived.length > 0) {
-      await notifyUsers(
-        ctx,
-        requesterIds,
-        `Material recibido: ${materialReceived.join(", ")} ya se puede entregar`,
-        undefined,
-        userId,
-      );
-    }
+      const { status, received, materialReceived, requesterIds } =
+        await applyReception(ctx, {
+          orderId: args.orderId,
+          items: args.items,
+          deliveryNote: args.deliveryNote,
+          note: args.note,
+          receivedBy: await actorName(ctx, userId),
+          at: Date.now(),
+        });
 
-    return {
-      status,
-      received,
-      materialReceived,
-    };
-  },
+      if (materialReceived.length > 0) {
+        await notifyUsers(
+          ctx,
+          requesterIds,
+          `Material recibido: ${materialReceived.join(", ")} ya se puede entregar`,
+          undefined,
+          userId,
+        );
+      }
+
+      return {
+        status,
+        received,
+        materialReceived,
+      };
+    },
+  ),
 });
 
 /**
@@ -527,49 +631,60 @@ export const receive = mutation({
  * llegado, que el material ya recibido no se devuelve solo—, para poder
  * montarlas otra vez.
  */
+const cancelOrderArgs = { orderId: v.id("purchaseOrders"), note: v.string() };
+
 export const cancelOrder = mutation({
-  args: { orderId: v.id("purchaseOrders"), note: v.string() },
-  handler: async (ctx, args) => {
-    await requirePurchasing(ctx, "anular órdenes de compra");
-    const order = await ctx.db.get(args.orderId);
-    if (!order) throw new ConvexError("La orden ya no existe.");
-    // Una anulada se queda como está —anular dos veces no es un error—, y de una
-    // completada no se anula nada: lo dice la máquina de la orden.
-    if (!canAdvancePurchaseOrder(order.status, "cancel")) {
-      if (order.status === PURCHASE_ORDER_STATUSES.CANCELLED)
-        return { returned: 0 };
-      throw new ConvexError(
-        `La orden ${order.reference} ya está completada: no hay nada que anular.`,
-      );
-    }
-    const note = args.note.trim();
-    if (!note) {
-      throw new ConvexError("Escribe por qué se anula la orden.");
-    }
+  args: cancelOrderArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para anular órdenes de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    cancelOrderArgs,
+    async (ctx, args) => {
+      const order = await ctx.db.get(args.orderId);
+      if (!order) throw new ConvexError("La orden ya no existe.");
+      // Una anulada se queda como está —anular dos veces no es un error—, y de una
+      // completada no se anula nada: lo dice la máquina de la orden.
+      if (!canAdvancePurchaseOrder(order.status, "cancel")) {
+        if (order.status === PURCHASE_ORDER_STATUSES.CANCELLED)
+          return { returned: 0 };
+        throw new ConvexError(
+          `La orden ${order.reference} ya está completada: no hay nada que anular.`,
+        );
+      }
+      const note = args.note.trim();
+      if (!note) {
+        throw new ConvexError("Escribe por qué se anula la orden.");
+      }
 
-    let returned = 0;
-    for (const line of order.lines) {
-      const row = await ctx.db.get(line.purchaseRequestId);
-      if (!row) continue;
-      // La vuelta a la cola: solo las que estaban dentro de la orden —lo que ya
-      // había llegado no se devuelve solo—.
-      const pending = nextPurchaseRequestStatus(row.status, "unorder");
-      if (pending === null) continue;
-      await ctx.db.patch(row._id, {
-        status: pending,
-        orderId: undefined,
-        orderedAt: undefined,
+      let returned = 0;
+      for (const line of order.lines) {
+        const row = await ctx.db.get(line.purchaseRequestId);
+        if (!row) continue;
+        // La vuelta a la cola: solo las que estaban dentro de la orden —lo que ya
+        // había llegado no se devuelve solo—.
+        const pending = nextPurchaseRequestStatus(row.status, "unorder");
+        if (pending === null) continue;
+        await ctx.db.patch(row._id, {
+          status: pending,
+          orderId: undefined,
+          orderedAt: undefined,
+        });
+        returned += 1;
+      }
+
+      await ctx.db.patch(order._id, {
+        status: PURCHASE_ORDER_STATUSES.CANCELLED,
+        cancelledAt: Date.now(),
+        cancelNote: note,
+        updatedAt: Date.now(),
       });
-      returned += 1;
-    }
 
-    await ctx.db.patch(order._id, {
-      status: PURCHASE_ORDER_STATUSES.CANCELLED,
-      cancelledAt: Date.now(),
-      cancelNote: note,
-      updatedAt: Date.now(),
-    });
-
-    return { returned };
-  },
+      return { returned };
+    },
+  ),
 });

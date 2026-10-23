@@ -7,7 +7,8 @@ import {
   purchaseOrderStatusValidator,
   purchaseRequestStatusValidator,
 } from "../schema";
-import { requirePurchasing, requireReading } from "./helpers";
+import { secureMutation } from "../_auth/secureMutation";
+import { requireReading } from "./helpers";
 
 /**
  * Las peticiones de compra, con el grupo por proveedor que necesita la pantalla:
@@ -128,7 +129,8 @@ export const listReceptions = query({
           .collect()
       : await ctx.db.query("receptions").collect();
     const sorted = rows.sort(
-      (a, b) => b.receivedAt - a.receivedAt || b._creationTime - a._creationTime,
+      (a, b) =>
+        b.receivedAt - a.receivedAt || b._creationTime - a._creationTime,
     );
     return await Promise.all(
       sorted.map(async (row) => ({
@@ -180,10 +182,21 @@ export const byRequest = query({
 });
 
 /** URL de subida para el albarán de una recepción. */
+const generateUploadUrlArgs = {};
+
 export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requirePurchasing(ctx, "adjuntar albaranes");
-    return await ctx.storage.generateUploadUrl();
-  },
+  args: generateUploadUrlArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage:
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      denyMessage:
+        "No tienes permisos para adjuntar albaranes. Revisa la configuración de tu rol con el administrador.",
+    },
+    generateUploadUrlArgs,
+    async (ctx) => {
+      return await ctx.storage.generateUploadUrl();
+    },
+  ),
 });
