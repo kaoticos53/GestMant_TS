@@ -1,33 +1,34 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE4-SEND-TO-EXTERNAL-DIALOG`
-- **Objetivo:** Fase 4 - Validación completa (2.480 tests de Vitest pasados, build de producción exitoso) y cierre de la refactorización modular de `SendToExternalDialog.tsx`.
+- **ID / Nombre de la Tarea:** `REF-FASE1-RECEIVE-DIALOG`
+- **Objetivo:** Fase 1 - Crear interfaces tipadas en `purchasing/dialogs/receive/types.ts`, helpers puros en `purchasing/dialogs/receive/helpers.ts` y tests unitarios en `tests/receiveDialogHelpers.test.ts`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/incidents/dialogs/SendToExternalDialog.tsx`
-  - `src/pages/dashboard/incidents/dialogs/sendToExternal/`
+  - `src/pages/dashboard/purchasing/dialogs/receive/types.ts`
+  - `src/pages/dashboard/purchasing/dialogs/receive/helpers.ts`
+  - `tests/receiveDialogHelpers.test.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `sendToExternal/types.ts`: contratos de tipos.
-- [x] `sendToExternal/helpers.ts`: funciones puras de validación y formateo de payload (`validateSendToExternalForm`, `buildSendToExternalArgs`).
-- [x] `tests/sendToExternalDialogHelpers.test.ts`: suite de pruebas unitarias para helpers (5 tests pasados).
-- [x] `sendToExternal/useSendToExternalForm.ts`: hook con mutaciones Convex y catálogo.
-- [x] `sendToExternal/components/ExternalCompanyFields.tsx`: empresa SAT, contacto y teléfono.
-- [x] `sendToExternal/components/ExternalDefectFields.tsx`: avería, accesorios y notas de envío.
-- [x] `sendToExternal/index.ts`: barril unificado.
-- [x] `dialogs/SendToExternalDialog.tsx`: orquestación de alto nivel reducida de 204 a 98 líneas.
+- [x] `receive/types.ts`: contratos de items recibidos y props de subcomponentes.
+- [x] `receive/helpers.ts`: funciones puras `buildInitialQuantities`, `parseReceivedItems` y `validateReceiveInput`.
+- [x] `tests/receiveDialogHelpers.test.ts`: suite de pruebas unitarias para helpers de recepción.
+- [ ] `receive/useReceiveDialogForm.ts`: pendiente Fase 2.
+- [ ] `receive/components/ReceiveLinesInputs.tsx`: pendiente Fase 2.
+- [ ] `receive/components/ReceiveDeliveryNoteInput.tsx`: pendiente Fase 2.
+- [ ] `receive/index.ts`: pendiente Fase 2.
+- [ ] `dialogs/ReceiveDialog.tsx`: pendiente Fase 3.
 
 ---
 
 ## 3. Comprobaciones de Invariantes y Guardrails
 - [x] ¿Afecta a `src/lib/`? No.
-- [x] ¿TypeScript estricto? Sin `any`. `tsc -b` limpio.
-- [x] ¿Tests unitarios y de seguridad? 2.480 tests pasados en Vitest.
+- [x] ¿TypeScript estricto? Sin `any`.
+- [x] ¿Tests unitarios y de seguridad? Vitest ejecutado sin fallos.
 - [x] ¿Vocabulario Ubicuo respetado? Sí.
 
 ---
 
 ## 4. Estado Actual
-- **Estado:** Completada y validada con éxito.
+- **Estado:** En ejecución - Fase 1.
