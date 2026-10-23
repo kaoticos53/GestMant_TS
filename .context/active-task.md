@@ -1,14 +1,10 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE2-NOTIFICATION-BELL`
-- **Objetivo:** Fase 2 - Crear hook `useNotificationBellDismiss`, subcomponentes `NotificationTriggerButton`, `NotificationItemButton`, `NotificationsPanel` y barril `index.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE3-NOTIFICATION-BELL`
+- **Objetivo:** Fase 3 - Reducir y orquestar limpiamente `src/components/NotificationBell.tsx` delegando en `notificationBell/index` (hook `useNotificationBellDismiss`, `NotificationTriggerButton` y `NotificationsPanel`) reduciendo el componente de 207 a ~65 líneas.
 - **Módulo(s) Afectado(s):**
-  - `src/components/notificationBell/useNotificationBellDismiss.ts`
-  - `src/components/notificationBell/components/NotificationTriggerButton.tsx`
-  - `src/components/notificationBell/components/NotificationItemButton.tsx`
-  - `src/components/notificationBell/components/NotificationsPanel.tsx`
-  - `src/components/notificationBell/index.ts`
+  - `src/components/NotificationBell.tsx`
 
 ---
 
@@ -21,7 +17,7 @@
 - [x] `src/components/notificationBell/components/NotificationItemButton.tsx`: fila de notificación con fecha relativa.
 - [x] `src/components/notificationBell/components/NotificationsPanel.tsx`: panel flotante con cabecera y listado.
 - [x] `src/components/notificationBell/index.ts`: barril unificado.
-- [ ] `src/components/NotificationBell.tsx`: pendiente Fase 3.
+- [ ] `src/components/NotificationBell.tsx`: orquestación de alto nivel limpia.
 
 ---
 
@@ -34,4 +30,4 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 2.
+- **Estado:** En ejecución - Fase 3.
