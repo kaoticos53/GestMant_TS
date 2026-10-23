@@ -577,6 +577,12 @@ const schema = defineSchema({
     // retirado) y otro para la pasada que borra lo caducado.
     .index("by_deletedAt", ["deletedAt"])
     .index("by_purgeAt", ["purgeAt"])
+    // Los filtros que se repiten: «lo que tiene asignado este técnico en este
+    // estado» —su cola— y «lo que le ha pasado a este equipo, por fecha», que es
+    // el historial de la ficha. Van compuestos para que la consulta lea el tramo
+    // que necesita en vez de filtrar un barrido.
+    .index("by_status_and_assignee", ["status", "assigneeId"])
+    .index("by_equipment_and_created", ["equipmentId", "createdAt"])
     // Por referencia: el número con el que el taller cita un caso entre sí
     // («la INC-0004»). Quien notificó no lo usa: sigue el suyo por el código.
     .index("by_reference", ["reference"])
@@ -779,6 +785,9 @@ const schema = defineSchema({
     .index("by_status", ["status"])
     .index("by_createdAt", ["createdAt"])
     .index("by_archivedAt", ["archivedAt"])
+    // El histórico por estado, por fecha: el cursor de una cola concreta, de la
+    // más reciente a la más antigua, sin leer las demás.
+    .index("by_status_and_createdAt", ["status", "createdAt"])
     // Los dos índices de la papelera: uno para listarla (solo tiene filas lo
     // retirado) y otro para la pasada que borra lo caducado.
     .index("by_deletedAt", ["deletedAt"])
@@ -1014,11 +1023,13 @@ const schema = defineSchema({
     at: v.number(),
   })
     .index("by_incident", ["incidentId"])
-    // La auditoría global recorre el histórico entero por fecha. El filtro
-    // por persona se aplica sobre esa misma lectura: la consulta necesita
-    // siempre el total y las firmas de todo el histórico, así que no ahorra
-    // nada tener un índice aparte por autor.
-    .index("by_at", ["at"]),
+    // La auditoría global recorre el histórico por fecha. El filtro por persona
+    // se aplica sobre esa misma lectura —la vista necesita el total y las firmas
+    // de todo el histórico—, pero los de acción y autor tienen su índice
+    // compuesto para cuando se pagina por ellos.
+    .index("by_at", ["at"])
+    .index("by_action_and_at", ["action", "at"])
+    .index("by_actor_and_at", ["byId", "at"]),
 
   // Imágenes del formulario público de incidencia. Quien notifica una avería
   // no tiene cuenta, así que su subida no puede pasar por `uploads.ts` —que
@@ -1260,7 +1271,11 @@ const schema = defineSchema({
   })
     .index("by_at", ["at"])
     .index("by_action", ["action"])
-    .index("by_actor", ["actorId"]),
+    .index("by_actor", ["actorId"])
+    // La consulta por cursor: la ventana de una acción concreta, por fecha. La
+    // tabla de seguridad no se vacía nunca y el filtro es lo que más se usa al
+    // revisar quién cambió qué.
+    .index("by_action_and_at", ["action", "at"]),
 
   // Catálogos maestros normalizados (marca, ubicación de equipos, ubicación en almacén de repuestos,
   // proveedor, puesto, categoría de repuesto) con autocompletado y prevención de erratas.

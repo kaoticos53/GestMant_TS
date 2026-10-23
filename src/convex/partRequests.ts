@@ -1,5 +1,6 @@
 import { archiveDecidedRequestsBefore } from "./archive";
 import { notifyUsers } from "./notify";
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -125,6 +126,66 @@ export const list = query({
         ),
       })),
     );
+  },
+});
+
+/**
+ * La cola de peticiones por cursor, para cargar el histórico de poco en poco.
+ *
+ * `list` devuelve la cola entera —la usan las fichas, la búsqueda global y los
+ * informes, que necesitan cruzarla con lo demás—. Esta puerta es para pantallas
+ * que solo miran: entrega una ventana y el cursor de la siguiente, de la más
+ * reciente a la más antigua, para que una instalación con años de peticiones no
+ * mande todo el archivo de una vez.
+ *
+ * Respeta lo mismo que la cola: lo retirado no sale, el archivo solo sale si se
+ * pide, y fuera del taller no se devuelve nada.
+ */
+export const paginatedList = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    status: v.optional(requestStatusValidator),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    if ((await memberOrNull(ctx)) === null) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const status = args.status;
+    const paginated = status
+      ? await ctx.db
+          .query("partRequests")
+          .withIndex("by_status_and_createdAt", (q) => q.eq("status", status))
+          .order("desc")
+          .paginate(args.paginationOpts)
+      : await ctx.db
+          .query("partRequests")
+          .withIndex("by_createdAt")
+          .order("desc")
+          .paginate(args.paginationOpts);
+
+    const live = paginated.page.filter(
+      (request) => request.deletedAt === undefined,
+    );
+    const visible = args.includeArchived
+      ? live
+      : live.filter((request) => request.archivedAt === undefined);
+
+    return {
+      ...paginated,
+      page: await Promise.all(
+        visible.map(async (request) => ({
+          ...request,
+          attachments: await Promise.all(
+            (request.attachments ?? []).map(async (attachment) => ({
+              ...attachment,
+              url: await ctx.storage.getUrl(attachment.storageId),
+            })),
+          ),
+        })),
+      ),
+    };
   },
 });
 

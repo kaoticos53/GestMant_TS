@@ -23,12 +23,18 @@ async function setup(
   return { t, authed, userId };
 }
 
+/** La primera ventana de la auditoría de seguridad: cabe de sobra en la prueba. */
+const FIRST_PAGE = { numItems: 20, cursor: null };
+
 async function expectConvexError(promise: Promise<unknown>, fragment: string) {
   const error = await promise.then(
     () => null,
     (err: unknown) => err,
   );
-  expect(error, `Se esperaba un error que contuviera: ${fragment}`).not.toBeNull();
+  expect(
+    error,
+    `Se esperaba un error que contuviera: ${fragment}`,
+  ).not.toBeNull();
   const message =
     error instanceof ConvexError ? String(error.data) : String(error);
   expect(message).toContain(fragment);
@@ -73,7 +79,9 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     );
     const techAuthed = t.withIdentity({ subject: `${techId}|s1` });
     await expectConvexError(
-      techAuthed.query(api.audit.securityAuditLogs, {}),
+      techAuthed.query(api.audit.securityAuditLogs, {
+        paginationOpts: FIRST_PAGE,
+      }),
       "Solo el administrador puede consultar las trazas",
     );
 
@@ -88,7 +96,9 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     );
     const anonAuthed = t.withIdentity({ subject: `${anonId}|s2` });
     await expectConvexError(
-      anonAuthed.query(api.audit.securityAuditLogs, {}),
+      anonAuthed.query(api.audit.securityAuditLogs, {
+        paginationOpts: FIRST_PAGE,
+      }),
       "Solo el administrador puede consultar las trazas",
     );
 
@@ -102,7 +112,9 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     );
     const inactiveAuthed = t.withIdentity({ subject: `${inactiveId}|s3` });
     await expectConvexError(
-      inactiveAuthed.query(api.audit.securityAuditLogs, {}),
+      inactiveAuthed.query(api.audit.securityAuditLogs, {
+        paginationOpts: FIRST_PAGE,
+      }),
       "Solo el administrador puede consultar las trazas",
     );
   });
@@ -123,19 +135,59 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
       });
     });
 
-    const allLogs = await authed.query(api.audit.securityAuditLogs, {});
-    expect(allLogs.length).toBe(2);
+    const allLogs = await authed.query(api.audit.securityAuditLogs, {
+      paginationOpts: FIRST_PAGE,
+    });
+    expect(allLogs.page).toHaveLength(2);
+    expect(allLogs.isDone).toBe(true);
 
     const filteredLogs = await authed.query(api.audit.securityAuditLogs, {
+      paginationOpts: FIRST_PAGE,
       action: "role_change",
     });
-    expect(filteredLogs.length).toBe(1);
-    expect(filteredLogs[0].action).toBe("role_change");
-    expect(filteredLogs[0].target).toBe("user:target1");
+    expect(filteredLogs.page).toHaveLength(1);
+    expect(filteredLogs.page[0].action).toBe("role_change");
+    expect(filteredLogs.page[0].target).toBe("user:target1");
+  });
+
+  test("securityAuditLogs entrega el histórico por cursor, no de golpe", async () => {
+    const { t, authed, userId } = await setup("admin");
+
+    await t.run(async (ctx) => {
+      for (let turn = 0; turn < 3; turn += 1) {
+        await logSecurityEvent(ctx, {
+          actorId: userId,
+          action: "role_change",
+          target: `user:${turn}`,
+          metadata: { turn },
+        });
+      }
+    });
+
+    // Una ventana de dos: la tabla no se vacía nunca, así que se pide a trozos.
+    const first = await authed.query(api.audit.securityAuditLogs, {
+      paginationOpts: { numItems: 2, cursor: null },
+    });
+    expect(first.page).toHaveLength(2);
+    expect(first.isDone).toBe(false);
+    expect(first.continueCursor).not.toBe("");
+
+    const second = await authed.query(api.audit.securityAuditLogs, {
+      paginationOpts: { numItems: 2, cursor: first.continueCursor },
+    });
+    expect(second.page).toHaveLength(1);
+    expect(second.isDone).toBe(true);
+    // Lo más reciente primero: las marcas de los tres turnos, sin repetir.
+    const targets = [...first.page, ...second.page].map((log) => log.target);
+    expect(targets).toEqual(["user:2", "user:1", "user:0"]);
   });
 
   test("members.setRole registra el cambio de rol en securityAuditLog", async () => {
-    const { t, authed, userId: adminId } = await setup("admin", "admin@taller.es");
+    const {
+      t,
+      authed,
+      userId: adminId,
+    } = await setup("admin", "admin@taller.es");
 
     const targetUserId = await t.run((ctx) =>
       ctx.db.insert("users", {
@@ -240,5 +292,16 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
       ctx.db.query("securityAuditLog").collect(),
     );
     expect(logsAfterReset.length).toBe(1);
+  });
+});
+
+describe("histórico de peticiones por cursor", () => {
+  test("fuera del taller no se devuelve ni una ventana", async () => {
+    const t = backend();
+    const page = await t.query(api.partRequests.paginatedList, {
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(page.page).toEqual([]);
+    expect(page.isDone).toBe(true);
   });
 });
