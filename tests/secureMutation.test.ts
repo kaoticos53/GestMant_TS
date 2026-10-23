@@ -121,6 +121,24 @@ describe("secureMutation", () => {
     expect(incident?.assigneeId).toBe(gestor.userId);
   });
 
+  test("las capacidades de administración se niegan a un técnico", async () => {
+    const t = backend();
+    const tecnico = await miembro(t, "technician");
+    const gestor = await miembro(t, "manager");
+
+    const mensaje = await denial(
+      tecnico.session.mutation(api.members.setRole, {
+        userId: gestor.userId,
+        role: "admin",
+      }),
+    );
+    expect(mensaje).toContain("Solo el administrador");
+
+    // Y el rol del objetivo no cambió: la denegación no dejó nada a medias.
+    const target = await t.run((ctx) => ctx.db.get(gestor.userId));
+    expect(target?.role).toBe("manager");
+  });
+
   test("la política deja pasar al técnico que tiene la incidencia asignada", async () => {
     const t = backend();
     const gestor = await miembro(t, "manager");

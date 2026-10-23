@@ -9,6 +9,7 @@ import { clampSidebarWidth } from "../lib/sidebar";
 import { dismissalOf } from "../lib/workAlert";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { secureMutation } from "./_auth/secureMutation";
 import { hasCapability, roleExists } from "./permissions";
 import {
   QueryCtx,
@@ -124,23 +125,29 @@ export const ensureRole = mutation({
 /** Actualiza el perfil de la propia persona (nunca el rol ni el estado). */
 export const updateProfile = mutation({
   args: profileArgs,
-  handler: async (ctx, args) => {
-    const userId = await requireUser(ctx);
-    const name = args.name.trim();
-    if (!name) throw new ConvexError("Indica tu nombre y apellidos.");
-    await ctx.db.patch(userId, {
-      name,
-      // Argumento omitido = no tocar; cadena vacía = limpiar el campo.
-      ...(args.position !== undefined
-        ? { position: trimmed(args.position) }
-        : {}),
-      ...(args.location !== undefined
-        ? { location: trimmed(args.location) }
-        : {}),
-      ...(args.phone !== undefined ? { phone: trimmed(args.phone) } : {}),
-    });
-    return true;
-  },
+  handler: secureMutation(
+    {
+      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+    },
+    profileArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      const name = args.name.trim();
+      if (!name) throw new ConvexError("Indica tu nombre y apellidos.");
+      await ctx.db.patch(userId, {
+        name,
+        // Argumento omitido = no tocar; cadena vacía = limpiar el campo.
+        ...(args.position !== undefined
+          ? { position: trimmed(args.position) }
+          : {}),
+        ...(args.location !== undefined
+          ? { location: trimmed(args.location) }
+          : {}),
+        ...(args.phone !== undefined ? { phone: trimmed(args.phone) } : {}),
+      });
+      return true;
+    },
+  ),
 });
 
 /**
@@ -149,16 +156,24 @@ export const updateProfile = mutation({
  * que venga. El backend no conoce el tamaño de la ventana, así que solo aplica
  * los límites propios del panel; el navegador ajusta el resto.
  */
+const saveSidebarLayoutArgs = { width: v.number(), collapsed: v.boolean() };
+
 export const saveSidebarLayout = mutation({
-  args: { width: v.number(), collapsed: v.boolean() },
-  handler: async (ctx, args) => {
-    const userId = await requireUser(ctx);
-    await ctx.db.patch(userId, {
-      sidebarWidth: clampSidebarWidth(args.width, Number.POSITIVE_INFINITY),
-      sidebarCollapsed: args.collapsed,
-    });
-    return true;
-  },
+  args: saveSidebarLayoutArgs,
+  handler: secureMutation(
+    {
+      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+    },
+    saveSidebarLayoutArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      await ctx.db.patch(userId, {
+        sidebarWidth: clampSidebarWidth(args.width, Number.POSITIVE_INFINITY),
+        sidebarCollapsed: args.collapsed,
+      });
+      return true;
+    },
+  ),
 });
 
 /**
@@ -170,57 +185,74 @@ export const saveSidebarLayout = mutation({
  * Las referencias se guardan limpias y ordenadas (`dismissalOf`, la misma regla
  * que usa el panel), para que comparar lo avisado no dependa de cómo llegó.
  */
+const saveWorkAlertDismissalArgs = {
+  dismissal: v.union(
+    v.object({
+      marginDays: v.number(),
+      references: v.array(v.string()),
+    }),
+    v.null(),
+  ),
+};
+
 export const saveWorkAlertDismissal = mutation({
-  args: {
-    dismissal: v.union(
-      v.object({
-        marginDays: v.number(),
-        references: v.array(v.string()),
-      }),
-      v.null(),
-    ),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireUser(ctx);
-    if (args.dismissal === null) {
-      // Olvidarlo es quitar el campo: sin él, el aviso sale como si nunca se
-      // hubiera cerrado.
-      await ctx.db.patch(userId, { workAlertDismissal: undefined });
+  args: saveWorkAlertDismissalArgs,
+  handler: secureMutation(
+    {
+      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+    },
+    saveWorkAlertDismissalArgs,
+    async (ctx, args, actor) => {
+      const userId = actor._id;
+      if (args.dismissal === null) {
+        // Olvidarlo es quitar el campo: sin él, el aviso sale como si nunca se
+        // hubiera cerrado.
+        await ctx.db.patch(userId, { workAlertDismissal: undefined });
+        return true;
+      }
+      const marginDays = Math.round(args.dismissal.marginDays);
+      if (!Number.isFinite(marginDays)) {
+        throw new ConvexError("El margen del aviso no es válido.");
+      }
+      await ctx.db.patch(userId, {
+        workAlertDismissal: dismissalOf(args.dismissal.references, marginDays),
+      });
       return true;
-    }
-    const marginDays = Math.round(args.dismissal.marginDays);
-    if (!Number.isFinite(marginDays)) {
-      throw new ConvexError("El margen del aviso no es válido.");
-    }
-    await ctx.db.patch(userId, {
-      workAlertDismissal: dismissalOf(args.dismissal.references, marginDays),
-    });
-    return true;
-  },
+    },
+  ),
 });
 
 /** El administrador modifica el perfil de cualquier usuario. */
+const updateUserArgs = { userId: v.id("users"), ...profileArgs };
+
 export const updateUser = mutation({
-  args: { userId: v.id("users"), ...profileArgs },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    const target = await ctx.db.get(args.userId);
-    if (!target) throw new ConvexError("El usuario ya no existe.");
-    const name = args.name.trim();
-    if (!name) throw new ConvexError("Indica tu nombre y apellidos.");
-    await ctx.db.patch(args.userId, {
-      name,
-      // Argumento omitido = no tocar; cadena vacía = limpiar el campo.
-      ...(args.position !== undefined
-        ? { position: trimmed(args.position) }
-        : {}),
-      ...(args.location !== undefined
-        ? { location: trimmed(args.location) }
-        : {}),
-      ...(args.phone !== undefined ? { phone: trimmed(args.phone) } : {}),
-    });
-    return true;
-  },
+  args: updateUserArgs,
+  handler: secureMutation(
+    {
+      capability: "manageUsers",
+      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      denyMessage: "Solo el administrador puede gestionar usuarios y roles.",
+    },
+    updateUserArgs,
+    async (ctx, args) => {
+      const target = await ctx.db.get(args.userId);
+      if (!target) throw new ConvexError("El usuario ya no existe.");
+      const name = args.name.trim();
+      if (!name) throw new ConvexError("Indica tu nombre y apellidos.");
+      await ctx.db.patch(args.userId, {
+        name,
+        // Argumento omitido = no tocar; cadena vacía = limpiar el campo.
+        ...(args.position !== undefined
+          ? { position: trimmed(args.position) }
+          : {}),
+        ...(args.location !== undefined
+          ? { location: trimmed(args.location) }
+          : {}),
+        ...(args.phone !== undefined ? { phone: trimmed(args.phone) } : {}),
+      });
+      return true;
+    },
+  ),
 });
 
 /**
@@ -441,35 +473,45 @@ export const list = query({
 });
 
 /** Cambia el rol de un usuario (solo administrador, nunca el propio). */
-export const setRole = mutation({
-  args: {
-    userId: v.id("users"),
-    role: roleValidator,
-  },
-  handler: async (ctx, args) => {
-    const adminId = await requireAdmin(ctx);
-    if (args.userId === adminId) {
-      throw new ConvexError("No puedes cambiar tu propio rol.");
-    }
-    const target = await ctx.db.get(args.userId);
-    if (!target) throw new ConvexError("El usuario ya no existe.");
-    if (!(await roleExists(ctx, args.role))) {
-      throw new ConvexError("El rol indicado no existe.");
-    }
-    if (target.role === args.role) return;
+const setRoleArgs = {
+  userId: v.id("users"),
+  role: roleValidator,
+};
 
-    const previousRole = target.role;
-    await ctx.db.patch(args.userId, { role: args.role });
-    await logSecurityEvent(ctx, {
-      actorId: adminId,
-      action: "role_change",
-      target: `user:${args.userId}`,
-      metadata: {
-        previousRole,
-        newRole: args.role,
-        targetEmail: target.email,
-        targetName: target.name,
-      },
-    });
-  },
+export const setRole = mutation({
+  args: setRoleArgs,
+  handler: secureMutation(
+    {
+      capability: "manageUsers",
+      identityMessage: "Debes iniciar sesión para gestionar usuarios.",
+      denyMessage: "Solo el administrador puede gestionar usuarios y roles.",
+    },
+    setRoleArgs,
+    async (ctx, args, actor) => {
+      const adminId = actor._id;
+      if (args.userId === adminId) {
+        throw new ConvexError("No puedes cambiar tu propio rol.");
+      }
+      const target = await ctx.db.get(args.userId);
+      if (!target) throw new ConvexError("El usuario ya no existe.");
+      if (!(await roleExists(ctx, args.role))) {
+        throw new ConvexError("El rol indicado no existe.");
+      }
+      if (target.role === args.role) return;
+
+      const previousRole = target.role;
+      await ctx.db.patch(args.userId, { role: args.role });
+      await logSecurityEvent(ctx, {
+        actorId: adminId,
+        action: "role_change",
+        target: `user:${args.userId}`,
+        metadata: {
+          previousRole,
+          newRole: args.role,
+          targetEmail: target.email,
+          targetName: target.name,
+        },
+      });
+    },
+  ),
 });
