@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { normalizeCatalogString } from "../lib/catalogs";
+import { secureMutation } from "./_auth/secureMutation";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
 
@@ -93,39 +94,48 @@ export const listAll = query({
  * Da de alta o devuelve el elemento de catálogo si ya existe con esa normalización.
  * Diseñado para ser invocado transparentemente al guardar formularios si el valor es nuevo.
  */
+const ensureItemArgs = {
+  kind: catalogKindValidator,
+  name: v.string(),
+};
+
 export const ensureItem = mutation({
-  args: {
-    kind: catalogKindValidator,
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await requireUser(ctx);
-    const cleanName = args.name.trim();
-    if (!cleanName) {
-      throw new ConvexError("El nombre no puede estar vacío.");
-    }
-    const normalized = normalizeCatalogString(cleanName);
+  args: ensureItemArgs,
+  handler: secureMutation(
+    {
+      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
+      // lee quien no ha entrado, solo dónde se comprueba.
+      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+    },
+    ensureItemArgs,
+    async (ctx, args) => {
+      const cleanName = args.name.trim();
+      if (!cleanName) {
+        throw new ConvexError("El nombre no puede estar vacío.");
+      }
+      const normalized = normalizeCatalogString(cleanName);
 
-    const existing = await ctx.db
-      .query("catalogs")
-      .withIndex("by_kind_normalized", (q) =>
-        q.eq("kind", args.kind).eq("normalized", normalized),
-      )
-      .first();
+      const existing = await ctx.db
+        .query("catalogs")
+        .withIndex("by_kind_normalized", (q) =>
+          q.eq("kind", args.kind).eq("normalized", normalized),
+        )
+        .first();
 
-    if (existing) {
-      return existing._id;
-    }
+      if (existing) {
+        return existing._id;
+      }
 
-    const now = Date.now();
-    return await ctx.db.insert("catalogs", {
-      kind: args.kind,
-      name: cleanName,
-      normalized,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
+      const now = Date.now();
+      return await ctx.db.insert("catalogs", {
+        kind: args.kind,
+        name: cleanName,
+        normalized,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+  ),
 });
 
 /**
@@ -212,7 +222,10 @@ async function propagateCatalogRename(
     // Plantillas de modelos
     const models = await ctx.db.query("equipmentModels").collect();
     for (const m of models) {
-      if (m.defaultSupplier && normalizeCatalogString(m.defaultSupplier) === normOld) {
+      if (
+        m.defaultSupplier &&
+        normalizeCatalogString(m.defaultSupplier) === normOld
+      ) {
         await ctx.db.patch(m._id, { defaultSupplier: newName });
       }
     }
@@ -248,14 +261,20 @@ async function propagateCatalogRename(
     // Peticiones de repuestos (requesterTeam)
     const requests = await ctx.db.query("partRequests").collect();
     for (const req of requests) {
-      if (req.requesterTeam && normalizeCatalogString(req.requesterTeam) === normOld) {
+      if (
+        req.requesterTeam &&
+        normalizeCatalogString(req.requesterTeam) === normOld
+      ) {
         await ctx.db.patch(req._id, { requesterTeam: newName });
       }
     }
     // Incidencias notificadas (reporterRole)
     const incidents = await ctx.db.query("incidents").collect();
     for (const inc of incidents) {
-      if (inc.reporterRole && normalizeCatalogString(inc.reporterRole) === normOld) {
+      if (
+        inc.reporterRole &&
+        normalizeCatalogString(inc.reporterRole) === normOld
+      ) {
         await ctx.db.patch(inc._id, { reporterRole: newName });
       }
     }
@@ -290,139 +309,178 @@ async function propagateCatalogRename(
  * Modifica el nombre de un elemento existente y propaga el cambio a todas las
  * tablas y documentos que citan este valor.
  */
+const updateArgs = {
+  id: v.id("catalogs"),
+  name: v.string(),
+};
+
 export const update = mutation({
-  args: {
-    id: v.id("catalogs"),
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    await requireUser(ctx);
-    const cleanName = args.name.trim();
-    if (!cleanName) {
-      throw new ConvexError("El nombre no puede estar vacío.");
-    }
+  args: updateArgs,
+  handler: secureMutation(
+    {
+      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
+      // lee quien no ha entrado, solo dónde se comprueba.
+      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+    },
+    updateArgs,
+    async (ctx, args) => {
+      const cleanName = args.name.trim();
+      if (!cleanName) {
+        throw new ConvexError("El nombre no puede estar vacío.");
+      }
 
-    const item = await ctx.db.get(args.id);
-    if (!item) {
-      throw new ConvexError("Elemento de catálogo no encontrado.");
-    }
+      const item = await ctx.db.get(args.id);
+      if (!item) {
+        throw new ConvexError("Elemento de catálogo no encontrado.");
+      }
 
-    const oldName = item.name;
-    const normalized = normalizeCatalogString(cleanName);
-    const duplicate = await ctx.db
-      .query("catalogs")
-      .withIndex("by_kind_normalized", (q) =>
-        q.eq("kind", item.kind).eq("normalized", normalized),
-      )
-      .first();
+      const oldName = item.name;
+      const normalized = normalizeCatalogString(cleanName);
+      const duplicate = await ctx.db
+        .query("catalogs")
+        .withIndex("by_kind_normalized", (q) =>
+          q.eq("kind", item.kind).eq("normalized", normalized),
+        )
+        .first();
 
-    if (duplicate && duplicate._id !== args.id) {
-      throw new ConvexError("Ya existe otro elemento con ese nombre en este catálogo.");
-    }
+      if (duplicate && duplicate._id !== args.id) {
+        throw new ConvexError(
+          "Ya existe otro elemento con ese nombre en este catálogo.",
+        );
+      }
 
-    const now = Date.now();
-    await ctx.db.patch(args.id, {
-      name: cleanName,
-      normalized,
-      updatedAt: now,
-    });
+      const now = Date.now();
+      await ctx.db.patch(args.id, {
+        name: cleanName,
+        normalized,
+        updatedAt: now,
+      });
 
-    // Propagación en cascada a todos los registros vinculados
-    await propagateCatalogRename(ctx, item.kind, oldName, cleanName);
+      // Propagación en cascada a todos los registros vinculados
+      await propagateCatalogRename(ctx, item.kind, oldName, cleanName);
 
-    return args.id;
-  },
+      return args.id;
+    },
+  ),
 });
 
 /**
  * Elimina un elemento del catálogo maestro.
  */
+const removeArgs = {
+  id: v.id("catalogs"),
+};
+
 export const remove = mutation({
-  args: {
-    id: v.id("catalogs"),
-  },
-  handler: async (ctx, args) => {
-    await requireUser(ctx);
-    const item = await ctx.db.get(args.id);
-    if (!item) {
-      throw new ConvexError("Elemento no encontrado.");
-    }
-    await ctx.db.delete(args.id);
-  },
+  args: removeArgs,
+  handler: secureMutation(
+    {
+      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
+      // lee quien no ha entrado, solo dónde se comprueba.
+      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+    },
+    removeArgs,
+    async (ctx, args) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) {
+        throw new ConvexError("Elemento no encontrado.");
+      }
+      await ctx.db.delete(args.id);
+    },
+  ),
 });
 
 /**
  * Fusiona un valor duplicado o erróneo en un valor canónico de destino.
  * Actualiza todas las referencias en las tablas del sistema y elimina el duplicado.
  */
+const mergeDuplicatesArgs = {
+  sourceId: v.id("catalogs"),
+  targetId: v.id("catalogs"),
+};
+
 export const mergeDuplicates = mutation({
-  args: {
-    sourceId: v.id("catalogs"),
-    targetId: v.id("catalogs"),
-  },
-  handler: async (ctx, args) => {
-    await requireUser(ctx);
-    if (args.sourceId === args.targetId) {
-      throw new ConvexError("No puedes fusionar un elemento consigo mismo.");
-    }
+  args: mergeDuplicatesArgs,
+  handler: secureMutation(
+    {
+      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
+      // lee quien no ha entrado, solo dónde se comprueba.
+      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+    },
+    mergeDuplicatesArgs,
+    async (ctx, args) => {
+      if (args.sourceId === args.targetId) {
+        throw new ConvexError("No puedes fusionar un elemento consigo mismo.");
+      }
 
-    const source = await ctx.db.get(args.sourceId);
-    const target = await ctx.db.get(args.targetId);
+      const source = await ctx.db.get(args.sourceId);
+      const target = await ctx.db.get(args.targetId);
 
-    if (!source || !target) {
-      throw new ConvexError("Uno de los elementos no fue encontrado.");
-    }
+      if (!source || !target) {
+        throw new ConvexError("Uno de los elementos no fue encontrado.");
+      }
 
-    if (source.kind !== target.kind) {
-      throw new ConvexError("No se pueden fusionar elementos de distintos catálogos.");
-    }
+      if (source.kind !== target.kind) {
+        throw new ConvexError(
+          "No se pueden fusionar elementos de distintos catálogos.",
+        );
+      }
 
-    const oldName = source.name;
-    const newName = target.name;
+      const oldName = source.name;
+      const newName = target.name;
 
-    // Propagación en caliente según el tipo de catálogo
-    await propagateCatalogRename(ctx, source.kind, oldName, newName);
+      // Propagación en caliente según el tipo de catálogo
+      await propagateCatalogRename(ctx, source.kind, oldName, newName);
 
-    // Borramos el duplicado
-    await ctx.db.delete(args.sourceId);
+      // Borramos el duplicado
+      await ctx.db.delete(args.sourceId);
 
-    return { merged: true, oldName, newName };
-  },
+      return { merged: true, oldName, newName };
+    },
+  ),
 });
 
 /**
  * Migra cualquier registro legado con kind "location" a "equipmentLocation".
  * Si ya existe una ubicación de equipo con el mismo nombre normalizado, elimina el registro legado para evitar duplicados.
  */
+const migrateLegacyLocationsArgs = {};
+
 export const migrateLegacyLocations = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireUser(ctx);
-    const legados = await ctx.db
-      .query("catalogs")
-      .withIndex("by_kind", (q) => q.eq("kind", "location" as never))
-      .collect();
-
-    let migrated = 0;
-    for (const item of legados) {
-      const existing = await ctx.db
+  args: migrateLegacyLocationsArgs,
+  handler: secureMutation(
+    {
+      // El aviso es el de siempre en los catálogos: la puerta no cambia lo que
+      // lee quien no ha entrado, solo dónde se comprueba.
+      identityMessage: "Debes iniciar sesión para consultar catálogos.",
+    },
+    migrateLegacyLocationsArgs,
+    async (ctx) => {
+      const legados = await ctx.db
         .query("catalogs")
-        .withIndex("by_kind_normalized", (q) =>
-          q.eq("kind", "equipmentLocation").eq("normalized", item.normalized),
-        )
-        .first();
+        .withIndex("by_kind", (q) => q.eq("kind", "location" as never))
+        .collect();
 
-      if (existing) {
-        await ctx.db.delete(item._id);
-      } else {
-        await ctx.db.patch(item._id, {
-          kind: "equipmentLocation",
-          updatedAt: Date.now(),
-        });
+      let migrated = 0;
+      for (const item of legados) {
+        const existing = await ctx.db
+          .query("catalogs")
+          .withIndex("by_kind_normalized", (q) =>
+            q.eq("kind", "equipmentLocation").eq("normalized", item.normalized),
+          )
+          .first();
+
+        if (existing) {
+          await ctx.db.delete(item._id);
+        } else {
+          await ctx.db.patch(item._id, {
+            kind: "equipmentLocation",
+            updatedAt: Date.now(),
+          });
+        }
+        migrated++;
       }
-      migrated++;
-    }
-    return { migrated };
-  },
+      return { migrated };
+    },
+  ),
 });
-
