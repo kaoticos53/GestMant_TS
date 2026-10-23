@@ -1,23 +1,24 @@
 # Tarea Activa (`.context/active-task.md`)
 
 ## 1. Definición de la Tarea
-- **ID / Nombre de la Tarea:** `REF-FASE1-AUTOMATIC-ARCHIVE-CARD`
-- **Objetivo:** Fase 1 - Crear interfaces tipadas en `settings/automaticArchive/types.ts`, helpers puros en `settings/automaticArchive/helpers.ts` y tests unitarios en `tests/automaticArchiveHelpers.test.ts`.
+- **ID / Nombre de la Tarea:** `REF-FASE2-AUTOMATIC-ARCHIVE-CARD`
+- **Objetivo:** Fase 2 - Crear hook `useAutomaticArchive`, subcomponentes `AutomaticArchiveHeader`, `AutomaticArchiveControls` y barril `automaticArchive/index.ts`.
 - **Módulo(s) Afectado(s):**
-  - `src/pages/dashboard/settings/automaticArchive/types.ts`
-  - `src/pages/dashboard/settings/automaticArchive/helpers.ts`
-  - `tests/automaticArchiveHelpers.test.ts`
+  - `src/pages/dashboard/settings/automaticArchive/useAutomaticArchive.ts`
+  - `src/pages/dashboard/settings/automaticArchive/components/AutomaticArchiveHeader.tsx`
+  - `src/pages/dashboard/settings/automaticArchive/components/AutomaticArchiveControls.tsx`
+  - `src/pages/dashboard/settings/automaticArchive/index.ts`
 
 ---
 
 ## 2. Archivos Modificados / Creados
-- [x] `automaticArchive/types.ts`: contratos de configuración y props de subcomponentes.
-- [x] `automaticArchive/helpers.ts`: funciones puras `resolveAutoOptions`, `formatRunNowResultToast` y `formatArchiveFooter`.
-- [x] `tests/automaticArchiveHelpers.test.ts`: suite de pruebas unitarias para helpers de archivado automático.
-- [ ] `automaticArchive/useAutomaticArchive.ts`: pendiente Fase 2.
-- [ ] `automaticArchive/components/AutomaticArchiveHeader.tsx`: pendiente Fase 2.
-- [ ] `automaticArchive/components/AutomaticArchiveControls.tsx`: pendiente Fase 2.
-- [ ] `automaticArchive/index.ts`: pendiente Fase 2.
+- [x] `automaticArchive/types.ts`: contratos de tipos.
+- [x] `automaticArchive/helpers.ts`: funciones puras de cálculo y formato.
+- [x] `tests/automaticArchiveHelpers.test.ts`: suite de pruebas unitarias para helpers.
+- [x] `automaticArchive/useAutomaticArchive.ts`: hook de queries, mutaciones y acciones de archivo automático.
+- [x] `automaticArchive/components/AutomaticArchiveHeader.tsx`: cabecera descriptiva con switch de activación.
+- [x] `automaticArchive/components/AutomaticArchiveControls.tsx`: selector de antigüedad y botón ejecutar ahora.
+- [x] `automaticArchive/index.ts`: barril unificado.
 - [ ] `settings/AutomaticArchiveCard.tsx`: pendiente Fase 3.
 
 ---
@@ -31,4 +32,5 @@
 ---
 
 ## 4. Estado Actual
-- **Estado:** En ejecución - Fase 1.
+- **Estado:** Fase 2 completada - Commit atómico 2 listo.
+
