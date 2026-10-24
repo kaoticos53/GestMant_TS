@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   allowsOn,
+  asPurchaseOrder,
+  asRequest,
   defineAbilityFor,
   emptyAbility,
   type AbilityActor,
@@ -111,20 +113,46 @@ describe("defineAbilityFor", () => {
     expect(allowsOn(admin, "delete", "Audit", {})).toBe(false);
   });
 
-  it("solo decide peticiones quien tiene la capacidad y mientras esperan", () => {
+  it("solo tramita peticiones quien tiene la capacidad, sea cual sea su estado", () => {
     const gestor = defineAbilityFor(tecnico, { decideRequests: true });
 
     expect(allowsOn(gestor, "decide", "Request", { status: "pending" })).toBe(
       true,
     );
-    expect(allowsOn(gestor, "decide", "Request", { status: "delivered" })).toBe(
-      false,
+    // Qué estados admiten cada paso lo dice `requestFlow`, no CASL: si la regla
+    // lo repitiera, la ficha ofrecería pasos que la máquina no deja.
+    expect(
+      allowsOn(gestor, "decide", "Request", { status: "materialReceived" }),
+    ).toBe(true);
+    expect(allowsOn(gestor, "archive", "Request", { status: "issued" })).toBe(
+      true,
     );
+    expect(allowsOn(gestor, "delete", "Request", {})).toBe(true);
     expect(
       allowsOn(defineAbilityFor(tecnico), "decide", "Request", {
         status: "pending",
       }),
     ).toBe(false);
+  });
+
+  it("la ficha de la petición se marca para preguntar por ella", () => {
+    const gestor = defineAbilityFor(tecnico, { decideRequests: true });
+
+    // `subject()` es lo que hace que CASL sepa qué ficha tiene delante.
+    expect(gestor.can("decide", asRequest({ status: "pending" }))).toBe(true);
+  });
+
+  it("recepcionar y anular una orden es de quien gestiona las compras", () => {
+    const comprador = defineAbilityFor(tecnico, { managePurchasing: true });
+    const orden = asPurchaseOrder({ status: "partial" });
+
+    expect(comprador.can("receive", orden)).toBe(true);
+    expect(comprador.can("cancel", orden)).toBe(true);
+
+    const sinCompras = defineAbilityFor(tecnico, { viewPurchasing: true });
+    expect(sinCompras.can("view", "PurchaseOrder")).toBe(true);
+    expect(sinCompras.can("receive", orden)).toBe(false);
+    expect(sinCompras.can("cancel", orden)).toBe(false);
   });
 
   it("las casillas de cada módulo son independientes", () => {

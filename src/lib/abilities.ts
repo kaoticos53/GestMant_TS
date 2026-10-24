@@ -18,8 +18,14 @@
  * Las capacidades siguen siendo las de `lib/permissions`: lo que el
  * administrador reparte desde su pantalla no cambia. Lo que se añade es la
  * propiedad y el contexto —una incidencia cerrada no se retoca, el técnico
- * trabaja lo que tiene asignado, una petición solo se decide mientras espera— y
- * una traza cuando alguien intenta lo que no puede.
+ * trabaja lo que tiene asignado— y una traza cuando alguien intenta lo que no
+ * puede.
+ *
+ * Lo que **no** se añade es la máquina de estados. Qué paso cabe en cada estado
+ * lo contestan `lib/incidentFlow`, `lib/requestFlow` y `lib/purchaseFlow`; si se
+ * copiara aquí como condición de una regla, la regla y la máquina podrían
+ * separarse y la ficha ofrecería lo que el servidor rechaza. CASL responde
+ * «¿puede esta persona tramitar esta ficha?»; el estado, quien lo mira.
  */
 
 import {
@@ -41,6 +47,8 @@ export type AppAction =
   | "assign"
   | "verify"
   | "close"
+  | "receive"
+  | "cancel"
   | "archive"
   | "manage";
 
@@ -131,16 +139,20 @@ export function defineAbilityFor(
     );
   }
 
-  // Peticiones: decidir solo mientras esperan una decisión.
+  // Peticiones: ver la cola no es tramitarla. Quien la tramita decide, corrige
+  // lo que aún espera, archiva y retira. **Qué paso cabe en cada estado no se
+  // responde aquí**: eso es la máquina (`lib/requestFlow`, `canRequestStep`), y
+  // repetirla como condición de CASL la dejaría dicha dos veces y distinta.
   if (allowed("viewRequests")) can("view", "Request");
   if (allowed("createRequests")) can("create", "Request");
-  if (allowed("decideRequests"))
-    can("decide", "Request", { status: "pending" });
+  if (allowed("decideRequests")) {
+    can(["decide", "update", "archive", "delete"], "Request");
+  }
 
   // Compras, almacén, equipos y manuales: ver y modificar son casillas aparte.
   if (allowed("viewPurchasing")) can("view", "PurchaseOrder");
   if (allowed("managePurchasing")) {
-    can(["create", "update", "decide"], "PurchaseOrder");
+    can(["create", "update", "decide", "receive", "cancel"], "PurchaseOrder");
   }
   if (allowed("viewInventory")) can("view", "InventoryItem");
   if (allowed("manageInventory")) {
@@ -211,4 +223,9 @@ export function asIncident(incident: Record<string, unknown>) {
 /** La ficha de una petición, marcada como tal para la interfaz (`<Can>`). */
 export function asRequest(request: Record<string, unknown>) {
   return subject("Request", request);
+}
+
+/** La orden de compra, marcada como tal para la interfaz (`<Can>`). */
+export function asPurchaseOrder(order: Record<string, unknown>) {
+  return subject("PurchaseOrder", order);
 }
