@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allowsOn,
   asPurchaseOrder,
+  asPurchaseRequest,
   asRequest,
   defineAbilityFor,
   emptyAbility,
@@ -153,6 +154,33 @@ describe("defineAbilityFor", () => {
     expect(sinCompras.can("view", "PurchaseOrder")).toBe(true);
     expect(sinCompras.can("receive", orden)).toBe(false);
     expect(sinCompras.can("cancel", orden)).toBe(false);
+  });
+
+  it("la cola de compras se toca con la capacidad de compras", () => {
+    const comprador = defineAbilityFor(tecnico, { managePurchasing: true });
+    const fila = asPurchaseRequest({ status: "pending" });
+
+    expect(comprador.can("update", fila)).toBe(true);
+    expect(comprador.can("cancel", fila)).toBe(true);
+    expect(comprador.can("create", "PurchaseOrder")).toBe(true);
+
+    const sinCompras = defineAbilityFor(tecnico, { viewPurchasing: true });
+    expect(sinCompras.can("view", fila)).toBe(true);
+    expect(sinCompras.can("update", fila)).toBe(false);
+    expect(sinCompras.can("cancel", fila)).toBe(false);
+    expect(sinCompras.can("create", "PurchaseOrder")).toBe(false);
+  });
+
+  it("apartar material sin existencias es de compras y pesa sobre la petición", () => {
+    // Apartar nace en una petición de repuesto: el sujeto es esa ficha.
+    const comprador = defineAbilityFor(tecnico, { managePurchasing: true });
+    expect(comprador.can("reserve", "Request")).toBe(true);
+
+    const taller = defineAbilityFor(tecnico, {
+      viewRequests: true,
+      decideRequests: true,
+    });
+    expect(taller.can("reserve", "Request")).toBe(false);
   });
 
   it("las casillas de cada módulo son independientes", () => {

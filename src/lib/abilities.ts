@@ -49,6 +49,7 @@ export type AppAction =
   | "close"
   | "receive"
   | "cancel"
+  | "reserve"
   | "archive"
   | "manage";
 
@@ -56,6 +57,7 @@ export type AppAction =
 export type AppSubjectName =
   | "Incident"
   | "Request"
+  | "PurchaseRequest"
   | "PurchaseOrder"
   | "InventoryItem"
   | "Equipment"
@@ -150,9 +152,19 @@ export function defineAbilityFor(
   }
 
   // Compras, almacén, equipos y manuales: ver y modificar son casillas aparte.
-  if (allowed("viewPurchasing")) can("view", "PurchaseOrder");
+  if (allowed("viewPurchasing")) {
+    can("view", "PurchaseOrder");
+    can("view", "PurchaseRequest");
+  }
   if (allowed("managePurchasing")) {
     can(["create", "update", "decide", "receive", "cancel"], "PurchaseOrder");
+    // La cola de compras: a una petición de compra se le corrige la nota y el
+    // proveedor, y retirarla es el paso `cancel` de `lib/purchaseFlow` —el que
+    // la deja fuera de la compra—.
+    can(["update", "cancel"], "PurchaseRequest");
+    // Apartar lo que el almacén no cubre nace en una **petición de repuesto**
+    // —el sujeto es esa ficha, no la compra—, y el paso se llama `reserve`.
+    can("reserve", "Request");
   }
   if (allowed("viewInventory")) can("view", "InventoryItem");
   if (allowed("manageInventory")) {
@@ -228,4 +240,13 @@ export function asRequest(request: Record<string, unknown>) {
 /** La orden de compra, marcada como tal para la interfaz (`<Can>`). */
 export function asPurchaseOrder(order: Record<string, unknown>) {
   return subject("PurchaseOrder", order);
+}
+
+/**
+ * La petición de compra —la fila de la cola, ya apartada— marcada para
+ * preguntar por ella. No es una petición de repuesto: la de repuesto la pide el
+ * taller y esta la compra el módulo de compras.
+ */
+export function asPurchaseRequest(request: Record<string, unknown>) {
+  return subject("PurchaseRequest", request);
 }
