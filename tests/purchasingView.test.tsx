@@ -241,6 +241,8 @@ function pintar(
     partRequests?: unknown[];
     parts?: unknown[];
     ability?: AppAbility;
+    /** El booleano que el panel reparte; la cola ya no lo mira. */
+    canManage?: boolean;
   } = {},
 ) {
   DATOS.purchaseRequests = props.purchaseRequests ?? [compra()];
@@ -252,7 +254,7 @@ function pintar(
   act(() => {
     root.render(
       <AbilityProvider value={ability}>
-        <PurchasingView canManage />
+        <PurchasingView canManage={props.canManage ?? true} />
       </AbilityProvider>,
     );
   });
@@ -306,7 +308,9 @@ describe("el módulo de compras, pintado", () => {
 
     expect(document.body.textContent).toContain("Sin material en el almacén");
     expect(document.body.textContent).toContain("PET-0001");
-    // Sin marcar nada no hay nada que apartar.
+    // Cada petición se puede apartar de una en una…
+    expect(boton("Generar petición de compra")).toBeDefined();
+    // …o en bloque: sin marcar nada no hay nada que apartar.
     expect(boton("Apartar las marcadas").disabled).toBe(true);
 
     act(() => boton("Marcar todas").click());
@@ -336,6 +340,10 @@ describe("el módulo de compras, pintado", () => {
     expect(texto).toContain("Ferretería Norte");
     expect(texto).toContain("1 petición · 1 artículo · 3 ud");
     expect(texto).toContain("PET-0007");
+    // La fila ofrece corregir la nota, el proveedor y retirarla…
+    expect(boton("Nota")).toBeDefined();
+    expect(boton("Proveedor")).toBeDefined();
+    expect(boton("Retirar")).toBeDefined();
 
     // Sin marcar nada no hay orden que montar.
     expect(boton("Crear orden de compra").disabled).toBe(true);
@@ -474,6 +482,43 @@ describe("el módulo de compras, pintado", () => {
           (candidate.textContent ?? "").includes(paso),
         ),
         paso,
+      ).toBe(false);
+    }
+  });
+
+  test("quien solo consulta ve la cola sin apartar, retirar ni montar la orden", () => {
+    // La cola tampoco recibe el booleano: cada control pregunta a `<Can>` por su
+    // paso y por la ficha. Sin capacidad de compras, las dos listas se leen.
+    pintar({
+      purchaseRequests: [compra()],
+      partRequests: [peticionSinMaterial("PET-0002", "req-2")],
+      ability: CONSULTA,
+      canManage: false,
+    });
+
+    const texto = document.body.textContent ?? "";
+    expect(texto).toContain("Sin material en el almacén");
+    expect(texto).toContain("PET-0002");
+    expect(texto).toContain("PC-0001");
+
+    // Ni casillas de selección…
+    expect(document.querySelector('[role="checkbox"]')).toBeNull();
+    // …ni un solo paso de los que piden la capacidad.
+    for (const control of [
+      "Marcar todas",
+      "Apartar",
+      "Generar petición de compra",
+      "Crear orden de compra",
+      "Elegir el grupo",
+      "Nota",
+      "Proveedor",
+      "Retirar",
+    ]) {
+      expect(
+        [...document.querySelectorAll("button")].some((candidate) =>
+          (candidate.textContent ?? "").includes(control),
+        ),
+        control,
       ).toBe(false);
     }
   });

@@ -1,3 +1,4 @@
+import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,7 +16,6 @@ export interface MissingStockItem {
 export interface MissingStockCardProps {
   missingStockRequests: readonly MissingStockItem[];
   markedIds: ReadonlySet<string>;
-  canManage: boolean;
   areAllMarked: boolean;
   isReserving: boolean;
   generatingId: string | null;
@@ -28,11 +28,13 @@ export interface MissingStockCardProps {
 /**
  * Tarjeta para visualizar y apartar peticiones de repuesto que el almacén
  * no puede cubrir por falta de existencias.
+ *
+ * Apartar es un paso sobre la **petición de repuesto**, así que es `<Can>` quien
+ * decide si se enseña: sin el paso `reserve`, la tarjeta queda como aviso.
  */
 export function MissingStockCard({
   missingStockRequests,
   markedIds,
-  canManage,
   areAllMarked,
   isReserving,
   generatingId,
@@ -56,11 +58,11 @@ export function MissingStockCard({
             Sin material en el almacén
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Peticiones que el almacén no puede cubrir —repuestos nuevos o
-            sin existencias—. Apartarlas es el primer paso para comprarlas.
+            Peticiones que el almacén no puede cubrir —repuestos nuevos o sin
+            existencias—. Apartarlas es el primer paso para comprarlas.
           </p>
         </div>
-        {canManage && (
+        <Can I="reserve" a="Request">
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
@@ -85,7 +87,7 @@ export function MissingStockCard({
                   }`}
             </Button>
           </div>
-        )}
+        </Can>
       </CardHeader>
 
       <CardContent className="grid gap-2">
@@ -95,14 +97,14 @@ export function MissingStockCard({
             className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
           >
             <div className="flex min-w-0 items-start gap-3">
-              {canManage && (
+              <Can I="reserve" a="Request">
                 <Checkbox
                   checked={markedIds.has(request._id)}
                   onCheckedChange={() => onToggleMarked(request._id)}
                   aria-label={`Incluir ${request.reference} en la compra`}
                   className="mt-1"
                 />
-              )}
+              </Can>
               <div className="min-w-0">
                 <p className="text-sm font-medium">
                   {request.reference}
@@ -117,7 +119,7 @@ export function MissingStockCard({
                 </p>
               </div>
             </div>
-            {canManage && (
+            <Can I="reserve" a="Request">
               <Button
                 type="button"
                 variant="outline"
@@ -129,7 +131,7 @@ export function MissingStockCard({
                 <ShoppingCart className="size-4" />
                 Generar petición de compra
               </Button>
-            )}
+            </Can>
           </div>
         ))}
       </CardContent>

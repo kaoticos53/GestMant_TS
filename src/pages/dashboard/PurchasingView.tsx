@@ -7,7 +7,10 @@ import { PendingSection } from "./purchasing/components/PendingSection";
 import { OrdersSection } from "./purchasing/components/OrdersSection";
 import { MovementsSection } from "./purchasing/components/MovementsSection";
 import { HistorySection } from "./purchasing/components/HistorySection";
-import type { PurchasingSection, PurchasingViewProps } from "./purchasing/types";
+import type {
+  PurchasingSection,
+  PurchasingViewProps,
+} from "./purchasing/types";
 
 export type { PurchasingViewProps } from "./purchasing/types";
 
@@ -54,7 +57,6 @@ export function PurchasingView({ canManage }: PurchasingViewProps) {
           purchaseRequests={purchaseRequests}
           partRequests={partRequests}
           parts={parts}
-          canManage={canManage}
         />
       )}
       {section === "orders" && (

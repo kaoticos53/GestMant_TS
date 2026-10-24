@@ -1,6 +1,8 @@
+import { Can } from "@/components/AbilityProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { asPurchaseRequest } from "@/lib/abilities";
 import {
   canAdvancePurchaseRequest,
   isPurchaseRequestClosed,
@@ -16,7 +18,6 @@ import type { PurchaseActionTarget, PurchaseActionType } from "../types";
 
 export interface PurchaseRequestRowProps {
   row: PurchaseRequestDoc;
-  canManage: boolean;
   selected: boolean;
   onToggle: () => void;
   onAction: (target: PurchaseActionTarget) => void;
@@ -25,14 +26,17 @@ export interface PurchaseRequestRowProps {
 /**
  * Fila puramente visual de una petición de compra pendiente.
  * No monta ningún diálogo en el DOM: delega las acciones a través de `onAction`.
+ *
+ * Cada botón pregunta a `<Can>` con la fila delante: la máquina dice desde qué
+ * estado cabe el paso y el motor, quién puede darlo.
  */
 export function PurchaseRequestRow({
   row,
-  canManage,
   selected,
   onToggle,
   onAction,
 }: PurchaseRequestRowProps) {
+  const comoPeticion = asPurchaseRequest(row);
   const meta = PURCHASE_REQUEST_STATUS_META[row.status];
 
   const handleOpenAction = (action: PurchaseActionType) => {
@@ -41,13 +45,15 @@ export function PurchaseRequestRow({
 
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
-      {canManage && isPurchaseRequestUntreated(row.status) && (
-        <Checkbox
-          checked={selected}
-          onCheckedChange={onToggle}
-          aria-label={`Incluir ${row.reference} en la orden`}
-          className="mt-1"
-        />
+      {isPurchaseRequestUntreated(row.status) && (
+        <Can I="create" a="PurchaseOrder">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggle}
+            aria-label={`Incluir ${row.reference} en la orden`}
+            className="mt-1"
+          />
+        </Can>
       )}
 
       <div className="min-w-0 flex-1">
@@ -71,9 +77,9 @@ export function PurchaseRequestRow({
         </p>
       </div>
 
-      {canManage && (
-        <div className="flex flex-wrap gap-1">
-          {!isPurchaseRequestClosed(row.status) && (
+      <div className="flex flex-wrap gap-1">
+        {!isPurchaseRequestClosed(row.status) && (
+          <Can I="update" this={comoPeticion}>
             <Button
               type="button"
               variant="ghost"
@@ -82,8 +88,10 @@ export function PurchaseRequestRow({
             >
               Nota
             </Button>
-          )}
-          {isPurchaseRequestUntreated(row.status) && (
+          </Can>
+        )}
+        {isPurchaseRequestUntreated(row.status) && (
+          <Can I="update" this={comoPeticion}>
             <Button
               type="button"
               variant="ghost"
@@ -92,8 +100,10 @@ export function PurchaseRequestRow({
             >
               Proveedor
             </Button>
-          )}
-          {canAdvancePurchaseRequest(row.status, "cancel") && (
+          </Can>
+        )}
+        {canAdvancePurchaseRequest(row.status, "cancel") && (
+          <Can I="cancel" this={comoPeticion}>
             <Button
               type="button"
               variant="ghost"
@@ -103,9 +113,9 @@ export function PurchaseRequestRow({
             >
               Retirar
             </Button>
-          )}
-        </div>
-      )}
+          </Can>
+        )}
+      </div>
     </div>
   );
 }

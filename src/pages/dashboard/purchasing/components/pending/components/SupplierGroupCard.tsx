@@ -1,3 +1,4 @@
+import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,7 +11,6 @@ import { PurchaseRequestRow } from "./PurchaseRequestRow";
 
 export interface SupplierGroupCardProps {
   group: SupplierGroup;
-  canManage: boolean;
   selectedIds: ReadonlySet<string>;
   isGroupFullySelected: boolean;
   onToggleItem: (id: string) => void;
@@ -24,7 +24,6 @@ export interface SupplierGroupCardProps {
  */
 export function SupplierGroupCard({
   group,
-  canManage,
   selectedIds,
   isGroupFullySelected,
   onToggleItem,
@@ -36,11 +35,9 @@ export function SupplierGroupCard({
       <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-2">
         <div>
           <CardTitle className="text-base">{group.supplier}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {groupSummary(group)}
-          </p>
+          <p className="text-sm text-muted-foreground">{groupSummary(group)}</p>
         </div>
-        {canManage && (
+        <Can I="create" a="PurchaseOrder">
           <Button
             type="button"
             variant="ghost"
@@ -49,14 +46,13 @@ export function SupplierGroupCard({
           >
             {isGroupFullySelected ? "Quitar el grupo" : "Elegir el grupo"}
           </Button>
-        )}
+        </Can>
       </CardHeader>
       <CardContent className="grid gap-2">
         {group.items.map((row: PurchaseRequestDoc) => (
           <PurchaseRequestRow
             key={row._id}
             row={row}
-            canManage={canManage}
             selected={selectedIds.has(row._id)}
             onToggle={() => onToggleItem(row._id)}
             onAction={onAction}

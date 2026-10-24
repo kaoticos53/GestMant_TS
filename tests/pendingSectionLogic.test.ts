@@ -35,7 +35,7 @@ describe("evaluatePurchaseSelection", () => {
   ];
 
   it("devuelve mensaje informativo cuando no hay nada seleccionado", () => {
-    const res = evaluatePurchaseSelection(items, new Set(), true);
+    const res = evaluatePurchaseSelection(items, new Set());
     expect(res.count).toBe(0);
     expect(res.suppliers).toHaveLength(0);
     expect(res.canCreateOrder).toBe(false);
@@ -46,13 +46,13 @@ describe("evaluatePurchaseSelection", () => {
 
   it("ignora peticiones cuyo estado no sea untreated", () => {
     // Si se selecciona la fila 4 que está 'ordered', no debe computar
-    const res = evaluatePurchaseSelection(items, new Set(["4"]), true);
+    const res = evaluatePurchaseSelection(items, new Set(["4"]));
     expect(res.count).toBe(0);
     expect(res.canCreateOrder).toBe(false);
   });
 
   it("permite crear orden si hay artículos seleccionados del mismo proveedor", () => {
-    const res = evaluatePurchaseSelection(items, new Set(["1", "2"]), true);
+    const res = evaluatePurchaseSelection(items, new Set(["1", "2"]));
     expect(res.count).toBe(2);
     expect(res.suppliers).toEqual(["RS Components"]);
     expect(res.isSingleSupplier).toBe(true);
@@ -61,14 +61,14 @@ describe("evaluatePurchaseSelection", () => {
   });
 
   it("singulariza el mensaje con 1 artículo", () => {
-    const res = evaluatePurchaseSelection(items, new Set(["1"]), true);
+    const res = evaluatePurchaseSelection(items, new Set(["1"]));
     expect(res.count).toBe(1);
     expect(res.feedbackMessage).toBe("1 artículo para RS Components");
     expect(res.canCreateOrder).toBe(true);
   });
 
   it("bloquea la creación de orden si se mezclan múltiples proveedores", () => {
-    const res = evaluatePurchaseSelection(items, new Set(["1", "3"]), true);
+    const res = evaluatePurchaseSelection(items, new Set(["1", "3"]));
     expect(res.count).toBe(2);
     expect(res.suppliers).toHaveLength(2);
     expect(res.isSingleSupplier).toBe(false);
@@ -78,9 +78,7 @@ describe("evaluatePurchaseSelection", () => {
     );
   });
 
-  it("bloquea la creación de orden si el usuario no tiene permisos canManage", () => {
-    const res = evaluatePurchaseSelection(items, new Set(["1"]), false);
-    expect(res.count).toBe(1);
-    expect(res.canCreateOrder).toBe(false);
-  });
+  // Quién puede montar la orden ya no se pregunta aquí: lo responde `<Can>` con
+  // la capacidad `managePurchasing` (tests/abilities.test.ts). Esta cuenta solo
+  // mira si la selección sirve para una orden.
 });

@@ -1,8 +1,6 @@
 import { Button } from "@/components/ui/button";
-import {
-  groupBySupplier,
-  type PurchaseRequestDoc,
-} from "@/lib/purchasing";
+import { Can } from "@/components/AbilityProvider";
+import { groupBySupplier, type PurchaseRequestDoc } from "@/lib/purchasing";
 import { ClipboardList, ShoppingCart } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CreateOrderDialog } from "../dialogs/CreateOrderDialog";
@@ -18,18 +16,20 @@ export interface PendingSectionProps {
   purchaseRequests: PurchaseRequestDoc[];
   partRequests: PartRequestDoc[];
   parts: PartDoc[];
-  canManage: boolean;
 }
 
 /**
  * Sección de compras pendientes: peticiones de repuesto sin existencias en almacén
  * y peticiones de compra abiertas agrupadas por proveedor para generar órdenes.
+ *
+ * No recibe un booleano de permisos: cada control pregunta a `<Can>` por el paso
+ * que da y por la ficha que lo recibe (apartar una petición de repuesto, montar
+ * una orden).
  */
 export function PendingSection({
   purchaseRequests,
   partRequests,
   parts,
-  canManage,
 }: PendingSectionProps) {
   const missingStock = useMissingStockActions({
     partRequests,
@@ -37,7 +37,7 @@ export function PendingSection({
     purchaseRequests,
   });
 
-  const selection = usePendingPurchaseSelection(purchaseRequests, canManage);
+  const selection = usePendingPurchaseSelection(purchaseRequests);
   const [actionTarget, setActionTarget] = useState<PurchaseActionTarget | null>(
     null,
   );
@@ -52,14 +52,15 @@ export function PendingSection({
       <MissingStockCard
         missingStockRequests={missingStock.missingStockRequests}
         markedIds={missingStock.markedIds}
-        canManage={canManage}
         areAllMarked={missingStock.areAllMarked}
         isReserving={missingStock.isReserving}
         generatingId={missingStock.generatingId}
         onToggleMarked={missingStock.toggleMarked}
         onToggleAll={missingStock.toggleAll}
         onReserveMarked={() => void missingStock.reserveMarked()}
-        onGenerateSingle={(request) => void missingStock.generateSingle(request)}
+        onGenerateSingle={(request) =>
+          void missingStock.generateSingle(request)
+        }
       />
 
       {groups.length === 0 ? (
@@ -76,27 +77,28 @@ export function PendingSection({
           </p>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {selection.validation.feedbackMessage}
-          </p>
-          <Button
-            type="button"
-            className="gap-2"
-            disabled={!selection.validation.canCreateOrder}
-            onClick={() => selection.setIsOrderDialogOpen(true)}
-          >
-            <ClipboardList className="size-4" />
-            Crear orden de compra
-          </Button>
-        </div>
+        <Can I="create" a="PurchaseOrder">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {selection.validation.feedbackMessage}
+            </p>
+            <Button
+              type="button"
+              className="gap-2"
+              disabled={!selection.validation.canCreateOrder}
+              onClick={() => selection.setIsOrderDialogOpen(true)}
+            >
+              <ClipboardList className="size-4" />
+              Crear orden de compra
+            </Button>
+          </div>
+        </Can>
       )}
 
       {groups.map((group) => (
         <SupplierGroupCard
           key={group.supplier}
           group={group}
-          canManage={canManage}
           selectedIds={selection.selectedIds}
           isGroupFullySelected={selection.isGroupFullySelected(group.items)}
           onToggleItem={selection.toggleItem}

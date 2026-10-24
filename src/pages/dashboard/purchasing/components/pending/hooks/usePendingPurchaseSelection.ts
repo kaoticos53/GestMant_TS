@@ -12,7 +12,6 @@ import type { PurchaseSelectionValidation } from "../types";
 export function evaluatePurchaseSelection(
   purchaseRequests: readonly PurchaseRequestDoc[],
   selectedIds: ReadonlySet<string>,
-  canManage: boolean,
 ): PurchaseSelectionValidation {
   const selectedItems = purchaseRequests.filter(
     (row) => isPurchaseRequestUntreated(row.status) && selectedIds.has(row._id),
@@ -32,7 +31,9 @@ export function evaluatePurchaseSelection(
     feedbackMessage = `${count} artículo${count === 1 ? "" : "s"} para ${suppliers[0]}`;
   }
 
-  const canCreateOrder = canManage && count > 0 && isSingleSupplier;
+  // Quién puede montar la orden lo pregunta el botón a `<Can>`; aquí solo se
+  // mira si la selección sirve —algo marcado y de un solo proveedor—.
+  const canCreateOrder = count > 0 && isSingleSupplier;
 
   return {
     selectedItems,
@@ -49,14 +50,13 @@ export function evaluatePurchaseSelection(
  */
 export function usePendingPurchaseSelection(
   purchaseRequests: readonly PurchaseRequestDoc[],
-  canManage: boolean,
 ) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
 
   const validation = useMemo(
-    () => evaluatePurchaseSelection(purchaseRequests, selectedIds, canManage),
-    [purchaseRequests, selectedIds, canManage],
+    () => evaluatePurchaseSelection(purchaseRequests, selectedIds),
+    [purchaseRequests, selectedIds],
   );
 
   const toggleItem = (id: string) => {
@@ -90,7 +90,9 @@ export function usePendingPurchaseSelection(
     setSelectedIds(new Set());
   };
 
-  const isGroupFullySelected = (items: readonly PurchaseRequestDoc[]): boolean =>
+  const isGroupFullySelected = (
+    items: readonly PurchaseRequestDoc[],
+  ): boolean =>
     items.length > 0 && items.every((item) => selectedIds.has(item._id));
 
   return {
