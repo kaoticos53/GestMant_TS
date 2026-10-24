@@ -16,7 +16,6 @@ export interface RequestCardProps {
   request: RequestDoc;
   /** Tarjeta reducida: para recorrer colas largas de un vistazo. */
   compact?: boolean;
-  canManage: boolean;
   /** Esta petición se está mandando al archivo ahora mismo. */
   archiving?: boolean;
   onOpen: () => void;
@@ -30,7 +29,6 @@ export interface RequestCardProps {
 export function RequestCard({
   request,
   compact = false,
-  canManage,
   archiving = false,
   onOpen,
   onAssociate,
@@ -86,7 +84,6 @@ export function RequestCard({
       <RequestCardFooter
         request={request}
         compact={compact}
-        canManage={canManage}
         archiving={archiving}
         onOpen={onOpen}
         onAssociate={onAssociate}

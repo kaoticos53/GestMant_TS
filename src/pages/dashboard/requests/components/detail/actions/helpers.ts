@@ -3,15 +3,20 @@ import type { RequestDoc } from "../../../types";
 import type { RequestActionFlags } from "./types";
 
 /**
- * Calcula de forma determinista qué botones de acción deben mostrarse
- * en la barra inferior de la petición según permisos y estado actual.
+ * Calcula de forma determinista qué pasos deja la máquina desde el estado
+ * actual de la petición.
+ *
+ * Responde solo por el **estado** y por si la ficha se consulta en solo lectura
+ * (archivada o retirada). Quién puede darlos lo pregunta cada botón a `<Can>`, y
+ * con qué ficha lo dice `lib/abilities`: la capacidad y la máquina no se mezclan
+ * en la misma cuenta.
  */
 export function computeRequestActionFlags(
-  canManage: boolean,
   status: RequestDoc["status"],
-  noReference: boolean
+  noReference: boolean,
+  readOnly = false,
 ): RequestActionFlags {
-  if (!canManage) {
+  if (readOnly) {
     return {
       canReject: false,
       canApprove: false,

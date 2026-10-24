@@ -27,9 +27,18 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
+import { AbilityProvider } from "@casl/react";
+
 import type { Doc } from "@/convex/_generated/dataModel";
+import { defineAbilityFor } from "@/lib/abilities";
 import { IncidentDetailSheet } from "@/pages/dashboard/incidents/components/IncidentDetailSheet";
 import { RequestDetailSheet } from "@/pages/dashboard/requests/components/RequestDetailSheet";
+
+/** Quien podría tramitar la petición: lo que la deja en solo lectura es su estado. */
+const GESTOR = defineAbilityFor(
+  { id: "user-gestor", role: "technician" },
+  { decideRequests: true },
+);
 
 const RETIRADA = Date.parse("2026-10-01T09:00:00.000Z");
 const ARCHIVADA = Date.parse("2026-09-20T09:00:00.000Z");
@@ -173,17 +182,19 @@ describe("la ficha de lo que espera en la papelera", () => {
   test("una petición retirada se lee entera y no se puede volver a tramitar", async () => {
     await act(async () => {
       root.render(
-        <RequestDetailSheet
-          request={peticionRetirada()}
-          parts={[]}
-          // Quien la mira podría tramitarla: lo que la deja en solo lectura es
-          // que está retirada, no el permiso de quien la abre.
-          canManage
-          onApprove={() => {}}
-          onReject={() => {}}
-          onIssue={() => {}}
-          onClose={() => {}}
-        />,
+        <AbilityProvider value={GESTOR}>
+          <RequestDetailSheet
+            request={peticionRetirada()}
+            parts={[]}
+            // Quien la mira podría tramitarla: lo que la deja en solo lectura es
+            // que está retirada, no el permiso de quien la abre.
+            canManage
+            onApprove={() => {}}
+            onReject={() => {}}
+            onIssue={() => {}}
+            onClose={() => {}}
+          />
+        </AbilityProvider>,
       );
     });
     await settle();

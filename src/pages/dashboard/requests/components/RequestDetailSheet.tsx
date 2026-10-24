@@ -6,11 +6,7 @@ import {
   nextRequestAction,
   requestJourney,
 } from "@/lib/requestJourney";
-import {
-  PRIORITY_META,
-  STATUS_META,
-  type Priority,
-} from "@/lib/workshop";
+import { PRIORITY_META, STATUS_META, type Priority } from "@/lib/workshop";
 import type { PartDoc, RequestDoc } from "../types";
 import { useRequestLifecycle } from "../hooks/useRequestLifecycle";
 import { useRequestLinesStock } from "../hooks/useRequestLinesStock";
@@ -68,7 +64,14 @@ export function RequestDetailSheet({
   const withdrawnAt = request.deletedAt;
   const isWithdrawn = withdrawnAt !== undefined;
   const isArchived = archivedAt !== undefined;
-  const canManage = resolveCanManageRequest(canManageRequest, archivedAt, withdrawnAt);
+  const canManage = resolveCanManageRequest(
+    canManageRequest,
+    archivedAt,
+    withdrawnAt,
+  );
+  // La ficha archivada o retirada se consulta en solo lectura: los botones no se
+  // apagan por el rol de quien mira, sino porque la petición ya no se trabaja.
+  const readOnly = isArchived || isWithdrawn;
 
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
@@ -86,13 +89,8 @@ export function RequestDetailSheet({
   } = useRequestLifecycle();
 
   // Hook de líneas de repuesto y control de stock memoizado
-  const {
-    delivery,
-    material,
-    lastDeliveredAt,
-    noReference,
-    enrichedLines,
-  } = useRequestLinesStock(request.lines, request.status, parts);
+  const { delivery, material, lastDeliveredAt, noReference, enrichedLines } =
+    useRequestLinesStock(request.lines, request.status, parts);
 
   // Recorrido de la petición y pasos sugeridos
   const stages = useMemo(
@@ -106,7 +104,12 @@ export function RequestDetailSheet({
 
   const nextAction = nextRequestAction(request.status, { canManage });
   const nextLabel = getRequestNextLabel(nextAction, noReference);
-  const nextHint = getRequestNextHint(request.status, canManage, isWithdrawn, isArchived);
+  const nextHint = getRequestNextHint(
+    request.status,
+    canManage,
+    isWithdrawn,
+    isArchived,
+  );
   const nowLabel = getRequestNowLabel(status.label, isWithdrawn, isArchived);
 
   const blocked =
@@ -177,8 +180,8 @@ export function RequestDetailSheet({
         </div>
 
         <RequestActionsFooter
-          canManage={canManage}
-          status={request.status}
+          request={request}
+          readOnly={readOnly}
           reference={request.reference}
           noReference={noReference}
           onClose={onClose}

@@ -7,7 +7,6 @@ import type { DecisionMode, RequestDoc, RequestSection } from "../types";
 export function RequestsList({
   sections,
   compact,
-  canManage,
   archivingId,
   areaRef,
   resetKey,
@@ -19,7 +18,6 @@ export function RequestsList({
 }: {
   sections: RequestSection[];
   compact: boolean;
-  canManage: boolean;
   archivingId: string | null;
   areaRef: (element: HTMLDivElement | null) => void;
   resetKey: string;
@@ -52,7 +50,6 @@ export function RequestsList({
                     key={request._id}
                     request={request}
                     compact={compact}
-                    canManage={canManage}
                     onOpen={() => onOpen(request)}
                     onAssociate={() => onAssociate(request)}
                     onApprove={() => onDecision(request, "approve")}

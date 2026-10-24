@@ -37,7 +37,6 @@ export interface RequestCardAttachmentsProps {
 export interface RequestCardFooterProps {
   request: RequestDoc;
   compact: boolean;
-  canManage: boolean;
   archiving: boolean;
   onOpen: () => void;
   onAssociate: () => void;

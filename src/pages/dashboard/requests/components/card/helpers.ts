@@ -25,18 +25,21 @@ export function getRequestUnitsSummary(
 }
 
 /**
- * Determina qué acciones de gestión están disponibles para la petición actual según sus permisos y estado de ciclo de vida.
+ * Determina qué pasos deja la máquina desde el estado actual de la petición.
+ *
+ * Solo el estado: quién puede darlos lo pregunta cada botón a `<Can>` con la
+ * ficha delante. La tarjeta no necesita saber de roles, y así la cola no tiene
+ * que arrastrar un booleano de permisos por cada nivel.
  */
 export function getRequestActionFlags(
   status: RequestStatus,
   hasLines: boolean,
-  canManage: boolean,
 ): RequestActionFlags {
   return {
-    canReject: canManage && canRequestStep(status, "reject"),
-    canApprove: canManage && canRequestStep(status, "approve") && hasLines,
-    canAssociate: canManage && canRequestStep(status, "approve") && !hasLines,
-    canIssue: canManage && canRequestStep(status, "issue"),
-    canArchive: canManage && !isRequestInMotion(status),
+    canReject: canRequestStep(status, "reject"),
+    canApprove: canRequestStep(status, "approve") && hasLines,
+    canAssociate: canRequestStep(status, "approve") && !hasLines,
+    canIssue: canRequestStep(status, "issue"),
+    canArchive: !isRequestInMotion(status),
   };
 }

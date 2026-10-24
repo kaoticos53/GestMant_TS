@@ -9,8 +9,8 @@ import type { RequestActionsFooterProps } from "./actions";
 export type { RequestActionsFooterProps };
 
 export function RequestActionsFooter({
-  canManage,
-  status,
+  request,
+  readOnly,
   reference,
   noReference,
   onClose,
@@ -32,12 +32,17 @@ export function RequestActionsFooter({
   setWithdrawReason,
   onWithdraw,
 }: RequestActionsFooterProps) {
-  const flags = computeRequestActionFlags(canManage, status, noReference);
+  const flags = computeRequestActionFlags(
+    request.status,
+    noReference,
+    readOnly,
+  );
 
   return (
     <>
       <SheetFooter className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6">
         <RequestWorkflowButtons
+          request={request}
           flags={flags}
           onClose={onClose}
           onReject={onReject}

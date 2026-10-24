@@ -72,7 +72,6 @@ export function RequestsView({
         <RequestsList
           sections={state.sections}
           compact={state.compact}
-          canManage={canManage}
           archivingId={state.archivingId}
           areaRef={state.areaRef}
           resetKey={`${state.search}|${state.sort}|${state.filter}|${state.paging.page}`}

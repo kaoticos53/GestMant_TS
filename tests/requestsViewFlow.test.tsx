@@ -46,10 +46,22 @@ vi.mock("convex/react", async () => {
 
 import { MemoryRouter } from "react-router";
 
+import { AbilityProvider } from "@casl/react";
+
 import type { Doc } from "@/convex/_generated/dataModel";
+import { defineAbilityFor, type AppAbility } from "@/lib/abilities";
 import { RequestsView } from "@/pages/dashboard/RequestsView";
 
 const AYER = Date.parse("2026-10-01T09:00:00.000Z");
+
+/** Quien tramita peticiones: es a quien la ficha le enseña los pasos. */
+const GESTOR = defineAbilityFor(
+  { id: "user-gestor", role: "technician" },
+  { decideRequests: true },
+);
+
+/** Quien solo consulta: ve la cola y la ficha, pero ningún paso. */
+const CONSULTA = defineAbilityFor({ id: "user-consulta", role: "technician" });
 
 /** La petición tal y como la sirve la cola: con un repuesto pedido. */
 function peticion(
@@ -155,13 +167,18 @@ function boton(
 }
 
 /** Monta la cola con esa petición y abre su ficha. */
-async function abrirFicha(request: Doc<"partRequests">) {
+async function abrirFicha(
+  request: Doc<"partRequests">,
+  ability: AppAbility = GESTOR,
+) {
   COLA.requests = [request];
   await act(async () => {
     root.render(
-      <MemoryRouter>
-        <RequestsView canManage />
-      </MemoryRouter>,
+      <AbilityProvider value={ability}>
+        <MemoryRouter>
+          <RequestsView canManage />
+        </MemoryRouter>
+      </AbilityProvider>,
     );
   });
   await settle();
@@ -186,9 +203,11 @@ async function abrirFichaDirecta(request: Doc<"partRequests">) {
   COLA.detalle = request;
   await act(async () => {
     root.render(
-      <MemoryRouter>
-        <RequestsView canManage initialDetailId={request._id} />
-      </MemoryRouter>,
+      <AbilityProvider value={GESTOR}>
+        <MemoryRouter>
+          <RequestsView canManage initialDetailId={request._id} />
+        </MemoryRouter>
+      </AbilityProvider>,
     );
   });
   await settle();
@@ -276,7 +295,9 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
     expect(texto).toContain("Ahora (paso 4 de 4):");
     expect(texto).toContain("Entregada · en el archivo");
     expect(texto).toContain("Archivada");
-    expect(texto).toContain("En el archivo: la petición se consulta en solo lectura.");
+    expect(texto).toContain(
+      "En el archivo: la petición se consulta en solo lectura.",
+    );
 
     // Y ninguna acción: los pasos de la máquina, el archivo y la retirada se
     // apagan aunque quien mire sea quien decide peticiones.
@@ -339,6 +360,28 @@ describe("ficha de la petición — los pasos que ofrece son los que deja la má
     await abrirFicha(peticion({ status: "pending" }));
 
     expect(ficha().textContent).not.toContain("Entregas del material");
+  });
+
+  test("quien no tramita peticiones abre la ficha sin ningún paso", async () => {
+    // El botón no se esconde por un booleano de la vista: se lo pregunta a
+    // `<Can>` con la ficha delante. Sin la capacidad, la ficha se lee y nada más.
+    await abrirFicha(peticion({ status: "pending" }), CONSULTA);
+
+    for (const paso of [
+      "Aprobar",
+      "Rechazar",
+      "Asociar repuesto",
+      "Entregar material",
+      "En espera",
+      "Archivar",
+      "Retirar",
+    ]) {
+      expect(botonDeLaFicha(paso), paso).toBeUndefined();
+    }
+    expect(botonDeLaFicha("Cerrar")).toBeDefined();
+    // Y la tarjeta de la cola tampoco ofrece gestionarla.
+    expect(boton("Aprobar")).toBeUndefined();
+    expect(boton("Rechazar")).toBeUndefined();
   });
 
   test("una petición rechazada lo dice una vez, no paso a paso", async () => {

@@ -1,5 +1,7 @@
 import { Archive, Check, PackageCheck, Wrench } from "lucide-react";
+import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
+import { asRequest } from "@/lib/abilities";
 import { cn } from "@/lib/utils";
 import { getRequestActionFlags, getRequestUnitsSummary } from "./helpers";
 import type { RequestCardFooterProps } from "./types";
@@ -7,7 +9,6 @@ import type { RequestCardFooterProps } from "./types";
 export function RequestCardFooter({
   request,
   compact,
-  canManage,
   archiving,
   onOpen,
   onAssociate,
@@ -16,11 +17,7 @@ export function RequestCardFooter({
   onIssue,
   onArchive,
 }: RequestCardFooterProps) {
-  const flags = getRequestActionFlags(
-    request.status,
-    request.lines.length > 0,
-    canManage,
-  );
+  const flags = getRequestActionFlags(request.status, request.lines.length > 0);
 
   return (
     <div
@@ -37,62 +34,72 @@ export function RequestCardFooter({
           Ver detalle
         </Button>
         {flags.canReject && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onReject}
-          >
-            Rechazar
-          </Button>
+          <Can I="decide" this={asRequest(request)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReject}
+            >
+              Rechazar
+            </Button>
+          </Can>
         )}
         {flags.canAssociate && (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1.5"
-            onClick={onAssociate}
-          >
-            <Wrench className="size-3.5" />
-            Asociar repuesto
-          </Button>
+          <Can I="update" this={asRequest(request)}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={onAssociate}
+            >
+              <Wrench className="size-3.5" />
+              Asociar repuesto
+            </Button>
+          </Can>
         )}
         {flags.canApprove && (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1.5"
-            onClick={onApprove}
-          >
-            <Check className="size-3.5" />
-            Aprobar
-          </Button>
+          <Can I="decide" this={asRequest(request)}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={onApprove}
+            >
+              <Check className="size-3.5" />
+              Aprobar
+            </Button>
+          </Can>
         )}
         {flags.canIssue && (
-          <Button
-            type="button"
-            size="sm"
-            className="gap-1.5"
-            onClick={onIssue}
-          >
-            <PackageCheck className="size-3.5" />
-            Entregar material
-          </Button>
+          <Can I="update" this={asRequest(request)}>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={onIssue}
+            >
+              <PackageCheck className="size-3.5" />
+              Entregar material
+            </Button>
+          </Can>
         )}
         {flags.canArchive && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            title={`Mandar ${request.reference} al archivo`}
-            aria-label={`Archivar ${request.reference}`}
-            disabled={archiving}
-            onClick={onArchive}
-          >
-            <Archive className="size-3.5" />
-            Archivar
-          </Button>
+          <Can I="archive" this={asRequest(request)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              title={`Mandar ${request.reference} al archivo`}
+              aria-label={`Archivar ${request.reference}`}
+              disabled={archiving}
+              onClick={onArchive}
+            >
+              <Archive className="size-3.5" />
+              Archivar
+            </Button>
+          </Can>
         )}
       </div>
     </div>

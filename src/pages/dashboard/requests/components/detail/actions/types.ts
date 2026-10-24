@@ -1,8 +1,10 @@
 import type { RequestDoc } from "../../../types";
 
 export interface RequestActionsFooterProps {
-  canManage: boolean;
-  status: RequestDoc["status"];
+  /** La ficha: los botones preguntan a `<Can>` por ella, no por el rol. */
+  request: RequestDoc;
+  /** Archivada o retirada: se consulta en solo lectura, sin pasos. */
+  readOnly: boolean;
   reference: string;
   noReference: boolean;
   onClose: () => void;
@@ -39,6 +41,7 @@ export interface RequestActionFlags {
 }
 
 export interface RequestWorkflowButtonsProps {
+  request: RequestDoc;
   flags: RequestActionFlags;
   onClose: () => void;
   onReject?: () => void;
