@@ -87,7 +87,22 @@ vi.mock("convex/react", async () => {
   };
 });
 
+import { AbilityProvider } from "@casl/react";
+
+import { defineAbilityFor, type AppAbility } from "@/lib/abilities";
 import { PurchasingView } from "@/pages/dashboard/PurchasingView";
+
+/** Los botones de la orden preguntan a `<Can>`: fuera del panel hay que darle uno. */
+const COMPRADOR = defineAbilityFor(
+  { id: "user-compras", role: "technician" },
+  { managePurchasing: true, viewPurchasing: true },
+);
+
+/** Quien solo consulta el módulo: ve la orden, no la recepciona. */
+const CONSULTA = defineAbilityFor(
+  { id: "user-consulta", role: "technician" },
+  { viewPurchasing: true },
+);
 
 /** Lo que jsdom no trae y Radix da por hecho al abrir diálogos y hojas. */
 function installMissingDomApis() {
@@ -225,6 +240,7 @@ function pintar(
     receptions?: unknown[];
     partRequests?: unknown[];
     parts?: unknown[];
+    ability?: AppAbility;
   } = {},
 ) {
   DATOS.purchaseRequests = props.purchaseRequests ?? [compra()];
@@ -232,8 +248,13 @@ function pintar(
   DATOS.receptions = props.receptions ?? [];
   DATOS.partRequests = props.partRequests ?? [];
   DATOS.parts = props.parts ?? [];
+  const ability = props.ability ?? COMPRADOR;
   act(() => {
-    root.render(<PurchasingView canManage />);
+    root.render(
+      <AbilityProvider value={ability}>
+        <PurchasingView canManage />
+      </AbilityProvider>,
+    );
   });
 }
 
@@ -434,6 +455,27 @@ describe("el módulo de compras, pintado", () => {
     expect(ficha).not.toContain("Aún no se puede");
     // …y el bloque suelto ya no vive en la tarjeta de la lista.
     expect(ficha).not.toContain("Por qué no se puede");
+  });
+
+  test("quien solo consulta ve la orden sin recepcionarla ni anularla", () => {
+    // La tarjeta ya no recibe un booleano de permisos: cada botón pregunta a
+    // `<Can>` con la orden delante, y la máquina dice desde qué estado cabe.
+    pintar({ orders: [orden], ability: CONSULTA });
+
+    act(() => boton("Órdenes de compra").click());
+    expect(document.body.textContent).toContain("OC-0001");
+    expect(boton("Ver la orden")).toBeDefined();
+
+    act(() => boton("Ver la orden").click());
+    expect(document.body.textContent).toContain("1/3 ud recibidas");
+    for (const paso of ["Recepcionar", "Anular la orden"]) {
+      expect(
+        [...document.querySelectorAll("button")].some((candidate) =>
+          (candidate.textContent ?? "").includes(paso),
+        ),
+        paso,
+      ).toBe(false);
+    }
   });
 
   test("una orden completada cuenta cómo terminó y por qué ya no se toca", () => {

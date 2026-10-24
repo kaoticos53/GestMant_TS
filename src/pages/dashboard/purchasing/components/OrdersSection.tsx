@@ -63,7 +63,6 @@ export function OrdersSection({
         <PurchaseOrderCard
           key={order._id}
           order={order}
-          canManage={canManage}
           onOpenOrder={setAbierta}
           onReceiveOrder={setRecibiendo}
           onCancelOrder={(ord) => {

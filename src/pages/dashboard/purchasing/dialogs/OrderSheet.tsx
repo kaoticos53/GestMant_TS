@@ -96,8 +96,8 @@ export function OrderSheet({
         </div>
 
         <OrderSheetFooter
+          order={order}
           orderStatus={order.status}
-          canManage={canManage}
           onClose={onClose}
           onCancel={onCancel}
           onReceive={onReceive}

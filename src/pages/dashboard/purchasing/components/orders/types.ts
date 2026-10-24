@@ -9,7 +9,6 @@ export interface OrdersSectionProps {
 
 export interface PurchaseOrderCardProps {
   order: PurchaseOrderDoc;
-  canManage: boolean;
   onOpenOrder: (order: PurchaseOrderDoc) => void;
   onReceiveOrder: (order: PurchaseOrderDoc) => void;
   onCancelOrder: (order: PurchaseOrderDoc) => void;

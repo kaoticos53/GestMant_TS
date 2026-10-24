@@ -39,8 +39,8 @@ export interface OrderReceptionsListProps {
 }
 
 export interface OrderSheetFooterProps {
+  order: PurchaseOrderDoc;
   orderStatus: PurchaseOrderStatus;
-  canManage: boolean;
   onClose: () => void;
   onCancel: () => void;
   onReceive: () => void;

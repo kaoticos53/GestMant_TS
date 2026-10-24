@@ -1,19 +1,17 @@
 import { Badge } from "@/components/ui/badge";
+import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { asPurchaseOrder } from "@/lib/abilities";
 import { canAdvancePurchaseOrder } from "@/lib/purchaseFlow";
-import {
-  PURCHASE_ORDER_STATUS_META,
-  orderTotals,
-} from "@/lib/purchasing";
+import { PURCHASE_ORDER_STATUS_META, orderTotals } from "@/lib/purchasing";
 import { Truck, Undo2 } from "lucide-react";
 import { formatOrderRequestRefs, formatOrderSubtitle } from "./helpers";
 import type { PurchaseOrderCardProps } from "./types";
 
 export function PurchaseOrderCard({
   order,
-  canManage,
   onOpenOrder,
   onReceiveOrder,
   onCancelOrder,
@@ -56,27 +54,31 @@ export function PurchaseOrderCard({
             >
               Ver la orden
             </Button>
-            {canManage && canAdvancePurchaseOrder(order.status, "receive") && (
+            {canAdvancePurchaseOrder(order.status, "receive") && (
               <>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => onReceiveOrder(order)}
-                >
-                  <Truck className="size-4" />
-                  Recepcionar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-destructive"
-                  onClick={() => onCancelOrder(order)}
-                >
-                  <Undo2 className="size-4" />
-                  Anular
-                </Button>
+                <Can I="receive" this={asPurchaseOrder(order)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => onReceiveOrder(order)}
+                  >
+                    <Truck className="size-4" />
+                    Recepcionar
+                  </Button>
+                </Can>
+                <Can I="cancel" this={asPurchaseOrder(order)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 text-destructive"
+                    onClick={() => onCancelOrder(order)}
+                  >
+                    <Undo2 className="size-4" />
+                    Anular
+                  </Button>
+                </Can>
               </>
             )}
           </div>
