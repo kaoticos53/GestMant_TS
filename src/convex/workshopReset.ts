@@ -68,6 +68,7 @@ const RESET_TABLES: TableNames[] = [
   // código de incidencia: tras vaciar, un código nuevo no debería heredar el
   // cupo gastado del que tenía antes.
   "publicLookupLimits",
+  "otpSendLimits",
   // La foto pública del taller: es un resumen de lo que se acaba de vaciar, así
   // que no puede quedarse contando el trabajo que ya no está. Se borra, y el
   // cron de `publicStats` toma una nueva —con ceros— en su siguiente pasada.
@@ -142,7 +143,7 @@ const MAX_PASSES = 500;
  * Vacía el taller: repite la tanda hasta que no queda nada y devuelve cuántas
  * filas se llevó. Se pide desde Ajustes del taller, con confirmación por delante.
  */
-import { logSecurityEvent } from "./audit";
+import { logSecurityEvent, notifySecurityAlert } from "./audit";
 
 export const logResetAudit = internalMutation({
   args: {
@@ -156,6 +157,10 @@ export const logResetAudit = internalMutation({
       action: "workshop_reset",
       target: "system:workshop",
       metadata: { deleted: args.deleted, passes: args.passes, at: Date.now() },
+    });
+    await notifySecurityAlert(ctx, {
+      message: `Alerta de seguridad: se ha ejecutado un vaciado del taller (${args.deleted} registros eliminados).`,
+      exceptUserId: args.userId,
     });
   },
 });

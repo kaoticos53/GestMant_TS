@@ -19,6 +19,7 @@ interface ReportIncidentFormProps {
   reporterProps: ComponentProps<typeof ReporterFields>;
   equipmentProps: ComponentProps<typeof EquipmentFields>;
   descriptionProps: ComponentProps<typeof DescriptionField>;
+  honeypotProps?: { value: string; onChange: (value: string) => void };
   error: string | null;
   busy: boolean;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -40,6 +41,7 @@ export function ReportIncidentForm({
   reporterProps,
   equipmentProps,
   descriptionProps,
+  honeypotProps,
   error,
   busy,
   onSubmit,
@@ -115,6 +117,21 @@ export function ReportIncidentForm({
 
           {/* Bloque 3: Descripción ocupando todo el ancho de la ficha */}
           <DescriptionField {...descriptionProps} />
+
+          {honeypotProps && (
+            <div aria-hidden="true" className="sr-only">
+              <label htmlFor="report-website">Sitio web</label>
+              <input
+                id="report-website"
+                name="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                value={honeypotProps.value}
+                onChange={(e) => honeypotProps.onChange(e.target.value)}
+              />
+            </div>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

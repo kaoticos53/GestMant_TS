@@ -47,6 +47,29 @@ export const INTAKE_STATUS: IncidentStatus = "reported";
 /** Lo que hay que esperar entre dos avisos de la misma persona (30 segundos). */
 export const INTAKE_COOLDOWN_MS = 30_000;
 
+/** Ventana del freno global de altas públicas: una hora. */
+export const INTAKE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Límite global horario de incidencias dadas de alta desde la puerta pública.
+ * Evita inundaciones de cola y envíos masivos de correo (CWE-307 / CWE-770).
+ */
+export const GLOBAL_INTAKE_LIMIT_PER_HOUR = 60;
+
+/** Valida si el volumen global horario de altas públicas supera el umbral. */
+export function admitGlobalIntake(
+  recentHourlyCount: number,
+): { allowed: boolean; error?: string } {
+  if (recentHourlyCount >= GLOBAL_INTAKE_LIMIT_PER_HOUR) {
+    return {
+      allowed: false,
+      error:
+        "El taller ha recibido demasiadas notificaciones públicas en la última hora. Por favor, inténtalo más tarde.",
+    };
+  }
+  return { allowed: true };
+}
+
 /** Mínimo de lo que se lee en la descripción, sin contar el marcado del editor. */
 export const INTAKE_MIN_DESCRIPTION = 10;
 
@@ -66,6 +89,8 @@ export interface IncidentIntakeInput {
   /** La descripción tal cual sale del editor (documento de `richDoc`). */
   description: string;
   reportedAt: number;
+  /** Campo trampa (honeypot) invisible: solo lo rellena un bot automatizado. */
+  website?: string;
 }
 
 /**
@@ -134,6 +159,12 @@ export function readIncidentIntake(
   input: IncidentIntakeInput,
   options: { now?: number; recent?: readonly RecentIncident[] } = {},
 ): IncidentIntakeRead {
+  if ((input.website ?? "").trim() !== "") {
+    return {
+      ok: false,
+      error: "No se ha podido procesar la solicitud.",
+    };
+  }
   const now = options.now ?? Date.now();
   const reporterName = input.reporterName.trim();
   if (!reporterName) {

@@ -969,6 +969,15 @@ const schema = defineSchema({
     .index("by_code", ["code"])
     .index("by_windowStart", ["windowStart"]),
 
+  // Freno anti-OTP bombing: registra el último envío de código por correo
+  // para evitar ráfagas repetidas contra la misma dirección.
+  otpSendLimits: defineTable({
+    email: v.string(),
+    lastSentAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_lastSentAt", ["lastSentAt"]),
+
   // La foto pública del taller: una sola fila con lo poco del trabajo que se
   // puede enseñar a quien no ha entrado nunca. Existe para que la portada no
   // cuente nada al vuelo: contar equipos, repuestos e incidencias es leer esas
@@ -1237,8 +1246,10 @@ const schema = defineSchema({
     domain: v.optional(v.string()), // dominio verificado (Mailgun)
     relayUrl: v.optional(v.string()), // puente HTTP del relevo propio
     smtpUser: v.optional(v.string()), // cuenta SMTP (Gmail, buzón de pruebas)
-    apiKey: v.optional(v.string()), // secreto del servicio, nunca en una lectura
-    relayToken: v.optional(v.string()), // testigo del relevo, idem
+    apiKey: v.optional(v.string()), // secreto del servicio (cifrado AES-GCM en reposo)
+    apiKeyHint: v.optional(v.string()), // últimos 4 caracteres visibles en UI
+    relayToken: v.optional(v.string()), // testigo del relevo (cifrado AES-GCM en reposo)
+    relayTokenHint: v.optional(v.string()), // últimos 4 caracteres visibles en UI
     updatedAt: v.number(),
     updatedBy: v.optional(v.string()),
     // La última prueba de envío, para que la pantalla pueda enseñar si el

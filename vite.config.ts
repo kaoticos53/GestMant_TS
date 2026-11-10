@@ -26,6 +26,18 @@ import { VitePWA } from "vite-plugin-pwa";
  */
 export const API_CSP_TOKEN = "__PULSO_API_CONNECT_SRC__";
 export const API_CSP_ASSET = "pulso-csp.txt";
+export const API_IMG_CSP_TOKEN = "__PULSO_API_IMG_SRC__";
+export const API_IMG_CSP_ASSET = "pulso-img-csp.txt";
+
+/** Extrae el host limpio y si el esquema original es sin TLS (`http`/`ws`). */
+function parseOriginHost(url: string | null | undefined): {
+  host: string;
+  plain: boolean;
+} {
+  const raw = (url ?? "").trim();
+  const host = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/.*$/, "");
+  return { host, plain: /^(http|ws):\/\//i.test(raw) };
+}
 
 /**
  * Las direcciones que hay que autorizar para hablar con la API, en las dos formas
@@ -40,11 +52,16 @@ export const API_CSP_ASSET = "pulso-csp.txt";
  * inválida dentro.
  */
 export function apiConnectSources(url: string | null | undefined): string {
-  const raw = (url ?? "").trim();
-  const host = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/.*$/, "");
+  const { host, plain } = parseOriginHost(url);
   if (host === "") return "";
-  const plain = /^(http|ws):\/\//i.test(raw);
   return plain ? `http://${host} ws://${host}` : `https://${host} wss://${host}`;
+}
+
+/** Origen HTTP(S) de la API para autorizar imágenes de `_storage` en `img-src`. */
+export function apiImageSources(url: string | null | undefined): string {
+  const { host, plain } = parseOriginHost(url);
+  if (host === "") return "";
+  return plain ? `http://${host}` : `https://${host}`;
 }
 
 /**
@@ -56,6 +73,7 @@ export function apiConnectSources(url: string | null | undefined): string {
  */
 function apiCspPlugin(): Plugin {
   let sources = "";
+  let imageSources = "";
   // El apunte solo se escribe al compilar: al servir no hay una carpeta de salida
   // donde dejarlo, y el propio Vite avisa de que ahí no pinta nada.
   let building = false;
@@ -63,12 +81,17 @@ function apiCspPlugin(): Plugin {
     name: "pulso-api-csp",
     configResolved(config) {
       building = config.command === "build";
-      sources = apiConnectSources(
-        process.env.VITE_CONVEX_URL ?? config.env.VITE_CONVEX_URL,
-      );
+      const apiUrl =
+        process.env.VITE_CONVEX_URL ?? config.env.VITE_CONVEX_URL;
+      sources = apiConnectSources(apiUrl);
+      imageSources = apiImageSources(apiUrl);
     },
     transformIndexHtml(html) {
-      let result = html.split(API_CSP_TOKEN).join(sources);
+      let result = html
+        .split(API_CSP_TOKEN)
+        .join(sources)
+        .split(API_IMG_CSP_TOKEN)
+        .join(imageSources);
       if (building) {
         // En compilación de producción, limpiar los comodines de desarrollo local (CWE-1188)
         result = result
@@ -82,6 +105,11 @@ function apiCspPlugin(): Plugin {
     buildStart() {
       if (!building) return;
       this.emitFile({ type: "asset", fileName: API_CSP_ASSET, source: sources });
+      this.emitFile({
+        type: "asset",
+        fileName: API_IMG_CSP_ASSET,
+        source: imageSources,
+      });
     },
   };
 }

@@ -3,6 +3,7 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
+import { notifyUsers } from "./notify";
 import { ROLES } from "./schema";
 
 /**
@@ -42,6 +43,46 @@ export async function logSecurityEvent(
     metadata,
     at,
   });
+}
+
+/**
+ * Envía un aviso in-app de seguridad a todos los administradores activos no
+ * anónimos. Si se indica `cooldownAction` + `cooldownMs`, omite el aviso cuando
+ * ya se registró un evento reciente de ese tipo para evitar ráfagas de alertas.
+ */
+export async function notifySecurityAlert(
+  ctx: MutationCtx,
+  args: {
+    message: string;
+    exceptUserId?: Id<"users">;
+    cooldownAction?: string;
+    cooldownMs?: number;
+  },
+): Promise<void> {
+  if (args.cooldownAction && args.cooldownMs && args.cooldownMs > 0) {
+    const recent = await ctx.db
+      .query("securityAuditLog")
+      .withIndex("by_action_and_at", (q) =>
+        q
+          .eq("action", args.cooldownAction!)
+          .gt("at", Date.now() - args.cooldownMs!),
+      )
+      .first();
+    if (recent !== null) return;
+  }
+
+  const users = await ctx.db.query("users").collect();
+  const adminIds = users
+    .filter(
+      (user) =>
+        user.role === ROLES.ADMIN &&
+        user.active !== false &&
+        user.isAnonymous !== true,
+    )
+    .map((user) => user._id);
+
+  if (adminIds.length === 0) return;
+  await notifyUsers(ctx, adminIds, args.message, undefined, args.exceptUserId);
 }
 
 /**

@@ -222,6 +222,7 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
       newRole: "manager",
       targetEmail: "pepe@taller.es",
       targetName: "Pepe Operario",
+      revokedSessions: 0,
     });
   });
 
@@ -292,6 +293,74 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
       ctx.db.query("securityAuditLog").collect(),
     );
     expect(logsAfterReset.length).toBe(1);
+  });
+
+  test("permissions, mailSettings y alertas tempranas registran eventos y notifican a administradores", async () => {
+    const { t, userId: adminId, authed } = await setup(
+      "admin",
+      "admin1@taller.es",
+    );
+    const secondAdminId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Segundo Admin",
+        email: "admin2@taller.es",
+        role: "admin",
+        active: true,
+      }),
+    );
+
+    const roleKey = await authed.mutation(api.permissions.createRole, {
+      label: "Auditor Externo",
+    });
+    await authed.mutation(api.permissions.updateRole, {
+      key: roleKey,
+      label: "Auditor Interno",
+    });
+    await authed.mutation(api.permissions.setRolePermissions, {
+      role: roleKey,
+      grants: { viewAudit: true },
+    });
+    await authed.mutation(api.permissions.deleteRole, { key: roleKey });
+
+    await authed.mutation(api.mailSettings.save, {
+      provider: "resend",
+      enabled: true,
+      fromName: "Pulso Taller",
+      fromEmail: "avisos@taller.es",
+      replyTo: "",
+      bcc: "",
+      domain: "",
+      relayUrl: "",
+      apiKey: "re_no_debe_salir_en_log",
+    });
+
+    // El vaciado de taller notifica al otro administrador activo.
+    await t.mutation(internal.workshopReset.logResetAudit, {
+      userId: adminId,
+      deleted: 4,
+      passes: 1,
+    });
+
+    const events = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const actions = events.map((e) => e.action);
+    expect(actions).toContain("role_definition_change");
+    expect(actions).toContain("role_permissions_change");
+    expect(actions).toContain("mail_settings_change");
+    expect(JSON.stringify(events)).not.toContain("re_no_debe_salir_en_log");
+
+    const secondAdminNotifications = await t.run((ctx) =>
+      ctx.db
+        .query("notifications")
+        .withIndex("by_user", (q) => q.eq("userId", secondAdminId))
+        .collect(),
+    );
+    expect(
+      secondAdminNotifications.some((n) =>
+        n.text.includes("Alerta de seguridad"),
+      ),
+    ).toBe(true);
   });
 });
 

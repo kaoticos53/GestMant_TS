@@ -120,6 +120,13 @@ crons.daily(
 );
 
 crons.daily(
+  "purgar marcas caducadas de envio OTP",
+  { hourUTC: 5, minuteUTC: 50 },
+  internal.otpLimits.purgeExpired,
+  {},
+);
+
+crons.daily(
   "resumen semanal",
   { hourUTC: 7, minuteUTC: 0 },
   internal.weeklyReport.runScheduled,

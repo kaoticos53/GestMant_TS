@@ -108,6 +108,48 @@ export function looksLikePdf(head: Uint8Array): boolean {
 }
 
 /**
+ * ¿Los primeros bytes son de una imagen permitida (JPEG, PNG, GIF, BMP, WEBP,
+ * HEIC o AVIF)? Rechaza SVG, HTML u otros documentos activos aunque el cliente
+ * declare un `Content-Type` de imagen.
+ */
+export function looksLikeImage(head: Uint8Array): boolean {
+  if (head.length < 2) return false;
+  const starts = (...bytes: number[]) =>
+    head.length >= bytes.length &&
+    bytes.every((byte, index) => head[index] === byte);
+  // JPEG, PNG, GIF y BMP: su firma es la primera.
+  if (starts(0xff, 0xd8, 0xff)) return true;
+  if (starts(0x89, 0x50, 0x4e, 0x47)) return true;
+  if (starts(0x47, 0x49, 0x46, 0x38)) return true;
+  if (starts(0x42, 0x4d)) return true;
+  // WEBP: caja RIFF con su marca a los ocho bytes.
+  if (
+    head.length >= 12 &&
+    starts(0x52, 0x49, 0x46, 0x46) &&
+    head[8] === 0x57 &&
+    head[9] === 0x45 &&
+    head[10] === 0x42 &&
+    head[11] === 0x50
+  ) {
+    return true;
+  }
+  // HEIC y AVIF: caja ISO-BMFF con la marca del formato.
+  if (
+    head.length >= 12 &&
+    head[4] === 0x66 &&
+    head[5] === 0x74 &&
+    head[6] === 0x79 &&
+    head[7] === 0x70
+  ) {
+    const brand = String.fromCharCode(head[8], head[9], head[10], head[11]);
+    return ["avif", "avis", "heic", "heix", "hevc", "mif1", "msf1"].some(
+      (known) => brand === known,
+    );
+  }
+  return false;
+}
+
+/**
  * La foto tal y como tiene que subirse: reescalada y recomprimida en el
  * navegador si hace falta, o el archivo tal cual si no hay nada que recomprimir
  * (un PDF, una foto que ya viene ligera).

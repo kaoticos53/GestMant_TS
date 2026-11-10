@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { MutationCtx } from "./_generated/server";
+import { logSecurityEvent, notifySecurityAlert } from "./audit";
 import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { notifyUsers } from "./notify";
 import { moderatorIds } from "./permissions";
@@ -8,6 +9,8 @@ import { freePublicCode } from "./publicCodes";
 import { freeReference } from "./references";
 import { assertReportImages } from "./reportUploads";
 import {
+  INTAKE_WINDOW_MS,
+  admitGlobalIntake,
   incidentIntakeNotice,
   incidentIntakeRecord,
   incidentIntakeReporterNotice,
@@ -63,15 +66,37 @@ export async function registerIncidentIntake(
     clientDraftId?: string;
   } = {},
 ): Promise<{ reference: string; code: string }> {
-  // Las últimas notificadas, solo para el freno: antes de repartir referencia
-  // ninguna se mira si quien avisa acaba de avisar.
+  const now = Date.now();
+  // Las últimas notificadas, acotadas por `RECENT_INTAKES`, para el freno
+  // global horario (anti-flooding) y el de repetición por nombre.
   const latest = await ctx.db
     .query("incidents")
     .withIndex("by_createdAt")
     .order("desc")
     .take(RECENT_INTAKES);
 
-  const read = readIncidentIntake(input, { recent: latest });
+  const recentHourCount = latest.filter(
+    (item) => item.createdAt > now - INTAKE_WINDOW_MS,
+  ).length;
+  const globalAdmission = admitGlobalIntake(recentHourCount);
+  if (!globalAdmission.allowed) {
+    throw new ConvexError(globalAdmission.error!);
+  }
+  if (!admitGlobalIntake(recentHourCount + 1).allowed) {
+    await notifySecurityAlert(ctx, {
+      message:
+        "Alerta de seguridad: se ha alcanzado el límite global horario de altas públicas de incidencias.",
+      cooldownAction: "global_rate_limit_reached",
+      cooldownMs: INTAKE_WINDOW_MS,
+    });
+    await logSecurityEvent(ctx, {
+      action: "global_rate_limit_reached",
+      target: "public:intake",
+      metadata: { count: recentHourCount + 1 },
+    });
+  }
+
+  const read = readIncidentIntake(input, { now, recent: latest });
   if (!read.ok) throw new ConvexError(read.error);
   const { intake } = read;
 
@@ -85,7 +110,6 @@ export async function registerIncidentIntake(
   const reference = await freeReference(ctx, "incident");
   const publicCode = await freePublicCode(ctx);
 
-  const now = Date.now();
   const incidentId = await ctx.db.insert(
     "incidents",
     incidentIntakeRecord(intake, { now, reference, publicCode }),

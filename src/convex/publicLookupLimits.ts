@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 import { internalMutation, MutationCtx } from "./_generated/server";
+import { logSecurityEvent, notifySecurityAlert } from "./audit";
 import {
   LOOKUP_WINDOW_MS,
   admitGlobalLookup,
@@ -41,6 +42,21 @@ export async function admitPublicLookup(
   const globalAdmission = admitGlobalLookup(recentTotal.length);
   if (!globalAdmission.allowed) {
     throw new ConvexError(globalAdmission.error!);
+  }
+  // Al alcanzar el último hueco de la cuota global horaria (esta transacción sí
+  // hace commit), dejar traza de seguridad y alerta temprana con enfriamiento.
+  if (!admitGlobalLookup(recentTotal.length + 1).allowed) {
+    await notifySecurityAlert(ctx, {
+      message:
+        "Alerta de seguridad: se ha alcanzado el límite global horario de consultas públicas (CWE-307).",
+      cooldownAction: "global_rate_limit_reached",
+      cooldownMs: LOOKUP_WINDOW_MS,
+    });
+    await logSecurityEvent(ctx, {
+      action: "global_rate_limit_reached",
+      target: "public:lookup",
+      metadata: { count: recentTotal.length + 1 },
+    });
   }
 
   // Una fila por código: la ventana en curso. Si no hay ninguna, esta consulta

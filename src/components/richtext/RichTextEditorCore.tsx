@@ -153,7 +153,7 @@ function EditorSurface({
   const generateImageUploadUrl = useMutation(
     api.uploads.generateImageUploadUrl,
   );
-  const imageUrl = useMutation(api.uploads.imageUrl);
+  const imageUrl = useAction(api.uploads.imageUrl);
   const generateReportUploadUrl = useMutation(
     api.reportUploads.generateUploadUrl,
   );

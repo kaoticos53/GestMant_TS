@@ -64,6 +64,8 @@ export const report = mutation({
     // aviso que se reintenta al volver la red llega con la misma marca y el alta
     // se reconoce en vez de duplicarse.
     clientDraftId: v.optional(v.string()),
+    // Campo honeypot anti-bot: debe llegar vacío.
+    website: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const clientDraftId = args.clientDraftId?.trim() || undefined;

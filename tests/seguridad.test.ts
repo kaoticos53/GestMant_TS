@@ -139,7 +139,7 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       expect(
         informe,
         "Se encontraron mutaciones públicas sin comprobación de identidad (getAuthUserId / requireUser / requireAdmin):\n\n" +
-          informe,
+        informe,
       ).toBe("");
     });
 
@@ -261,10 +261,16 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
 
       expect(contenido).toContain("MAX_MANUAL_FILE_SIZE");
       expect(contenido).toContain("looksLikePdf");
+      expect(contenido).toContain("looksLikeImage");
       expect(contenido).toContain("0x25"); // '%'
       expect(contenido).toContain("0x50"); // 'P'
       expect(contenido).toContain("0x44"); // 'D'
       expect(contenido).toContain("0x46"); // 'F'
+
+      const rutaUploads = join(DIR_BACKEND, "uploads.ts");
+      const contenidoUploads = readFileSync(rutaUploads, "utf8");
+      expect(contenidoUploads).toContain("looksLikeImage");
+      expect(contenidoUploads).toContain("MAX_FILE_SIZE");
     });
   });
 
@@ -297,6 +303,20 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       const rutaLib = join(RAIZ, "src", "lib", "publicLookup.ts");
       const contenidoLib = readFileSync(rutaLib, "utf8");
       expect(contenidoLib).toContain("GLOBAL_LOOKUP_LIMIT_PER_HOUR");
+    });
+
+    test("incidentIntake.ts valida cupo global contra flooding de altas públicas", () => {
+      const rutaIntake = join(DIR_BACKEND, "incidentIntake.ts");
+      expect(readFileSync(rutaIntake, "utf8")).toContain("admitGlobalIntake");
+    });
+  });
+
+  describe("9. Cifrado en Reposo de Credenciales de Correo", () => {
+    test("mailSettings.ts cifra y descifra secretos mediante secretCrypto", () => {
+      const rutaMail = join(DIR_BACKEND, "mailSettings.ts");
+      const contenido = readFileSync(rutaMail, "utf8");
+      expect(contenido).toContain("encryptSecret");
+      expect(contenido).toContain("decryptSecret");
     });
   });
 });

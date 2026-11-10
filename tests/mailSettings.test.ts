@@ -1,7 +1,7 @@
 import { backend } from "./backend";
 import { ConvexError } from "convex/values";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
 import {
   MAIL_LOG_LIMIT,
   MAIL_PROVIDERS,
@@ -1485,5 +1485,37 @@ describe("el aviso a quien notificó — sale por el servicio configurado", () =
       manager.action(api.mailSettings.check, {}),
       "Solo el administrador",
     );
+  });
+
+  test("las credenciales se cifran con AES-256-GCM en reposo cuando hay clave de cifrado", async () => {
+    const previousKey = process.env.PULSO_SETTINGS_ENCRYPTION_KEY;
+    process.env.PULSO_SETTINGS_ENCRYPTION_KEY = "clave-maestra-de-prueba-32-bytes";
+    try {
+      const { t, admin } = await setup();
+      await admin.mutation(api.mailSettings.save, {
+        ...resendDraft,
+        apiKey: "re_super_secret_6789",
+      });
+
+      const storedRow = await t.run((ctx) =>
+        ctx.db.query("mailSettings").unique(),
+      );
+      expect(storedRow?.apiKey).toMatch(/^enc:v1:/);
+      expect(storedRow?.apiKey).not.toContain("re_super_secret_6789");
+      expect(storedRow?.apiKeyHint).toBe("…6789");
+
+      const view = await admin.query(api.mailSettings.settings, {});
+      expect(view.hasKey).toBe(true);
+      expect(view.keyHint).toBe("…6789");
+
+      const delivered = await t.query(internal.mailSettings.delivery, {});
+      expect(delivered.apiKey).toBe("re_super_secret_6789");
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.PULSO_SETTINGS_ENCRYPTION_KEY;
+      } else {
+        process.env.PULSO_SETTINGS_ENCRYPTION_KEY = previousKey;
+      }
+    }
   });
 });

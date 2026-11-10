@@ -1,5 +1,6 @@
 import { Email } from "@convex-dev/auth/providers/Email";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
+import { internal } from "../_generated/api";
 
 /** Tiempo máximo de espera al gateway de envío de códigos. */
 const EMAIL_OTP_TIMEOUT_MS = 10_000;
@@ -17,7 +18,10 @@ export const emailOtp = Email({
     const alphabet = "0123456789";
     return generateRandomString(random, alphabet, 6);
   },
-  async sendVerificationRequest({ identifier: email, token }) {
+  async sendVerificationRequest({ identifier: email, token }, ctx) {
+    if (ctx && typeof ctx.runMutation === "function") {
+      await ctx.runMutation(internal.otpLimits.admitSend, { email });
+    }
     let response: Response;
     try {
       response = await fetch(freebuffEmailOtpUrl(), {

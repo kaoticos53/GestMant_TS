@@ -19,6 +19,7 @@ import {
   MAX_FILE_SIZE,
   MAX_FILE_SIZE_LABEL,
   MAX_REPORT_IMAGES,
+  looksLikeImage,
 } from "../lib/upload";
 
 /**
@@ -104,43 +105,6 @@ const REJECTION_MESSAGES: Record<Rejection, string> = {
     "Esa imagen ya se ha adjuntado: elige otra o vuelve a subirla.",
 };
 
-/**
- * ¿Los primeros bytes son de una foto? Se aceptan los formatos con los que se
- * fotografía una avería; no SVG, que es un documento con scripts y no una foto.
- */
-function looksLikeImage(head: Uint8Array): boolean {
-  const starts = (...bytes: number[]) =>
-    bytes.every((byte, index) => head[index] === byte);
-  // JPEG, PNG, GIF y BMP: su firma es la primera.
-  if (starts(0xff, 0xd8, 0xff)) return true;
-  if (starts(0x89, 0x50, 0x4e, 0x47)) return true;
-  if (starts(0x47, 0x49, 0x46, 0x38)) return true;
-  if (starts(0x42, 0x4d)) return true;
-  // WEBP: caja RIFF con su marca a los ocho bytes.
-  if (
-    starts(0x52, 0x49, 0x46, 0x46) &&
-    head[8] === 0x57 &&
-    head[9] === 0x45 &&
-    head[10] === 0x42 &&
-    head[11] === 0x50
-  ) {
-    return true;
-  }
-  // HEIC y AVIF: caja ISO-BMFF con la marca del formato.
-  if (
-    head[4] === 0x66 &&
-    head[5] === 0x74 &&
-    head[6] === 0x79 &&
-    head[7] === 0x70
-  ) {
-    const brand = String.fromCharCode(head[8], head[9], head[10], head[11]);
-    return ["avif", "avis", "heic", "heix", "hevc", "mif1", "msf1"].some(
-      (known) => brand === known,
-    );
-  }
-  return false;
-}
-
 /** Un vale nuevo, largo y al azar: es lo único que acredita un archivo. */
 function newTicket(): string {
   const bytes = new Uint8Array(16);
@@ -161,7 +125,7 @@ export const generateUploadUrl = mutation({
     const recent = await ctx.db
       .query("reportUploads")
       .withIndex("by_createdAt", (q) => q.gt("createdAt", since))
-      .collect();
+      .take(MAX_UPLOADS_PER_HOUR);
     if (recent.length >= MAX_UPLOADS_PER_HOUR) {
       throw new ConvexError(
         "El formulario ha recibido demasiados archivos en la última hora. Inténtalo de nuevo dentro de un rato.",

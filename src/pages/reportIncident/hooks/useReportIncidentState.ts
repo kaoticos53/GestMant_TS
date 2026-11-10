@@ -42,6 +42,7 @@ export function useReportIncidentState() {
   const [serialNumber, setSerialNumber] = useState("");
   const [reportedAt, setReportedAt] = useState(getTodayInputDate);
   const [description, setDescription] = useState("");
+  const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // El código con el que se sigue el caso: lo único que se lleva quien notifica
@@ -159,6 +160,7 @@ export function useReportIncidentState() {
       const created = await report({
         ...validation.payload,
         clientDraftId: clientDraftId(),
+        ...(website ? { website } : {}),
       });
       setCode(created.code);
       setSentTo(validation.payload.reporterEmail ?? null);
@@ -189,6 +191,7 @@ export function useReportIncidentState() {
     setSerialNumber("");
     setReportedAt(getTodayInputDate());
     setDescription("");
+    setWebsite("");
     setError(null);
     setOfflineNotice(null);
   };
@@ -208,6 +211,10 @@ export function useReportIncidentState() {
       notice: offlineNotice,
     },
     handleSubmit,
+    honeypotProps: {
+      value: website,
+      onChange: setWebsite,
+    },
     reporterProps: {
       nameValue,
       onNameChange: setName,

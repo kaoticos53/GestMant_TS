@@ -73,6 +73,20 @@ services:
     # reconstruir, y la que se ve en Container Manager → Imagen.
     image: pulso-taller-app:local
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETGID
+      - SETUID
     ports:
       # Solo el NAS: el proxy inverso de DSM entra por aquí. Para servir la app
       # directamente en la red local, cambia esta línea por "8080:80" (y mira el
@@ -289,6 +303,11 @@ services:
     # La receta está en `scripts/mail-relay.mjs`, montada desde el código.
     image: node:22-alpine
     restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     command: ["node", "/app/mail-relay.mjs"]
     volumes:
       - ./codigo/scripts/mail-relay.mjs:/app/mail-relay.mjs:ro

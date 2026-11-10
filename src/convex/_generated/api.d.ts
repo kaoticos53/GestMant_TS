@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _auth_secretCrypto from "../_auth/secretCrypto.js";
 import type * as _auth_secureMutation from "../_auth/secureMutation.js";
 import type * as _incidents_documents from "../_incidents/documents.js";
 import type * as _incidents_helpers from "../_incidents/helpers.js";
@@ -44,6 +45,7 @@ import type * as members from "../members.js";
 import type * as messages from "../messages.js";
 import type * as notifications from "../notifications.js";
 import type * as notify from "../notify.js";
+import type * as otpLimits from "../otpLimits.js";
 import type * as partRequests from "../partRequests.js";
 import type * as permissions from "../permissions.js";
 import type * as publicCodes from "../publicCodes.js";
@@ -69,6 +71,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_auth/secretCrypto": typeof _auth_secretCrypto;
   "_auth/secureMutation": typeof _auth_secureMutation;
   "_incidents/documents": typeof _incidents_documents;
   "_incidents/helpers": typeof _incidents_helpers;
@@ -105,6 +108,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   notifications: typeof notifications;
   notify: typeof notify;
+  otpLimits: typeof otpLimits;
   partRequests: typeof partRequests;
   permissions: typeof permissions;
   publicCodes: typeof publicCodes;

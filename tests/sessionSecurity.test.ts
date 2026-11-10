@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
+import { api, internal } from "../src/convex/_generated/api";
 import { emailOtp } from "../src/convex/auth/emailOtp";
+import { backend } from "./backend";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
@@ -29,9 +31,93 @@ describe("Seguridad AppSec: Sesión, OTP y Clickjacking (Fase 2)", () => {
     expect(token1).not.toBe(token2);
   });
 
-  test("index.html incluye script defensivo de Frame Busting contra Clickjacking (CWE-1021)", () => {
+  test("index.html carga el script externo de Frame Busting sin scripts inline (CWE-1021 y CSP script-src 'self')", () => {
     const html = readFileSync(join(RAIZ, "index.html"), "utf8");
-    expect(html).toContain("window.top !== window.self");
-    expect(html).toContain("window.top.location = window.self.location");
+    const frameBuster = readFileSync(
+      join(RAIZ, "public", "frame-buster.js"),
+      "utf8",
+    );
+
+    expect(html).toContain('<script src="/frame-buster.js"></script>');
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/i);
+    expect(frameBuster).toContain("window.top !== window.self");
+    expect(frameBuster).toContain("window.top.location = window.self.location");
+  });
+
+  test("members.setRole y revokeSessions revocan inmediatamente authSessions y authRefreshTokens", async () => {
+    const t = backend();
+    const { adminId, techId } = await t.run(async (ctx) => {
+      const adminId = await ctx.db.insert("users", {
+        name: "Admin",
+        email: "admin@taller.es",
+        role: "admin",
+        active: true,
+      });
+      const techId = await ctx.db.insert("users", {
+        name: "Técnico",
+        email: "tech@taller.es",
+        role: "technician",
+        active: true,
+      });
+      const sessionId = await ctx.db.insert("authSessions", {
+        userId: techId,
+        expirationTime: Date.now() + 60_000,
+      });
+      await ctx.db.insert("authRefreshTokens", {
+        sessionId,
+        expirationTime: Date.now() + 60_000,
+      });
+      return { adminId, techId };
+    });
+
+    const adminAuthed = t.withIdentity({ subject: `${adminId}|s-admin` });
+    await adminAuthed.mutation(api.members.setRole, {
+      userId: techId,
+      role: "manager",
+    });
+
+    const afterRoleChange = await t.run(async (ctx) => ({
+      sessions: await ctx.db
+        .query("authSessions")
+        .withIndex("userId", (q) => q.eq("userId", techId))
+        .collect(),
+      tokens: await ctx.db.query("authRefreshTokens").collect(),
+    }));
+    expect(afterRoleChange.sessions).toHaveLength(0);
+    expect(afterRoleChange.tokens).toHaveLength(0);
+
+    // Probar también revokeSessions manual por el propio usuario
+    await t.run(async (ctx) => {
+      const s2 = await ctx.db.insert("authSessions", {
+        userId: techId,
+        expirationTime: Date.now() + 60_000,
+      });
+      await ctx.db.insert("authRefreshTokens", {
+        sessionId: s2,
+        expirationTime: Date.now() + 60_000,
+      });
+    });
+    const techAuthed = t.withIdentity({ subject: `${techId}|s-tech` });
+    const res = await techAuthed.mutation(api.members.revokeSessions, {});
+    expect(res.revoked).toBe(1);
+    const remaining = await t.run((ctx) =>
+      ctx.db
+        .query("authSessions")
+        .withIndex("userId", (q) => q.eq("userId", techId))
+        .collect(),
+    );
+    expect(remaining).toHaveLength(0);
+  });
+
+  test("otpLimits.admitSend bloquea el OTP bombing sobre la misma dirección", async () => {
+    const t = backend();
+    await t.mutation(internal.otpLimits.admitSend, {
+      email: "Tecnico@Taller.es",
+    });
+    await expect(
+      t.mutation(internal.otpLimits.admitSend, {
+        email: "tecnico@taller.es",
+      }),
+    ).rejects.toThrow(/enviado un código recientemente/i);
   });
 });

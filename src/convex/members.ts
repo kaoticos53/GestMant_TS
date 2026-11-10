@@ -12,6 +12,7 @@ import { internal } from "./_generated/api";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasCapability, roleExists } from "./permissions";
 import {
+  type MutationCtx,
   QueryCtx,
   action,
   internalMutation,
@@ -20,7 +21,7 @@ import {
   query,
 } from "./_generated/server";
 import { ROLES, roleValidator } from "./schema";
-import { logSecurityEvent } from "./audit";
+import { logSecurityEvent, notifySecurityAlert } from "./audit";
 
 async function requireUser(ctx: QueryCtx) {
   const userId = await getAuthUserId(ctx);
@@ -480,7 +481,33 @@ export const list = query({
   },
 });
 
-/** Cambia el rol de un usuario (solo administrador, nunca el propio). */
+/**
+ * Revoca inmediatamente todas las sesiones y refresh tokens activos de un
+ * usuario en las tablas de `@convex-dev/auth`, usable dentro de mutaciones
+ * atómicas (p. ej. cambio de rol o revocación explícita).
+ */
+async function revokeAllUserSessions(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<number> {
+  const sessions = await ctx.db
+    .query("authSessions")
+    .withIndex("userId", (q) => q.eq("userId", userId))
+    .collect();
+  for (const session of sessions) {
+    const tokens = await ctx.db
+      .query("authRefreshTokens")
+      .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+      .collect();
+    for (const token of tokens) {
+      await ctx.db.delete(token._id);
+    }
+    await ctx.db.delete(session._id);
+  }
+  return sessions.length;
+}
+
+/** Cambia el rol de un usuario (solo administrador, nunca el propio) y revoca sus sesiones activas. */
 const setRoleArgs = {
   userId: v.id("users"),
   role: roleValidator,
@@ -511,6 +538,13 @@ export const setRole = mutation({
 
       const previousRole = target.role;
       await ctx.db.patch(args.userId, { role: args.role });
+      const revokedSessions = await revokeAllUserSessions(ctx, args.userId);
+      if (args.role === ROLES.ADMIN || previousRole === ROLES.ADMIN) {
+        await notifySecurityAlert(ctx, {
+          message: `Alerta de seguridad: cambio de rol administrativo (${previousRole ?? "sin rol"} -> ${args.role}) para ${target.name ?? target.email ?? args.userId}.`,
+          exceptUserId: adminId,
+        });
+      }
       await logSecurityEvent(ctx, {
         actorId: adminId,
         action: "role_change",
@@ -520,8 +554,59 @@ export const setRole = mutation({
           newRole: args.role,
           targetEmail: target.email,
           targetName: target.name,
+          revokedSessions,
         },
       });
+    },
+  ),
+});
+
+
+const revokeSessionsArgs = {
+  userId: v.optional(v.id("users")),
+};
+
+/**
+ * Revoca todas las sesiones activas propias o (si es administrador) de otro
+ * usuario ante sospecha de compromiso de cuenta.
+ */
+export const revokeSessions = mutation({
+  args: revokeSessionsArgs,
+  handler: secureMutation(
+    {
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para cerrar sesiones activas.",
+      ),
+      denyMessage:
+        "Solo el administrador puede cerrar sesiones de otro usuario.",
+      authorize: async (_ctx, actor, args) => {
+        if (
+          args.userId !== undefined &&
+          args.userId !== actor._id &&
+          actor.role !== ROLES.ADMIN
+        ) {
+          return "Solo el administrador puede cerrar sesiones de otro usuario.";
+        }
+        return null;
+      },
+    },
+    revokeSessionsArgs,
+    async (ctx, args, actor) => {
+      const targetId = args.userId ?? actor._id;
+      const target = await ctx.db.get(targetId);
+      if (!target) throw new ConvexError("El usuario ya no existe.");
+      const revoked = await revokeAllUserSessions(ctx, targetId);
+      await logSecurityEvent(ctx, {
+        actorId: actor._id,
+        action: "session_revoked",
+        target: `user:${targetId}`,
+        metadata: {
+          revoked,
+          selfService: targetId === actor._id,
+          targetEmail: target.email,
+        },
+      });
+      return { revoked };
     },
   ),
 });

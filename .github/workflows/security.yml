@@ -1,0 +1,42 @@
+name: Seguridad y AppSec
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  appsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Comprobación de tipos (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Auditoría de dependencias (SCA)
+        run: npm audit --audit-level=high
+
+      - name: Suite de arquitectura y seguridad
+        run: >
+          npx vitest run
+          tests/arquitectura.test.ts
+          tests/seguridad.test.ts
+          tests/seguridadHeaders.test.ts
+          tests/sessionSecurity.test.ts
+          tests/cspSecurity.test.ts
+          tests/csvSecurity.test.ts
+          tests/publicLookupSecurity.test.ts
+          tests/audit.test.ts
+          tests/uploads.test.ts
+          tests/securityAuditLib.test.ts
+

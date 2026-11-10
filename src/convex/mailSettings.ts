@@ -26,12 +26,19 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { weeklyRecipients } from "../lib/weeklyReport";
+import {
+  decryptSecret,
+  encryptSecret,
+  isEncryptedSecret,
+  secretHint,
+} from "./_auth/secretCrypto";
 import { deliverMailLogged } from "./_mail/deliver";
 import {
   normalizeSettingsRoleKeys,
   requireAdmin,
   settingsRoleOptions,
 } from "./permissions";
+import { logSecurityEvent } from "./audit";
 
 /**
  * El correo saliente del taller, configurable desde Ajustes.
@@ -121,9 +128,16 @@ function keyState(
   const stored =
     provider === "vly" || row?.provider !== provider ? "" : (row?.apiKey ?? "");
   const hasKey = stored.trim() !== "" || fromEnv !== "";
+  const storedHint =
+    provider === "vly" || row?.provider !== provider
+      ? ""
+      : (row?.apiKeyHint ??
+        (stored.trim() === "" || isEncryptedSecret(stored.trim())
+          ? ""
+          : secretHint(stored)));
   return {
     hasKey,
-    keyHint: stored.trim() === "" ? "" : `…${stored.slice(-4)}`,
+    keyHint: storedHint,
     keySource:
       stored.trim() !== ""
         ? "guardada"
@@ -143,6 +157,14 @@ function publicView(row: Doc<"mailSettings"> | null) {
     settings.provider === "relay" && row?.provider === "relay"
       ? (row?.relayToken ?? "")
       : "";
+  const relayTokenHint =
+    settings.provider === "relay" && row?.provider === "relay"
+      ? (row?.relayTokenHint ??
+        (relayTokenStored.trim() === "" ||
+        isEncryptedSecret(relayTokenStored.trim())
+          ? ""
+          : secretHint(relayTokenStored)))
+      : "";
   return {
     ...settings,
     hasKey: key.hasKey,
@@ -151,8 +173,7 @@ function publicView(row: Doc<"mailSettings"> | null) {
     envVar: key.envVar,
     envConfigured: key.envConfigured,
     hasRelayToken: relayTokenStored.trim() !== "",
-    relayTokenHint:
-      relayTokenStored.trim() === "" ? "" : `…${relayTokenStored.slice(-4)}`,
+    relayTokenHint,
     updatedAt: row?.updatedAt ?? null,
     updatedBy: row?.updatedBy ?? null,
     lastTestAt: row?.lastTestAt ?? null,
@@ -199,10 +220,10 @@ export const delivery = internalQuery({
     const stored =
       provider === "vly" || row?.provider !== provider
         ? ""
-        : (row?.apiKey ?? "");
+        : await decryptSecret(row?.apiKey ?? "");
     const storedToken =
       provider === "relay" && row?.provider === "relay"
-        ? (row?.relayToken ?? "")
+        ? await decryptSecret(row?.relayToken ?? "")
         : "";
     return {
       enabled: settings.enabled,
@@ -255,6 +276,12 @@ export const setIncidentRoles = mutation({
         updatedBy: by,
       });
     }
+    await logSecurityEvent(ctx, {
+      actorId: admin._id,
+      action: "mail_settings_change",
+      target: "system:mail_roles",
+      metadata: { roleKeys },
+    });
     return publicView(await readRow(ctx));
   },
 });
@@ -293,23 +320,31 @@ export const canConfigure = internalQuery({
   },
 });
 
-/** El secreto que queda: el nuevo si lo hay, el anterior si no, o ninguno. */
-function nextSecret(
+function nextSecretWithHint(
   value: string | undefined,
   clear: boolean | undefined,
-  previous: string | undefined,
+  previousValue: string | undefined,
+  previousHint: string | undefined,
   what: string,
-): string | undefined {
-  if (clear === true) return undefined;
+): { raw?: string; hint?: string; reuseEncrypted?: string } {
+  if (clear === true) return {};
   const trimmed = (value ?? "").trim();
-  if (trimmed === "") return previous;
+  if (trimmed === "") {
+    if (previousValue === undefined) return {};
+    return {
+      reuseEncrypted: previousValue,
+      hint:
+        previousHint ??
+        (isEncryptedSecret(previousValue) ? undefined : secretHint(previousValue)),
+    };
+  }
   if (trimmed.length > MAX_MAIL_SECRET) {
     throw new ConvexError(`${what} es demasiado larga.`);
   }
   if (/[\r\n]/.test(trimmed)) {
     throw new ConvexError(`${what} no puede llevar saltos de línea.`);
   }
-  return trimmed;
+  return { raw: trimmed, hint: secretHint(trimmed) };
 }
 
 /**
@@ -343,25 +378,41 @@ export const save = mutation({
     // La clave pertenece al servicio: al cambiarlo, la anterior no se hereda.
     const sameProvider = row !== null && row.provider === value.provider;
     const previousKey = sameProvider ? row?.apiKey : undefined;
+    const previousKeyHint = sameProvider ? row?.apiKeyHint : undefined;
     const previousToken = sameProvider ? row?.relayToken : undefined;
-    const apiKey =
+    const previousTokenHint = sameProvider ? row?.relayTokenHint : undefined;
+
+    const apiKeyPick =
       value.provider === "vly"
-        ? undefined
-        : nextSecret(
+        ? {}
+        : nextSecretWithHint(
             args.apiKey,
             args.clearApiKey,
             previousKey,
+            previousKeyHint,
             "La clave del servicio",
           );
-    const relayToken =
+    const relayTokenPick =
       value.provider === "relay"
-        ? nextSecret(
+        ? nextSecretWithHint(
             args.relayToken,
             args.clearRelayToken,
             previousToken,
+            previousTokenHint,
             "El testigo del relevo",
           )
-        : undefined;
+        : {};
+
+    const apiKey =
+      apiKeyPick.raw !== undefined
+        ? await encryptSecret(apiKeyPick.raw)
+        : apiKeyPick.reuseEncrypted;
+    const apiKeyHint = apiKeyPick.hint;
+    const relayToken =
+      relayTokenPick.raw !== undefined
+        ? await encryptSecret(relayTokenPick.raw)
+        : relayTokenPick.reuseEncrypted;
+    const relayTokenHint = relayTokenPick.hint;
 
     const record = {
       provider: value.provider,
@@ -376,7 +427,9 @@ export const save = mutation({
       updatedAt: Date.now(),
       updatedBy: admin.name?.trim() || admin.email?.trim() || "Administración",
       ...(apiKey === undefined ? {} : { apiKey }),
+      ...(apiKeyHint === undefined ? {} : { apiKeyHint }),
       ...(relayToken === undefined ? {} : { relayToken }),
+      ...(relayTokenHint === undefined ? {} : { relayTokenHint }),
     };
 
     if (row === null) {
@@ -386,10 +439,25 @@ export const save = mutation({
       // reaparece una clave vieja que ya nadie sabe de dónde salió.
       await ctx.db.patch(row._id, {
         ...record,
-        ...(apiKey === undefined ? { apiKey: undefined } : {}),
-        ...(relayToken === undefined ? { relayToken: undefined } : {}),
+        ...(apiKey === undefined
+          ? { apiKey: undefined, apiKeyHint: undefined }
+          : {}),
+        ...(relayToken === undefined
+          ? { relayToken: undefined, relayTokenHint: undefined }
+          : {}),
       });
     }
+    await logSecurityEvent(ctx, {
+      actorId: admin._id,
+      action: "mail_settings_change",
+      target: "system:mail",
+      metadata: {
+        provider: value.provider,
+        enabled: value.enabled,
+        hasApiKey: apiKey !== undefined,
+        hasRelayToken: relayToken !== undefined,
+      },
+    });
     return publicView(await readRow(ctx));
   },
 });

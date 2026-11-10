@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/hooks/use-auth";
 import { QueueToolbar } from "./QueueToolbar";
 import {
   AUDIT_SORT_OPTIONS,
@@ -9,6 +12,7 @@ import { useAuditEntries } from "./audit/hooks/useAuditEntries";
 import { AuditHeaderCard } from "./audit/components/AuditHeaderCard";
 import { AuditFiltersCard } from "./audit/components/AuditFiltersCard";
 import { AuditGroupSection } from "./audit/components/AuditGroupSection";
+import { SecurityAuditPanel } from "./audit/components/SecurityAuditPanel";
 import {
   AuditFilteredEmptyState,
   AuditInitialEmptyState,
@@ -20,17 +24,14 @@ import {
  * una sola vista —quién adjuntó, editó o retiró cada documento y cuándo—, con
  * filtros por persona, por fechas y por tipo de movimiento.
  *
- * Es una lectura de administración (la capacidad `viewAudit` está bloqueada),
- * y por eso el Dashboard solo la monta para el administrador. El filtrado
- * grande lo hace la consulta sobre los índices de la tabla; aquí se añade la
- * búsqueda de texto y el orden, como en las colas.
- *
- * La lista se parte en páginas con la misma medida que las colas y las tablas:
- * cuántos movimientos caben lo dice el alto del área —contado por el navegador—,
- * y el pie va fuera, pegado a la vista, en vez de un «Mostrar más» al final de
- * todo.
+ * Para administradores activos añade además el visor paginado de auditoría de
+ * seguridad (`securityAuditLog`).
  */
 export function AuditView({ onOpenIncident }: AuditViewProps) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [section, setSection] = useState<"documents" | "security">("documents");
+
   const {
     filters,
     search,
@@ -56,7 +57,7 @@ export function AuditView({ onOpenIncident }: AuditViewProps) {
     listKey,
   } = useAuditEntries();
 
-  return (
+  const documentsSection = (
     <div className="flex flex-col gap-5">
       <AuditHeaderCard rango={rango} audit={audit} />
 
@@ -125,5 +126,32 @@ export function AuditView({ onOpenIncident }: AuditViewProps) {
         </>
       )}
     </div>
+  );
+
+  if (!isAdmin) {
+    return documentsSection;
+  }
+
+  return (
+    <Tabs
+      value={section}
+      onValueChange={(value) =>
+        setSection(value === "security" ? "security" : "documents")
+      }
+      className="flex flex-col gap-5"
+    >
+      <TabsList className="w-fit">
+        <TabsTrigger value="documents">Documentos del expediente</TabsTrigger>
+        <TabsTrigger value="security">Auditoría de seguridad</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="documents" className="focus-visible:outline-none">
+        {documentsSection}
+      </TabsContent>
+
+      <TabsContent value="security" className="focus-visible:outline-none">
+        <SecurityAuditPanel />
+      </TabsContent>
+    </Tabs>
   );
 }

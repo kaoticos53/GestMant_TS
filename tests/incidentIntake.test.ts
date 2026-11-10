@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
+  GLOBAL_INTAKE_LIMIT_PER_HOUR,
   INTAKE_COOLDOWN_MS,
   INTAKE_STATUS,
+  admitGlobalIntake,
   incidentIntakeNotice,
   incidentIntakeRecord,
   incidentIntakeReporterNotice,
@@ -276,5 +278,20 @@ describe("el correo del alta", () => {
     // esto lo dice solo, sin tocar el caso de uso.
     expect(incidentIntakeReporterNotice()).toBe(mailNotice(INTAKE_STATUS));
     expect(mailNotice("assigned")).toBe("assigned");
+  });
+});
+
+describe("protección anti-flooding y honeypot del alta pública", () => {
+  test("admitGlobalIntake frena al superar el cupo horario", () => {
+    expect(admitGlobalIntake(GLOBAL_INTAKE_LIMIT_PER_HOUR - 1).allowed).toBe(true);
+    expect(admitGlobalIntake(GLOBAL_INTAKE_LIMIT_PER_HOUR).allowed).toBe(false);
+  });
+
+  test("readIncidentIntake rechaza si el campo honeypot website llega relleno", () => {
+    const blocked = readIncidentIntake({
+      ...intakeArgs,
+      website: "https://spam.example",
+    });
+    expect(blocked.ok).toBe(false);
   });
 });

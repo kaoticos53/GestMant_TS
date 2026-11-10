@@ -17,6 +17,7 @@ import {
   query,
 } from "./_generated/server";
 import { ROLES, roleValidator } from "./schema";
+import { logSecurityEvent } from "./audit";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -512,6 +513,12 @@ export const setRolePermissions = mutation({
           updatedBy: actor._id,
         });
       }
+      await logSecurityEvent(ctx, {
+        actorId: actor._id,
+        action: "role_permissions_change",
+        target: `role:${args.role}`,
+        metadata: { role: args.role },
+      });
       return true;
     },
   ),
@@ -591,6 +598,12 @@ export const createRole = mutation({
         updatedAt: now,
         updatedBy: actor._id,
       });
+      await logSecurityEvent(ctx, {
+        actorId: actor._id,
+        action: "role_definition_change",
+        target: `role:${key}`,
+        metadata: { op: "create", label },
+      });
       return key;
     },
   ),
@@ -630,6 +643,12 @@ export const updateRole = mutation({
         updatedAt: Date.now(),
         updatedBy: actor._id,
       });
+      await logSecurityEvent(ctx, {
+        actorId: actor._id,
+        action: "role_definition_change",
+        target: `role:${args.key}`,
+        metadata: { op: "update", label },
+      });
       return true;
     },
   ),
@@ -650,7 +669,7 @@ export const deleteRole = mutation({
       denyMessage: PERMISSIONS_DENY,
     },
     deleteRoleArgs,
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
       if (isSystemKey(args.key)) {
         throw new ConvexError("Los roles del sistema no se pueden borrar.");
       }
@@ -666,6 +685,12 @@ export const deleteRole = mutation({
         );
       }
       await ctx.db.delete(row._id);
+      await logSecurityEvent(ctx, {
+        actorId: actor._id,
+        action: "role_definition_change",
+        target: `role:${args.key}`,
+        metadata: { op: "delete", label: row.label },
+      });
       return true;
     },
   ),

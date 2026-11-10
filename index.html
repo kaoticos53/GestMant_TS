@@ -8,22 +8,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <meta
-    http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*; connect-src 'self' https://*.convex.cloud wss://*.convex.cloud __PULSO_API_CONNECT_SRC__ http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*;" />
-  <meta name="description" content="Pulso Taller — incidencias, peticiones de repuestos, stock, compras, manuales y mantenimiento del taller audiovisual de una cadena de televisión, en una sola pantalla." />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.convex.cloud __PULSO_API_IMG_SRC__ http://127.0.0.1:* http://localhost:*; connect-src 'self' https://*.convex.cloud wss://*.convex.cloud __PULSO_API_CONNECT_SRC__ http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*;" />
+  <meta name="description"
+    content="Pulso Taller — incidencias, peticiones de repuestos, stock, compras, manuales y mantenimiento del taller audiovisual de una cadena de televisión, en una sola pantalla." />
   <title>Pulso Taller · Gestión del taller audiovisual</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    rel="stylesheet" />
-  <!-- Mitigación de Clickjacking en capa cliente (CWE-1021) -->
-  <script>
-    if (window.top !== window.self) {
-      window.top.location = window.self.location;
-    }
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Mitigación de Clickjacking en capa cliente (CWE-1021), externo para cumplir script-src 'self' -->
+  <script src="/frame-buster.js"></script>
 </head>
 
 

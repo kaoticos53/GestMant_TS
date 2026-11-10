@@ -2,11 +2,24 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { API_CSP_ASSET, API_CSP_TOKEN, apiConnectSources } from "../vite.config";
+import {
+  API_CSP_ASSET,
+  API_CSP_TOKEN,
+  API_IMG_CSP_ASSET,
+  API_IMG_CSP_TOKEN,
+  apiConnectSources,
+  apiImageSources,
+} from "../vite.config";
 
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 const INDEX_HTML = join(RAIZ, "index.html");
 const NGINX_CONF = join(RAIZ, "docker", "synology", "nginx.conf");
+const SECURITY_HEADERS_CONF = join(
+  RAIZ,
+  "docker",
+  "synology",
+  "security-headers.conf",
+);
 const DOCKERFILE = join(RAIZ, "docker", "synology", "Dockerfile");
 
 describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
@@ -22,101 +35,123 @@ describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
     // Content-Security-Policy
     expect(html).toContain('http-equiv="Content-Security-Policy"');
 
-    // Directivas esenciales de CSP en index.html
+    // Directivas esenciales de CSP en index.html (sin img-src https: abierto)
     expect(html).toContain("default-src 'self'");
     expect(html).toContain("script-src 'self'");
     expect(html).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
     expect(html).toContain("font-src 'self' https://fonts.gstatic.com");
-    expect(html).toContain("img-src 'self' data: blob: https:");
+    expect(html).toContain("img-src 'self' data: blob: https://*.convex.cloud");
+    expect(html).not.toMatch(/img-src[^;]*\shttps:(\s|;)/);
     expect(html).toContain("connect-src 'self' https://*.convex.cloud wss://*.convex.cloud");
   });
 
-  test("nginx.conf en docker/synology define cabeceras defensivas y anti-clickjacking", () => {
+  test("nginx.conf y security-headers.conf definen cabeceras defensivas en todos los bloques location", () => {
     const conf = readFileSync(NGINX_CONF, "utf8");
+    const headers = readFileSync(SECURITY_HEADERS_CONF, "utf8");
+
+    expect(conf).toContain("server_tokens off;");
+    expect(conf).toContain("include /etc/nginx/snippets/security-headers.conf;");
+    // location /assets/ y location = /index.html también incluyen las cabeceras
+    // porque definir `add_header Cache-Control` anula la herencia en nginx.
+    expect(conf).toMatch(
+      /location \/assets\/\s*\{[^}]*include \/etc\/nginx\/snippets\/security-headers\.conf;/s,
+    );
+    expect(conf).toMatch(
+      /location = \/index\.html\s*\{[^}]*include \/etc\/nginx\/snippets\/security-headers\.conf;/s,
+    );
 
     // Anti-clickjacking
-    expect(conf).toMatch(/add_header\s+X-Frame-Options\s+"DENY"\s+always;/);
+    expect(headers).toMatch(/add_header\s+X-Frame-Options\s+"DENY"\s+always;/);
 
     // MIME sniffing protection
-    expect(conf).toMatch(/add_header\s+X-Content-Type-Options\s+"nosniff"\s+always;/);
+    expect(headers).toMatch(/add_header\s+X-Content-Type-Options\s+"nosniff"\s+always;/);
 
     // Referrer policy
-    expect(conf).toMatch(/add_header\s+Referrer-Policy\s+"strict-origin-when-cross-origin"\s+always;/);
+    expect(headers).toMatch(/add_header\s+Referrer-Policy\s+"strict-origin-when-cross-origin"\s+always;/);
+
+    // Permissions-Policy
+    expect(headers).toMatch(/add_header\s+Permissions-Policy\s+"camera=\(\), microphone=\(\), geolocation=\(\)"\s+always;/);
 
     // HSTS (HTTP Strict Transport Security)
-    expect(conf).toMatch(/add_header\s+Strict-Transport-Security\s+"max-age=31536000;\s*includeSubDomains"\s+always;/);
+    expect(headers).toMatch(/add_header\s+Strict-Transport-Security\s+"max-age=31536000;\s*includeSubDomains"\s+always;/);
 
-    // CSP con frame-ancestors 'none'
-    expect(conf).toContain('add_header Content-Security-Policy');
-    expect(conf).toContain("frame-ancestors 'none'");
-    expect(conf).toContain("default-src 'self'");
-    expect(conf).toContain("connect-src 'self' https://*.convex.cloud wss://*.convex.cloud");
+    // CSP con frame-ancestors 'none' y img-src acotado
+    expect(headers).toContain("add_header Content-Security-Policy");
+    expect(headers).toContain("frame-ancestors 'none'");
+    expect(headers).toContain("default-src 'self'");
+    expect(headers).toContain("img-src 'self' data: blob: https://*.convex.cloud");
+    expect(headers).not.toMatch(/img-src[^;]*\shttps:(\s|;)/);
+    expect(headers).toContain("connect-src 'self' https://*.convex.cloud wss://*.convex.cloud");
   });
 });
 
 /**
  * La CSP autoriza, además de Convex Cloud, la dirección de la API de **esta**
- * instalación: sin ella el navegador no deja que la app llame a su propia API y
- * el aviso que se ve es «No se puede hablar con la API del taller · No responde»,
- * con el backend en pie y contestando a quien pregunte por él directamente.
- *
- * La dirección entra al compilar, que es cuando se sabe (`VITE_CONVEX_URL`), y
- * entra en los dos sitios donde hay una política: el `index.html` y la cabecera de
- * nginx. Aquí se vigila que los dos dejen el hueco, que la regla meta las dos
- * formas de la dirección y que la imagen de nginx reciba el valor de la
- * compilación en lugar de deducirlo por su cuenta.
+ * instalación tanto para conexiones (`connect-src`) como para imágenes de
+ * `_storage` (`img-src`).
  */
 describe("seguridad: la CSP autoriza la API de esta instalación", () => {
-  test("los dos sitios donde hay una política dejan el hueco de la dirección", () => {
+  test("los dos sitios donde hay una política dejan los huecos de la dirección", () => {
     expect(readFileSync(INDEX_HTML, "utf8")).toContain(API_CSP_TOKEN);
-    expect(readFileSync(NGINX_CONF, "utf8")).toContain(API_CSP_TOKEN);
+    expect(readFileSync(INDEX_HTML, "utf8")).toContain(API_IMG_CSP_TOKEN);
+    expect(readFileSync(SECURITY_HEADERS_CONF, "utf8")).toContain(API_CSP_TOKEN);
+    expect(readFileSync(SECURITY_HEADERS_CONF, "utf8")).toContain(API_IMG_CSP_TOKEN);
   });
 
   test("la dirección entra en las dos formas: peticiones y conexión en vivo", () => {
-    // El caso del NAS con dominio: es el que dejó la app sin datos.
     expect(apiConnectSources("https://api.videoingenieria.es")).toBe(
       "https://api.videoingenieria.es wss://api.videoingenieria.es",
     );
+    expect(apiImageSources("https://api.videoingenieria.es")).toBe(
+      "https://api.videoingenieria.es",
+    );
 
-    // Una instalación de red local no acaba autorizando un `https` que no existe:
-    // el esquema se copia del que trae la dirección.
     expect(apiConnectSources("http://192.168.0.47:3210")).toBe(
       "http://192.168.0.47:3210 ws://192.168.0.47:3210",
     );
+    expect(apiImageSources("http://192.168.0.47:3210")).toBe(
+      "http://192.168.0.47:3210",
+    );
 
-    // El camino y la barra final no son parte de la casa.
     expect(apiConnectSources("https://api.tudominio.com/")).toBe(
       "https://api.tudominio.com wss://api.tudominio.com",
     );
 
-    // Sin dirección no se inventa una entrada, que invalidaría la política entera.
     expect(apiConnectSources(undefined)).toBe("");
     expect(apiConnectSources("")).toBe("");
+    expect(apiImageSources(undefined)).toBe("");
+    expect(apiImageSources("")).toBe("");
   });
 
   test("la política queda rellena, y sin huecos, cuando la compilación la sustituye", () => {
     const address = apiConnectSources("https://api.tudominio.com");
+    const imgAddress = apiImageSources("https://api.tudominio.com");
 
-    for (const ruta of [INDEX_HTML, NGINX_CONF]) {
+    for (const ruta of [INDEX_HTML, SECURITY_HEADERS_CONF]) {
       const rellena = readFileSync(ruta, "utf8")
         .split(API_CSP_TOKEN)
-        .join(address);
+        .join(address)
+        .split(API_IMG_CSP_TOKEN)
+        .join(imgAddress);
 
       expect(rellena).not.toContain(API_CSP_TOKEN);
+      expect(rellena).not.toContain(API_IMG_CSP_TOKEN);
       expect(rellena).toContain(
         `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud ${address}`,
+      );
+      expect(rellena).toContain(
+        `img-src 'self' data: blob: https://*.convex.cloud ${imgAddress}`,
       );
     }
   });
 
-  test("la imagen de nginx recibe la dirección de la compilación, no la adivina", () => {
+  test("la imagen de nginx recibe las direcciones de la compilación, no las adivina", () => {
     const dockerfile = readFileSync(DOCKERFILE, "utf8");
 
-    // La compilación deja el valor escrito, y la imagen lo lee de ahí...
     expect(dockerfile).toContain(API_CSP_ASSET);
-
-    // ...y lo pone en la cabecera que sirve, borrando el apunte de en medio.
-    expect(dockerfile).toContain(`sed -i "s|${API_CSP_TOKEN}|`);
-    expect(dockerfile).toContain("/etc/nginx/conf.d/default.conf");
+    expect(dockerfile).toContain(API_IMG_CSP_ASSET);
+    expect(dockerfile).toContain(API_CSP_TOKEN);
+    expect(dockerfile).toContain(API_IMG_CSP_TOKEN);
+    expect(dockerfile).toContain("/etc/nginx/snippets/security-headers.conf");
   });
 });

@@ -19,6 +19,7 @@ import {
 } from "./_generated/server";
 import { recordCleanupRun } from "./cleanupLog";
 import { requireCoordinator } from "./permissions";
+import { logSecurityEvent } from "./audit";
 
 /**
  * La papelera del almacén.
@@ -361,7 +362,10 @@ export const restore = mutation({
 export const deleteNow = mutation({
   args: { id: v.id("trashFiles") },
   handler: async (ctx, args) => {
-    await requireCoordinator(ctx, "borrar un archivo de la papelera");
+    const actor = await requireCoordinator(
+      ctx,
+      "borrar un archivo de la papelera",
+    );
 
     const row = await ctx.db.get(args.id);
     if (!row) throw new ConvexError("Ese archivo ya no está en la papelera.");
@@ -369,6 +373,13 @@ export const deleteNow = mutation({
     const file = await ctx.db.system.get("_storage", row.storageId);
     if (file) await ctx.storage.delete(row.storageId);
     await ctx.db.delete(row._id);
+
+    await logSecurityEvent(ctx, {
+      actorId: actor._id,
+      action: "manual_purge",
+      target: `storage:${row.storageId}`,
+      metadata: { pass: row.pass, size: file?.size ?? row.size },
+    });
 
     return { files: file ? 1 : 0, bytes: file?.size ?? 0 };
   },
