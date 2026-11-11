@@ -20,6 +20,7 @@ export default function ReportIncident() {
     connectivity,
     handleSubmit,
     honeypotProps,
+    challengeProps,
     reporterProps,
     equipmentProps,
     descriptionProps,
@@ -45,6 +46,7 @@ export default function ReportIncident() {
             equipmentProps={equipmentProps}
             descriptionProps={descriptionProps}
             honeypotProps={honeypotProps}
+            challengeProps={challengeProps}
             error={error}
             busy={busy}
             connectivity={connectivity}

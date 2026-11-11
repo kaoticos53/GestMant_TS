@@ -34,6 +34,7 @@ import type * as equipment from "../equipment.js";
 import type * as equipmentModels from "../equipmentModels.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
+import type * as humanChallenge from "../humanChallenge.js";
 import type * as incidentIntake from "../incidentIntake.js";
 import type * as incidentMail from "../incidentMail.js";
 import type * as incidents from "../incidents.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   equipmentModels: typeof equipmentModels;
   health: typeof health;
   http: typeof http;
+  humanChallenge: typeof humanChallenge;
   incidentIntake: typeof incidentIntake;
   incidentMail: typeof incidentMail;
   incidents: typeof incidents;

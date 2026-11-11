@@ -309,6 +309,17 @@ describe("Guardrails de Seguridad y AppSec (tests/seguridad.test.ts)", () => {
       const rutaIntake = join(DIR_BACKEND, "incidentIntake.ts");
       expect(readFileSync(rutaIntake, "utf8")).toContain("admitGlobalIntake");
     });
+
+    test("las puertas anónimas de alta y subida pasan por verifyHumanChallenge", () => {
+      const rutaIncidents = join(DIR_BACKEND, "incidents.ts");
+      const rutaUploads = join(DIR_BACKEND, "reportUploads.ts");
+      expect(readFileSync(rutaIncidents, "utf8")).toContain(
+        "verifyHumanChallenge",
+      );
+      expect(readFileSync(rutaUploads, "utf8")).toContain(
+        "verifyHumanChallenge",
+      );
+    });
   });
 
   describe("9. Cifrado en Reposo de Credenciales de Correo", () => {

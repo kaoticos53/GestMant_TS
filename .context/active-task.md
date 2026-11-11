@@ -4,6 +4,4 @@ _No hay ninguna tarea en curso._
 
 ## Última tarea cerrada
 
-**Endurecimiento de dependencias (`npm audit`) y tipado OTP:**
-1. Añadidos `overrides` en `package.json` (`@vly-ai/integrations > zod@^4.6.6`, `minimatch@^10.0.0 -> ^11.0.8`, `workbox-build > glob@^14.0.4`) y actualizado `package-lock.json`, eliminando todas las vulnerabilidades `high` y `moderate` (quedando `npm audit --audit-level=high` en verde).
-2. Corregido el tipado de `sendVerificationRequest` en `src/convex/auth/emailOtp.ts` (`ctx?: ActionCtx`).
+**Protección anti-bot multi-IP (`turnstile_waf_plan.md`):** Cloudflare Turnstile + *fallback* PoW SHA-256 con *Time-Trap* y anti-*replay* (`src/lib/humanChallenge.ts`, `src/convex/humanChallenge.ts`), conversión de `incidents.report` y `reportUploads.generateUploadUrl` a `action` -> `internalMutation`, exención de reto y cuota pública para miembros autenticados, integración transparente en `ReportIncidentForm` y `RichTextEditorCore`, actualización de CSP y empaquetado Docker/Synology con perfil opcional `tunnel` (`cloudflared`). El traspaso está en [`.context/sessions/2026-11-11-turnstile-pow-tunnel.md`](sessions/2026-11-11-turnstile-pow-tunnel.md).

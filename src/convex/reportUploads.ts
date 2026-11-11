@@ -11,6 +11,10 @@ import {
 } from "./_generated/server";
 import { AUTO_CLEANUP_BY, uploadSweepAlert } from "../lib/cleanupLog";
 import { coordinatorIds, requireCoordinator } from "./permissions";
+import {
+  humanChallengeValidator,
+  verifyHumanChallenge,
+} from "./humanChallenge";
 import { cleanupActor, recordCleanupRun } from "./cleanupLog";
 import { notifyUsers } from "./notify";
 import { moveToTrash, trashRetentionDays } from "./trash";
@@ -118,23 +122,41 @@ function newTicket(): string {
  * meter archivos en serie: dentro de un taller, unos cuantos avisos con foto a
  * la hora no se acercan a este número.
  */
-export const generateUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const since = Date.now() - H;
-    const recent = await ctx.db
-      .query("reportUploads")
-      .withIndex("by_createdAt", (q) => q.gt("createdAt", since))
-      .take(MAX_UPLOADS_PER_HOUR);
-    if (recent.length >= MAX_UPLOADS_PER_HOUR) {
-      throw new ConvexError(
-        "El formulario ha recibido demasiados archivos en la última hora. Inténtalo de nuevo dentro de un rato.",
-      );
+export const issueUploadUrl = internalMutation({
+  args: { isAuthenticatedMember: v.boolean() },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ uploadUrl: string; ticket: string }> => {
+    if (!args.isAuthenticatedMember) {
+      const since = Date.now() - H;
+      const recent = await ctx.db
+        .query("reportUploads")
+        .withIndex("by_createdAt", (q) => q.gt("createdAt", since))
+        .take(MAX_UPLOADS_PER_HOUR);
+      if (recent.length >= MAX_UPLOADS_PER_HOUR) {
+        throw new ConvexError(
+          "El formulario ha recibido demasiados archivos en la última hora. Inténtalo de nuevo dentro de un rato.",
+        );
+      }
     }
 
     const ticket = newTicket();
     await ctx.db.insert("reportUploads", { ticket, createdAt: Date.now() });
     return { uploadUrl: await ctx.storage.generateUploadUrl(), ticket };
+  },
+});
+
+export const generateUploadUrl = action({
+  args: { challenge: v.optional(humanChallengeValidator) },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ uploadUrl: string; ticket: string }> => {
+    const { authenticated } = await verifyHumanChallenge(ctx, args.challenge);
+    return await ctx.runMutation(internal.reportUploads.issueUploadUrl, {
+      isAuthenticatedMember: authenticated,
+    });
   },
 });
 

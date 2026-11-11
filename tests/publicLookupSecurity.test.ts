@@ -35,7 +35,7 @@ describe("Seguridad AppSec: Mitigación de Fuerza Bruta en Consulta Pública (CW
   test("incidents.report rechaza bots que rellenan el campo honeypot", async () => {
     const t = backend();
     await expect(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         reporterName: "Bot Automático",
         description: "Texto largo de relleno automático para probar el envío.",
         reportedAt: Date.now(),
@@ -63,7 +63,7 @@ describe("Seguridad AppSec: Mitigación de Fuerza Bruta en Consulta Pública (CW
     });
 
     await expect(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         reporterName: "Usuario Legítimo Nuevo",
         description: "La cámara del plató 2 no enciende al pulsar el interruptor.",
         reportedAt: now,

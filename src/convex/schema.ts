@@ -978,6 +978,14 @@ const schema = defineSchema({
     .index("by_email", ["email"])
     .index("by_lastSentAt", ["lastSentAt"]),
 
+  // Control anti-replay de retos humanos de un solo uso (Turnstile / PoW).
+  publicChallengeUsed: defineTable({
+    key: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_expiresAt", ["expiresAt"]),
+
   // La foto pública del taller: una sola fila con lo poco del trabajo que se
   // puede enseñar a quien no ha entrado nunca. Existe para que la portada no
   // cuente nada al vuelo: contar equipos, repuestos e incidencias es leer esas

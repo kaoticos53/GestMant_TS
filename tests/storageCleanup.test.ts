@@ -91,7 +91,7 @@ const reportArgs = {
 
 /** La incidencia notificada, para colgarle notas y versiones. */
 async function reportedIncident(t: Test, description: string) {
-  await t.mutation(api.incidents.report, { ...reportArgs, description });
+  await t.action(api.incidents.report, { ...reportArgs, description });
   const [incident] = await t.run((ctx) => ctx.db.query("incidents").collect());
   return incident;
 }

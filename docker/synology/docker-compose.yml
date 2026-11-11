@@ -69,6 +69,8 @@ services:
         # La misma dirección que usa el backend: un solo valor en el `.env` que
         # mantener, en lugar de dos que se puedan separar sin querer.
         VITE_CONVEX_URL: ${CONVEX_CLOUD_ORIGIN:?falta CONVEX_CLOUD_ORIGIN en el .env}
+        # Clave pública de Cloudflare Turnstile (opcional; sin ella usa PoW propio).
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     # El nombre con el que queda construida: es la que se vuelve a levantar al
     # reconstruir, y la que se ve en Container Manager → Imagen.
     image: pulso-taller-app:local
@@ -202,6 +204,8 @@ services:
       # email y el resumen semanal).
       VLY_INTEGRATION_KEY: ${VLY_INTEGRATION_KEY:-}
       VLY_INTEGRATION_BASE_URL: ${VLY_INTEGRATION_BASE_URL:-}
+      # Verificación anti-bot de Cloudflare Turnstile (opcional).
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       # El **modo de instalación**. Con una base recién hecha —sin ninguna
       # cuenta— el taller queda listo de una sola pasada: la base vacía y la
       # cuenta de administrador ya creada, sin cargar ningún dato de ejemplo. Con
@@ -332,6 +336,20 @@ services:
       interval: 30s
       start_period: 5s
       retries: 5
+
+  tunnel:
+    # Túnel opcional de Cloudflare (perfil `tunnel`): permite publicar la app y
+    # la API detrás de Cloudflare WAF sin abrir puertos 80/443 en el router ni
+    # depender de DDNS con IP pública dinámica.
+    # Activar con: sudo docker compose --profile tunnel up -d
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   datos:

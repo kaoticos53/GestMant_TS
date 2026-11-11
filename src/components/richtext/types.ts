@@ -5,6 +5,8 @@
  * diferido) pueda anunciar la misma forma sin arrastrar TipTap consigo.
  */
 
+import type { HumanChallengePayload } from "@/lib/humanChallenge";
+
 /** Por dónde sube la imagen: la sesión del taller o el camino del formulario público. */
 export type ImageUploads = "session" | "publicReport";
 
@@ -22,6 +24,8 @@ export type RichTextEditorProps = {
    * camino del reporte, que comprueba el archivo antes de aceptarlo.
    */
   imageUploads?: ImageUploads;
+  /** Resuelve el reto anti-bot en subidas públicas anónimas. */
+  onResolvePublicChallenge?: () => Promise<HumanChallengePayload | undefined>;
   /**
    * Sin el hueco de escritura de una ficha: para los sitios donde el editor
    * comparte sitio con otras cosas —el compositor de un chat, por ejemplo— y

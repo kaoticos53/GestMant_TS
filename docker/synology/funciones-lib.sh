@@ -162,6 +162,9 @@ fijar_variables() {
   if [ -n "${VLY_INTEGRATION_BASE_URL:-}" ]; then
     fijar_variable VLY_INTEGRATION_BASE_URL "$VLY_INTEGRATION_BASE_URL" || return 1
   fi
+  if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
+    fijar_variable TURNSTILE_SECRET_KEY "$TURNSTILE_SECRET_KEY" || return 1
+  fi
 }
 
 # Los nombres de las variables que tienen que estar puestas en el deployment: las
@@ -175,6 +178,9 @@ variables_esperadas() {
   fi
   if [ -n "${VLY_INTEGRATION_BASE_URL:-}" ]; then
     printf ' VLY_INTEGRATION_BASE_URL'
+  fi
+  if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
+    printf ' TURNSTILE_SECRET_KEY'
   fi
 }
 
@@ -246,8 +252,8 @@ preparar_deployment() {
   # de verdad puesto.
   nombres_actuales="$(nombres_del_deployment)" || fail "el deployment ha dejado de contestar"
 
-  if tiene "$nombres_actuales" JWT_PRIVATE_KEY && tiene "$nombres_actuales" JWKS && tiene "$nombres_actuales" PULSO_SETTINGS_ENCRYPTION_KEY; then
-    log "las claves de Convex Auth y cifrado ya estaban: no se tocan"
+  if tiene "$nombres_actuales" JWT_PRIVATE_KEY && tiene "$nombres_actuales" JWKS && tiene "$nombres_actuales" PULSO_SETTINGS_ENCRYPTION_KEY && tiene "$nombres_actuales" PULSO_CHALLENGE_SECRET; then
+    log "las claves de Convex Auth, cifrado y retos ya estaban: no se tocan"
     return 0
   fi
 
@@ -262,7 +268,7 @@ preparar_deployment() {
       sleep 5
       esperadas=$((esperadas + 5))
       nombres_actuales="$(nombres_del_deployment)" || fail "el deployment ha dejado de contestar"
-      if tiene "$nombres_actuales" JWT_PRIVATE_KEY && tiene "$nombres_actuales" JWKS && tiene "$nombres_actuales" PULSO_SETTINGS_ENCRYPTION_KEY; then
+      if tiene "$nombres_actuales" JWT_PRIVATE_KEY && tiene "$nombres_actuales" JWKS && tiene "$nombres_actuales" PULSO_SETTINGS_ENCRYPTION_KEY && tiene "$nombres_actuales" PULSO_CHALLENGE_SECRET; then
         log "las claves ya están puestas: sigo"
         return 0
       fi
@@ -282,6 +288,13 @@ preparar_deployment() {
     clave_cifrado="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
     fijar_variable PULSO_SETTINGS_ENCRYPTION_KEY "$clave_cifrado" ||
       fail "no se ha podido guardar PULSO_SETTINGS_ENCRYPTION_KEY"
+  fi
+
+  if ! tiene "$nombres_actuales" PULSO_CHALLENGE_SECRET; then
+    log "generando clave HMAC para retos anti-bot del formulario público…"
+    clave_reto="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+    fijar_variable PULSO_CHALLENGE_SECRET "$clave_reto" ||
+      fail "no se ha podido guardar PULSO_CHALLENGE_SECRET"
   fi
 }
 

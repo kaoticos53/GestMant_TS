@@ -102,7 +102,7 @@ describe("reporte público de incidencias", () => {
     const { t, coordinator } = await setup();
 
     // Sin identidad: el formulario público no requiere registro
-    const { reference, code } = await t.mutation(
+    const { reference, code } = await t.action(
       api.incidents.report,
       reportArgs,
     );
@@ -148,7 +148,7 @@ describe("reporte público de incidencias", () => {
       );
     }
 
-    expect((await t.mutation(api.incidents.report, reportArgs)).reference).toBe(
+    expect((await t.action(api.incidents.report, reportArgs)).reference).toBe(
       "INC-0121",
     );
 
@@ -161,24 +161,24 @@ describe("reporte público de incidencias", () => {
   test("valida los campos mínimos y la fecha", async () => {
     const { t } = await setup();
     await expectConvexError(
-      t.mutation(api.incidents.report, { ...reportArgs, reporterName: " " }),
+      t.action(api.incidents.report, { ...reportArgs, reporterName: " " }),
       "Indica tu nombre y apellidos.",
     );
     await expectConvexError(
-      t.mutation(api.incidents.report, { ...reportArgs, description: "corta" }),
+      t.action(api.incidents.report, { ...reportArgs, description: "corta" }),
       "Describe la incidencia",
     );
     // La descripción puede venir del editor con formato: el mínimo se cuenta
     // sobre lo que dice, no sobre las etiquetas.
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportArgs,
         description: "<p>corta</p>",
       }),
       "Describe la incidencia",
     );
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportArgs,
         reportedAt: Date.now() + 3 * 24 * 60 * 60 * 1000,
       }),
@@ -188,7 +188,7 @@ describe("reporte público de incidencias", () => {
 
   test("admite la notificación sin modelo ni tipo de equipo", async () => {
     const { t } = await setup();
-    const created = await t.mutation(api.incidents.report, {
+    const created = await t.action(api.incidents.report, {
       ...reportArgs,
       equipmentKind: undefined,
       model: undefined,
@@ -207,14 +207,14 @@ describe("reporte público de incidencias", () => {
   test("el freno de 30 segundos corta a quien repite, no a otra persona", async () => {
     const { t } = await setup();
 
-    expect((await t.mutation(api.incidents.report, reportArgs)).reference).toBe(
+    expect((await t.action(api.incidents.report, reportArgs)).reference).toBe(
       "INC-0001",
     );
     // El mismo nombre —aunque cambie de mayúsculas— no vuelve a colar dentro de
     // la ventana: el formulario público es una puerta abierta y sin el freno una
     // misma persona podría inundar la cola.
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportArgs,
         reporterName: "laura peña",
       }),
@@ -224,7 +224,7 @@ describe("reporte público de incidencias", () => {
     // escribe, no de la cola entera.
     expect(
       (
-        await t.mutation(api.incidents.report, {
+        await t.action(api.incidents.report, {
           ...reportArgs,
           reporterName: "Marta Ruiz",
         })
@@ -244,7 +244,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
   /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
   async function reported() {
     const contexto = await setup();
-    const { reference, code } = await contexto.t.mutation(
+    const { reference, code } = await contexto.t.action(
       api.incidents.report,
       reportArgs,
     );
@@ -268,7 +268,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
 
     // Dos avisos seguidos no comparten código: si se repitieran, uno de los dos
     // seguiría el caso del otro.
-    const otro = await t.mutation(api.incidents.report, {
+    const otro = await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Marta Ruiz",
     });
@@ -577,7 +577,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
     );
 
     // El cupo es del código consultado: otro caso se sigue sin esperar.
-    const otro = await t.mutation(api.incidents.report, {
+    const otro = await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Marta Ruiz",
     });
@@ -627,7 +627,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
     await t.mutation(api.incidents.byCode, { code });
     await t.mutation(api.incidents.byCode, { code });
 
-    const otro = await t.mutation(api.incidents.report, {
+    const otro = await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Marta Ruiz",
     });
@@ -683,7 +683,7 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
 describe("asignación de incidencias", () => {
   test("el técnico se autoasigna una pendiente y avisa a coordinadores", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await tech.mutation(api.incidents.selfAssign, {
@@ -704,7 +704,7 @@ describe("asignación de incidencias", () => {
 
   test("un técnico no puede asignar a otros, pero el coordinador sí", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await expectConvexError(
@@ -732,7 +732,7 @@ describe("asignación de incidencias", () => {
 
   test("no se puede autoasignar lo que ya está asignado", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, {
       incidentId: incident._id,
@@ -755,7 +755,7 @@ describe("asignación de incidencias", () => {
 
   test("el técnico de taller abre el listado con su propia orden delante", async () => {
     const { t, coordinator, tech, techId, coordinatorId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     await tech.mutation(api.incidents.verify, {
@@ -782,7 +782,7 @@ describe("asignación de incidencias", () => {
 
     // Y con una incidencia que no lleva, tampoco: no es una lista abierta a todo
     // el taller, es la de su orden.
-    const segunda = await t.mutation(api.incidents.report, {
+    const segunda = await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Marta Ruiz",
     });
@@ -798,7 +798,7 @@ describe("asignación de incidencias", () => {
 describe("verificación, taller y cierre", () => {
   test("un técnico sin asignar no puede verificar", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await expectConvexError(
       tech.mutation(api.incidents.verify, {
@@ -811,7 +811,7 @@ describe("verificación, taller y cierre", () => {
 
   test("resuelta in situ: se cierra y crea la ficha del equipo", async () => {
     const { t, coordinator, tech, equipmentId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -843,7 +843,7 @@ describe("verificación, taller y cierre", () => {
 
   test("derivada a taller: entra en la orden, se cierra y genera petición", async () => {
     const { t, coordinator, tech, equipmentId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await coordinator.mutation(api.incidents.assign, {
       incidentId: incident._id,
@@ -897,7 +897,7 @@ describe("verificación, taller y cierre", () => {
 
   test("el coordinador reasigna la orden de taller a otro técnico", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await coordinator.mutation(api.incidents.assign, {
       incidentId: incident._id,
@@ -924,7 +924,7 @@ describe("verificación, taller y cierre", () => {
 
   test("sin equipo relacionado no se crea ficha, pero sí se cierra", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     await tech.mutation(api.incidents.verify, {
@@ -984,7 +984,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
   test("pedir material deja la incidencia esperando, y la entrega la pasa a reparación", async () => {
     const { t, coordinator, tech, coordinatorId } = await setup();
     const pieza = await repuesto(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1050,7 +1050,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
         updatedAt: Date.now(),
       }),
     );
-    const { code } = await t.mutation(api.incidents.report, reportArgs);
+    const { code } = await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1105,7 +1105,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
     const { t, coordinator, tech, techId, coordinatorId, equipmentId } =
       await setup();
     const pieza = await repuesto(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     await tech.mutation(api.incidents.verify, {
@@ -1177,7 +1177,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
   test("con dos peticiones no se repara hasta que se entrega la última", async () => {
     const { t, coordinator, tech } = await setup();
     const pieza = await repuesto(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1208,7 +1208,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
   test("una petición cancelada devuelve la incidencia a donde estaba", async () => {
     const { t, coordinator, tech } = await setup();
     const pieza = await repuesto(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1240,7 +1240,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
   test("devolver el material devuelve la incidencia a la espera", async () => {
     const { t, coordinator, tech } = await setup();
     const pieza = await repuesto(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1266,7 +1266,7 @@ describe("repuestos y la incidencia: la espera y la reparación", () => {
 describe("corrección de los datos del equipo", () => {
   test("el técnico asignado añade el nº de serie que la notificación no traía", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       serialNumber: undefined,
     });
@@ -1304,7 +1304,7 @@ describe("corrección de los datos del equipo", () => {
 
   test("el coordinador corrige el modelo y quita el nº de serie equivocado", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       model: "HDC 350",
       serialNumber: "S/N 123",
@@ -1328,7 +1328,7 @@ describe("corrección de los datos del equipo", () => {
 
   test("sin nada que cambiar se rechaza en vez de anotar un paso vacío", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await expectConvexError(
@@ -1355,7 +1355,7 @@ describe("corrección de los datos del equipo", () => {
 
   test("los datos corregidos son los que se llevan a la ficha del equipo", async () => {
     const { t, coordinator, tech, equipmentId } = await setup();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       serialNumber: "S/N 123",
     });
@@ -1385,7 +1385,7 @@ describe("corrección de los datos del equipo", () => {
 describe("documentos y notas durante el ciclo de vida", () => {
   test("el coordinador adjunta un documento y la incidencia lo expone", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.attachDocument, {
@@ -1410,7 +1410,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el autor del documento es quien lo adjunta, aunque otro lo edite después", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     const created = await coordinator.mutation(api.incidents.attachDocument, {
@@ -1445,7 +1445,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("cada documento guarda su propio autor y todos se leen juntos", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.attachDocument, {
@@ -1474,7 +1474,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("es posible adjuntar más de un documento y se conservan en orden", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.attachDocument, {
@@ -1497,7 +1497,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el técnico asignado anota con fecha y quien coordina la lee", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1524,7 +1524,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("múltiples notas se acumulan y se ordenan por fecha", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1549,7 +1549,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("una nota está vacía rechaza con mensaje claro", async () => {
     const { t, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(tech);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1564,7 +1564,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("se puede adjuntar un documento con nota y luego editarlo", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     const created = await coordinator.mutation(api.incidents.attachDocument, {
@@ -1596,7 +1596,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el coordinador quita un adjunto sin tocar el resto", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     const created = await coordinator.mutation(api.incidents.attachDocument, {
@@ -1621,7 +1621,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("solo el coordinador adjunta, edita y quita documentos", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     // El técnico está asignado (puede anotar), pero el expediente no es suyo.
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
@@ -1670,7 +1670,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("un técnico sin asignar no puede anotar, y sí en cuanto se la lleva", async () => {
     const { t, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(tech);
 
     // Todavía está sin asignar: la nota no es suya
@@ -1697,7 +1697,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el técnico con la orden de taller también puede anotar", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // Un segundo técnico: así la asignación y la orden de taller recaen en
@@ -1747,7 +1747,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("quien escribió la nota la corrige y la retira aunque ya no tenga la incidencia", async () => {
     const { t, coordinator, tech, coordinatorId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -1815,7 +1815,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("cada corrección guarda lo que decía la nota antes", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -1852,7 +1852,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el autor devuelve su nota a una versión anterior y deja la constancia", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -1897,7 +1897,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("volver a la versión que ya está puesta no inventa una corrección", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -1950,7 +1950,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("deshacer una restauración devuelve la nota al texto que se acababa de quitar", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -1996,7 +1996,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("restaurar una versión ajena o fuera de plazo no cuela", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2060,7 +2060,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("una nota retirada hay que recuperarla antes de volver a una versión", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2107,7 +2107,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("guardar la nota sin cambiarla no inventa una corrección", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2131,7 +2131,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el historial viaja con la nota al retirarla y recuperarla", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2167,7 +2167,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("nadie más toca una nota ajena, tampoco quien coordina", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2203,7 +2203,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("pasado el plazo la nota ya es histórico del expediente", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2252,7 +2252,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("las notas antiguas sin firma se quedan como están", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // Notas heredadas tal y como quedaron en el expediente: la primera es la
@@ -2316,7 +2316,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("una nota que ya no está se detecta por su identificador", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     await tech.mutation(api.incidents.addNote, {
@@ -2337,7 +2337,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("una nota retirada se recupera antes de volver a tocarla", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2375,7 +2375,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el coordinador recupera la nota de otro y un técnico ajeno no", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2432,7 +2432,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("la recuperación no tiene plazo: lo perdido se puede rescatar después", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     const noteId = await tech.mutation(api.incidents.addNote, {
@@ -2480,7 +2480,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el rastro de auditoría guarda quién adjuntó, renombró y quitó cada documento", async () => {
     const { t, coordinator, coordinatorId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     const documentId = await coordinator.mutation(
@@ -2562,7 +2562,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("corregir la nota del adjunto deja rastro sin confundirse con un renombrado", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const documentId = await coordinator.mutation(
       api.incidents.attachDocument,
@@ -2604,7 +2604,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("el rastro de los documentos lo lee solo quien coordina", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await coordinator.mutation(api.incidents.attachDocument, {
       incidentId: incident._id,
@@ -2639,7 +2639,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 
   test("una incidencia sin documentos tiene el rastro vacío", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     expect(
@@ -2653,7 +2653,7 @@ describe("documentos y notas durante el ciclo de vida", () => {
 describe("notas y descripciones con formato", () => {
   test("una nota se guarda como documento y el historial la compara por bloques", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -2713,7 +2713,7 @@ describe("notas y descripciones con formato", () => {
 
   test("el hueco vacío que deja el editor no es una nota", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
 
@@ -2739,7 +2739,7 @@ describe("notas y descripciones con formato", () => {
     const { t, coordinator } = await setup();
     const rich =
       "<p>La cámara <strong>se apaga sola</strong> en directo cuando se mueve el cable.</p>";
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       description: rich,
     });
@@ -2765,7 +2765,7 @@ describe("notas y descripciones con formato", () => {
 describe("archivo real de los documentos del expediente", () => {
   test("el documento adjunto guarda el archivo y la cola lo enlaza", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const storageId = await t.run((ctx) =>
       ctx.storage.store(new Blob(["informe"], { type: "application/pdf" })),
@@ -2789,7 +2789,7 @@ describe("archivo real de los documentos del expediente", () => {
 
   test("un documento sin archivo se queda con su nombre y sin enlace", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.attachDocument, {
@@ -2805,7 +2805,7 @@ describe("archivo real de los documentos del expediente", () => {
 
   test("quitar el documento borra su archivo del almacenamiento", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const storageId = await t.run((ctx) =>
       ctx.storage.store(new Blob(["foto"], { type: "image/jpeg" })),
@@ -2832,7 +2832,7 @@ describe("archivo real de los documentos del expediente", () => {
 
   test("reemplazar el archivo borra el anterior y firma el cambio en el rastro", async () => {
     const { t, coordinator, coordinatorId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const firstFile = await t.run((ctx) =>
       ctx.storage.store(new Blob(["informe v1"], { type: "application/pdf" })),
@@ -2885,7 +2885,7 @@ describe("archivo real de los documentos del expediente", () => {
 
   test("volver a mandar el mismo archivo no es un reemplazo ni deja rastro", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const storageId = await t.run((ctx) =>
       ctx.storage.store(new Blob(["informe"], { type: "application/pdf" })),
@@ -2914,7 +2914,7 @@ describe("archivo real de los documentos del expediente", () => {
 
   test("la URL de subida la pide quien puede mover el expediente", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     expect(
@@ -2962,8 +2962,8 @@ describe("auditoría de documentos de todas las incidencias", () => {
     const { t, coordinator, coordinatorId } = await setup();
     const { admin, adminId } = await audience(t);
 
-    await t.mutation(api.incidents.report, reportArgs);
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, {
       ...reportArgs,
       // Otra persona: el aviso anti-inundación corta dos avisos seguidos del
       // mismo notificador, y aquí hacen falta dos incidencias.
@@ -3022,7 +3022,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("la auditoría la consulta el administrador, no el coordinador ni el técnico", async () => {
     const { t, coordinator, tech } = await setup();
     const { admin } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
 
     // La capacidad está bloqueada: solo el administrador la tiene.
     expect(
@@ -3055,7 +3055,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("el filtro por persona deja fuera los movimientos de los demás", async () => {
     const { t, coordinator, coordinatorId } = await setup();
     const { admin, adminId } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await coordinator.mutation(api.incidents.attachDocument, {
       incidentId: incident._id,
@@ -3096,7 +3096,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("el filtro por fechas incluye los días elegidos, enteros", async () => {
     const { t, coordinator } = await setup();
     const { admin } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     for (const name of ["Antiguo.pdf", "Medio.pdf", "Nuevo.pdf"]) {
       await coordinator.mutation(api.incidents.attachDocument, {
@@ -3166,7 +3166,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("el filtro por movimiento separa altas, ediciones y retiradas", async () => {
     const { t, coordinator } = await setup();
     const { admin } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const documentId = await coordinator.mutation(
       api.incidents.attachDocument,
@@ -3218,7 +3218,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("un movimiento cuya incidencia ya no está se sigue leyendo, sin ficha", async () => {
     const { t, coordinator } = await setup();
     const { admin } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await coordinator.mutation(api.incidents.attachDocument, {
       incidentId: incident._id,
@@ -3238,7 +3238,7 @@ describe("auditoría de documentos de todas las incidencias", () => {
   test("sin movimientos la auditoría llega vacía", async () => {
     const { t } = await setup();
     const { admin } = await audience(t);
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
 
     expect(await admin.query(api.incidents.documentAudit, {})).toEqual({
       entries: [],
@@ -3358,7 +3358,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("el alta al día no avisa; la retirada sí, y a los administradores", async () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     const documentId = await coordinator.mutation(
@@ -3392,7 +3392,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("reemplazar el archivo avisa aunque la incidencia esté abierta", async () => {
     const { t, coordinator, admin, otroAdmin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     const firstFile = await t.run((ctx) =>
       ctx.storage.store(new Blob(["v1"], { type: "application/pdf" })),
@@ -3430,7 +3430,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("el expediente de una incidencia cerrada avisa aunque solo sea un alta", async () => {
     const { t, coordinator, tech, admin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // Cerrada in situ: el caso queda terminado y su expediente, quieto.
@@ -3488,7 +3488,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("el aviso queda aunque lo provoque el propio administrador", async () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await tech.mutation(api.incidents.selfAssign, { incidentId: incident._id });
     await tech.mutation(api.incidents.verify, {
@@ -3516,7 +3516,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("la audiencia configurada manda: el aviso va a esos roles y a nadie más", async () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // De partida el aviso es de quien audita: el administrador. El propio
@@ -3578,7 +3578,7 @@ describe("avisos de auditoría del expediente", () => {
     const keeper = t.withIdentity({ subject: `${keeperId}|session1` });
     await admin.mutation(api.auditAlerts.setAudience, { roleKeys: [key] });
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await retirarDocumento(coordinator, incident._id, "Medición voltaje.xlsx");
 
@@ -3593,7 +3593,7 @@ describe("avisos de auditoría del expediente", () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
     await admin.mutation(api.auditAlerts.setAudience, { roleKeys: [] });
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await retirarDocumento(coordinator, incident._id, "Medición voltaje.xlsx");
 
@@ -3607,7 +3607,7 @@ describe("avisos de auditoría del expediente", () => {
 
   test("la audiencia configurada manda también en un reemplazo de archivo", async () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // De partida el aviso es de quien audita: los dos administradores. Quien
@@ -3678,7 +3678,7 @@ describe("avisos de auditoría del expediente", () => {
     const keeper = t.withIdentity({ subject: `${keeperId}|session1` });
     await admin.mutation(api.auditAlerts.setAudience, { roleKeys: [key] });
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await reemplazarArchivo(
       t,
@@ -3701,7 +3701,7 @@ describe("avisos de auditoría del expediente", () => {
     const { t, coordinator, tech, admin, otroAdmin } = await plantilla();
     await admin.mutation(api.auditAlerts.setAudience, { roleKeys: [] });
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
     await reemplazarArchivo(
       t,
@@ -3744,15 +3744,15 @@ describe("rastro de documentos de un lote de incidencias", () => {
 
   test("devuelve los movimientos del lote pedido, y solo de esas incidencias", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     // Cada aviso, de una persona distinta: el anti-inundación de `report` corta
     // dos notificaciones seguidas del mismo notificador.
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Nacho Gil",
       description: "El monitor de plató parpadea durante la emisión.",
     });
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       reporterName: "Sara Muro",
       description: "El foco no mantiene la intensidad al 100 %.",
@@ -3809,7 +3809,7 @@ describe("rastro de documentos de un lote de incidencias", () => {
 
   test("el rastro del lote lo lee solo quien coordina", async () => {
     const { t, coordinator, tech } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await expectConvexError(
@@ -3833,7 +3833,7 @@ describe("papelera de incidencias", () => {
   /** La incidencia notificada sin sesión, como llega desde `/reportar`. */
   async function reported() {
     const contexto = await setup();
-    const { reference, code } = await contexto.t.mutation(
+    const { reference, code } = await contexto.t.action(
       api.incidents.report,
       reportArgs,
     );
@@ -4048,7 +4048,7 @@ describe("papelera de incidencias", () => {
 describe("reparación externa", () => {
   test("ciclo completo: envío a SAT externo, retorno con coste y cierre", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.assign, {
@@ -4114,7 +4114,7 @@ describe("reparación externa", () => {
 
   test("cierre directo desde reparación externa si resulta irreparable", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.assign, {
@@ -4150,7 +4150,7 @@ describe("reparación externa", () => {
 
   test("validaciones de entrada en reparación externa", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     // Técnico no asignado no puede enviar a reparación externa
@@ -4206,7 +4206,7 @@ describe("reparación externa", () => {
 
   test("catálogo maestro de empresas externas/SAT: alta, autocompletado y propagación", async () => {
     const { t, coordinator, tech, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const incident = await firstIncident(coordinator);
 
     await coordinator.mutation(api.incidents.assign, {

@@ -52,7 +52,7 @@ const NOT_A_PHOTO = new TextEncoder().encode(
 
 /** El vale que el formulario pide antes de subir nada. */
 async function ticket(t: Test): Promise<string> {
-  return (await t.mutation(api.reportUploads.generateUploadUrl, {})).ticket;
+  return (await t.action(api.reportUploads.generateUploadUrl, {})).ticket;
 }
 
 /** Lo que sube el navegador: el archivo queda en el almacén con su sello de tiempo. */
@@ -98,11 +98,11 @@ describe("subida de imágenes del formulario público", () => {
   test("la dirección de subida se pide sin sesión y cada vale es distinto", async () => {
     const t = harness();
 
-    const first = await t.mutation(api.reportUploads.generateUploadUrl, {});
+    const first = await t.action(api.reportUploads.generateUploadUrl, {});
     expect(first.uploadUrl).toContain("upload");
     expect(first.ticket).toMatch(/^[0-9a-f]{32}$/);
 
-    const second = await t.mutation(api.reportUploads.generateUploadUrl, {});
+    const second = await t.action(api.reportUploads.generateUploadUrl, {});
     expect(second.ticket).not.toBe(first.ticket);
   });
 
@@ -111,7 +111,7 @@ describe("subida de imágenes del formulario público", () => {
     for (let i = 0; i < MAX_UPLOADS_PER_HOUR; i += 1) await ticket(t);
 
     await expectConvexError(
-      t.mutation(api.reportUploads.generateUploadUrl, {}),
+      t.action(api.reportUploads.generateUploadUrl, {}),
       "demasiados archivos en la última hora",
     );
   });
@@ -211,7 +211,7 @@ describe("imágenes de la incidencia notificada sin cuenta", () => {
     const t = harness();
     const { url } = await upload(t, PNG_HEAD);
 
-    const { reference } = await t.mutation(api.incidents.report, {
+    const { reference } = await t.action(api.incidents.report, {
       ...reportBase,
       description: `<p>La cámara no enciende desde esta mañana.</p><img src="${url}">`,
     });
@@ -222,7 +222,7 @@ describe("imágenes de la incidencia notificada sin cuenta", () => {
     const t = harness();
 
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportBase,
         description:
           '<p>Otra avería descrita con calma.</p><img src="https://taller.convex.cloud/api/storage/00000000">',
@@ -239,7 +239,7 @@ describe("imágenes de la incidencia notificada sin cuenta", () => {
     }
 
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportBase,
         description: `<p>Un aviso con demasiadas fotos.</p>${urls
           .map((url) => `<img src="${url}">`)
@@ -283,7 +283,7 @@ describe("limpieza de lo que nadie usó", () => {
         claimedAt: yesterday,
       }),
     );
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportBase,
       description: `<p>La cámara no enciende desde esta mañana.</p><img src="${citedUrl}">`,
     });
@@ -350,7 +350,7 @@ describe("imágenes del formulario sin usar (panel del taller)", () => {
   async function cited(t: Test): Promise<Id<"_storage">> {
     const storageId = await abandoned(t, 7, YESTERDAY);
     const url = await t.run((ctx) => ctx.storage.getUrl(storageId));
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportBase,
       description: `<p>La cámara no enciende desde esta mañana.</p><img src="${url}">`,
     });
@@ -615,7 +615,7 @@ describe("el aviso de lo que la limpieza se va a llevar del formulario", () => {
     // Una foto vieja que sí está en una incidencia: nadie se la va a llevar...
     const inIncident = await abandoned(t, 6);
     const url = await t.run((ctx) => ctx.storage.getUrl(inIncident));
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportBase,
       description: `<p>La cámara no enciende desde esta mañana.</p><img src="${url}">`,
     });

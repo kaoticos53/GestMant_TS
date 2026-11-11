@@ -127,6 +127,13 @@ crons.daily(
 );
 
 crons.daily(
+  "purgar retos publicos caducados",
+  { hourUTC: 5, minuteUTC: 55 },
+  internal.humanChallenge.purgeExpired,
+  {},
+);
+
+crons.daily(
   "resumen semanal",
   { hourUTC: 7, minuteUTC: 0 },
   internal.weeklyReport.runScheduled,

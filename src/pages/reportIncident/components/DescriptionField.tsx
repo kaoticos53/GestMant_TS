@@ -1,16 +1,19 @@
 import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/RichTextEditor";
+import type { HumanChallengePayload } from "@/lib/humanChallenge";
 import { MAX_FILE_SIZE_LABEL, MAX_REPORT_IMAGES } from "@/lib/upload";
 
 interface DescriptionFieldProps {
   description: string;
   onDescriptionChange: (value: string) => void;
+  onResolvePublicChallenge?: () => Promise<HumanChallengePayload | undefined>;
   disabled: boolean;
 }
 
 export function DescriptionField({
   description,
   onDescriptionChange,
+  onResolvePublicChallenge,
   disabled,
 }: DescriptionFieldProps) {
   return (
@@ -23,6 +26,7 @@ export function DescriptionField({
         id="inc-description"
         value={description}
         onChange={onDescriptionChange}
+        onResolvePublicChallenge={onResolvePublicChallenge}
         placeholder="¿Qué ha pasado? ¿Desde cuándo? ¿Qué se ha probado?"
         disabled={disabled}
         imageUploads="publicReport"

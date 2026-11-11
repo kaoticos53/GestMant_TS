@@ -298,7 +298,7 @@ describe("capacidades aplicadas en los módulos", () => {
   test("quitada la capacidad de gestionar incidencias, no puede asignarlas", async () => {
     const { admin, manager, techId, t } = await setup();
 
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       reporterName: "Laura Peña",
       equipmentKind: "Cámara de estudio",
       model: "HDC-3500",
@@ -339,10 +339,10 @@ describe("capacidades aplicadas en los módulos", () => {
         "La cámara se apaga sola en directo cuando se mueve el cable.",
       reportedAt: Date.now() - 60 * 60 * 1000,
     };
-    await t.mutation(api.incidents.report, report);
+    await t.action(api.incidents.report, report);
     // Otra persona: el formulario público corta a quien repite en 30 segundos,
     // y aquí lo que se prueba es el permiso, no el freno anti-ráfaga.
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...report,
       reporterName: "Marta Ruiz",
     });

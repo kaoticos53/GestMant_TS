@@ -145,6 +145,7 @@ function EditorSurface({
   placeholder,
   disabled = false,
   imageUploads = "session",
+  onResolvePublicChallenge,
   compact = false,
   className,
   autoFocus = false,
@@ -154,7 +155,7 @@ function EditorSurface({
     api.uploads.generateImageUploadUrl,
   );
   const imageUrl = useAction(api.uploads.imageUrl);
-  const generateReportUploadUrl = useMutation(
+  const generateReportUploadUrl = useAction(
     api.reportUploads.generateUploadUrl,
   );
   // La acreditación del formulario público es una acción: es la única pieza
@@ -279,7 +280,10 @@ function EditorSurface({
       // Sin cuenta no hay sesión que valga: se pide el vale, se sube el archivo
       // y se acredita con él. Sin ese último paso la imagen no sirve para la
       // incidencia, así que el aviso no puede enviarse con ella a medias.
-      const { uploadUrl, ticket } = await generateReportUploadUrl({});
+      const challenge = await onResolvePublicChallenge?.();
+      const { uploadUrl, ticket } = await generateReportUploadUrl(
+        challenge ? { challenge } : {},
+      );
       const storageId = await uploadToStorage(uploadUrl, file);
       const url = await attachReportImage({ ticket, storageId });
       if (!url) throw new Error("La imagen subida no se ha podido enlazar.");

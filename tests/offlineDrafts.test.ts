@@ -101,11 +101,11 @@ describe("reenviar el mismo borrador no duplica la incidencia", () => {
 
   test("el segundo envío devuelve el caso del primero", async () => {
     const t = backend();
-    const primero = await t.mutation(api.incidents.report, {
+    const primero = await t.action(api.incidents.report, {
       ...aviso,
       clientDraftId: "draft-abc-123",
     });
-    const segundo = await t.mutation(api.incidents.report, {
+    const segundo = await t.action(api.incidents.report, {
       ...aviso,
       clientDraftId: "draft-abc-123",
     });
@@ -119,11 +119,11 @@ describe("reenviar el mismo borrador no duplica la incidencia", () => {
 
   test("dos avisos distintos son dos incidencias", async () => {
     const t = backend();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...aviso,
       clientDraftId: "draft-abc-123",
     });
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...aviso,
       reporterName: "Iván Torres",
       clientDraftId: "draft-def-456",

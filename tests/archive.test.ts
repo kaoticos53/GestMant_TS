@@ -87,7 +87,7 @@ function avisoDeOtraPersona() {
 
 /** Incidencia resuelta in situ: devuelve su id y su referencia. */
 async function closedIncident(t: Test, manager: Authed, tech: Authed) {
-  const { reference } = await t.mutation(
+  const { reference } = await t.action(
     api.incidents.report,
     avisoDeOtraPersona(),
   );
@@ -183,7 +183,7 @@ describe("archivo de incidencias", () => {
 
   test("no se archiva lo que sigue abierto", async () => {
     const { t, manager, tech } = await setup();
-    const { reference } = await t.mutation(api.incidents.report, reportArgs);
+    const { reference } = await t.action(api.incidents.report, reportArgs);
     const incident = await incidentByReference(manager, reference);
 
     await expectConvexError(
@@ -227,7 +227,7 @@ describe("archivo de incidencias", () => {
     const { t, manager, tech } = await setup();
     const old = await closedIncident(t, manager, tech);
     const recent = await closedIncident(t, manager, tech);
-    const { reference: openReference } = await t.mutation(
+    const { reference: openReference } = await t.action(
       api.incidents.report,
       avisoDeOtraPersona(),
     );

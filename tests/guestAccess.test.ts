@@ -269,7 +269,7 @@ describe("el invitado puede notificar: notificar es la puerta pública", () => {
   test("su aviso entra en la cola del taller y él se lo lleva con el código", async () => {
     const { manager, guest } = await tallerConGestor();
 
-    const created = await guest.mutation(api.incidents.report, aviso);
+    const created = await guest.action(api.incidents.report, aviso);
 
     // Las dos caras del mismo caso: la referencia con la que lo cita el taller y
     // el código con el que lo sigue quien avisó.
@@ -297,7 +297,7 @@ describe("el invitado puede notificar: notificar es la puerta pública", () => {
   test("notificar no le abre el caso: no lo trabaja él", async () => {
     const { manager, guest } = await tallerConGestor();
 
-    await guest.mutation(api.incidents.report, aviso);
+    await guest.action(api.incidents.report, aviso);
     const cola = await manager.query(api.incidents.list, {});
     const incidentId = cola[0]._id;
 

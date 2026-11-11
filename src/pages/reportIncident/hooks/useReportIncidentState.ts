@@ -11,13 +11,20 @@ import {
   type OfflineDraftPayload,
 } from "@/lib/offlineDrafts";
 import { getErrorMessage } from "@/lib/workshop";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import { getTodayInputDate, validateReportIncidentForm } from "../helpers";
+import { useHumanChallenge } from "./useHumanChallenge";
 
 export function useReportIncidentState() {
   const { user, isAuthenticated } = useAuth();
-  const report = useMutation(api.incidents.report);
+  const report = useAction(api.incidents.report);
+  const {
+    useTurnstile,
+    containerRef: challengeContainerRef,
+    widgetError: challengeError,
+    resolveChallenge,
+  } = useHumanChallenge(isAuthenticated);
   const inventoryModels = useQuery(api.equipment.uniqueModels, {}) ?? [];
   const catalogPositions =
     useQuery(api.catalogs.listPublic, { kind: "position" }) ?? [];
@@ -104,7 +111,12 @@ export function useReportIncidentState() {
         const drafts = await listOfflineDrafts();
         for (const draft of drafts) {
           try {
-            await report({ ...draft.payload, clientDraftId: draft.id });
+            const challenge = await resolveChallenge();
+            await report({
+              ...draft.payload,
+              clientDraftId: draft.id,
+              ...(challenge ? { challenge } : {}),
+            });
             await deleteOfflineDraft(draft.id);
           } catch (err) {
             // Sin red otra vez —o el taller rechaza el aviso por ahora (el
@@ -122,7 +134,7 @@ export function useReportIncidentState() {
     return () => {
       active = false;
     };
-  }, [online, report]);
+  }, [online, report, resolveChallenge]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -157,10 +169,12 @@ export function useReportIncidentState() {
 
     setBusy(true);
     try {
+      const challenge = await resolveChallenge();
       const created = await report({
         ...validation.payload,
         clientDraftId: clientDraftId(),
         ...(website ? { website } : {}),
+        ...(challenge ? { challenge } : {}),
       });
       setCode(created.code);
       setSentTo(validation.payload.reporterEmail ?? null);
@@ -215,6 +229,11 @@ export function useReportIncidentState() {
       value: website,
       onChange: setWebsite,
     },
+    challengeProps: {
+      visible: useTurnstile,
+      containerRef: challengeContainerRef,
+      error: challengeError,
+    },
     reporterProps: {
       nameValue,
       onNameChange: setName,
@@ -243,6 +262,7 @@ export function useReportIncidentState() {
     descriptionProps: {
       description,
       onDescriptionChange: setDescription,
+      onResolvePublicChallenge: resolveChallenge,
       disabled: busy,
     },
   };

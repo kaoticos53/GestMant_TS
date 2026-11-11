@@ -37,12 +37,15 @@ describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
 
     // Directivas esenciales de CSP en index.html (sin img-src https: abierto)
     expect(html).toContain("default-src 'self'");
-    expect(html).toContain("script-src 'self'");
+    expect(html).toContain("script-src 'self' https://challenges.cloudflare.com");
     expect(html).toContain("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
     expect(html).toContain("font-src 'self' https://fonts.gstatic.com");
     expect(html).toContain("img-src 'self' data: blob: https://*.convex.cloud");
     expect(html).not.toMatch(/img-src[^;]*\shttps:(\s|;)/);
-    expect(html).toContain("connect-src 'self' https://*.convex.cloud wss://*.convex.cloud");
+    expect(html).toContain("frame-src 'self' https://challenges.cloudflare.com");
+    expect(html).toContain(
+      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://challenges.cloudflare.com",
+    );
   });
 
   test("nginx.conf y security-headers.conf definen cabeceras defensivas en todos los bloques location", () => {
@@ -81,7 +84,10 @@ describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
     expect(headers).toContain("default-src 'self'");
     expect(headers).toContain("img-src 'self' data: blob: https://*.convex.cloud");
     expect(headers).not.toMatch(/img-src[^;]*\shttps:(\s|;)/);
-    expect(headers).toContain("connect-src 'self' https://*.convex.cloud wss://*.convex.cloud");
+    expect(headers).toContain("frame-src 'self' https://challenges.cloudflare.com");
+    expect(headers).toContain(
+      "connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://challenges.cloudflare.com",
+    );
   });
 });
 
@@ -137,7 +143,7 @@ describe("seguridad: la CSP autoriza la API de esta instalación", () => {
       expect(rellena).not.toContain(API_CSP_TOKEN);
       expect(rellena).not.toContain(API_IMG_CSP_TOKEN);
       expect(rellena).toContain(
-        `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud ${address}`,
+        `connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://challenges.cloudflare.com ${address}`,
       );
       expect(rellena).toContain(
         `img-src 'self' data: blob: https://*.convex.cloud ${imgAddress}`,

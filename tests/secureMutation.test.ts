@@ -40,7 +40,7 @@ async function miembro(
 
 /** Deja entrar un aviso por la puerta pública y devuelve su identificador. */
 async function aviso(t: Backend, session: Session) {
-  await session.mutation(api.incidents.report, {
+  await session.action(api.incidents.report, {
     reporterName: "Quien avisa",
     description: "El equipo hace un ruido raro.",
     reportedAt: Date.now(),

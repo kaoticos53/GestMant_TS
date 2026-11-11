@@ -429,7 +429,7 @@ describe("el aviso por correo a quien notificó", () => {
   test("el formulario guarda el correo en minúsculas y rechaza la errata", async () => {
     const { t } = await setup();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     // El alta programa su correo: se entrega aquí para no dejar nada colgando.
     // Sin clave de integraciones el intento queda apuntado en la ficha, que es lo
     // que hace en un taller que aún no la tiene configurada.
@@ -441,7 +441,7 @@ describe("el aviso por correo a quien notificó", () => {
     // Un correo con una errata de dedo se avisa al notificar, que es cuando
     // todavía se puede corregir: si no, el aviso se pierde en silencio.
     await expectConvexError(
-      t.mutation(api.incidents.report, {
+      t.action(api.incidents.report, {
         ...reportArgs,
         reporterEmail: "sandra.ruiz@taller",
       }),
@@ -456,7 +456,7 @@ describe("el aviso por correo a quien notificó", () => {
 
     // Nadie ha tocado la incidencia todavía: el correo sale por notificarla, que
     // es lo que impide que el código se quede en la pantalla que se va a cerrar.
-    const created = await t.mutation(api.incidents.report, reportArgs);
+    const created = await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -491,7 +491,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -583,7 +583,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -608,7 +608,7 @@ describe("el aviso por correo a quien notificó", () => {
     const { t, coordinator, techId } = await setup();
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       reporterEmail: undefined,
     });
@@ -627,7 +627,7 @@ describe("el aviso por correo a quien notificó", () => {
 
   test("sin clave de integraciones el motivo queda escrito, no se pierde", async () => {
     const { t, coordinator, techId } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
 
     const row = await incidentRow(t);
     await coordinator.mutation(api.incidents.assign, {
@@ -647,7 +647,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -679,7 +679,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -731,7 +731,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -761,7 +761,7 @@ describe("el aviso por correo a quien notificó", () => {
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     const row = await incidentRow(t);
@@ -787,7 +787,7 @@ describe("el aviso por correo a quien notificó", () => {
     const { t, coordinator } = await setup();
     process.env.VLY_INTEGRATION_KEY = "sk_test_123";
     const fetchMock = stubGateway();
-    await t.mutation(api.incidents.report, {
+    await t.action(api.incidents.report, {
       ...reportArgs,
       reporterEmail: undefined,
     });
@@ -806,7 +806,7 @@ describe("el aviso por correo a quien notificó", () => {
 
   test("sin clave de integraciones, la retirada también deja su motivo", async () => {
     const { t, coordinator } = await setup();
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
 
     const row = await incidentRow(t);
     await coordinator.mutation(api.incidents.withdraw, {

@@ -64,6 +64,8 @@ export async function registerIncidentIntake(
   options: {
     /** Marca del borrador sin conexión, para reconocer un envío repetido. */
     clientDraftId?: string;
+    /** Miembro autenticado del taller: exento de cuota global pública. */
+    isAuthenticatedMember?: boolean;
   } = {},
 ): Promise<{ reference: string; code: string }> {
   const now = Date.now();
@@ -75,25 +77,27 @@ export async function registerIncidentIntake(
     .order("desc")
     .take(RECENT_INTAKES);
 
-  const recentHourCount = latest.filter(
-    (item) => item.createdAt > now - INTAKE_WINDOW_MS,
-  ).length;
-  const globalAdmission = admitGlobalIntake(recentHourCount);
-  if (!globalAdmission.allowed) {
-    throw new ConvexError(globalAdmission.error!);
-  }
-  if (!admitGlobalIntake(recentHourCount + 1).allowed) {
-    await notifySecurityAlert(ctx, {
-      message:
-        "Alerta de seguridad: se ha alcanzado el límite global horario de altas públicas de incidencias.",
-      cooldownAction: "global_rate_limit_reached",
-      cooldownMs: INTAKE_WINDOW_MS,
-    });
-    await logSecurityEvent(ctx, {
-      action: "global_rate_limit_reached",
-      target: "public:intake",
-      metadata: { count: recentHourCount + 1 },
-    });
+  if (!options.isAuthenticatedMember) {
+    const recentHourCount = latest.filter(
+      (item) => item.createdAt > now - INTAKE_WINDOW_MS,
+    ).length;
+    const globalAdmission = admitGlobalIntake(recentHourCount);
+    if (!globalAdmission.allowed) {
+      throw new ConvexError(globalAdmission.error!);
+    }
+    if (!admitGlobalIntake(recentHourCount + 1).allowed) {
+      await notifySecurityAlert(ctx, {
+        message:
+          "Alerta de seguridad: se ha alcanzado el límite global horario de altas públicas de incidencias.",
+        cooldownAction: "global_rate_limit_reached",
+        cooldownMs: INTAKE_WINDOW_MS,
+      });
+      await logSecurityEvent(ctx, {
+        action: "global_rate_limit_reached",
+        target: "public:intake",
+        metadata: { count: recentHourCount + 1 },
+      });
+    }
   }
 
   const read = readIncidentIntake(input, { now, recent: latest });

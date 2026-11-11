@@ -11,6 +11,7 @@ import { pendingDraftsNotice } from "@/lib/offlineDrafts";
 import type { ComponentProps } from "react";
 import { DescriptionField } from "./DescriptionField";
 import { EquipmentFields } from "./EquipmentFields";
+import { HumanChallengeField } from "./HumanChallengeField";
 import { ReporterFields } from "./ReporterFields";
 
 interface ReportIncidentFormProps {
@@ -20,6 +21,7 @@ interface ReportIncidentFormProps {
   equipmentProps: ComponentProps<typeof EquipmentFields>;
   descriptionProps: ComponentProps<typeof DescriptionField>;
   honeypotProps?: { value: string; onChange: (value: string) => void };
+  challengeProps?: ComponentProps<typeof HumanChallengeField>;
   error: string | null;
   busy: boolean;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -42,6 +44,7 @@ export function ReportIncidentForm({
   equipmentProps,
   descriptionProps,
   honeypotProps,
+  challengeProps,
   error,
   busy,
   onSubmit,
@@ -132,6 +135,8 @@ export function ReportIncidentForm({
               />
             </div>
           )}
+
+          {challengeProps && <HumanChallengeField {...challengeProps} />}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 

@@ -2,11 +2,18 @@ import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { paginationOptsValidator } from "convex/server";
 import {
+  action,
+  internalMutation,
   mutation,
   query,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  humanChallengeValidator,
+  verifyHumanChallenge,
+} from "./humanChallenge";
 import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
 import { registerIncidentIntake } from "./incidentIntake";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
@@ -47,25 +54,30 @@ import {
  * vuelta, que son las dos caras del mismo caso: la referencia con la que el
  * taller lo cita y el código con el que lo sigue quien avisó.
  */
-export const report = mutation({
+const reportPayloadArgs = {
+  reporterName: v.string(),
+  reporterRole: v.optional(v.string()),
+  // Correo de quien notifica, si lo deja: solo sirve para avisarle cuando el
+  // caso cambie de estado (`convex/incidentMail`). Opcional a propósito.
+  reporterEmail: v.optional(v.string()),
+  location: v.optional(v.string()),
+  equipmentKind: v.optional(v.string()),
+  model: v.optional(v.string()),
+  serialNumber: v.optional(v.string()),
+  description: v.string(),
+  reportedAt: v.number(),
+  // Marca del borrador guardado sin conexión (`lib/offlineDrafts`): el mismo
+  // aviso que se reintenta al volver la red llega con la misma marca y el alta
+  // se reconoce en vez de duplicarse.
+  clientDraftId: v.optional(v.string()),
+  // Campo honeypot anti-bot: debe llegar vacío.
+  website: v.optional(v.string()),
+};
+
+export const commitReport = internalMutation({
   args: {
-    reporterName: v.string(),
-    reporterRole: v.optional(v.string()),
-    // Correo de quien notifica, si lo deja: solo sirve para avisarle cuando el
-    // caso cambie de estado (`convex/incidentMail`). Opcional a propósito.
-    reporterEmail: v.optional(v.string()),
-    location: v.optional(v.string()),
-    equipmentKind: v.optional(v.string()),
-    model: v.optional(v.string()),
-    serialNumber: v.optional(v.string()),
-    description: v.string(),
-    reportedAt: v.number(),
-    // Marca del borrador guardado sin conexión (`lib/offlineDrafts`): el mismo
-    // aviso que se reintenta al volver la red llega con la misma marca y el alta
-    // se reconoce en vez de duplicarse.
-    clientDraftId: v.optional(v.string()),
-    // Campo honeypot anti-bot: debe llegar vacío.
-    website: v.optional(v.string()),
+    ...reportPayloadArgs,
+    isAuthenticatedMember: v.boolean(),
   },
   handler: async (ctx, args) => {
     const clientDraftId = args.clientDraftId?.trim() || undefined;
@@ -86,9 +98,38 @@ export const report = mutation({
     }
 
     // Ni una regla aquí: el caso de uso y su adaptador están a un salto
-    // (`lib/incidentIntake` y `convex/incidentIntake`). Esta puerta solo existe
-    // para que el formulario público tenga a quién llamar.
-    return await registerIncidentIntake(ctx, args, { clientDraftId });
+    // (`lib/incidentIntake` y `convex/incidentIntake`).
+    return await registerIncidentIntake(ctx, args, {
+      clientDraftId,
+      isAuthenticatedMember: args.isAuthenticatedMember,
+    });
+  },
+});
+
+export const report = action({
+  args: {
+    ...reportPayloadArgs,
+    challenge: v.optional(humanChallengeValidator),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ reference: string; code: string }> => {
+    const { authenticated } = await verifyHumanChallenge(ctx, args.challenge);
+    return await ctx.runMutation(internal.incidents.commitReport, {
+      reporterName: args.reporterName,
+      reporterRole: args.reporterRole,
+      reporterEmail: args.reporterEmail,
+      location: args.location,
+      equipmentKind: args.equipmentKind,
+      model: args.model,
+      serialNumber: args.serialNumber,
+      description: args.description,
+      reportedAt: args.reportedAt,
+      clientDraftId: args.clientDraftId,
+      website: args.website,
+      isAuthenticatedMember: authenticated,
+    });
   },
 });
 

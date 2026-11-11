@@ -261,7 +261,7 @@ describe("la papelera del almacén", () => {
     const description = `<p>La cámara se apaga sola en directo.</p><img src="${url}">`;
     // Sin su vale, el aviso que se quedó a medias ya no puede citarla.
     await expectConvexError(
-      t.mutation(api.incidents.report, { ...reportArgs, description }),
+      t.action(api.incidents.report, { ...reportArgs, description }),
       "No se han podido comprobar las imágenes",
     );
 
@@ -276,7 +276,7 @@ describe("la papelera del almacén", () => {
     ).toEqual({ kept: false });
 
     // Recuperada, vuelve a poder: el vale está de vuelta con su ventana nueva.
-    await t.mutation(api.incidents.report, { ...reportArgs, description });
+    await t.action(api.incidents.report, { ...reportArgs, description });
     const rows = await t.run((ctx) => ctx.db.query("reportUploads").collect());
     expect(rows).toHaveLength(1);
     expect(rows[0].storageId).toBe(storageId);

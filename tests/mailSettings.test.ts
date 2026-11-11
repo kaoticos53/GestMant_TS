@@ -1070,7 +1070,7 @@ describe("el aviso interno de una incidencia nueva", () => {
     });
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     // Dos correos distintos: el de quien notificó —su código— y el interno.
@@ -1108,7 +1108,7 @@ describe("el aviso interno de una incidencia nueva", () => {
     });
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     // Solo el correo de quien notificó.
@@ -1135,7 +1135,7 @@ describe("el aviso interno de una incidencia nueva", () => {
     });
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
     const row = await t.run((ctx) =>
       ctx.db
@@ -1208,7 +1208,7 @@ describe("el aviso interno de una incidencia nueva", () => {
     });
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     const row = await t.run((ctx) =>
       ctx.db
         .query("incidents")
@@ -1293,7 +1293,7 @@ describe("el aviso a quien notificó — sale por el servicio configurado", () =
     process.env.VLY_INTEGRATION_KEY = "sk_deployment";
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -1339,7 +1339,7 @@ describe("el aviso a quien notificó — sale por el servicio configurado", () =
     });
     const fetchMock = stubFetch();
 
-    await t.mutation(api.incidents.report, reportArgs);
+    await t.action(api.incidents.report, reportArgs);
     await deliverScheduled(t);
 
     expect(fetchMock).not.toHaveBeenCalled();
