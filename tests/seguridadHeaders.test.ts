@@ -160,4 +160,13 @@ describe("seguridad: la CSP autoriza la API de esta instalación", () => {
     expect(dockerfile).toContain(API_IMG_CSP_TOKEN);
     expect(dockerfile).toContain("/etc/nginx/snippets/security-headers.conf");
   });
+
+  test("Dockerfile usa nginx:stable-alpine, node:22-alpine y actualiza paquetes con apk upgrade", () => {
+    const dockerfile = readFileSync(DOCKERFILE, "utf8");
+    expect(dockerfile).toContain("FROM nginx:stable-alpine AS app");
+    expect(dockerfile).not.toContain("nginx:1.27-alpine");
+    expect(dockerfile).toContain("FROM node:22-alpine AS base");
+    expect(dockerfile).toContain("FROM node:22-alpine AS relevo");
+    expect(dockerfile).toContain("RUN apk upgrade --no-cache");
+  });
 });

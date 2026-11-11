@@ -27,6 +27,7 @@
 # archivos estáticos, así que lo que se sirve no lleva ni Node ni el código
 # fuente.
 FROM node:22-alpine AS base
+RUN apk upgrade --no-cache
 
 WORKDIR /app
 
@@ -101,6 +102,12 @@ RUN sed -i 's/\r$//' /usr/local/bin/funciones /usr/local/bin/vigila-funciones /u
 
 CMD ["/usr/local/bin/funciones"]
 
+# --- 3b. Relevo SMTP ---------------------------------------------------------
+# Imagen limpia de Node sobre Alpine con los paquetes del sistema al día para el
+# puente HTTP → SMTP (`relevo`), sin arrastrar `node_modules` ni el código fuente.
+FROM node:22-alpine AS relevo
+RUN apk upgrade --no-cache
+
 # --- 4. Servir ---------------------------------------------------------------
 
 # La misma imagen de nginx de antes, con el sitio y la configuración dentro: el
@@ -109,7 +116,8 @@ CMD ["/usr/local/bin/funciones"]
 #
 # Va la última a propósito: sin `--target`, lo que sale de este archivo es la
 # aplicación, que es lo que espera quien escribe la orden a mano.
-FROM nginx:1.27-alpine AS app
+FROM nginx:stable-alpine AS app
+RUN apk upgrade --no-cache
 
 COPY docker/synology/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/synology/security-headers.conf /etc/nginx/snippets/security-headers.conf

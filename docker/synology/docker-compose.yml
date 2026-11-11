@@ -305,7 +305,11 @@ services:
     # No publica ningún puerto: quien le manda los correos es el backend, por la
     # red del propio proyecto, con la dirección http://relevo:8788/enviar.
     # La receta está en `scripts/mail-relay.mjs`, montada desde el código.
-    image: node:22-alpine
+    build:
+      context: ./codigo
+      dockerfile: docker/synology/Dockerfile
+      target: relevo
+    image: pulso-taller-relevo:local
     restart: unless-stopped
     read_only: true
     security_opt:
