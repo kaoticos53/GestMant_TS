@@ -33,6 +33,7 @@ export interface UsersTableProps {
   roleLabelOf: (key: string | null) => string;
   activeCount: number;
   onChangeRole: (userId: Id<"users">, role: string) => Promise<void>;
+  onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => Promise<void>;
 }
@@ -52,6 +53,7 @@ export function UsersTable({
   roleLabelOf,
   activeCount,
   onChangeRole,
+  onOpenDetail,
   onEdit,
   onToggleActive,
 }: UsersTableProps) {
@@ -102,6 +104,7 @@ export function UsersTable({
                 roleOptions={roleOptions}
                 roleLabelOf={roleLabelOf}
                 onChangeRole={onChangeRole}
+                onOpenDetail={onOpenDetail}
                 onEdit={onEdit}
                 onToggleActive={onToggleActive}
               />

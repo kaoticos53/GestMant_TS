@@ -10,7 +10,9 @@ import { dismissalOf } from "../lib/workAlert";
 import { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
-import { hasCapability, roleExists } from "./permissions";
+import { CAPABILITIES } from "../lib/permissions";
+import { isClosedIncident } from "../lib/incidentFlow";
+import { grantsForRole, hasCapability, roleExists } from "./permissions";
 import {
   type MutationCtx,
   QueryCtx,
@@ -609,4 +611,52 @@ export const revokeSessions = mutation({
       return { revoked };
     },
   ),
+});
+
+export const getMemberSummary = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) {
+      return null;
+    }
+
+    const roleKey = target.role ?? DEFAULT_ROLE;
+    const grants = await grantsForRole(ctx, roleKey);
+    const capabilities = CAPABILITIES.filter((c) => Boolean(grants[c.id])).map(
+      (c) => ({ key: c.id, label: c.label }),
+    );
+
+    const allIncidents = await ctx.db.query("incidents").collect();
+    const assignedIncidents = allIncidents.filter(
+      (inc) => inc.deletedAt === undefined && inc.assigneeId === args.userId,
+    );
+    const activeAssignedIncidents = assignedIncidents.filter(
+      (inc) => !isClosedIncident(inc.status),
+    ).length;
+
+    const allRequests = await ctx.db.query("partRequests").collect();
+    const userRequestsCount = allRequests.filter(
+      (req) => req.deletedAt === undefined && req.requesterId === args.userId,
+    ).length;
+
+    const recentMovements = (
+      await ctx.db
+        .query("stockMovements")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(120)
+    )
+      .filter((m) => m.actorId === args.userId)
+      .slice(0, 8);
+
+    return {
+      assignedIncidentsTotal: assignedIncidents.length,
+      activeAssignedIncidents,
+      requestsCount: userRequestsCount,
+      capabilities,
+      recentMovements,
+    };
+  },
 });

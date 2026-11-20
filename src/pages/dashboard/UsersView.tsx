@@ -6,6 +6,7 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import { sortRows } from "@/lib/tableSort";
 import { useQuery } from "convex/react";
 import { useMemo, useState } from "react";
+import { UserDetailSheet } from "./users/components/UserDetailSheet";
 import {
   UsersDialogs,
   UsersHeader,
@@ -33,6 +34,7 @@ export function UsersView() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
+  const [detailTarget, setDetailTarget] = useState<Member | null>(null);
 
   const {
     deactivating,
@@ -84,6 +86,16 @@ export function UsersView() {
         roleLabelOf={roleLabelOf}
         activeCount={activeCount}
         onChangeRole={handleChangeRole}
+        onOpenDetail={setDetailTarget}
+        onEdit={setEditing}
+        onToggleActive={handleToggleActive}
+      />
+
+      <UserDetailSheet
+        member={detailTarget}
+        isSelf={detailTarget?._id === currentUser?._id}
+        roleLabelOf={roleLabelOf}
+        onClose={() => setDetailTarget(null)}
         onEdit={setEditing}
         onToggleActive={handleToggleActive}
       />

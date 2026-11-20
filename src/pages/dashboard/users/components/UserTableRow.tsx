@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ export interface UserTableRowProps {
   roleOptions: RoleOption[];
   roleLabelOf: (key: string | null) => string;
   onChangeRole: (userId: Id<"users">, role: string) => void | Promise<void>;
+  onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => void | Promise<void>;
 }
@@ -39,6 +41,7 @@ export const UserTableRow = memo(function UserTableRow({
   roleOptions,
   roleLabelOf,
   onChangeRole,
+  onOpenDetail,
   onEdit,
   onToggleActive,
 }: UserTableRowProps) {
@@ -55,14 +58,17 @@ export const UserTableRow = memo(function UserTableRow({
               .toUpperCase() || "?"}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">
+            <DetailTitleButton
+              onClick={() => onOpenDetail(member)}
+              className="text-sm"
+            >
               {member.name ?? "Sin nombre"}
               {isSelf && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                   (tú)
                 </span>
               )}
-            </p>
+            </DetailTitleButton>
             <p className="truncate text-xs text-muted-foreground">
               {member.email ?? "Sin correo de acceso"}
               {member.isAnonymous && " · invitado"}
