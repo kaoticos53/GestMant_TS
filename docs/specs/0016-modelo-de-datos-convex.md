@@ -1,0 +1,78 @@
+# SPEC-0016 — Modelo de Datos Convex (`schema.ts`) y Mapa de API
+
+- **ID:** `SPEC-0016`
+- **Título:** Esquema completo de tablas, índices, relaciones, referencias correlativas y módulos Convex
+- **Estado:** Implementada
+- **Fecha:** 2026-11-20
+- **Fuentes clave:** `src/convex/schema.ts`, `src/convex/references.ts`, `src/convex/workshopReset.ts`, `src/convex/_generated/api.d.ts`
+
+---
+
+## 1. Contexto y Objetivos
+
+Documenta el modelo de persistencia completo en `src/convex/schema.ts`, la generación atómica de referencias (`referenceCounters`), el conjunto de tablas reiniciables (`RESET_TABLES`) frente a las de configuración/auditoría, y la organización modular de `src/convex/`.
+
+---
+
+## 2. Modelo Entidad-Relación (Núcleo Operativo)
+
+```mermaid
+erDiagram
+  equipmentModels ||--o{ equipment : "modelId"
+  equipment ||--o{ maintenanceRecords : "equipmentId"
+  equipment ||--o{ equipmentMovements : "equipmentId"
+  equipment ||--o{ incidents : "equipmentId"
+  incidents ||--o{ incidentDocuments : "incidentId"
+  incidents ||--o{ partRequests : "incidentId"
+  spareParts ||--o{ stockMovements : "sparePartId"
+  partRequests ||--o{ requestDecisions : "requestId"
+  partRequests ||--o{ purchaseRequests : "partRequestId"
+  purchaseOrders ||--o{ receptions : "orderId"
+  users ||--o{ notifications : "userId"
+```
+
+---
+
+## 3. Catálogo de Tablas (`src/convex/schema.ts`)
+
+### A. Dominio operativo (reiniciables en `RESET_TABLES`)
+`spareParts`, `stockMovements`, `equipment`, `equipmentMovements`, `equipmentModels`, `incidents`, `incidentDocuments`, `incidentDocumentLog`, `partRequests`, `requestDecisions`, `purchaseRequests`, `purchaseOrders`, `receptions`, `maintenanceRecords`, `manuals`, `notifications`, `messages`, `reportUploads`, `storageCleanupRuns`, `reportUploadPurges`, `trashFiles`, `weeklyReports`, `catalogs`, `appSettings`, `publicStats`.
+
+### B. Efímeras y control de tasa (incluidas en `RESET_TABLES` + purga cron)
+`publicLookupLimits`, `otpSendLimits`, `publicChallengeUsed`, `aiUsageLimits`.
+
+### C. Identidad, configuración y auditoría (excluidas de `RESET_TABLES`)
+- `users`, `roles`, `referenceCounters`
+- `storageSettings`, `alertSettings`, `auditAlertSettings`, `reportSettings`, `archiveSettings`, `mailSettings`, `aiSettings`
+- `mailLog`, **`securityAuditLog`** (inmutable, nunca se purga).
+
+---
+
+## 4. Requisitos Funcionales
+
+- **RF-001 (Contadores atómicos `references.ts`):** `referenceCounters` asigna referencias correlativas únicas sin colisiones (`INC-XXXX`, `PET-XXXX`, `PC-XXXX`, `OC-XXXX`, `EQ-XXX`).
+- **RF-002 (Organización modular `src/convex/`):** Helpers internos agrupados en `_ai/`, `_auth/`, `_incidents/`, `_inventory/`, `_mail/`, `_partRequests/`, `_purchasing/`, expuestos solo mediante `internalQuery`/`internalMutation` o funciones de dominio.
+- **RF-003 (Registro estático de tipos):** Toda nueva función o módulo bajo `src/convex/` debe quedar declarado en `src/convex/_generated/api.d.ts` (validado automáticamente por `tests/nasSetup.test.ts`).
+
+---
+
+## 5. Reglas de Negocio e Invariantes
+
+- **RN-001:** Ninguna tabla operativa con `deletedAt` se borra físicamente en la acción de usuario; primero pasa a papelera y solo vence en cron tras expirar retención.
+- **RN-002:** `securityAuditLog` jamás entra en `RESET_TABLES`.
+
+---
+
+## 6. Trazabilidad RF → Tests
+
+| Requisito | Cobertura automatizada |
+|---|---|
+| RF-001 | `tests/references.test.ts` |
+| RF-003 | `tests/nasSetup.test.ts` |
+| RN-002 | `tests/workshopReset.test.ts`, `tests/seguridad.test.ts` |
+
+---
+
+## 7. Preguntas Abiertas / Deuda Técnica
+
+- **Q-001:** `npx convex codegen` requiere un deployment local/remoto activo para regenerar `api.d.ts` automáticamente; en entornos offline se mantiene `api.d.ts` actualizado manualmente y validado por `tests/nasSetup.test.ts`.
