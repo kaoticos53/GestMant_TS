@@ -31,7 +31,8 @@ import {
  * Para administradores activos añade además el visor paginado de auditoría de
  * seguridad (`securityAuditLog`).
  */
-export function AuditView({ onOpenIncident: _onOpenIncident }: AuditViewProps) {
+export function AuditView({ onOpenIncident }: AuditViewProps) {
+  void onOpenIncident;
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [section, setSection] = useState<"documents" | "security">("documents");

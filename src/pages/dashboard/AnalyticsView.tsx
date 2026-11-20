@@ -9,6 +9,8 @@ export interface AnalyticsViewProps {
   onOpenRequests: () => void;
   onOpenInventoryLowStock: () => void;
   onOpenEquipment: () => void;
+  onSelectEquipment?: (label: string) => void;
+  onSelectPart?: (code: string) => void;
 }
 
 export function AnalyticsView({
@@ -16,6 +18,8 @@ export function AnalyticsView({
   onOpenRequests,
   onOpenInventoryLowStock,
   onOpenEquipment,
+  onSelectEquipment,
+  onSelectPart,
 }: AnalyticsViewProps) {
   const analytics = useQuery(api.dashboard.analytics, {});
 
@@ -50,6 +54,8 @@ export function AnalyticsView({
         criticalParts={analytics.criticalParts}
         onOpenEquipment={onOpenEquipment}
         onOpenInventoryLowStock={onOpenInventoryLowStock}
+        onSelectEquipment={onSelectEquipment}
+        onSelectPart={onSelectPart}
       />
     </div>
   );

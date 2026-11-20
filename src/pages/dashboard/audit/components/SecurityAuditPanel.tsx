@@ -4,7 +4,6 @@ import { Download, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { api } from "@/convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,

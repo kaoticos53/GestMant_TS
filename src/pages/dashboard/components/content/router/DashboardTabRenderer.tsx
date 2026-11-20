@@ -36,8 +36,10 @@ export function DashboardTabRenderer({
     goToTab,
     openIncident,
     openRequest,
+    openInventory,
     openEquipmentViewRequests,
     setRequestsEquipmentFilter,
+    handleSearchSelect,
   } = navigation;
 
   const allowed = canAccessDashboardTab(activeTab, {
@@ -57,8 +59,14 @@ export function DashboardTabRenderer({
         <AnalyticsView
           onOpenIncidents={() => goToTab("incidents")}
           onOpenRequests={() => goToTab("requests")}
-          onOpenInventoryLowStock={() => goToTab("inventory")}
+          onOpenInventoryLowStock={() => openInventory(true)}
           onOpenEquipment={() => goToTab("equipment")}
+          onSelectEquipment={(label) =>
+            handleSearchSelect({ kind: "equipment", term: label })
+          }
+          onSelectPart={(code) =>
+            handleSearchSelect({ kind: "part", term: code })
+          }
         />
       );
 

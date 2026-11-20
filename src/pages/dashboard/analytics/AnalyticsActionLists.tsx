@@ -1,4 +1,5 @@
 import { ArrowRight, PackageX, Wrench } from "lucide-react";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,8 @@ interface AnalyticsActionListsProps {
   criticalParts: WorkshopAnalyticsResult["criticalParts"];
   onOpenEquipment: () => void;
   onOpenInventoryLowStock: () => void;
+  onSelectEquipment?: (label: string) => void;
+  onSelectPart?: (code: string) => void;
 }
 
 export function AnalyticsActionLists({
@@ -22,6 +25,8 @@ export function AnalyticsActionLists({
   criticalParts,
   onOpenEquipment,
   onOpenInventoryLowStock,
+  onSelectEquipment,
+  onSelectPart,
 }: AnalyticsActionListsProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -53,7 +58,16 @@ export function AnalyticsActionLists({
                   key={item.label}
                   className="flex items-center justify-between gap-3 py-2.5 text-sm"
                 >
-                  <span className="truncate font-medium">{item.label}</span>
+                  <DetailTitleButton
+                    onClick={() =>
+                      onSelectEquipment
+                        ? onSelectEquipment(item.label)
+                        : onOpenEquipment()
+                    }
+                    className="min-w-0 flex-1"
+                  >
+                    {item.label}
+                  </DetailTitleButton>
                   <div className="flex shrink-0 items-center gap-2">
                     {item.openCount > 0 && (
                       <Badge variant="destructive">
@@ -97,8 +111,16 @@ export function AnalyticsActionLists({
                   key={part.code}
                   className="flex items-center justify-between gap-3 py-2.5 text-sm"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{part.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <DetailTitleButton
+                      onClick={() =>
+                        onSelectPart
+                          ? onSelectPart(part.code)
+                          : onOpenInventoryLowStock()
+                      }
+                    >
+                      {part.name}
+                    </DetailTitleButton>
                     <p className="text-xs text-muted-foreground">{part.code}</p>
                   </div>
                   <Badge
