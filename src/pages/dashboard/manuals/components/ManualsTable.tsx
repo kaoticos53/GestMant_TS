@@ -47,7 +47,7 @@ export function ManualsTable({
         onSortChange={onSortChange}
       />
       <ListArea ref={areaRef} resetKey={resetKey}>
-        <Table>
+        <Table className="w-full">
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <SortableTableHead

@@ -119,7 +119,7 @@ export default function Dashboard() {
           <main
             id="contenido"
             tabIndex={-1}
-            className="mx-auto w-full max-w-7xl flex-1 px-4 pb-1 pt-4 sm:px-6 sm:pt-5"
+            className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-1 pt-4 sm:px-6 sm:pt-5"
           >
             <PageHeader
               title={heading.title}

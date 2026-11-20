@@ -38,7 +38,7 @@ export function ManualsTableRow({
 
   return (
     <TableRow className="hover:bg-muted/40">
-      <TableCell className="max-w-[20rem]">
+      <TableCell className="min-w-[14rem]">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge
             variant="outline"
