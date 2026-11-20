@@ -28,6 +28,7 @@ export function InventoryView({
   currentUserId = null,
   initialSearch = "",
   initialLowStockOnly = false,
+  onOpenEquipmentModel,
 }: InventoryViewProps) {
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
   const [detailTarget, setDetailTarget] = useState<PartDoc | null>(null);
@@ -181,6 +182,7 @@ export function InventoryView({
         onEdit={(part) => setFormTarget({ part })}
         onStockAdjust={setStockTarget}
         onPrintLabel={setLabelTarget}
+        onSelectModel={onOpenEquipmentModel}
       />
 
       {movementsOpen && (

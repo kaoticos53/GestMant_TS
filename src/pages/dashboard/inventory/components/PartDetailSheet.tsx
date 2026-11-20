@@ -1,7 +1,5 @@
 import { useQuery } from "convex/react";
 import {
-  Boxes,
-  History,
   MapPin,
   Pencil,
   Printer,
@@ -12,7 +10,6 @@ import {
 import { RichText } from "@/components/RichText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -21,15 +18,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { api } from "@/convex/_generated/api";
-import { STOCK_MOVEMENT_META, type StockMovementKind } from "@/lib/movements";
-import {
-  STOCK_META,
-  formatCurrency,
-  formatDateTime,
-  stockState,
-} from "@/lib/workshop";
+import { STOCK_META, formatCurrency, stockState } from "@/lib/workshop";
 import { modelLabel } from "../helpers";
 import type { EquipmentModelDoc, PartDoc } from "../types";
+import { PartMovementsSection } from "./PartMovementsSection";
 
 export interface PartDetailSheetProps {
   part: PartDoc | null;
@@ -39,6 +31,7 @@ export interface PartDetailSheetProps {
   onEdit: (part: PartDoc) => void;
   onStockAdjust: (part: PartDoc) => void;
   onPrintLabel: (part: PartDoc) => void;
+  onSelectModel?: (modelName: string) => void;
 }
 
 export function PartDetailSheet({
@@ -49,6 +42,7 @@ export function PartDetailSheet({
   onEdit,
   onStockAdjust,
   onPrintLabel,
+  onSelectModel,
 }: PartDetailSheetProps) {
   const movements = useQuery(
     api.stockMovements.listByPart,
@@ -179,77 +173,33 @@ export function PartDetailSheet({
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {compatibles.map((model) => (
-                    <Badge key={model._id} variant="secondary">
-                      {modelLabel(model)}
-                    </Badge>
-                  ))}
+                  {compatibles.map((model) => {
+                    const label = modelLabel(model);
+                    return onSelectModel ? (
+                      <Button
+                        key={model._id}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => {
+                          onClose();
+                          onSelectModel(model.model);
+                        }}
+                      >
+                        {label}
+                      </Button>
+                    ) : (
+                      <Badge key={model._id} variant="secondary">
+                        {label}
+                      </Badge>
+                    );
+                  })}
                 </div>
               )}
             </section>
 
-            <section className="space-y-2">
-              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <History className="size-3.5" />
-                Últimos movimientos de stock
-              </h3>
-              {movements === undefined ? (
-                <div className="space-y-2" aria-label="Cargando movimientos">
-                  <Skeleton className="h-12 rounded-lg" />
-                  <Skeleton className="h-12 rounded-lg" />
-                </div>
-              ) : movements.length === 0 ? (
-                <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
-                  <Boxes className="size-4 shrink-0" />
-                  <span>Sin movimientos registrados para este repuesto.</span>
-                </div>
-              ) : (
-                <ul className="divide-y rounded-lg border">
-                  {movements.map((mov) => {
-                    const kindMeta =
-                      STOCK_MOVEMENT_META[mov.kind as StockMovementKind] ?? {
-                        label: mov.kind,
-                        signTone: "neutral",
-                      };
-                    const signedDelta =
-                      mov.delta > 0 ? `+${mov.delta}` : String(mov.delta);
-                    return (
-                      <li
-                        key={mov._id}
-                        className="flex items-start justify-between gap-3 px-3 py-2 text-xs"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium">{kindMeta.label}</p>
-                          <p className="truncate text-muted-foreground">
-                            {mov.actorName}
-                            {mov.reason ? ` · ${mov.reason}` : ""}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {formatDateTime(mov.createdAt)}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right tabular-nums">
-                          <span
-                            className={
-                              mov.delta > 0
-                                ? "font-semibold text-emerald-600 dark:text-emerald-400"
-                                : mov.delta < 0
-                                  ? "font-semibold text-rose-600 dark:text-rose-400"
-                                  : "font-semibold"
-                            }
-                          >
-                            {signedDelta} {part.unit}
-                          </span>
-                          <p className="text-[11px] text-muted-foreground">
-                            {mov.previousStock} → {mov.nextStock}
-                          </p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+            <PartMovementsSection unit={part.unit} movements={movements} />
           </>
         )}
       </SheetContent>

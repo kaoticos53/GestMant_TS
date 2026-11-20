@@ -1,10 +1,8 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import {
   AI_VARIABLE_CATALOG,
-  type AiDebugTraceEntry,
   type WorkshopChatTurn,
 } from "@/lib/ai";
 import { cn } from "@/lib/utils";
@@ -12,7 +10,6 @@ import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
 import {
   Bug,
-  Database,
   Loader2,
   PanelRightClose,
   Send,
@@ -22,14 +19,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { AiMarkdownMessage } from "./AiMarkdownMessage";
+import { AiChatMessagesList, type AiChatEntry } from "./AiChatMessagesList";
 
-interface ChatEntry extends WorkshopChatTurn {
-  id: string;
-  citedReferences?: string[];
-  usedTools?: string[];
-  debugTrace?: AiDebugTraceEntry[];
-}
+type ChatEntry = AiChatEntry;
 
 const MIN_PANEL_WIDTH = 320;
 const DEFAULT_PANEL_WIDTH = 420;
@@ -255,137 +247,14 @@ export function WorkshopAiChatButton() {
             </div>
           </div>
 
-          <div
-            ref={scrollContainerRef}
-            className="flex-1 space-y-3 overflow-y-auto bg-muted/15 p-4"
-          >
-            {entries.length === 0 ? (
-              <div className="space-y-3 py-6 text-center">
-                <p className="text-xs text-muted-foreground">
-                  Escribe una pregunta o elige una consulta rápida:
-                </p>
-                <div className="flex flex-wrap justify-center gap-1.5">
-                  {SUGGESTIONS.map((item) => (
-                    <Button
-                      key={item}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-auto py-1.5 text-xs font-normal whitespace-normal"
-                      disabled={loading}
-                      onClick={() => void sendQuestion(item)}
-                    >
-                      {item}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              entries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    "max-w-[90%] rounded-lg px-3.5 py-2.5 text-sm",
-                    entry.role === "user"
-                      ? "ml-auto bg-primary text-primary-foreground"
-                      : "mr-auto border bg-background text-foreground",
-                  )}
-                >
-                  {entry.role === "assistant" ? (
-                    <AiMarkdownMessage content={entry.content} />
-                  ) : (
-                    <p className="whitespace-pre-wrap leading-relaxed">
-                      {entry.content}
-                    </p>
-                  )}
-                  {entry.usedTools && entry.usedTools.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-2 text-[11px] text-muted-foreground">
-                      <Database className="size-3 shrink-0" />
-                      <span>Consultado:</span>
-                      {entry.usedTools.map((tool) => (
-                        <code
-                          key={tool}
-                          className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]"
-                        >
-                          {tool}
-                        </code>
-                      ))}
-                    </div>
-                  )}
-                  {entry.citedReferences && entry.citedReferences.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1 border-t pt-2">
-                      {entry.citedReferences.map((ref) => (
-                        <Badge
-                          key={ref}
-                          variant="secondary"
-                          className="font-mono text-[11px]"
-                        >
-                          {ref}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {entry.debugTrace && entry.debugTrace.length > 0 && (
-                    <details className="mt-2 rounded border bg-muted/40 p-2 text-[11px]">
-                      <summary className="cursor-pointer font-medium text-amber-700 dark:text-amber-300">
-                        Traza de depuración ({entry.debugTrace.length}{" "}
-                        {entry.debugTrace.length === 1 ? "ronda" : "rondas"})
-                      </summary>
-                      <div className="mt-2 space-y-2">
-                        {entry.debugTrace.map((trace) => (
-                          <div
-                            key={trace.round}
-                            className="space-y-1 rounded border bg-background p-2 font-mono text-[10px]"
-                          >
-                            <div className="font-semibold">
-                              Ronda {trace.round} · {trace.model} · HTTP{" "}
-                              {trace.responseStatus} · {trace.durationMs}ms ·{" "}
-                              finish={trace.finishReason ?? "null"}
-                            </div>
-                            <div className="text-muted-foreground break-all">
-                              Endpoint: {trace.endpoint} | Tools:{" "}
-                              {trace.toolNames.join(", ") || "(ninguna)"}
-                            </div>
-                            <div>
-                              <span className="font-semibold">Enviado:</span>
-                              <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-1.5">
-                                {JSON.stringify(trace.messages, null, 2)}
-                              </pre>
-                            </div>
-                            {trace.toolCalls && trace.toolCalls.length > 0 && (
-                              <div>
-                                <span className="font-semibold">
-                                  Tool calls:
-                                </span>
-                                <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-1.5">
-                                  {JSON.stringify(trace.toolCalls, null, 2)}
-                                </pre>
-                              </div>
-                            )}
-                            <div>
-                              <span className="font-semibold">
-                                Respuesta cruda:
-                              </span>
-                              <pre className="mt-0.5 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-1.5">
-                                {trace.rawContent || "(vacía)"}
-                              </pre>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              ))
-            )}
-            {loading && (
-              <div className="mr-auto flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Consultando datos del taller...
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+          <AiChatMessagesList
+            entries={entries}
+            loading={loading}
+            suggestions={SUGGESTIONS}
+            onSelectSuggestion={(text) => void sendQuestion(text)}
+            scrollContainerRef={scrollContainerRef}
+            messagesEndRef={messagesEndRef}
+          />
 
           <div className="border-t border-border/70 bg-background p-3 space-y-2">
             <div className="flex flex-wrap items-center gap-1">

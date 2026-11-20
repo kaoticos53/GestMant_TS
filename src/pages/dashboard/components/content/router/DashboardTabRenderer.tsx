@@ -116,6 +116,9 @@ export function DashboardTabRenderer({
           currentUserId={user?._id ?? null}
           initialSearch={target.inventorySearch ?? ""}
           initialLowStockOnly={target.inventoryLowStockOnly ?? false}
+          onOpenEquipmentModel={(modelName) =>
+            handleSearchSelect({ kind: "equipment", term: modelName })
+          }
         />
       );
 

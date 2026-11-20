@@ -16,6 +16,8 @@ export interface InventoryViewProps {
   initialSearch?: string;
   /** Abre la tabla mostrando solo lo que está por debajo del mínimo */
   initialLowStockOnly?: boolean;
+  /** Navega a Equipos filtrando por modelo compatible. */
+  onOpenEquipmentModel?: (modelName: string) => void;
 }
 
 export interface FilterInventoryParams {
