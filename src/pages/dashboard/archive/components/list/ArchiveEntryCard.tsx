@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,12 @@ export function ArchiveEntryCard({
             {kindMeta.label}
           </span>
         </div>
-        <p className="text-sm font-medium leading-5">{entry.title}</p>
+        <DetailTitleButton
+          onClick={() => onOpenEntry({ kind: entry.kind, id: entry.id })}
+          className="text-sm leading-5"
+        >
+          {entry.title}
+        </DetailTitleButton>
         {!compact && entry.subtitle !== "" && (
           <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
             {entry.subtitle}

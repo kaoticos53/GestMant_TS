@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Clock } from "lucide-react";
 import { RichText } from "@/components/RichText";
 import { cn } from "@/lib/utils";
@@ -12,25 +13,36 @@ export function RequestCardBody({
   status,
   decisionText,
   compact,
+  onOpen,
 }: RequestCardBodyProps) {
+  const titleClassName = compact
+    ? "text-sm font-semibold tracking-tight"
+    : "text-base font-semibold tracking-tight";
+
   return (
     <>
       <div className={compact ? "mt-1" : "mt-3"}>
-        <p
-          className={
-            compact
-              ? "text-sm font-semibold tracking-tight"
-              : "text-base font-semibold tracking-tight"
-          }
-        >
-          {requesterName}
-          {requesterTeam && (
-            <span className="font-normal text-muted-foreground">
-              {" "}
-              · {requesterTeam}
-            </span>
-          )}
-        </p>
+        {onOpen ? (
+          <DetailTitleButton onClick={onOpen} className={titleClassName}>
+            {requesterName}
+            {requesterTeam && (
+              <span className="font-normal text-muted-foreground">
+                {" "}
+                · {requesterTeam}
+              </span>
+            )}
+          </DetailTitleButton>
+        ) : (
+          <p className={titleClassName}>
+            {requesterName}
+            {requesterTeam && (
+              <span className="font-normal text-muted-foreground">
+                {" "}
+                · {requesterTeam}
+              </span>
+            )}
+          </p>
+        )}
         {equipment && (
           <p className="mt-0.5 text-sm text-muted-foreground">
             Equipo afectado: {equipment}

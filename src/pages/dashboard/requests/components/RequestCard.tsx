@@ -65,6 +65,7 @@ export function RequestCard({
         status={request.status}
         decisionText={decisionLine(request)}
         compact={compact}
+        onOpen={onOpen}
       />
 
       <RequestCardLines

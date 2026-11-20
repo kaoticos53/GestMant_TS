@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Download, Eye, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,9 +46,12 @@ export function ManualsTableRow({
           >
             {meta.label}
           </Badge>
-          <span className="block truncate font-medium">
+          <DetailTitleButton
+            onClick={() => onOpenDetail(manual)}
+            className="min-w-0 flex-1"
+          >
             {manual.title}
-          </span>
+          </DetailTitleButton>
         </div>
         <span className="block truncate text-xs text-muted-foreground">
           {manual.kind === "file"

@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { reporterNoticeText } from "@/lib/incidentMail";
 import { trashRemainingLabel } from "@/lib/trash";
@@ -31,9 +32,12 @@ export function TrashedIncidentItem({
             {trashRemainingLabel(item.purgeAt)}
           </span>
         </div>
-        <p className="text-sm font-medium leading-5">
+        <DetailTitleButton
+          onClick={() => onOpen(row)}
+          className="text-sm leading-5"
+        >
           {formatIncidentEquipmentTitle(item.equipmentKind, item.model)}
-        </p>
+        </DetailTitleButton>
         {item.description !== "" && (
           <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
             {item.description}

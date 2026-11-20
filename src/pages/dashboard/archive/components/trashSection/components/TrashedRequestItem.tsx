@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { trashRemainingLabel } from "@/lib/trash";
 import { STATUS_META } from "@/lib/workshop";
@@ -34,9 +35,12 @@ export function TrashedRequestItem({
             {trashRemainingLabel(item.purgeAt)}
           </span>
         </div>
-        <p className="text-sm font-medium leading-5">
+        <DetailTitleButton
+          onClick={() => onOpen(row)}
+          className="text-sm leading-5"
+        >
           {item.summary || "Petición sin repuesto"}
-        </p>
+        </DetailTitleButton>
         {context !== "" && (
           <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
             {context}

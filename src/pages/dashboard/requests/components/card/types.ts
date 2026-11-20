@@ -18,6 +18,7 @@ export interface RequestCardBodyProps {
   status: RequestStatus;
   decisionText: string;
   compact: boolean;
+  onOpen?: () => void;
 }
 
 export interface RequestCardLinesProps {

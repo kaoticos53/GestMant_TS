@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { equipmentLabel } from "@/lib/workshop";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { BookOpen, Copy, Eye, Pencil, Printer, Trash2 } from "lucide-react";
 import type { EquipmentDoc } from "../types";
 
@@ -46,9 +47,9 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
         <span className="block font-mono text-xs text-muted-foreground">
           {item.code}
         </span>
-        <span className="block truncate font-medium">
+        <DetailTitleButton onClick={() => onViewDetail(item)}>
           {equipmentLabel(item)}
-        </span>
+        </DetailTitleButton>
         {reviewOverdue && (
           <span className="block text-xs font-medium text-amber-700">
             Revisión preventiva vencida
