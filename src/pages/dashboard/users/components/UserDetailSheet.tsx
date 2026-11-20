@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -125,9 +126,10 @@ export function UserDetailSheet({
             </div>
 
             {summary === undefined ? (
-              <p className="text-xs text-muted-foreground">
-                Cargando actividad y permisos...
-              </p>
+              <div className="space-y-3" aria-label="Cargando resumen de usuario">
+                <Skeleton className="h-20 rounded-lg" />
+                <Skeleton className="h-14 rounded-lg" />
+              </div>
             ) : summary === null ? (
               <p className="text-xs text-muted-foreground">
                 No se encontró el resumen del usuario.

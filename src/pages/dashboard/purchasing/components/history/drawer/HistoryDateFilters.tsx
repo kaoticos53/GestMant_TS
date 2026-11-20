@@ -1,4 +1,11 @@
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FECHA_TIPO_OPTIONS, type FechaTipoFilter } from "./helpers";
 
 export interface HistoryDateFiltersProps {
@@ -27,17 +34,24 @@ export function HistoryDateFilters({
         <label className="text-xs font-medium text-muted-foreground">
           Filtrar fecha por:
         </label>
-        <select
+        <Select
           value={fechaTipo}
-          onChange={(e) => onChangeFechaTipo(e.target.value as FechaTipoFilter)}
-          className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onValueChange={(value) => onChangeFechaTipo(value as FechaTipoFilter)}
         >
-          {FECHA_TIPO_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className="mt-1 h-8 w-full text-xs"
+            aria-label="Filtrar fecha por"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FECHA_TIPO_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <label className="text-xs font-medium text-muted-foreground">

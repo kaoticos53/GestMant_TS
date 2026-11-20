@@ -3,6 +3,7 @@ import { api } from "@/convex/_generated/api";
 import { AnalyticsActionLists } from "./analytics/AnalyticsActionLists";
 import { AnalyticsChartsGrid } from "./analytics/AnalyticsChartsGrid";
 import { AnalyticsKpiGrid } from "./analytics/AnalyticsKpiGrid";
+import { AnalyticsSkeleton } from "./analytics/AnalyticsSkeleton";
 
 export interface AnalyticsViewProps {
   onOpenIncidents: () => void;
@@ -24,11 +25,7 @@ export function AnalyticsView({
   const analytics = useQuery(api.dashboard.analytics, {});
 
   if (analytics === undefined) {
-    return (
-      <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
-        Cargando métricas y gráficos del taller...
-      </div>
-    );
+    return <AnalyticsSkeleton />;
   }
 
   if (analytics === null) {

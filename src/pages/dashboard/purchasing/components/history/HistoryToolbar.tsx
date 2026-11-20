@@ -10,6 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { PurchaseHistoryFilters } from "@/lib/purchasing";
 
 export interface HistoryToolbarProps {
@@ -66,23 +73,30 @@ export function HistoryToolbar({
             </div>
 
             {proveedores.length > 1 && (
-              <select
+              <Select
                 value={filters.proveedor ?? "todos"}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   setFilters((prev) => ({
                     ...prev,
-                    proveedor: e.target.value,
+                    proveedor: value,
                   }))
                 }
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value="todos">Todos los proveedores</option>
-                {proveedores.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  className="h-9 w-full sm:w-[200px] text-sm"
+                  aria-label="Filtrar por proveedor"
+                >
+                  <SelectValue placeholder="Todos los proveedores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los proveedores</SelectItem>
+                  {proveedores.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
             <Button

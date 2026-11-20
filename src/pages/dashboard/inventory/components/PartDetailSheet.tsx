@@ -12,6 +12,7 @@ import {
 import { RichText } from "@/components/RichText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -193,9 +194,10 @@ export function PartDetailSheet({
                 Últimos movimientos de stock
               </h3>
               {movements === undefined ? (
-                <p className="text-xs text-muted-foreground">
-                  Cargando historial de movimientos...
-                </p>
+                <div className="space-y-2" aria-label="Cargando movimientos">
+                  <Skeleton className="h-12 rounded-lg" />
+                  <Skeleton className="h-12 rounded-lg" />
+                </div>
               ) : movements.length === 0 ? (
                 <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
                   <Boxes className="size-4 shrink-0" />

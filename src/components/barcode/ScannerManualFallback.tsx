@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ScannerManualFallbackProps } from "./types";
 
 export function ScannerManualFallback({
@@ -18,13 +19,13 @@ export function ScannerManualFallback({
         O introduce/pega el código manualmente o mediante lector USB:
       </label>
       <div className="flex gap-2">
-        <input
+        <Input
           id="manual-scan-input"
           type="text"
           value={manualCode}
           onChange={(e) => onManualCodeChange(e.target.value)}
           placeholder="Ej. EQ-CAM-0042 o REP-001..."
-          className="flex-1 h-9 px-3 rounded-lg border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary"
+          className="h-9 flex-1 bg-background"
         />
         <Button type="submit" size="sm" disabled={!manualCode.trim()}>
           Aceptar

@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { Search, ScanLine } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 
 export interface SearchInputProps {
@@ -22,7 +23,7 @@ export function SearchInput({
   return (
     <>
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <input
+      <Input
         ref={inputRef}
         type="search"
         value={query}
@@ -32,7 +33,7 @@ export function SearchInput({
         placeholder="Buscar por referencia o texto..."
         aria-label="Búsqueda global"
         aria-keyshortcuts="Control+K"
-        className="h-9 w-full rounded-lg border border-border/70 bg-card pl-9 pr-22 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring"
+        className="h-9 w-full bg-card pl-9 pr-22"
       />
       <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
         {query === "" && (

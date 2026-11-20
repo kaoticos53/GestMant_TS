@@ -1,4 +1,11 @@
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ESTADO_ENTREGA_OPTIONS, type EstadoEntregaFilter } from "./helpers";
 
 export interface HistoryFieldFiltersProps {
@@ -64,17 +71,26 @@ export function HistoryFieldFilters({
         <label className="text-xs font-medium text-muted-foreground">
           Estado de entrega:
         </label>
-        <select
+        <Select
           value={estado}
-          onChange={(e) => onChangeEstado(e.target.value as EstadoEntregaFilter)}
-          className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          onValueChange={(value) =>
+            onChangeEstado(value as EstadoEntregaFilter)
+          }
         >
-          {ESTADO_ENTREGA_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className="mt-1 h-8 w-full text-xs"
+            aria-label="Estado de entrega"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ESTADO_ENTREGA_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
