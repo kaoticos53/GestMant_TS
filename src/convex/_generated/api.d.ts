@@ -70,6 +70,7 @@ import type * as trash from "../trash.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
 import type * as weeklyReport from "../weeklyReport.js";
+import type * as workshopBackup from "../workshopBackup.js";
 import type * as workshopReset from "../workshopReset.js";
 
 import type {
@@ -141,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   uploads: typeof uploads;
   users: typeof users;
   weeklyReport: typeof weeklyReport;
+  workshopBackup: typeof workshopBackup;
   workshopReset: typeof workshopReset;
 }>;
 

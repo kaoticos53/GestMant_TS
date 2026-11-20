@@ -4,6 +4,7 @@ import {
   WorkshopDataHeader,
   WorkshopResetDialog,
 } from "./workshopData";
+import { WorkshopBackupSection } from "./workshopData/components/WorkshopBackupSection";
 
 export function WorkshopDataCard() {
   const {
@@ -34,6 +35,8 @@ export function WorkshopDataCard() {
         onSeedPurchasing={() => void handleSeedPurchasing()}
         onRequestReset={() => setConfirming(true)}
       />
+
+      <WorkshopBackupSection />
 
       <WorkshopResetDialog
         open={confirming}
