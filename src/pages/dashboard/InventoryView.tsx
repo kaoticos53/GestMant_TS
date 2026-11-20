@@ -15,6 +15,7 @@ import {
 } from "./inventory/components/InventoryEmptyState";
 import { InventoryTable } from "./inventory/components/InventoryTable";
 import { InventoryDeleteDialog } from "./inventory/components/InventoryDeleteDialog";
+import { PartDetailSheet } from "./inventory/components/PartDetailSheet";
 import { useInventoryState } from "./inventory/hooks/useInventoryState";
 import { partLabel as buildPartLabel } from "@/lib/labelGenerator";
 import type { PartDoc } from "./inventory/types";
@@ -29,6 +30,7 @@ export function InventoryView({
   initialLowStockOnly = false,
 }: InventoryViewProps) {
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
+  const [detailTarget, setDetailTarget] = useState<PartDoc | null>(null);
   const [movementsOpen, setMovementsOpen] = useState(false);
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
@@ -125,6 +127,7 @@ export function InventoryView({
             visibleParts={visible}
             canManage={canManage}
             catalogModels={catalogModels}
+            onOpenDetail={setDetailTarget}
             onQuickAdjust={handleQuickAdjust}
             onEdit={(part) => setFormTarget({ part })}
             onStockAdjust={setStockTarget}
@@ -168,6 +171,16 @@ export function InventoryView({
       <PrintLabelDialog
         label={labelTarget === null ? null : buildPartLabel(labelTarget, origin)}
         onClose={() => setLabelTarget(null)}
+      />
+
+      <PartDetailSheet
+        part={detailTarget}
+        canManage={canManage}
+        catalogModels={catalogModels}
+        onClose={() => setDetailTarget(null)}
+        onEdit={(part) => setFormTarget({ part })}
+        onStockAdjust={setStockTarget}
+        onPrintLabel={setLabelTarget}
       />
 
       {movementsOpen && (

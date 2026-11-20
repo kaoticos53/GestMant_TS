@@ -25,6 +25,7 @@ export interface InventoryTableProps {
   visibleParts: PartDoc[];
   canManage: boolean;
   catalogModels: EquipmentModelDoc[];
+  onOpenDetail: (part: PartDoc) => void;
   onQuickAdjust: (part: PartDoc, delta: number) => void;
   onEdit: (part: PartDoc) => void;
   onStockAdjust: (part: PartDoc) => void;
@@ -41,6 +42,7 @@ export function InventoryTable({
   visibleParts,
   canManage,
   catalogModels,
+  onOpenDetail,
   onQuickAdjust,
   onEdit,
   onStockAdjust,
@@ -130,6 +132,7 @@ export function InventoryTable({
                   part={part}
                   canManage={canManage}
                   catalogModels={catalogModels}
+                  onOpenDetail={onOpenDetail}
                   onQuickAdjust={onQuickAdjust}
                   onEdit={onEdit}
                   onStockAdjust={onStockAdjust}

@@ -1,4 +1,6 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import {
+  Eye,
   Minus,
   Pencil,
   Plus,
@@ -18,6 +20,7 @@ export interface PartRowProps {
   part: PartDoc;
   canManage: boolean;
   catalogModels: EquipmentModelDoc[];
+  onOpenDetail: (part: PartDoc) => void;
   onQuickAdjust: (part: PartDoc, delta: number) => void;
   onEdit: (part: PartDoc) => void;
   onStockAdjust: (part: PartDoc) => void;
@@ -34,6 +37,7 @@ export function PartRow({
   part,
   canManage,
   catalogModels,
+  onOpenDetail,
   onQuickAdjust,
   onEdit,
   onStockAdjust,
@@ -52,7 +56,9 @@ export function PartRow({
           {part.code}
           {part.partNumber ? ` · ${part.partNumber}` : ""}
         </span>
-        <span className="block truncate font-medium">{part.name}</span>
+        <DetailTitleButton onClick={() => onOpenDetail(part)}>
+          {part.name}
+        </DetailTitleButton>
         {part.description && (
           <RichText
             value={part.description}
@@ -105,6 +111,16 @@ export function PartRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-10 text-muted-foreground hover:text-foreground"
+            onClick={() => onOpenDetail(part)}
+            aria-label={`Ver detalle de ${part.code}`}
+          >
+            <Eye className="size-4" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
