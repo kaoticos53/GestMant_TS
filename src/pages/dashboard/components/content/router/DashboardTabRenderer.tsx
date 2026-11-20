@@ -1,6 +1,7 @@
 import type { DashboardTabRouterProps } from "../types";
 import { canAccessDashboardTab } from "./helpers";
 import {
+  AnalyticsView,
   ArchiveView,
   AuditView,
   EquipmentView,
@@ -51,6 +52,16 @@ export function DashboardTabRenderer({
   }
 
   switch (activeTab) {
+    case "analytics":
+      return (
+        <AnalyticsView
+          onOpenIncidents={() => goToTab("incidents")}
+          onOpenRequests={() => goToTab("requests")}
+          onOpenInventoryLowStock={() => goToTab("inventory")}
+          onOpenEquipment={() => goToTab("equipment")}
+        />
+      );
+
     case "profile":
       return (
         <ProfileView

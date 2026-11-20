@@ -38,6 +38,7 @@ export type TabAccessRule =
  * que estén todas las del menú (`NavId`) y ninguna de más.
  */
 export const TAB_ACCESS_POLICY = {
+  analytics: { kind: "staff" },
   profile: { kind: "open" },
   incidents: { kind: "open" },
   requests: { kind: "open" },

@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import {
+  buildWorkshopAnalytics,
+  type WorkshopAnalyticsResult,
+} from "../lib/analytics";
+import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   stockState,
   workWithoutTraceDays,
@@ -197,5 +201,99 @@ export const summary = query({
       purchasing: { pending: purchasing.length },
       staleWork,
     };
+  },
+});
+
+/** Métricas y series temporales para el dashboard analítico del taller. */
+export const analytics = query({
+  args: {},
+  handler: async (ctx): Promise<WorkshopAnalyticsResult | null> => {
+    const member = await memberOrNull(ctx);
+    if (!member) return null;
+
+    const [canIncidents, canRequests, canParts, canEquipment, canPurchasing] =
+      await Promise.all([
+        hasAnyCapability(ctx, member, ["viewIncidents", "manageIncidents"]),
+        hasAnyCapability(ctx, member, ["viewRequests", "decideRequests"]),
+        hasAnyCapability(ctx, member, ["viewInventory", "manageInventory"]),
+        hasAnyCapability(ctx, member, [
+          "viewEquipment",
+          "manageEquipment",
+          "lookupEquipment",
+        ]),
+        hasAnyCapability(ctx, member, ["viewPurchasing", "managePurchasing"]),
+      ]);
+
+    const [
+      rawIncidents,
+      rawRequests,
+      rawParts,
+      rawEquipment,
+      rawMovements,
+      rawPurchasing,
+    ] = await Promise.all([
+      canIncidents
+        ? ctx.db.query("incidents").collect()
+        : Promise.resolve([]),
+      canRequests
+        ? ctx.db.query("partRequests").collect()
+        : Promise.resolve([]),
+      canParts ? ctx.db.query("spareParts").collect() : Promise.resolve([]),
+      canEquipment ? ctx.db.query("equipment").collect() : Promise.resolve([]),
+      canParts
+        ? ctx.db
+            .query("stockMovements")
+            .withIndex("by_createdAt")
+            .order("desc")
+            .take(500)
+        : Promise.resolve([]),
+      canPurchasing
+        ? ctx.db
+            .query("purchaseRequests")
+            .withIndex("by_status", (q) =>
+              q.eq("status", PURCHASE_REQUEST_STATUSES.PENDING),
+            )
+            .collect()
+        : Promise.resolve([]),
+    ]);
+
+    return buildWorkshopAnalytics({
+      now: Date.now(),
+      incidents: rawIncidents
+        .filter((i) => i.deletedAt === undefined && i.archivedAt === undefined)
+        .map((i) => ({
+          status: i.status,
+          reportedAt: i.reportedAt,
+          closedAt: i.closedAt,
+          model: i.model,
+          equipmentKind: i.equipmentKind,
+        })),
+      requests: rawRequests
+        .filter((r) => r.deletedAt === undefined && r.archivedAt === undefined)
+        .map((r) => ({
+          status: r.status,
+          priority: r.priority,
+        })),
+      parts: rawParts.map((p) => ({
+        code: p.code,
+        name: p.name,
+        category: p.category,
+        stock: p.stock,
+        minStock: p.minStock,
+        unit: p.unit,
+      })),
+      equipment: rawEquipment.map((e) => ({
+        code: e.code,
+        name: e.name,
+        model: e.model,
+        decommissionDate: e.decommissionDate,
+      })),
+      stockMovements: rawMovements.map((m) => ({
+        kind: m.kind,
+        delta: m.delta,
+        createdAt: m.createdAt,
+      })),
+      pendingPurchaseRequests: rawPurchasing.length,
+    });
   },
 });

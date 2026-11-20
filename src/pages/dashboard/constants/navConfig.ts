@@ -2,6 +2,7 @@ import type { api } from "@/convex/_generated/api";
 import type { Capability } from "@/lib/permissions";
 import {
   Archive,
+  BarChart3,
   BookOpen,
   Boxes,
   CircleAlert,
@@ -28,6 +29,11 @@ export type WorkshopSummaryData = typeof api.dashboard.summary._returnType;
 
 /** Metadatos textuales de cabecera para cada módulo del panel de control. */
 export const MODULE_META: Record<NavId, { title: string; description: string }> = {
+  analytics: {
+    title: "Panel y gráficos",
+    description:
+      "Indicadores clave, evolución semanal, estado del inventario y equipos con más avisos.",
+  },
   incidents: {
     title: "Incidencias",
     description:
@@ -110,6 +116,16 @@ export function buildNavItems({
   canSeePurchasing,
 }: BuildNavItemsParams): NavItem[] {
   return [
+    ...(!isGuest
+      ? [
+          {
+            id: "analytics" as const,
+            label: "Panel y gráficos",
+            icon: BarChart3,
+            badge: 0,
+          },
+        ]
+      : []),
     ...(can("viewIncidents")
       ? [
           {
@@ -240,6 +256,7 @@ export function computeNavBadges(
   summary: WorkshopSummaryData | undefined,
 ): Record<NavId, number> {
   return {
+    analytics: 0,
     incidents: summary?.incidents.reported ?? 0,
     requests: summary?.requests.pending ?? 0,
     purchasing: summary?.purchasing.pending ?? 0,

@@ -12,6 +12,7 @@ import type { NavId } from "@/pages/dashboard/types";
  * precargar una pestaña acabaría bajando un archivo distinto del que monta.
  */
 const VIEW_LOADERS = {
+  analytics: () => import("../../../AnalyticsView"),
   archive: () => import("../../../ArchiveView"),
   audit: () => import("../../../AuditView"),
   equipment: () => import("../../../EquipmentView"),
@@ -39,6 +40,9 @@ export function prefetchTab(tab: NavId): void {
   void VIEW_LOADERS[tab]().catch(() => {});
 }
 
+export const AnalyticsView = lazy(() =>
+  VIEW_LOADERS.analytics().then((m) => ({ default: m.AnalyticsView })),
+);
 export const ArchiveView = lazy(() =>
   VIEW_LOADERS.archive().then((m) => ({ default: m.ArchiveView })),
 );

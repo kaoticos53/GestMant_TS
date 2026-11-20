@@ -4,6 +4,7 @@ import type { OpenArchivedDoc } from "./ArchiveView";
 import type { RequestFilterId } from "./requests/types";
 
 export type NavId =
+  | "analytics"
   | "incidents"
   | "requests"
   | "purchasing"
