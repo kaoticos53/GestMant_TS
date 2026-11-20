@@ -135,4 +135,44 @@ describe("Fase 1 TDD — Dominio puro de IA (src/lib/ai)", () => {
     if (!parsed.ok) return;
     expect(parsed.value.citedReferences).toEqual(["INC-0014"]);
   });
+
+  test("parseEquipmentLabelResponse extrae technicalDetails y formatLabelDescription genera la descripción", async () => {
+    const { formatLabelDescription, parseEquipmentLabelResponse } = await import(
+      "@/lib/ai"
+    );
+    const parsed = parseEquipmentLabelResponse(
+      JSON.stringify({
+        brand: "SL Power",
+        model: "MW155RA2400F02",
+        serialNumber: null,
+        equipmentKind: "Fuente de alimentación médica",
+        technicalDetails: ["Input: 100-240V~, 50-60Hz", "Output: +24V 5.0A"],
+        confidence: "high",
+        alternatives: [],
+        warnings: ["Sin número de serie visible"],
+      }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.technicalDetails).toEqual([
+      "Input: 100-240V~, 50-60Hz",
+      "Output: +24V 5.0A",
+    ]);
+    const description = formatLabelDescription(parsed.value);
+    expect(description).toContain("Tipo de equipo: Fuente de alimentación médica");
+    expect(description).toContain("- Input: 100-240V~, 50-60Hz");
+    expect(description).toContain("- Output: +24V 5.0A");
+  });
+
+  test("parseWorkshopQaResponse acepta Markdown plano tras tool calling y extrae citas válidas", async () => {
+    const { parseWorkshopQaResponse } = await import("@/lib/ai");
+    const parsed = parseWorkshopQaResponse(
+      "El repuesto **AUD-POP01** es compatible con **EQ-007** (no con FAKE-999).",
+      new Set(["AUD-POP01", "EQ-007"]),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.answer).toContain("AUD-POP01");
+    expect(parsed.value.citedReferences).toEqual(["AUD-POP01", "EQ-007"]);
+  });
 });

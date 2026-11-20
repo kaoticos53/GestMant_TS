@@ -1,5 +1,14 @@
 import { api } from "@/convex/_generated/api";
-import type { AiSettingsPublicView } from "@/lib/ai";
+import {
+  AI_MAX_CALLS_PER_USER_HOUR,
+  ALL_AI_TOOL_MODULES,
+  DEFAULT_DEEPSEEK_BASE_URL,
+  DEFAULT_DEEPSEEK_CHAT_MODEL,
+  DEFAULT_DEEPSEEK_VISION_MODEL,
+  type AiSettingsPublicView,
+  type AiTasksEnabledConfig,
+  type AiToolModule,
+} from "@/lib/ai";
 import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useMutation } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,15 +21,27 @@ export interface AiFormData {
   chatModel: string;
   apiKey: string;
   clearApiKey: boolean;
+  tasks: AiTasksEnabledConfig;
+  rateLimitPerHour: number;
+  allowedRoles: string[];
+  enabledModules: AiToolModule[];
 }
 
 export const INITIAL_AI_FORM_DATA: AiFormData = {
   enabled: false,
-  baseUrl: "https://api.deepseek.com",
-  visionModel: "deepseek-chat",
-  chatModel: "deepseek-chat",
+  baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
+  visionModel: DEFAULT_DEEPSEEK_VISION_MODEL,
+  chatModel: DEFAULT_DEEPSEEK_CHAT_MODEL,
   apiKey: "",
   clearApiKey: false,
+  tasks: {
+    labelScanner: true,
+    incidentQa: true,
+    workshopChat: true,
+  },
+  rateLimitPerHour: AI_MAX_CALLS_PER_USER_HOUR,
+  allowedRoles: [],
+  enabledModules: [...ALL_AI_TOOL_MODULES],
 };
 
 export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
@@ -42,6 +63,12 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
       chatModel: settings.chatModel,
       apiKey: "",
       clearApiKey: false,
+      tasks: settings.tasks ?? INITIAL_AI_FORM_DATA.tasks,
+      rateLimitPerHour:
+        settings.rateLimitPerHour ?? INITIAL_AI_FORM_DATA.rateLimitPerHour,
+      allowedRoles: settings.allowedRoles ?? [],
+      enabledModules:
+        settings.enabledModules ?? [...ALL_AI_TOOL_MODULES],
     });
   }, [settings]);
 
@@ -51,11 +78,16 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
       const trimmedKey = formData.apiKey.trim();
       await save({
         enabled: formData.enabled,
-        baseUrl: formData.baseUrl.trim() || "https://api.deepseek.com",
-        visionModel: formData.visionModel.trim() || "deepseek-chat",
-        chatModel: formData.chatModel.trim() || "deepseek-chat",
+        baseUrl: formData.baseUrl.trim() || DEFAULT_DEEPSEEK_BASE_URL,
+        visionModel:
+          formData.visionModel.trim() || DEFAULT_DEEPSEEK_VISION_MODEL,
+        chatModel: formData.chatModel.trim() || DEFAULT_DEEPSEEK_CHAT_MODEL,
         ...(trimmedKey ? { apiKey: trimmedKey } : {}),
         clearApiKey: formData.clearApiKey,
+        tasks: formData.tasks,
+        rateLimitPerHour: formData.rateLimitPerHour,
+        allowedRoles: formData.allowedRoles,
+        enabledModules: formData.enabledModules,
       });
       setFormData((prev) => ({
         ...prev,

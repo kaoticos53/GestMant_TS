@@ -10,6 +10,7 @@ import {
   purchaseRequestReceivedStatus,
 } from "../../lib/purchaseFlow";
 import { nextRequestStatus } from "../../lib/requestFlow";
+import { recordStockMovement } from "../_inventory/movements";
 import { PURCHASE_ORDER_STATUSES, type DeliveryNote } from "../schema";
 
 /** Toda la gestión de compras requiere sesión iniciada. */
@@ -172,9 +173,22 @@ export async function applyReception(
           `El repuesto ${line.code} ya no está en el catálogo: no se puede dar entrada.`,
         );
       }
+      const nextStock = part.stock + cantidad;
       await ctx.db.patch(part._id, {
-        stock: part.stock + cantidad,
+        stock: nextStock,
         updatedAt: now,
+      });
+      await recordStockMovement(ctx, {
+        sparePartId: part._id,
+        partCode: part.code,
+        partName: part.name,
+        kind: "purchase_reception",
+        previousStock: part.stock,
+        nextStock,
+        reference: order.reference,
+        reason: `Recepción de proveedor ${order.supplier}`,
+        actorName: args.receivedBy,
+        createdAt: now,
       });
       received.push({
         sparePartId: part._id,

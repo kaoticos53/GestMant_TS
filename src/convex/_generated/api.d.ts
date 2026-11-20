@@ -9,12 +9,14 @@
  */
 
 import type * as _ai_client from "../_ai/client.js";
+import type * as _ai_workshopTools from "../_ai/workshopTools.js";
 import type * as _auth_secretCrypto from "../_auth/secretCrypto.js";
 import type * as _auth_secureMutation from "../_auth/secureMutation.js";
 import type * as _incidents_documents from "../_incidents/documents.js";
 import type * as _incidents_helpers from "../_incidents/helpers.js";
 import type * as _incidents_notes from "../_incidents/notes.js";
 import type * as _incidents_trash from "../_incidents/trash.js";
+import type * as _inventory_movements from "../_inventory/movements.js";
 import type * as _mail_deliver from "../_mail/deliver.js";
 import type * as _partRequests_helpers from "../_partRequests/helpers.js";
 import type * as _partRequests_incidentSync from "../_partRequests/incidentSync.js";
@@ -35,6 +37,7 @@ import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as equipment from "../equipment.js";
 import type * as equipmentModels from "../equipmentModels.js";
+import type * as equipmentMovements from "../equipmentMovements.js";
 import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as humanChallenge from "../humanChallenge.js";
@@ -61,6 +64,7 @@ import type * as reportUploads from "../reportUploads.js";
 import type * as seed from "../seed.js";
 import type * as seedPurchasing from "../seedPurchasing.js";
 import type * as spareParts from "../spareParts.js";
+import type * as stockMovements from "../stockMovements.js";
 import type * as storageCleanup from "../storageCleanup.js";
 import type * as trash from "../trash.js";
 import type * as uploads from "../uploads.js";
@@ -76,12 +80,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_ai/client": typeof _ai_client;
+  "_ai/workshopTools": typeof _ai_workshopTools;
   "_auth/secretCrypto": typeof _auth_secretCrypto;
   "_auth/secureMutation": typeof _auth_secureMutation;
   "_incidents/documents": typeof _incidents_documents;
   "_incidents/helpers": typeof _incidents_helpers;
   "_incidents/notes": typeof _incidents_notes;
   "_incidents/trash": typeof _incidents_trash;
+  "_inventory/movements": typeof _inventory_movements;
   "_mail/deliver": typeof _mail_deliver;
   "_partRequests/helpers": typeof _partRequests_helpers;
   "_partRequests/incidentSync": typeof _partRequests_incidentSync;
@@ -102,6 +108,7 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   equipment: typeof equipment;
   equipmentModels: typeof equipmentModels;
+  equipmentMovements: typeof equipmentMovements;
   health: typeof health;
   http: typeof http;
   humanChallenge: typeof humanChallenge;
@@ -128,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   seed: typeof seed;
   seedPurchasing: typeof seedPurchasing;
   spareParts: typeof spareParts;
+  stockMovements: typeof stockMovements;
   storageCleanup: typeof storageCleanup;
   trash: typeof trash;
   uploads: typeof uploads;

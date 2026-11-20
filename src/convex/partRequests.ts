@@ -10,6 +10,7 @@ import {
   query,
 } from "./_generated/server";
 import { memberOrNull } from "./permissions";
+import { recordStockMovement } from "./_inventory/movements";
 import { freeReference } from "./references";
 import {
   canEditRequest,
@@ -843,18 +844,35 @@ export const approve = mutation({
       }
 
       const now = Date.now();
+      const approverName = await actorName(ctx, userId);
       for (let i = 0; i < request.lines.length; i++) {
         const part = parts[i];
+        const nextStock = part.stock - request.lines[i].quantity;
         await ctx.db.patch(part._id, {
-          stock: part.stock - request.lines[i].quantity,
+          stock: nextStock,
           updatedAt: now,
+        });
+        await recordStockMovement(ctx, {
+          sparePartId: part._id,
+          partCode: part.code,
+          partName: part.name,
+          kind: "request_reserve",
+          previousStock: part.stock,
+          nextStock,
+          reference: request.reference,
+          reason: request.equipment
+            ? `Petición ${request.reference} (${request.equipment})`
+            : `Petición ${request.reference}`,
+          actorId: userId,
+          actorName: approverName,
+          createdAt: now,
         });
       }
 
       const reason = decisionReason(args.note);
       await ctx.db.patch(args.requestId, {
         status: approved,
-        decidedBy: await actorName(ctx, userId),
+        decidedBy: approverName,
         decidedAt: now,
         ...(reason ? { decisionNote: reason } : {}),
       });

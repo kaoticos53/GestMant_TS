@@ -3,6 +3,7 @@ import type {
   CatalogModelHint,
   EquipmentLabelExtraction,
   IncidentQaAnswer,
+  WorkshopQaAnswer,
 } from "./types";
 
 const LABEL_PREFIX_RE =
@@ -102,6 +103,7 @@ export function parseEquipmentLabelResponse(
   const alternatives = cleanStringArray(obj.alternatives).filter(
     (alt) => alt.toLowerCase() !== (model ?? "").toLowerCase(),
   );
+  const technicalDetails = cleanStringArray(obj.technicalDetails);
   const warnings = cleanStringArray(obj.warnings);
 
   const confidence: AiConfidence = isConfidence(obj.confidence)
@@ -117,12 +119,35 @@ export function parseEquipmentLabelResponse(
       ...(model !== undefined ? { model } : {}),
       ...(serialNumber !== undefined ? { serialNumber } : {}),
       ...(equipmentKind !== undefined ? { equipmentKind } : {}),
+      ...(technicalDetails.length > 0 ? { technicalDetails } : {}),
       confidence,
       ...(evidence !== undefined ? { evidence } : {}),
       alternatives,
       warnings,
     },
   };
+}
+
+/**
+ * Formatea el tipo de equipo y los datos técnicos variados extraídos de una
+ * etiqueta para rellenar el campo de descripción del equipo.
+ */
+export function formatLabelDescription(source: {
+  equipmentKind?: string;
+  technicalDetails?: readonly string[];
+}): string | undefined {
+  const lines: string[] = [];
+  const kind = source.equipmentKind?.trim();
+  if (kind) {
+    lines.push(`Tipo de equipo: ${kind}`);
+  }
+  for (const detail of source.technicalDetails ?? []) {
+    const trimmed = detail.trim();
+    if (trimmed) {
+      lines.push(`- ${trimmed}`);
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
 /** Busca coincidencia normalizada entre el modelo extraído/alternativas y el catálogo del taller. */
@@ -145,16 +170,16 @@ export function matchCatalogEquipmentModel(
   return undefined;
 }
 
-/** Valida la respuesta del asistente de incidencias filtrando referencias existentes. */
-export function parseIncidentQaResponse(
+function parseCitedQaResponse(
   raw: string,
   validReferences: ReadonlySet<string>,
+  invalidMessage: string,
 ): { ok: true; value: IncidentQaAnswer } | { ok: false; error: string } {
   const obj = extractJsonObject(raw);
   if (obj === null || typeof obj.answer !== "string") {
     return {
       ok: false,
-      error: "No se pudo interpretar la respuesta del asistente de incidencias.",
+      error: invalidMessage,
     };
   }
   const answer = obj.answer.trim();
@@ -165,4 +190,58 @@ export function parseIncidentQaResponse(
     validReferences.has(ref),
   );
   return { ok: true, value: { answer, citedReferences } };
+}
+
+/** Valida la respuesta del asistente de incidencias filtrando referencias existentes. */
+export function parseIncidentQaResponse(
+  raw: string,
+  validReferences: ReadonlySet<string>,
+): { ok: true; value: IncidentQaAnswer } | { ok: false; error: string } {
+  return parseCitedQaResponse(
+    raw,
+    validReferences,
+    "No se pudo interpretar la respuesta del asistente de incidencias.",
+  );
+}
+
+function extractMentionedReferences(
+  text: string,
+  validReferences: ReadonlySet<string>,
+): string[] {
+  const found: string[] = [];
+  for (const ref of validReferences) {
+    if (ref.length >= 3 && text.includes(ref)) {
+      found.push(ref);
+    }
+  }
+  return found;
+}
+
+/** Valida la respuesta del asistente integral del taller filtrando referencias reales. */
+export function parseWorkshopQaResponse(
+  raw: string,
+  validReferences: ReadonlySet<string>,
+): { ok: true; value: WorkshopQaAnswer } | { ok: false; error: string } {
+  const jsonAttempt = parseCitedQaResponse(
+    raw,
+    validReferences,
+    "No se pudo interpretar la respuesta del asistente del taller.",
+  );
+  if (jsonAttempt.ok) {
+    return jsonAttempt;
+  }
+
+  // Tras usar Tool Calling algunos modelos responden en Markdown plano en lugar de JSON.
+  const plain = raw.trim();
+  if (plain !== "") {
+    return {
+      ok: true,
+      value: {
+        answer: plain,
+        citedReferences: extractMentionedReferences(plain, validReferences),
+      },
+    };
+  }
+
+  return jsonAttempt;
 }

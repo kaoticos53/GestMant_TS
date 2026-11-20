@@ -123,4 +123,40 @@ describe("Fase 2 TDD — aiSettings (configuración cifrada de DeepSeek)", () =>
     const probe = await admin.action(api.aiSettings.testConnection, {});
     expect(probe.ok).toBe(true);
   });
+
+  test("permite guardar permisos por rol, módulos habilitados, cuota y prompts personalizados", async () => {
+    const { admin } = await setup();
+
+    const saved = await admin.mutation(api.aiSettings.save, {
+      enabled: true,
+      baseUrl: "https://api.deepseek.com/v1",
+      visionModel: "deepseek-flash",
+      chatModel: "deepseek-chat",
+      tasks: {
+        labelScanner: true,
+        incidentQa: false,
+        workshopChat: true,
+      },
+      rateLimitPerHour: 25,
+      allowedRoles: ["admin", "manager"],
+      enabledModules: ["equipment", "incidents"],
+      taskParams: {
+        label_scanner: { temperature: 0.1, maxTokens: 1600 },
+        incident_qa: { temperature: 0.2, maxTokens: 900 },
+        workshop_chat: {
+          temperature: 0.3,
+          maxTokens: 1400,
+          customPrompt: "Responde breve a {{usuario_nombre}}.",
+        },
+      },
+    });
+
+    expect(saved.rateLimitPerHour).toBe(25);
+    expect(saved.allowedRoles).toEqual(["admin", "manager"]);
+    expect(saved.enabledModules).toEqual(["equipment", "incidents"]);
+    expect(saved.tasks?.incidentQa).toBe(false);
+    expect(saved.taskParams?.workshop_chat.customPrompt).toBe(
+      "Responde breve a {{usuario_nombre}}.",
+    );
+  });
 });

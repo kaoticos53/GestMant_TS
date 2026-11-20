@@ -26,6 +26,7 @@ export function EquipmentLabelScanner({
     canScan,
     isMobile,
     scanning,
+    scanError,
     fileInputRef,
     imageDataUrl,
     extraction,
@@ -78,6 +79,12 @@ export function EquipmentLabelScanner({
           {scanning ? "Analizando etiqueta..." : "Escanear etiqueta (IA)"}
         </Button>
       </div>
+
+      {scanError && (
+        <p role="alert" className="text-xs text-destructive">
+          {scanError}
+        </p>
+      )}
 
       {isMobile ? (
         <LabelInlineBanner

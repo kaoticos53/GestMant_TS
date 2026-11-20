@@ -17,6 +17,9 @@
 .PARAMETER Check
   Solo comprueba la salud del entorno y los servicios sin arrancar nada nuevo.
 
+.PARAMETER Stop
+  Detiene el servidor Vite y el observador de Convex iniciados en segundo plano.
+
 .PARAMETER NoOpen
   No abre automáticamente el navegador al completar el arranque.
 
@@ -34,6 +37,10 @@
 .EXAMPLE
   .\start.ps1 -Check
   Verifica el estado de los servicios locales.
+
+.EXAMPLE
+  .\start.ps1 -Stop
+  Detiene el servidor Vite y el observador de Convex en segundo plano.
 #>
 
 [CmdletBinding()]
@@ -41,6 +48,7 @@ param(
   [switch]$Repair,
   [switch]$Fresh,
   [switch]$Check,
+  [switch]$Stop,
   [switch]$NoOpen,
   [switch]$TakeOver
 )
@@ -115,6 +123,10 @@ if ($Fresh) {
 if ($Check) {
   $nodeArgs += "--check"
   Write-Host "Modo: Comprobación de salud del entorno" -ForegroundColor Magenta
+}
+if ($Stop) {
+  $nodeArgs += "--stop"
+  Write-Host "Modo: Detención de servicios de desarrollo" -ForegroundColor Magenta
 }
 if ($NoOpen) {
   $nodeArgs += "--no-open"

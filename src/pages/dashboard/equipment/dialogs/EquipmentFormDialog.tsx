@@ -62,16 +62,26 @@ export function EquipmentFormDialog(props: EquipmentFormDialogProps) {
     name: string;
     model: string;
     serialNumber: string;
+    description: string;
   } | null>(null);
 
   const handleApplyLabel = (fields: AppliedLabelFields) => {
     if (!undoSnapshotRef.current) {
-      undoSnapshotRef.current = { brand, name, model, serialNumber };
+      undoSnapshotRef.current = {
+        brand,
+        name,
+        model,
+        serialNumber,
+        description,
+      };
     }
     if (fields.brand) setBrand(fields.brand);
     if (fields.equipmentKind && !name.trim()) setName(fields.equipmentKind);
     if (fields.model) handleModelChange(fields.model);
     if (fields.serialNumber) setSerialNumber(fields.serialNumber);
+    if (fields.description && !description.trim()) {
+      setDescription(fields.description);
+    }
   };
 
   const handleUndoLabel = () => {
@@ -81,6 +91,7 @@ export function EquipmentFormDialog(props: EquipmentFormDialogProps) {
     setName(snap.name);
     handleModelChange(snap.model);
     setSerialNumber(snap.serialNumber);
+    setDescription(snap.description);
     undoSnapshotRef.current = null;
   };
 

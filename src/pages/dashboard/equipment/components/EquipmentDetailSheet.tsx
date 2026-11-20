@@ -10,6 +10,7 @@ import { DeleteInterventionDialog } from "./detail/DeleteInterventionDialog";
 import { EquipmentDataSection } from "./detail/EquipmentDataSection";
 import { EquipmentMaintenanceSection } from "./detail/EquipmentMaintenanceSection";
 import { EquipmentManualsSection } from "./detail/EquipmentManualsSection";
+import { EquipmentMovementsSection } from "./detail/EquipmentMovementsSection";
 import { EquipmentPartsSection } from "./detail/EquipmentPartsSection";
 import { EquipmentRequestsSection } from "./detail/EquipmentRequestsSection";
 import { EquipmentSheetHeader } from "./detail/EquipmentSheetHeader";
@@ -105,6 +106,8 @@ export function EquipmentDetailSheet({
             shownRequests={shownRequests}
             onViewRequests={onViewRequests}
           />
+
+          <EquipmentMovementsSection equipmentId={item._id} />
         </div>
 
         {formTarget && (

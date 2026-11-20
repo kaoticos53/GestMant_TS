@@ -1,4 +1,5 @@
 import logo from "@/assets/logo.svg";
+import { WorkshopAiChatButton } from "@/components/ai/WorkshopAiChatButton";
 import { MessagesCenter } from "@/components/MessagesCenter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ export function DashboardHeader({
             {roleBadge}
             <NotificationBell onOpen={onOpenNotification} />
             <MessagesCenter canSend={canSendMessages} />
+            <WorkshopAiChatButton />
           </div>
         </div>
       )}
@@ -94,6 +96,7 @@ export function DashboardHeader({
           <div className="flex shrink-0 items-center gap-2">
             <NotificationBell onOpen={onOpenNotification} />
             <MessagesCenter canSend={canSendMessages} />
+            <WorkshopAiChatButton />
             <span className="hidden sm:block">{roleBadge}</span>
             <button
               type="button"

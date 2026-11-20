@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import type { AiConfidence, EquipmentLabelExtraction } from "@/lib/ai";
 import { Check, RotateCw, ZoomIn, ZoomOut } from "lucide-react";
 import { useState } from "react";
@@ -213,6 +214,21 @@ export function LabelReviewDialog({
                   value={draft.equipmentKind ?? ""}
                   onChange={(e) =>
                     onDraftChange({ ...draft, equipmentKind: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <Label htmlFor="ai-review-description">
+                  Descripción y datos varios
+                </Label>
+                <Textarea
+                  id="ai-review-description"
+                  rows={3}
+                  className="text-xs"
+                  value={draft.description ?? ""}
+                  onChange={(e) =>
+                    onDraftChange({ ...draft, description: e.target.value })
                   }
                 />
               </div>

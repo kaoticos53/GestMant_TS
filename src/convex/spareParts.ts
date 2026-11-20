@@ -4,6 +4,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
 import { secureMutation } from "./_auth/secureMutation";
+import { recordStockMovement } from "./_inventory/movements";
 import type { IdentityIssue } from "./permissions";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 
@@ -202,7 +203,7 @@ export const create = mutation({
       denyMessage: PART_DENY,
     },
     createPartArgs,
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
         const code = args.code.trim().toUpperCase();
       const name = args.name.trim();
       if (!code) throw new ConvexError("El código del repuesto es obligatorio.");
@@ -222,13 +223,14 @@ export const create = mutation({
       // plano —de las de antes— se guarda tal cual se escribió.
       const description = richDocToStore(args.description);
       const now = Date.now();
-      return await ctx.db.insert("spareParts", {
+      const initialStock = Math.max(0, Math.floor(args.stock));
+      const id = await ctx.db.insert("spareParts", {
         code,
         name,
         ...(description ? { description } : {}),
         category: args.category,
         unit: args.unit.trim() || "ud",
-        stock: Math.max(0, Math.floor(args.stock)),
+        stock: initialStock,
         minStock: Math.max(0, Math.floor(args.minStock)),
         ...(args.location?.trim() ? { location: args.location.trim().toUpperCase() } : {}),
         ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
@@ -241,6 +243,18 @@ export const create = mutation({
         createdAt: now,
         updatedAt: now,
       });
+      await recordStockMovement(ctx, {
+        sparePartId: id,
+        partCode: code,
+        partName: name,
+        kind: "initial",
+        previousStock: 0,
+        nextStock: initialStock,
+        actorId: actor._id,
+        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        createdAt: now,
+      });
+      return id;
     },
   ),
 });
@@ -272,7 +286,7 @@ export const update = mutation({
       denyMessage: PART_DENY,
     },
     updatePartArgs,
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
         const part = await ctx.db.get(args.id);
       if (!part) throw new ConvexError("El repuesto ya no existe.");
 
@@ -327,7 +341,22 @@ export const update = mutation({
         patch.unitPrice = args.unitPrice;
       }
 
-      await ctx.db.patch(args.id, { ...patch, updatedAt: Date.now() });
+      const now = Date.now();
+      await ctx.db.patch(args.id, { ...patch, updatedAt: now });
+      if (patch.stock !== undefined && patch.stock !== part.stock) {
+        await recordStockMovement(ctx, {
+          sparePartId: part._id,
+          partCode: patch.code ?? part.code,
+          partName: patch.name ?? part.name,
+          kind: "manual_adjust",
+          previousStock: part.stock,
+          nextStock: patch.stock,
+          reason: "Edición de ficha de repuesto",
+          actorId: actor._id,
+          actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+          createdAt: now,
+        });
+      }
     },
   ),
 });
@@ -347,12 +376,25 @@ export const adjustStock = mutation({
       denyMessage: PART_DENY,
     },
     adjustStockArgs,
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
         const part = await ctx.db.get(args.id);
       if (!part) throw new ConvexError("El repuesto ya no existe.");
       const next = Math.max(0, part.stock + Math.trunc(args.delta));
       if (next === part.stock) return;
-      await ctx.db.patch(args.id, { stock: next, updatedAt: Date.now() });
+      const now = Date.now();
+      await ctx.db.patch(args.id, { stock: next, updatedAt: now });
+      await recordStockMovement(ctx, {
+        sparePartId: part._id,
+        partCode: part.code,
+        partName: part.name,
+        kind: "manual_adjust",
+        previousStock: part.stock,
+        nextStock: next,
+        reason: "Ajuste rápido desde inventario",
+        actorId: actor._id,
+        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        createdAt: now,
+      });
     },
   ),
 });

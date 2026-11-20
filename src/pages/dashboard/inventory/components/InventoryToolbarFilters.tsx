@@ -1,4 +1,4 @@
-import { CircleAlert, FileDown, Plus } from "lucide-react";
+import { CircleAlert, FileDown, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -27,6 +27,7 @@ export interface InventoryToolbarActionsProps {
   filteredCount: number;
   onExport: () => void;
   onNewPart: () => void;
+  onOpenMovements?: () => void;
 }
 
 export function InventoryToolbarFilters({
@@ -102,9 +103,22 @@ export function InventoryToolbarActions({
   filteredCount,
   onExport,
   onNewPart,
+  onOpenMovements,
 }: InventoryToolbarActionsProps) {
   return (
     <>
+      {onOpenMovements && (
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={onOpenMovements}
+          title="Ver historial de movimientos de stock del almacén"
+        >
+          <History className="size-4" />
+          Movimientos
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"

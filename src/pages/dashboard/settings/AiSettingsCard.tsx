@@ -12,12 +12,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
-import type { AiKeySource } from "@/lib/ai";
+import {
+  AI_TOOL_MODULE_LABELS,
+  ALL_AI_TOOL_MODULES,
+  type AiKeySource,
+  type AiToolModule,
+} from "@/lib/ai";
 import { useQuery } from "convex/react";
 import {
   CheckCircle2,
   KeyRound,
   Loader2,
+  ShieldCheck,
   Sparkles,
   XCircle,
 } from "lucide-react";
@@ -37,6 +43,12 @@ const KEY_SOURCE_LABELS: Record<AiKeySource, { label: string; tone: string }> = 
     tone: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60",
   },
 };
+
+const ROLE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "admin", label: "Administrador" },
+  { key: "manager", label: "Responsable" },
+  { key: "technician", label: "Técnico" },
+];
 
 export function AiSettingsCard() {
   const settings = useQuery(api.aiSettings.settings);
@@ -59,6 +71,24 @@ export function AiSettingsCard() {
 
   const sourceMeta = KEY_SOURCE_LABELS[settings.keySource];
 
+  const toggleRole = (roleKey: string, checked: boolean) => {
+    setFormData((prev) => {
+      const next = checked
+        ? [...new Set([...prev.allowedRoles, roleKey])]
+        : prev.allowedRoles.filter((r) => r !== roleKey);
+      return { ...prev, allowedRoles: next };
+    });
+  };
+
+  const toggleModule = (mod: AiToolModule, checked: boolean) => {
+    setFormData((prev) => {
+      const next = checked
+        ? [...new Set([...prev.enabledModules, mod])]
+        : prev.enabledModules.filter((m) => m !== mod);
+      return { ...prev, enabledModules: next };
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -69,8 +99,8 @@ export function AiSettingsCard() {
               Inteligencia artificial (DeepSeek)
             </CardTitle>
             <CardDescription className="mt-1">
-              Reconocimiento de etiquetas de equipos y asistente de incidencias
-              solo para miembros autenticados del taller.
+              Reconocimiento de etiquetas de equipos, asistente de incidencias y
+              chat global del taller solo para miembros autenticados.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -88,7 +118,7 @@ export function AiSettingsCard() {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/30 p-3">
           <div className="flex items-center gap-2 text-sm">
             <KeyRound className="size-4 text-muted-foreground" />
@@ -155,7 +185,7 @@ export function AiSettingsCard() {
               onChange={(e) =>
                 setFormData((prev) => ({ ...prev, baseUrl: e.target.value }))
               }
-              placeholder="https://api.deepseek.com"
+              placeholder="https://api.deepseek.com/v1"
             />
           </div>
 
@@ -170,8 +200,12 @@ export function AiSettingsCard() {
                   visionModel: e.target.value,
                 }))
               }
-              placeholder="deepseek-chat"
+              placeholder="deepseek-flash"
             />
+            <p className="text-[11px] text-muted-foreground">
+              Para leer etiquetas con imagen en DeepSeek usa{" "}
+              <code>deepseek-flash</code>.
+            </p>
           </div>
 
           <div className="space-y-1.5">
@@ -184,6 +218,116 @@ export function AiSettingsCard() {
               }
               placeholder="deepseek-chat"
             />
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-lg border p-4">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ShieldCheck className="size-4 text-primary" />
+            <span>Capacidades, cuota y permisos de acceso</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={formData.tasks.labelScanner}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tasks: { ...prev.tasks, labelScanner: checked === true },
+                  }))
+                }
+              />
+              Escáner de etiquetas
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={formData.tasks.incidentQa}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tasks: { ...prev.tasks, incidentQa: checked === true },
+                  }))
+                }
+              />
+              Asistente de incidencias
+            </label>
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={formData.tasks.workshopChat}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tasks: { ...prev.tasks, workshopChat: checked === true },
+                  }))
+                }
+              />
+              Chat global del taller
+            </label>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-rate-limit">
+                Límite de consultas por usuario / hora
+              </Label>
+              <Input
+                id="ai-rate-limit"
+                type="number"
+                min={1}
+                max={500}
+                value={formData.rateLimitPerHour}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    rateLimitPerHour: Number(e.target.value) || 40,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Roles con acceso a la IA (vacío = todos activos)</Label>
+              <div className="flex flex-wrap gap-3 pt-1">
+                {ROLE_OPTIONS.map((role) => (
+                  <label
+                    key={role.key}
+                    className="flex items-center gap-1.5 text-xs"
+                  >
+                    <Checkbox
+                      checked={formData.allowedRoles.includes(role.key)}
+                      onCheckedChange={(checked) =>
+                        toggleRole(role.key, checked === true)
+                      }
+                    />
+                    {role.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>
+              Módulos consultables por las herramientas del asistente (siempre
+              filtrados además por el permiso real del usuario)
+            </Label>
+            <div className="grid gap-2 pt-1 sm:grid-cols-2 lg:grid-cols-3">
+              {ALL_AI_TOOL_MODULES.map((mod) => (
+                <label
+                  key={mod}
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                  <Checkbox
+                    checked={formData.enabledModules.includes(mod)}
+                    onCheckedChange={(checked) =>
+                      toggleModule(mod, checked === true)
+                    }
+                  />
+                  {AI_TOOL_MODULE_LABELS[mod]}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 

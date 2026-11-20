@@ -1,6 +1,9 @@
 import { api } from "@/convex/_generated/api";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { EquipmentLabelExtraction } from "@/lib/ai";
+import {
+  formatLabelDescription,
+  type EquipmentLabelExtraction,
+} from "@/lib/ai";
 import { compressImageFile } from "@/lib/imageCompress";
 import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
@@ -13,6 +16,7 @@ export interface AppliedLabelFields {
   model?: string;
   serialNumber?: string;
   equipmentKind?: string;
+  description?: string;
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -35,14 +39,21 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function toAppliedFields(
   source: Pick<
     EquipmentLabelExtraction,
-    "brand" | "model" | "serialNumber" | "equipmentKind"
-  >,
+    "brand" | "model" | "serialNumber" | "equipmentKind" | "technicalDetails"
+  > & { description?: string },
 ): AppliedLabelFields {
+  const description =
+    source.description?.trim() ||
+    formatLabelDescription({
+      equipmentKind: source.equipmentKind,
+      technicalDetails: source.technicalDetails,
+    });
   return {
     brand: source.brand?.trim() || undefined,
     model: source.model?.trim() || undefined,
     serialNumber: source.serialNumber?.trim() || undefined,
     equipmentKind: source.equipmentKind?.trim() || undefined,
+    description,
   };
 }
 
@@ -64,6 +75,7 @@ export function useEquipmentLabelScanner({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [extraction, setExtraction] = useState<EquipmentLabelExtraction | null>(
     null,
@@ -82,6 +94,7 @@ export function useEquipmentLabelScanner({
     async (file: File | undefined) => {
       if (!file || !canScan) return;
       setScanning(true);
+      setScanError(null);
       try {
         const [compressed, barcodes] = await Promise.all([
           compressImageFile(file),
@@ -107,7 +120,9 @@ export function useEquipmentLabelScanner({
           setBannerOpen(false);
         }
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        const message = getErrorMessage(error);
+        setScanError(message);
+        toast.error(message);
       } finally {
         setScanning(false);
         if (fileInputRef.current) {
@@ -147,6 +162,7 @@ export function useEquipmentLabelScanner({
     canScan,
     isMobile,
     scanning,
+    scanError,
     fileInputRef,
     imageDataUrl,
     extraction,

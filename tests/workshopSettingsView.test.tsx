@@ -58,6 +58,9 @@ vi.mock("@/pages/dashboard/settings/WorkshopDataCard", () => ({
 vi.mock("@/pages/dashboard/settings/AiSettingsCard", () => ({
   AiSettingsCard: () => <div data-testid="card-ai-settings">AiSettingsCard</div>,
 }));
+vi.mock("@/pages/dashboard/settings/AiPromptsCard", () => ({
+  AiPromptsCard: () => <div data-testid="card-ai-prompts">AiPromptsCard</div>,
+}));
 
 import { WorkshopSettingsView } from "@/pages/dashboard/WorkshopSettingsView";
 

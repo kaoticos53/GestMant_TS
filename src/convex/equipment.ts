@@ -4,6 +4,8 @@ import { QueryCtx, mutation, query } from "./_generated/server";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
+import { detectEquipmentChanges } from "../lib/movements";
+import { recordEquipmentMovement } from "./_inventory/movements";
 
 /** El inventario de equipos requiere sesión iniciada. */
 async function requireUser(ctx: QueryCtx) {
@@ -208,7 +210,7 @@ export const create = mutation({
         "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
     },
     equipmentArgs,
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
       let code = args.code?.trim().toUpperCase() || "";
       if (!code) {
         code = await generateFreeEquipmentCode(ctx);
@@ -276,6 +278,16 @@ export const create = mutation({
         createdAt: now,
         updatedAt: now,
       });
+      await recordEquipmentMovement(ctx, {
+        equipmentId: id,
+        equipmentCode: code,
+        equipmentName: args.name.trim(),
+        kind: "created",
+        ...(args.location?.trim() ? { toLocation: args.location.trim() } : {}),
+        actorId: actor._id,
+        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        createdAt: now,
+      });
       return id;
     },
   ),
@@ -296,7 +308,7 @@ export const update = mutation({
         "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
     },
     { ...equipmentArgs, id: v.id("equipment") },
-    async (ctx, args) => {
+    async (ctx, args, actor) => {
       const item = await ctx.db.get(args.id);
       if (!item) throw new ConvexError("El equipo ya no existe.");
 
@@ -331,13 +343,15 @@ export const update = mutation({
         }
       }
 
+      const now = Date.now();
+      const nextLocation = args.location?.trim() || undefined;
       await ctx.db.patch(args.id, {
         code,
         modelId: modelId || undefined,
         brand: args.brand?.trim() || undefined,
         name: args.name.trim(),
         model: args.model.trim(),
-        location: args.location?.trim() || undefined,
+        location: nextLocation,
         // `undefined` aquí borra la nota: una descripción vacía deja el equipo
         // sin ella, y el documento del editor se guarda tal cual llega.
         description: richDocToStore(args.description),
@@ -348,8 +362,31 @@ export const update = mutation({
         decommissionDate: args.decommissionDate,
         warrantyEndDate: args.warrantyEndDate,
         maintenanceIntervalDays: args.maintenanceIntervalDays,
-        updatedAt: Date.now(),
+        updatedAt: now,
       });
+
+      const changes = detectEquipmentChanges(
+        { location: item.location, decommissionDate: item.decommissionDate },
+        { location: nextLocation, decommissionDate: args.decommissionDate },
+      );
+      const actorName = actor.name?.trim() || actor.email?.trim() || "Técnico";
+      for (const change of changes) {
+        await recordEquipmentMovement(ctx, {
+          equipmentId: args.id,
+          equipmentCode: code,
+          equipmentName: args.name.trim(),
+          kind: change.kind,
+          ...(change.kind === "location_change"
+            ? {
+                fromLocation: change.fromLocation,
+                toLocation: change.toLocation,
+              }
+            : {}),
+          actorId: actor._id,
+          actorName,
+          createdAt: now,
+        });
+      }
     },
   ),
 });

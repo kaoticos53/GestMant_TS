@@ -1,11 +1,16 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import {
+  AI_MAX_CALLS_PER_USER_HOUR,
+  ALL_AI_TOOL_MODULES,
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_DEEPSEEK_CHAT_MODEL,
   DEFAULT_DEEPSEEK_VISION_MODEL,
   isValidAiBaseUrl,
   type AiSettingsPublicView,
+  type AiTaskId,
+  type AiTaskParamConfig,
+  type AiTasksEnabledConfig,
+  type AiToolModule,
 } from "../lib/ai";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -30,6 +35,18 @@ import { requireAdmin } from "./permissions";
 const SETTINGS_KEY = "default";
 const MAX_API_KEY_LEN = 512;
 
+const DEFAULT_TASKS: AiTasksEnabledConfig = {
+  labelScanner: true,
+  incidentQa: true,
+  workshopChat: true,
+};
+
+const DEFAULT_TASK_PARAMS: Record<AiTaskId, AiTaskParamConfig> = {
+  label_scanner: { temperature: 0.1, maxTokens: 1600 },
+  incident_qa: { temperature: 0.1, maxTokens: 900 },
+  workshop_chat: { temperature: 0.2, maxTokens: 1200 },
+};
+
 function envApiKey(): string {
   return (process.env.DEEPSEEK_API_KEY ?? "").trim();
 }
@@ -39,6 +56,36 @@ async function readRow(ctx: QueryCtx): Promise<Doc<"aiSettings"> | null> {
     .query("aiSettings")
     .withIndex("by_key", (q) => q.eq("key", SETTINGS_KEY))
     .unique();
+}
+
+function normalizedTasks(row: Doc<"aiSettings"> | null): AiTasksEnabledConfig {
+  return {
+    labelScanner: row?.tasks?.labelScanner ?? DEFAULT_TASKS.labelScanner,
+    incidentQa: row?.tasks?.incidentQa ?? DEFAULT_TASKS.incidentQa,
+    workshopChat: row?.tasks?.workshopChat ?? DEFAULT_TASKS.workshopChat,
+  };
+}
+
+function normalizedTaskParams(
+  row: Doc<"aiSettings"> | null,
+): Record<AiTaskId, AiTaskParamConfig> {
+  return {
+    label_scanner:
+      row?.taskParams?.label_scanner ?? DEFAULT_TASK_PARAMS.label_scanner,
+    incident_qa:
+      row?.taskParams?.incident_qa ?? DEFAULT_TASK_PARAMS.incident_qa,
+    workshop_chat:
+      row?.taskParams?.workshop_chat ?? DEFAULT_TASK_PARAMS.workshop_chat,
+  };
+}
+
+function normalizedEnabledModules(
+  row: Doc<"aiSettings"> | null,
+): AiToolModule[] {
+  if (row?.enabledModules !== undefined) {
+    return [...row.enabledModules];
+  }
+  return [...ALL_AI_TOOL_MODULES];
 }
 
 function publicView(row: Doc<"aiSettings"> | null): AiSettingsPublicView {
@@ -64,6 +111,11 @@ function publicView(row: Doc<"aiSettings"> | null): AiSettingsPublicView {
     lastTestAt: row?.lastTestAt ?? null,
     lastTestOk: row?.lastTestOk ?? null,
     lastTestError: row?.lastTestError ?? null,
+    tasks: normalizedTasks(row),
+    rateLimitPerHour: row?.rateLimitPerHour ?? AI_MAX_CALLS_PER_USER_HOUR,
+    allowedRoles: row?.allowedRoles ?? [],
+    enabledModules: normalizedEnabledModules(row),
+    taskParams: normalizedTaskParams(row),
   };
 }
 
@@ -104,11 +156,22 @@ export const resolved = internalQuery({
       visionModel: row?.visionModel ?? DEFAULT_DEEPSEEK_VISION_MODEL,
       chatModel: row?.chatModel ?? DEFAULT_DEEPSEEK_CHAT_MODEL,
       apiKey,
+      tasks: normalizedTasks(row),
+      rateLimitPerHour: row?.rateLimitPerHour ?? AI_MAX_CALLS_PER_USER_HOUR,
+      allowedRoles: row?.allowedRoles ?? [],
+      enabledModules: normalizedEnabledModules(row),
+      taskParams: normalizedTaskParams(row),
     };
   },
 });
 
-/** Guarda los ajustes de DeepSeek cifrando la API key en reposo. */
+const taskParamValidator = v.object({
+  temperature: v.number(),
+  maxTokens: v.number(),
+  customPrompt: v.optional(v.string()),
+});
+
+/** Guarda los ajustes de DeepSeek, prompts y permisos cifrando la API key en reposo. */
 export const save = mutation({
   args: {
     enabled: v.boolean(),
@@ -117,6 +180,34 @@ export const save = mutation({
     chatModel: v.string(),
     apiKey: v.optional(v.string()),
     clearApiKey: v.optional(v.boolean()),
+    tasks: v.optional(
+      v.object({
+        labelScanner: v.boolean(),
+        incidentQa: v.boolean(),
+        workshopChat: v.boolean(),
+      }),
+    ),
+    rateLimitPerHour: v.optional(v.number()),
+    allowedRoles: v.optional(v.array(v.string())),
+    enabledModules: v.optional(
+      v.array(
+        v.union(
+          v.literal("equipment"),
+          v.literal("incidents"),
+          v.literal("requests"),
+          v.literal("purchasing"),
+          v.literal("parts"),
+          v.literal("manuals"),
+        ),
+      ),
+    ),
+    taskParams: v.optional(
+      v.object({
+        label_scanner: taskParamValidator,
+        incident_qa: taskParamValidator,
+        workshop_chat: taskParamValidator,
+      }),
+    ),
   },
   handler: async (ctx, args): Promise<AiSettingsPublicView> => {
     const admin = await requireAdmin(ctx, "configurar la IA del taller");
@@ -156,6 +247,11 @@ export const save = mutation({
 
     const now = Date.now();
     const by = admin.name?.trim() || admin.email?.trim() || "Administración";
+    const rateLimitPerHour =
+      args.rateLimitPerHour !== undefined
+        ? Math.max(1, Math.min(500, Math.round(args.rateLimitPerHour)))
+        : (row?.rateLimitPerHour ?? AI_MAX_CALLS_PER_USER_HOUR);
+
     const record = {
       enabled: args.enabled,
       baseUrl,
@@ -163,6 +259,17 @@ export const save = mutation({
       chatModel,
       updatedAt: now,
       updatedBy: by,
+      tasks: args.tasks ?? normalizedTasks(row),
+      rateLimitPerHour,
+      allowedRoles:
+        args.allowedRoles !== undefined
+          ? args.allowedRoles
+          : (row?.allowedRoles ?? []),
+      enabledModules:
+        args.enabledModules !== undefined
+          ? args.enabledModules
+          : normalizedEnabledModules(row),
+      taskParams: args.taskParams ?? normalizedTaskParams(row),
       ...(nextApiKey !== undefined ? { apiKey: nextApiKey } : {}),
       ...(nextHint !== undefined ? { apiKeyHint: nextHint } : {}),
     };
@@ -187,6 +294,7 @@ export const save = mutation({
         visionModel,
         chatModel,
         hasApiKey: nextApiKey !== undefined,
+        rateLimitPerHour,
       },
     });
 
@@ -202,31 +310,33 @@ export const recordTest = internalMutation({
     await ctx.db.patch(row._id, {
       lastTestAt: Date.now(),
       lastTestOk: args.ok,
-      lastTestError: args.ok ? undefined : args.error,
+      lastTestError: args.error,
     });
   },
 });
 
-/** Prueba la conexión contra DeepSeek usando la configuración guardada o de entorno. */
+/** Prueba la conexión real contra DeepSeek con la clave configurada. */
 export const testConnection = action({
   args: {},
   handler: async (ctx): Promise<{ ok: boolean; error?: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError("Debes iniciar sesión para probar la IA.");
-    }
-    const allowed = await ctx.runQuery(internal.aiSettings.canConfigure, {
-      userId,
+    const admin = await ctx.runQuery(internal.ai.assertActiveMember, {});
+    const isAdmin = await ctx.runQuery(internal.aiSettings.canConfigure, {
+      userId: admin,
     });
-    if (!allowed) {
-      throw new ConvexError("Solo el administrador puede probar la IA del taller.");
+    if (!isAdmin) {
+      throw new ConvexError(
+        "Solo un administrador puede probar la conexión de IA.",
+      );
     }
 
     const config = await ctx.runQuery(internal.aiSettings.resolved, {});
-    if (config.apiKey.trim() === "") {
-      const error = "Falta la clave API de DeepSeek (guardada o en DEEPSEEK_API_KEY).";
-      await ctx.runMutation(internal.aiSettings.recordTest, { ok: false, error });
-      return { ok: false, error };
+    if (!config.apiKey) {
+      const msg = "No hay ninguna API key de DeepSeek configurada.";
+      await ctx.runMutation(internal.aiSettings.recordTest, {
+        ok: false,
+        error: msg,
+      });
+      return { ok: false, error: msg };
     }
 
     try {
@@ -238,22 +348,20 @@ export const testConnection = action({
         messages: [
           {
             role: "system",
-            content: 'Responde solo con JSON válido: {"ok":true}',
+            content: 'Responde únicamente con JSON válido: {"ok":true}',
           },
           { role: "user", content: "ping" },
         ],
       });
       await ctx.runMutation(internal.aiSettings.recordTest, { ok: true });
       return { ok: true };
-    } catch (err) {
-      const error =
-        err instanceof ConvexError
-          ? String(err.data)
-          : err instanceof Error
-            ? err.message
-            : "Error desconocido al probar DeepSeek.";
-      await ctx.runMutation(internal.aiSettings.recordTest, { ok: false, error });
-      return { ok: false, error };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await ctx.runMutation(internal.aiSettings.recordTest, {
+        ok: false,
+        error: msg,
+      });
+      return { ok: false, error: msg };
     }
   },
 });

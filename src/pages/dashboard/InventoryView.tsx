@@ -4,6 +4,7 @@ import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { PartFormDialog } from "./inventory/dialogs/PartFormDialog";
 import { StockDialog } from "./inventory/dialogs/StockDialog";
+import { StockMovementsDialog } from "./inventory/dialogs/StockMovementsDialog";
 import {
   InventoryToolbarActions,
   InventoryToolbarFilters,
@@ -28,6 +29,7 @@ export function InventoryView({
   initialLowStockOnly = false,
 }: InventoryViewProps) {
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
+  const [movementsOpen, setMovementsOpen] = useState(false);
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
 
@@ -97,6 +99,7 @@ export function InventoryView({
               filteredCount={filtered.length}
               onExport={handleExport}
               onNewPart={() => setFormTarget({ part: null })}
+              onOpenMovements={() => setMovementsOpen(true)}
             />
           }
         />
@@ -166,6 +169,13 @@ export function InventoryView({
         label={labelTarget === null ? null : buildPartLabel(labelTarget, origin)}
         onClose={() => setLabelTarget(null)}
       />
+
+      {movementsOpen && (
+        <StockMovementsDialog
+          open={movementsOpen}
+          onClose={() => setMovementsOpen(false)}
+        />
+      )}
     </div>
   );
 }

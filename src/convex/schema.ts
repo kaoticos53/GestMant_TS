@@ -1283,6 +1283,46 @@ const schema = defineSchema({
     lastTestAt: v.optional(v.number()),
     lastTestOk: v.optional(v.boolean()),
     lastTestError: v.optional(v.string()),
+    tasks: v.optional(
+      v.object({
+        labelScanner: v.boolean(),
+        incidentQa: v.boolean(),
+        workshopChat: v.boolean(),
+      }),
+    ),
+    rateLimitPerHour: v.optional(v.number()),
+    allowedRoles: v.optional(v.array(v.string())),
+    enabledModules: v.optional(
+      v.array(
+        v.union(
+          v.literal("equipment"),
+          v.literal("incidents"),
+          v.literal("requests"),
+          v.literal("purchasing"),
+          v.literal("parts"),
+          v.literal("manuals"),
+        ),
+      ),
+    ),
+    taskParams: v.optional(
+      v.object({
+        label_scanner: v.object({
+          temperature: v.number(),
+          maxTokens: v.number(),
+          customPrompt: v.optional(v.string()),
+        }),
+        incident_qa: v.object({
+          temperature: v.number(),
+          maxTokens: v.number(),
+          customPrompt: v.optional(v.string()),
+        }),
+        workshop_chat: v.object({
+          temperature: v.number(),
+          maxTokens: v.number(),
+          customPrompt: v.optional(v.string()),
+        }),
+      }),
+    ),
   }).index("by_key", ["key"]),
 
   // Cuota horaria de uso de IA por usuario autenticado (tabla efímera).
@@ -1293,6 +1333,52 @@ const schema = defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_windowStart", ["windowStart"]),
+
+  // Libro mayor de movimientos de stock de repuestos.
+  stockMovements: defineTable({
+    sparePartId: v.id("spareParts"),
+    partCode: v.string(),
+    partName: v.string(),
+    kind: v.union(
+      v.literal("initial"),
+      v.literal("manual_adjust"),
+      v.literal("request_reserve"),
+      v.literal("request_return"),
+      v.literal("purchase_reception"),
+    ),
+    previousStock: v.number(),
+    delta: v.number(),
+    nextStock: v.number(),
+    reason: v.optional(v.string()),
+    reference: v.optional(v.string()),
+    actorId: v.optional(v.id("users")),
+    actorName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_sparePart", ["sparePartId", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_reference", ["reference"]),
+
+  // Historial de desplazamientos y ciclo de vida de equipos.
+  equipmentMovements: defineTable({
+    equipmentId: v.id("equipment"),
+    equipmentCode: v.optional(v.string()),
+    equipmentName: v.string(),
+    kind: v.union(
+      v.literal("created"),
+      v.literal("location_change"),
+      v.literal("decommission"),
+      v.literal("reactivation"),
+    ),
+    fromLocation: v.optional(v.string()),
+    toLocation: v.optional(v.string()),
+    note: v.optional(v.string()),
+    actorId: v.optional(v.id("users")),
+    actorName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_equipment", ["equipmentId", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
 
   // Histórico de correos salientes: qué salió, a quién y qué contestó el
   // servicio. Guarda el sobre —destinatarios, copia oculta, asunto y resultado—

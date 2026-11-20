@@ -57,6 +57,7 @@ function makeExtraction(
     model: "50UM7600PLB",
     serialNumber: "912MAYY5H530",
     equipmentKind: "Televisor",
+    technicalDetails: ["AC 100-240V ~ 50/60Hz 135W", "Fabricado 12/2019"],
     confidence: "high",
     evidence: "LG 50UM7600PLB SERIAL NO.: 912MAYY5H530",
     alternatives: ["50UM7600PLB.BEUSLJP"],
@@ -211,6 +212,8 @@ describe("EquipmentLabelScanner", () => {
       model: "50UM7600PLB.BEUSLJP",
       serialNumber: "912MAYY5H530",
       equipmentKind: "Televisor",
+      description:
+        "Tipo de equipo: Televisor\n- AC 100-240V ~ 50/60Hz 135W\n- Fabricado 12/2019",
     });
   });
 
@@ -238,6 +241,8 @@ describe("EquipmentLabelScanner", () => {
       model: "50UM7600PLB",
       serialNumber: "912MAYY5H530",
       equipmentKind: "Televisor",
+      description:
+        "Tipo de equipo: Televisor\n- AC 100-240V ~ 50/60Hz 135W\n- Fabricado 12/2019",
     });
     expect(container.textContent).toContain("Detectado por IA · Verificar");
     expect(document.body.textContent).not.toContain(
