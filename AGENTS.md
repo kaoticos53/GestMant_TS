@@ -84,6 +84,7 @@ Antes de modificar código, cada agente debe seguir rigurosamente este ciclo de 
 - Ejecuta el test de seguridad: `npx vitest run tests/seguridad.test.ts`.
 
 ### Paso 5: Handover y Cierre
+- Realiza un `git commit` en cada cambio significativo una vez validado con tests y tipado (sin hacer `git push` salvo petición explícita).
 - Limpia `.context/active-task.md`.
 - Registra el trabajo realizado en un bloque siguiendo `.context/session-state-template.md`.
 
