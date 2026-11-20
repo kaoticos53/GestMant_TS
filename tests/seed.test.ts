@@ -56,6 +56,15 @@ describe("datos de ejemplo (cadena de televisión)", () => {
     expect(maintenance.length).toBeGreaterThanOrEqual(40);
     expect(incidents.length).toBeGreaterThanOrEqual(70);
 
+    const stockMovs = await authed.query(api.stockMovements.listRecent, {});
+    expect(stockMovs.length).toBeGreaterThanOrEqual(20);
+    if (equipment[0]) {
+      const eqMovs = await authed.query(api.equipmentMovements.listByEquipment, {
+        equipmentId: equipment[0]._id,
+      });
+      expect(eqMovs.length).toBeGreaterThanOrEqual(2);
+    }
+
     // El trazo de cada paso queda en la ficha de la incidencia, en orden
     for (const incident of incidents) {
       expect(incident.history.length).toBeGreaterThanOrEqual(1);

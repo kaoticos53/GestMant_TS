@@ -15,6 +15,7 @@ import { PUBLIC_CODE_LENGTH, publicCodeFrom } from "../lib/publicCode";
 import { richDocToStore } from "../lib/richDoc";
 import { formatReference, nextSequence } from "../lib/references";
 import { deliveryNote } from "../lib/requestFlow";
+import { recordEquipmentMovement, recordStockMovement } from "./_inventory/movements";
 import { internal } from "./_generated/api";
 import { Doc, Id } from "./_generated/dataModel";
 import {
@@ -3650,6 +3651,96 @@ export const seedDemoManuals = action({
  * Las tres piezas se piden juntas desde el panel: primero esto —que es lo que
  * deja el inventario— y después las dos acciones.
  */
+async function insertSampleMovements(
+  ctx: MutationCtx,
+  now: number,
+  technicians: readonly string[],
+) {
+  const actorA = technicians[0] || "Responsable de almacén";
+  const actorB = technicians[1] || actorA;
+
+  const partDocs = (await ctx.db.query("spareParts").collect()).slice(0, 10);
+  for (let i = 0; i < partDocs.length; i++) {
+    const part = partDocs[i];
+    const base = Math.max(1, part.stock);
+    const tInitial = now - (30 - i) * DAY;
+    const tReception = now - (14 - (i % 10)) * DAY;
+    const tReserve = now - (5 - (i % 4)) * DAY;
+
+    await recordStockMovement(ctx, {
+      sparePartId: part._id,
+      partCode: part.code,
+      partName: part.name,
+      kind: "initial",
+      previousStock: 0,
+      nextStock: base + 1,
+      actorName: actorA,
+      createdAt: tInitial,
+    });
+    await recordStockMovement(ctx, {
+      sparePartId: part._id,
+      partCode: part.code,
+      partName: part.name,
+      kind: "purchase_reception",
+      previousStock: base + 1,
+      nextStock: base + 3,
+      reference: `OC-${String(i + 1).padStart(4, "0")}`,
+      reason: `Recepción de ${part.supplier || "proveedor habitual"}`,
+      actorName: actorA,
+      createdAt: tReception,
+    });
+    await recordStockMovement(ctx, {
+      sparePartId: part._id,
+      partCode: part.code,
+      partName: part.name,
+      kind: "request_reserve",
+      previousStock: base + 3,
+      nextStock: part.stock,
+      reference: `PET-${String(i + 1).padStart(4, "0")}`,
+      reason: "Reserva para intervención en taller",
+      actorName: actorB,
+      createdAt: tReserve,
+    });
+  }
+
+  const eqDocs = await ctx.db.query("equipment").collect();
+  for (let i = 0; i < eqDocs.length; i++) {
+    const eq = eqDocs[i];
+    const currentLoc = eq.location || "Taller técnico";
+    const originLoc = currentLoc === "Almacén central" ? "Control central" : "Almacén central";
+
+    await recordEquipmentMovement(ctx, {
+      equipmentId: eq._id,
+      equipmentCode: eq.code,
+      equipmentName: eq.name,
+      kind: "created",
+      toLocation: originLoc,
+      actorName: actorA,
+      createdAt: now - (45 - i) * DAY,
+    });
+    await recordEquipmentMovement(ctx, {
+      equipmentId: eq._id,
+      equipmentCode: eq.code,
+      equipmentName: eq.name,
+      kind: "location_change",
+      fromLocation: originLoc,
+      toLocation: currentLoc,
+      actorName: actorB,
+      createdAt: now - (10 - (i % 7)) * DAY,
+    });
+    if (eq.decommissionDate) {
+      await recordEquipmentMovement(ctx, {
+        equipmentId: eq._id,
+        equipmentCode: eq.code,
+        equipmentName: eq.name,
+        kind: "decommission",
+        actorName: actorA,
+        createdAt: eq.decommissionDate,
+      });
+    }
+  }
+}
+
 export const seedDemoData = mutation({
   args: {},
   handler: async (ctx) => {
@@ -3691,6 +3782,7 @@ export const seedDemoData = mutation({
       now,
       ALL_EQUIPMENT.map((item) => item.code),
     );
+    await insertSampleMovements(ctx, now, technicians);
 
     // Avisos de ejemplo en la campana de quien carga los datos y una charla
     // de taller con otro miembro, si ya lo hay.
