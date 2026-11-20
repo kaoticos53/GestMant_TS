@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { PurchaseOrderDoc } from "@/lib/purchasing";
 import type { ReceptionDoc } from "../types";
+import { OrderSheet } from "../dialogs/OrderSheet";
 import { useCellSelection } from "../hooks/useCellSelection";
 import { useHistoryExport } from "../hooks/useHistoryExport";
 import { useHistoryFilters } from "../hooks/useHistoryFilters";
@@ -15,6 +17,7 @@ export interface HistorySectionProps {
 
 /** Histórico de compras en formato tabla tipo Excel / Hoja de cálculo interactiva */
 export function HistorySection({ orders, receptions }: HistorySectionProps) {
+  const [openOrder, setOpenOrder] = useState<PurchaseOrderDoc | null>(null);
   const {
     filters,
     setFilters,
@@ -89,8 +92,23 @@ export function HistorySection({ orders, receptions }: HistorySectionProps) {
         isSelected={isSelected}
         onToggleRow={toggleRow}
         onToggleCell={toggleCell}
+        onOpenOrder={(orderRef) => {
+          const match = orders.find((o) => o.reference === orderRef);
+          if (match) setOpenOrder(match);
+        }}
         selectedCount={selectedCount}
       />
+
+      {openOrder && (
+        <OrderSheet
+          order={openOrder}
+          receptions={receptions.filter((row) => row.orderId === openOrder._id)}
+          canManage={false}
+          onClose={() => setOpenOrder(null)}
+          onReceive={() => setOpenOrder(null)}
+          onCancel={() => setOpenOrder(null)}
+        />
+      )}
     </div>
   );
 }

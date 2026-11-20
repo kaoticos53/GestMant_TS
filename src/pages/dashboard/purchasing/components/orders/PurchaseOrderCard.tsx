@@ -1,3 +1,4 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
@@ -25,8 +26,10 @@ export function PurchaseOrderCard({
       <CardContent className="grid gap-3 pt-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-              {order.reference}
+            <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+              <DetailTitleButton onClick={() => onOpenOrder(order)}>
+                {order.reference}
+              </DetailTitleButton>
               {order.solicitudeCode && (
                 <Badge variant="secondary" className="font-mono text-xs">
                   Solicitud: {order.solicitudeCode}
@@ -35,7 +38,7 @@ export function PurchaseOrderCard({
               <Badge variant="outline" className={meta.badgeClassName}>
                 {meta.label}
               </Badge>
-            </p>
+            </div>
             <p className="text-sm text-muted-foreground">
               {formatOrderSubtitle(order, total.received, total.quantity)}
             </p>

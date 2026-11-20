@@ -20,6 +20,7 @@ export function HistoryTable({
   isSelected,
   onToggleRow,
   onToggleCell,
+  onOpenOrder,
   selectedCount,
 }: {
   rows: PurchaseHistoryRow[];
@@ -32,6 +33,7 @@ export function HistoryTable({
   isSelected: (rowId: string, column: PurchaseHistoryColumn) => boolean;
   onToggleRow: (rowId: string) => void;
   onToggleCell: (rowId: string, column: PurchaseHistoryColumn) => void;
+  onOpenOrder?: (orderReference: string) => void;
   selectedCount: number;
 }) {
   return (
@@ -64,6 +66,7 @@ export function HistoryTable({
                   isSelected={(column) => isSelected(row.id, column)}
                   onToggleRow={onToggleRow}
                   onToggleCell={onToggleCell}
+                  onOpenOrder={onOpenOrder}
                 />
               ))
             )}

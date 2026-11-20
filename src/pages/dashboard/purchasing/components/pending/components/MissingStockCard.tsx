@@ -1,4 +1,5 @@
 import { Can } from "@/components/AbilityProvider";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +24,7 @@ export interface MissingStockCardProps {
   onToggleAll: () => void;
   onReserveMarked: () => void;
   onGenerateSingle: (request: PartRequestDoc) => void;
+  onOpenRequest?: (request: PartRequestDoc) => void;
 }
 
 /**
@@ -42,6 +44,7 @@ export function MissingStockCard({
   onToggleAll,
   onReserveMarked,
   onGenerateSingle,
+  onOpenRequest,
 }: MissingStockCardProps) {
   if (missingStockRequests.length === 0) return null;
 
@@ -106,12 +109,18 @@ export function MissingStockCard({
                 />
               </Can>
               <div className="min-w-0">
-                <p className="text-sm font-medium">
-                  {request.reference}
-                  <span className="ml-2 font-normal text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {onOpenRequest ? (
+                    <DetailTitleButton onClick={() => onOpenRequest(request)}>
+                      {request.reference}
+                    </DetailTitleButton>
+                  ) : (
+                    <span>{request.reference}</span>
+                  )}
+                  <span className="font-normal text-muted-foreground">
                     {request.requesterName}
                   </span>
-                </p>
+                </div>
                 <p className="truncate text-xs text-muted-foreground">
                   {missing
                     .map((line) => `${line.code} × ${line.quantity}`)

@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { IncidentDetailSheet } from "./incidents/components/IncidentDetailSheet";
 import { QueueToolbar } from "./QueueToolbar";
 import {
   AUDIT_SORT_OPTIONS,
@@ -27,10 +31,29 @@ import {
  * Para administradores activos añade además el visor paginado de auditoría de
  * seguridad (`securityAuditLog`).
  */
-export function AuditView({ onOpenIncident }: AuditViewProps) {
+export function AuditView({ onOpenIncident: _onOpenIncident }: AuditViewProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [section, setSection] = useState<"documents" | "security">("documents");
+  const [detailIncidentId, setDetailIncidentId] =
+    useState<Id<"incidents"> | null>(null);
+
+  const incidentsForSheet = useQuery(
+    api.incidents.list,
+    detailIncidentId ? { includeArchived: true } : "skip",
+  );
+  const equipmentForSheet = useQuery(
+    api.equipment.list,
+    detailIncidentId ? {} : "skip",
+  );
+  const requestsForSheet = useQuery(
+    api.partRequests.list,
+    detailIncidentId ? { includeArchived: true } : "skip",
+  );
+  const detailIncident = detailIncidentId
+    ? (incidentsForSheet ?? []).find((inc) => inc._id === detailIncidentId) ??
+      null
+    : null;
 
   const {
     filters,
@@ -109,7 +132,7 @@ export function AuditView({ onOpenIncident }: AuditViewProps) {
                       label={group.label}
                       compact={compact}
                       entries={group.items}
-                      onOpenIncident={onOpenIncident}
+                      onOpenIncident={setDetailIncidentId}
                     />
                   ))}
                 </div>
@@ -128,30 +151,52 @@ export function AuditView({ onOpenIncident }: AuditViewProps) {
     </div>
   );
 
+  const sheetHost = detailIncident ? (
+    <IncidentDetailSheet
+      key={detailIncident._id}
+      incident={detailIncident}
+      equipment={equipmentForSheet ?? []}
+      requests={requestsForSheet ?? []}
+      currentUserId={user?._id ?? null}
+      currentUserName={user?.name ?? user?.email ?? "Administrador"}
+      canAssign={false}
+      canOpenRequests={false}
+      onClose={() => setDetailIncidentId(null)}
+    />
+  ) : null;
+
   if (!isAdmin) {
-    return documentsSection;
+    return (
+      <>
+        {documentsSection}
+        {sheetHost}
+      </>
+    );
   }
 
   return (
-    <Tabs
-      value={section}
-      onValueChange={(value) =>
-        setSection(value === "security" ? "security" : "documents")
-      }
-      className="flex flex-col gap-5"
-    >
-      <TabsList className="w-fit">
-        <TabsTrigger value="documents">Documentos del expediente</TabsTrigger>
-        <TabsTrigger value="security">Auditoría de seguridad</TabsTrigger>
-      </TabsList>
+    <>
+      <Tabs
+        value={section}
+        onValueChange={(value) =>
+          setSection(value === "security" ? "security" : "documents")
+        }
+        className="flex flex-col gap-5"
+      >
+        <TabsList className="w-fit">
+          <TabsTrigger value="documents">Documentos del expediente</TabsTrigger>
+          <TabsTrigger value="security">Auditoría de seguridad</TabsTrigger>
+        </TabsList>
 
-      <TabsContent value="documents" className="focus-visible:outline-none">
-        {documentsSection}
-      </TabsContent>
+        <TabsContent value="documents" className="focus-visible:outline-none">
+          {documentsSection}
+        </TabsContent>
 
-      <TabsContent value="security" className="focus-visible:outline-none">
-        <SecurityAuditPanel />
-      </TabsContent>
-    </Tabs>
+        <TabsContent value="security" className="focus-visible:outline-none">
+          <SecurityAuditPanel />
+        </TabsContent>
+      </Tabs>
+      {sheetHost}
+    </>
   );
 }

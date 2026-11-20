@@ -2,6 +2,7 @@ import { useState } from "react";
 import { usePaginatedQuery } from "convex/react";
 import { Download, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { api } from "@/convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import {
   type SecurityAuditEntry,
 } from "@/lib/securityAudit";
 import { formatDateTime } from "@/lib/workshop";
+import { SecurityEventDetailSheet } from "./SecurityEventDetailSheet";
 
 const PAGE_SIZE = 25;
 
@@ -37,6 +39,9 @@ const PAGE_SIZE = 25;
  */
 export function SecurityAuditPanel() {
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [selectedEntry, setSelectedEntry] = useState<SecurityAuditEntry | null>(
+    null,
+  );
   const { results, status, loadMore, isLoading } = usePaginatedQuery(
     api.audit.securityAuditLogs,
     actionFilter === "all" ? {} : { action: actionFilter },
@@ -121,9 +126,12 @@ export function SecurityAuditPanel() {
                   >
                     <div className="flex min-w-0 flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary" className="font-medium">
+                        <DetailTitleButton
+                          onClick={() => setSelectedEntry(entry)}
+                          className="text-sm font-semibold"
+                        >
                           {securityActionLabel(entry.action)}
-                        </Badge>
+                        </DetailTitleButton>
                         <span className="font-mono text-xs text-muted-foreground">
                           {entry.target}
                         </span>
@@ -160,6 +168,11 @@ export function SecurityAuditPanel() {
           )}
         </CardContent>
       </Card>
+
+      <SecurityEventDetailSheet
+        entry={selectedEntry}
+        onClose={() => setSelectedEntry(null)}
+      />
     </div>
   );
 }

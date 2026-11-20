@@ -4,6 +4,7 @@ import { groupBySupplier, type PurchaseRequestDoc } from "@/lib/purchasing";
 import { ClipboardList, ShoppingCart } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CreateOrderDialog } from "../dialogs/CreateOrderDialog";
+import { RequestDetailSheet } from "../../requests/components/RequestDetailSheet";
 import type { PartDoc, PartRequestDoc } from "../types";
 import { MissingStockCard } from "./pending/components/MissingStockCard";
 import { PurchaseRequestActionDialog } from "./pending/components/PurchaseRequestActionDialog";
@@ -41,6 +42,7 @@ export function PendingSection({
   const [actionTarget, setActionTarget] = useState<PurchaseActionTarget | null>(
     null,
   );
+  const [openRequest, setOpenRequest] = useState<PartRequestDoc | null>(null);
 
   const groups = useMemo(
     () => groupBySupplier(purchaseRequests),
@@ -61,6 +63,7 @@ export function PendingSection({
         onGenerateSingle={(request) =>
           void missingStock.generateSingle(request)
         }
+        onOpenRequest={setOpenRequest}
       />
 
       {groups.length === 0 ? (
@@ -120,6 +123,17 @@ export function PendingSection({
         target={actionTarget}
         onClose={() => setActionTarget(null)}
       />
+
+      {openRequest && (
+        <RequestDetailSheet
+          key={openRequest._id}
+          request={openRequest}
+          parts={parts}
+          canManage={false}
+          showStock={true}
+          onClose={() => setOpenRequest(null)}
+        />
+      )}
     </div>
   );
 }

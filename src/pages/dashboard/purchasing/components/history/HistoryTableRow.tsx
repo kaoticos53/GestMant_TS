@@ -1,4 +1,5 @@
 import { CheckSquare, Square } from "lucide-react";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { TableCell, TableRow } from "@/components/ui/table";
 import type { PurchaseHistoryColumn, PurchaseHistoryRow } from "@/lib/purchasing";
 import { HistoryCell } from "./HistoryCell";
@@ -9,12 +10,14 @@ export function HistoryTableRow({
   isSelected,
   onToggleRow,
   onToggleCell,
+  onOpenOrder,
 }: {
   row: PurchaseHistoryRow;
   isRowSelected: boolean;
   isSelected: (column: PurchaseHistoryColumn) => boolean;
   onToggleRow: (rowId: string) => void;
   onToggleCell: (rowId: string, column: PurchaseHistoryColumn) => void;
+  onOpenOrder?: (orderReference: string) => void;
 }) {
   const completado = row.pendingQuantity === 0;
 
@@ -53,7 +56,16 @@ export function HistoryTableRow({
         onToggle={onToggleCell}
         className="font-mono font-semibold text-foreground"
       >
-        {row.orderReference}
+        {onOpenOrder ? (
+          <DetailTitleButton
+            onClick={() => onOpenOrder(row.orderReference)}
+            className="font-mono font-semibold"
+          >
+            {row.orderReference}
+          </DetailTitleButton>
+        ) : (
+          row.orderReference
+        )}
       </HistoryCell>
 
       <HistoryCell
