@@ -215,7 +215,7 @@ export function UserDetailSheet({
                           >
                             <div className="min-w-0">
                               <p className="truncate font-medium">
-                                {mov.sparePartName}
+                                {mov.partName}
                               </p>
                               <p className="truncate text-muted-foreground">
                                 {meta.label} · {formatDateTime(mov.createdAt)}

@@ -127,7 +127,13 @@ export function PendingSection({
       {openRequest && (
         <RequestDetailSheet
           key={openRequest._id}
-          request={openRequest}
+          request={{
+            ...openRequest,
+            attachments: (openRequest.attachments ?? []).map((att) => ({
+              ...att,
+              url: null,
+            })),
+          }}
           parts={parts}
           canManage={false}
           showStock={true}

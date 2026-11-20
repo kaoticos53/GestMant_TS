@@ -57,7 +57,10 @@ export function TablePagination({
         className,
       )}
     >
-      <p className="flex flex-wrap items-center gap-x-1.5">
+      <p
+        aria-live="polite"
+        className="flex flex-wrap items-center gap-x-1.5"
+      >
         <span>{pageSummary({ from, to, total }, { singular, plural })}</span>
         {detail && (
           <>

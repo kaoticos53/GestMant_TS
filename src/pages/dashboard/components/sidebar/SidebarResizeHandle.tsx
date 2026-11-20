@@ -18,7 +18,7 @@ export function SidebarResizeHandle({
       tabIndex={0}
       title="Arrastra para cambiar el ancho · doble clic para restablecer"
       {...resizeHandleProps}
-      className="group sticky top-0 hidden h-screen w-3.5 -mr-1.5 shrink-0 cursor-col-resize touch-none select-none focus-visible:outline-none lg:flex lg:items-center lg:justify-center z-20"
+      className="group sticky top-0 hidden h-screen w-3.5 -mr-1.5 shrink-0 cursor-col-resize touch-none select-none rounded-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:flex lg:items-center lg:justify-center z-20"
     >
       {/* Línea divisoria interactiva */}
       <span

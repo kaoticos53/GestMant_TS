@@ -78,7 +78,7 @@ export function SecurityAuditPanel() {
 
           <div className="flex flex-wrap items-center gap-2">
             <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="w-[220px]" aria-label="Filtrar evento">
+              <SelectTrigger className="w-full sm:w-[220px]" aria-label="Filtrar evento">
                 <SelectValue placeholder="Todos los eventos" />
               </SelectTrigger>
               <SelectContent>

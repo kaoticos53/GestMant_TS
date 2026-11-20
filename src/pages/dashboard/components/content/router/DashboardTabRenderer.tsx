@@ -39,7 +39,7 @@ export function DashboardTabRenderer({
     openInventory,
     openEquipmentViewRequests,
     setRequestsEquipmentFilter,
-    handleSearchSelect,
+    setTarget,
   } = navigation;
 
   const allowed = canAccessDashboardTab(activeTab, {
@@ -62,10 +62,21 @@ export function DashboardTabRenderer({
           onOpenInventoryLowStock={() => openInventory(true)}
           onOpenEquipment={() => goToTab("equipment")}
           onSelectEquipment={(label) =>
-            handleSearchSelect({ kind: "equipment", term: label })
+            setTarget((prev) => ({
+              ...prev,
+              tab: "equipment",
+              equipmentSearch: label,
+              timestamp: Date.now(),
+            }))
           }
           onSelectPart={(code) =>
-            handleSearchSelect({ kind: "part", term: code })
+            setTarget((prev) => ({
+              ...prev,
+              tab: "inventory",
+              inventorySearch: code,
+              inventoryLowStockOnly: false,
+              timestamp: Date.now(),
+            }))
           }
         />
       );
@@ -117,7 +128,12 @@ export function DashboardTabRenderer({
           initialSearch={target.inventorySearch ?? ""}
           initialLowStockOnly={target.inventoryLowStockOnly ?? false}
           onOpenEquipmentModel={(modelName) =>
-            handleSearchSelect({ kind: "equipment", term: modelName })
+            setTarget((prev) => ({
+              ...prev,
+              tab: "equipment",
+              equipmentSearch: modelName,
+              timestamp: Date.now(),
+            }))
           }
         />
       );

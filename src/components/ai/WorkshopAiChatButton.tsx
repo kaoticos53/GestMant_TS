@@ -191,7 +191,7 @@ export function WorkshopAiChatButton() {
                   setPanelWidth((prev) => clampPanelWidth(prev - 24));
                 }
               }}
-              className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-primary/40 focus:bg-primary/50 focus:outline-none"
+              className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-primary/40 focus-visible:bg-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-3.5">
             <div className="min-w-0">

@@ -57,7 +57,7 @@ describe("UserDetailSheet (Fase 3)", () => {
         {
           _id: "mov_u1",
           kind: "manual_adjust",
-          sparePartName: "Correa trapezoidal",
+          partName: "Correa trapezoidal",
           delta: -1,
           createdAt: Date.now(),
         },
