@@ -1,4 +1,5 @@
 import { CircleAlert } from "lucide-react";
+import { InlineNotice } from "@/components/InlineNotice";
 import { Button } from "@/components/ui/button";
 import { attachmentFailure } from "@/lib/attachment";
 import type { AttachmentLayout } from "../types";
@@ -51,10 +52,7 @@ export function NotOpenedNotice({
   }
 
   return (
-    <span
-      role="status"
-      className="flex w-full flex-col gap-1.5 rounded-lg bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800"
-    >
+    <InlineNotice tone="warning" as="span">
       <span className="flex items-start gap-2">
         <CircleAlert className="mt-0.5 size-4 shrink-0" />
         <span className="font-medium">
@@ -68,7 +66,7 @@ export function NotOpenedNotice({
           variant="link"
           size="sm"
           onClick={onRetry}
-          className="h-auto px-0 text-xs font-medium text-amber-700"
+          className="h-auto px-0 text-xs font-medium text-status-warning-foreground"
         >
           Reintentar
         </Button>
@@ -76,14 +74,14 @@ export function NotOpenedNotice({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-medium text-amber-700 underline underline-offset-4"
+          className="font-medium text-status-warning-foreground underline underline-offset-4"
         >
           Abrir la dirección
         </a>
-        <span className="font-mono text-[10px] break-all text-amber-800/70">
+        <span className="font-mono text-[10px] break-all opacity-75">
           {failure.address}
         </span>
       </span>
-    </span>
+    </InlineNotice>
   );
 }

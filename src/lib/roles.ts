@@ -54,7 +54,8 @@ export const ROLE_META: Record<
   manager: {
     label: "Responsable de repuestos",
     description: "Aprueba peticiones y gestiona repuestos y equipos",
-    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    badgeClassName:
+      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
   },
   technician: {
     label: "Técnico",

@@ -42,11 +42,11 @@ export function RequestLinesCard({
       </div>
 
       {noReference ? (
-        <div className="mt-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-4 text-center">
-          <p className="text-sm font-medium text-amber-800">
+        <div className="mt-3 rounded-lg border border-dashed border-status-warning/40 bg-status-warning-surface p-4 text-center text-status-warning-foreground">
+          <p className="text-sm font-medium">
             Todavía sin repuesto asociado
           </p>
-          <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-amber-800/80">
+          <p className="mx-auto mt-1 max-w-xs text-xs leading-5 opacity-80">
             Busca el proveedor y el part number a partir de la descripción, y
             asocia el repuesto del catálogo o crea uno nuevo.
           </p>

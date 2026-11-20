@@ -1,3 +1,4 @@
+import { InlineNotice } from "@/components/InlineNotice";
 import { ImageOff } from "lucide-react";
 import { missingAttachment } from "@/lib/attachment";
 import { cn } from "@/lib/utils";
@@ -30,16 +31,13 @@ export function NoFileNotice({ layout, frameClassName }: NoFileNoticeProps) {
 
   if (layout === "row") {
     return (
-      <span
-        role="status"
-        className="flex w-full flex-col gap-1.5 rounded-lg bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800"
-      >
+      <InlineNotice tone="warning" as="span">
         <span className="flex items-start gap-2">
           <ImageOff className="mt-0.5 size-4 shrink-0" />
           <span className="font-medium">{missing.reason}</span>
         </span>
         <span className="pl-6">{missing.detail}</span>
-      </span>
+      </InlineNotice>
     );
   }
 

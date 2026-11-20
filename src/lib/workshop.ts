@@ -80,7 +80,8 @@ export const STATUS_META: Record<
   pending: {
     label: "Pendiente",
     description: "Esperando revisión del responsable de repuestos",
-    badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     dotClassName: "bg-amber-500",
   },
   approved: {
@@ -98,7 +99,8 @@ export const STATUS_META: Record<
   issued: {
     label: "Entregada",
     description: "Material entregado al técnico",
-    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    badgeClassName:
+      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
     dotClassName: "bg-emerald-600",
   },
   onHold: {
@@ -110,7 +112,8 @@ export const STATUS_META: Record<
   returned: {
     label: "Devuelta",
     description: "El material se ha devuelto del técnico",
-    badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     dotClassName: "bg-amber-500",
   },
   cancelled: {
@@ -122,14 +125,16 @@ export const STATUS_META: Record<
   pendingSupplierQuote: {
     label: "Presupuesto pendiente",
     description: "En espera de respuesta del proveedor",
-    badgeClassName: "border-sky-600/25 bg-sky-600/10 text-sky-700",
+    badgeClassName:
+      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
     dotClassName: "bg-sky-500",
   },
   materialReceived: {
     label: "Material recibido",
     description:
       "Lo que faltaba se compró y ya ha entrado en el almacén: se puede resolver",
-    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    badgeClassName:
+      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
     dotClassName: "bg-emerald-600",
   },
 };
@@ -148,7 +153,8 @@ export const SEVERITY_META: Record<
   },
   high: {
     label: "Alta",
-    badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   },
   critical: {
     label: "Crítica",
@@ -198,11 +204,13 @@ export const STOCK_META: Record<
   },
   low: {
     label: "Stock bajo",
-    badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   },
   ok: {
     label: "Disponible",
-    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    badgeClassName:
+      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
   },
 };
 
@@ -233,12 +241,14 @@ export const INCIDENT_STATUS_META: Record<
   },
   workshop: {
     label: "En taller",
-    badgeClassName: "border-amber-500/25 bg-amber-500/10 text-amber-700",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     description: "Entrada de incidencia a taller abierta",
   },
   waitingParts: {
     label: "En espera de repuestos",
-    badgeClassName: "border-sky-600/25 bg-sky-600/10 text-sky-700",
+    badgeClassName:
+      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
     description:
       "Con una petición de repuestos abierta: no se trabaja hasta que llegue el material",
   },
@@ -257,7 +267,8 @@ export const INCIDENT_STATUS_META: Record<
   },
   resolved: {
     label: "Resuelta",
-    badgeClassName: "border-emerald-600/25 bg-emerald-600/10 text-emerald-700",
+    badgeClassName:
+      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
     description: "Cerrada con resolución",
   },
   unresolved: {

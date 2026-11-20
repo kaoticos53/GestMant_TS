@@ -16,8 +16,8 @@ export function TrackingPendingParts({
 }: TrackingPendingPartsProps) {
   if (missingParts.length > 0) {
     return (
-      <section className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
-        <h4 className="flex items-center gap-1.5 text-xs font-medium text-amber-800">
+      <section className="mt-3 rounded-xl border border-status-warning/30 bg-status-warning-surface p-3 text-status-warning-foreground">
+        <h4 className="flex items-center gap-1.5 text-xs font-medium">
           <PackageSearch className="size-3.5 shrink-0" aria-hidden />
           Repuestos pendientes
         </h4>
@@ -25,7 +25,7 @@ export function TrackingPendingParts({
           {missingParts.map((part, index) => (
             <li
               key={`${part.since}-${index}`}
-              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm text-amber-900"
+              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm"
             >
               <span>
                 <span className="font-semibold tabular-nums">
@@ -33,14 +33,14 @@ export function TrackingPendingParts({
                 </span>{" "}
                 {part.name}
               </span>
-              <span className="text-xs text-amber-800/80">
+              <span className="text-xs opacity-80">
                 {pendingPartWait(part.since, arrivedAt)}
               </span>
             </li>
           ))}
         </ul>
         {oldestPending !== null && (
-          <p className="mt-2 text-xs text-amber-800/80">
+          <p className="mt-2 text-xs opacity-80">
             {missingParts.length === 1
               ? "Se pidió el"
               : "El más antiguo se pidió el"}{" "}

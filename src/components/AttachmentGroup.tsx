@@ -1,6 +1,7 @@
 import { CircleAlert } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { InlineNotice } from "@/components/InlineNotice";
 import { Button } from "@/components/ui/button";
 import {
   AttachmentGroupContext,
@@ -90,10 +91,7 @@ function AddressNotice({
   onRetry: () => void;
 }) {
   return (
-    <div
-      role="status"
-      className="mb-3 flex w-full flex-col gap-1.5 rounded-lg bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800"
-    >
+    <InlineNotice tone="warning" className="mb-3">
       <span className="flex items-start gap-2">
         <CircleAlert className="mt-0.5 size-4 shrink-0" />
         <span className="font-medium">No llegan las fotos</span>
@@ -105,15 +103,15 @@ function AddressNotice({
           variant="link"
           size="sm"
           onClick={onRetry}
-          className="h-auto px-0 text-xs font-medium text-amber-700"
+          className="h-auto px-0 text-xs font-medium text-status-warning-foreground"
         >
           Reintentar las fotos
         </Button>
-        <span className="text-amber-800/80">
+        <span className="opacity-80">
           La dirección es la misma para todas: el porqué se dice aquí una vez,
           no en cada hueco.
         </span>
       </span>
-    </div>
+    </InlineNotice>
   );
 }
