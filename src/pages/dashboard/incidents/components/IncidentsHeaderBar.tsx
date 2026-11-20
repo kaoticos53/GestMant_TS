@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { FileDown, Siren } from "lucide-react";
+import { FileDown, Siren, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { INCIDENT_FILTERS } from "@/lib/workshop";
@@ -10,11 +10,13 @@ export function IncidentsHeaderBar({
   onFilterChange,
   counts,
   onOpenReports,
+  onOpenAiAssistant,
 }: {
   filter: IncidentFilterId;
   onFilterChange: (id: IncidentFilterId) => void;
   counts: Record<IncidentFilterId, number>;
   onOpenReports: () => void;
+  onOpenAiAssistant?: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -47,6 +49,18 @@ export function IncidentsHeaderBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {onOpenAiAssistant && (
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={onOpenAiAssistant}
+            title="Consultar el historial de incidencias con DeepSeek"
+          >
+            <Sparkles className="size-4 text-primary" />
+            Consultar IA
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

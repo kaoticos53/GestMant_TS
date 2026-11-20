@@ -1,7 +1,10 @@
+import { useRef } from "react";
+import { EquipmentLabelScanner, type AppliedLabelFields } from "@/components/ai/EquipmentLabelScanner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 interface EquipmentFieldsProps {
+  isAuthenticated?: boolean;
   reportedAt: string;
   onReportedAtChange: (value: string) => void;
   equipmentKind: string;
@@ -15,6 +18,7 @@ interface EquipmentFieldsProps {
 }
 
 export function EquipmentFields({
+  isAuthenticated = false,
   reportedAt,
   onReportedAtChange,
   equipmentKind,
@@ -26,8 +30,41 @@ export function EquipmentFields({
   inventoryModels,
   disabled,
 }: EquipmentFieldsProps) {
+  const undoSnapshotRef = useRef<{
+    equipmentKind: string;
+    model: string;
+    serialNumber: string;
+  } | null>(null);
+
+  const handleApplyLabel = (fields: AppliedLabelFields) => {
+    if (!undoSnapshotRef.current) {
+      undoSnapshotRef.current = { equipmentKind, model, serialNumber };
+    }
+    if (fields.equipmentKind) onEquipmentKindChange(fields.equipmentKind);
+    if (fields.model) onModelChange(fields.model);
+    if (fields.serialNumber) onSerialNumberChange(fields.serialNumber);
+  };
+
+  const handleUndoLabel = () => {
+    const snap = undoSnapshotRef.current;
+    if (!snap) return;
+    onEquipmentKindChange(snap.equipmentKind);
+    onModelChange(snap.model);
+    onSerialNumberChange(snap.serialNumber);
+    undoSnapshotRef.current = null;
+  };
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 items-start">
+    <div className="space-y-4">
+      {isAuthenticated && (
+        <EquipmentLabelScanner
+          isAuthenticated={isAuthenticated}
+          disabled={disabled}
+          onApply={handleApplyLabel}
+          onUndo={handleUndoLabel}
+        />
+      )}
+      <div className="grid gap-4 sm:grid-cols-2 items-start">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="inc-date">Fecha de notificación *</Label>
         <Input
@@ -77,6 +114,7 @@ export function EquipmentFields({
           disabled={disabled}
         />
       </div>
+    </div>
     </div>
   );
 }

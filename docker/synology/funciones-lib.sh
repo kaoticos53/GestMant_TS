@@ -165,6 +165,9 @@ fijar_variables() {
   if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
     fijar_variable TURNSTILE_SECRET_KEY "$TURNSTILE_SECRET_KEY" || return 1
   fi
+  if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    fijar_variable DEEPSEEK_API_KEY "$DEEPSEEK_API_KEY" || return 1
+  fi
 }
 
 # Los nombres de las variables que tienen que estar puestas en el deployment: las
@@ -181,6 +184,9 @@ variables_esperadas() {
   fi
   if [ -n "${TURNSTILE_SECRET_KEY:-}" ]; then
     printf ' TURNSTILE_SECRET_KEY'
+  fi
+  if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    printf ' DEEPSEEK_API_KEY'
   fi
 }
 

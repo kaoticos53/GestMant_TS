@@ -6,6 +6,7 @@ export type WorkshopTabId =
   | "alerts"
   | "storage"
   | "mail"
+  | "ai"
   | "data";
 
 export interface WorkshopTabItem {

@@ -134,6 +134,13 @@ crons.daily(
 );
 
 crons.daily(
+  "purgar cuotas horarias caducadas de IA",
+  { hourUTC: 6, minuteUTC: 0 },
+  internal.ai.purgeExpiredUsage,
+  {},
+);
+
+crons.daily(
   "resumen semanal",
   { hourUTC: 7, minuteUTC: 0 },
   internal.weeklyReport.runScheduled,

@@ -70,6 +70,7 @@ const RESET_TABLES: TableNames[] = [
   "publicLookupLimits",
   "otpSendLimits",
   "publicChallengeUsed",
+  "aiUsageLimits",
   // La foto pública del taller: es un resumen de lo que se acaba de vaciar, así
   // que no puede quedarse contando el trabajo que ya no está. Se borra, y el
   // cron de `publicStats` toma una nueva —con ceros— en su siguiente pasada.

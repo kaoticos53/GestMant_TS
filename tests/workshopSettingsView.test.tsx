@@ -55,6 +55,9 @@ vi.mock("@/pages/dashboard/settings/WorkshopDataCard", () => ({
     <div data-testid="card-workshop-data">WorkshopDataCard</div>
   ),
 }));
+vi.mock("@/pages/dashboard/settings/AiSettingsCard", () => ({
+  AiSettingsCard: () => <div data-testid="card-ai-settings">AiSettingsCard</div>,
+}));
 
 import { WorkshopSettingsView } from "@/pages/dashboard/WorkshopSettingsView";
 
@@ -121,6 +124,7 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     expect(labels).toContain("Avisos");
     expect(labels).toContain("Almacén y archivo");
     expect(labels).toContain("Correo");
+    expect(labels).toContain("IA y DeepSeek");
     expect(labels).toContain("Datos del taller");
   });
 

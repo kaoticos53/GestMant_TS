@@ -26,6 +26,7 @@ vi.mock("@/hooks/use-auth", () => ({
 vi.mock("convex/react", () => ({
   useQuery: () => [],
   useMutation: () => vi.fn(),
+  useAction: () => vi.fn(),
 }));
 
 // Mock para RichTextEditor si usa canvas o DOM específico

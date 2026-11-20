@@ -40,6 +40,7 @@ vi.mock("convex/react", async () => {
       }
       return undefined;
     },
+    useAction: () => async () => undefined,
   };
 });
 

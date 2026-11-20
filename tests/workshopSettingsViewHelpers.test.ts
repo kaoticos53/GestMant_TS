@@ -55,6 +55,7 @@ describe("workshopSettingsView helpers", () => {
         "alerts",
         "storage",
         "mail",
+        "ai",
         "data",
       ]);
     });

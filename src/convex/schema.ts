@@ -1268,6 +1268,32 @@ const schema = defineSchema({
     lastTestError: v.optional(v.string()),
   }).index("by_key", ["key"]),
 
+  // Ajustes de IA (DeepSeek Visión + Chat): una sola fila (`key` = "default").
+  // La clave API se cifra con AES-GCM en reposo y nunca regresa al navegador.
+  aiSettings: defineTable({
+    key: v.string(),
+    enabled: v.boolean(),
+    baseUrl: v.string(),
+    visionModel: v.string(),
+    chatModel: v.string(),
+    apiKey: v.optional(v.string()),
+    apiKeyHint: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.string()),
+    lastTestAt: v.optional(v.number()),
+    lastTestOk: v.optional(v.boolean()),
+    lastTestError: v.optional(v.string()),
+  }).index("by_key", ["key"]),
+
+  // Cuota horaria de uso de IA por usuario autenticado (tabla efímera).
+  aiUsageLimits: defineTable({
+    userId: v.id("users"),
+    windowStart: v.number(),
+    count: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_windowStart", ["windowStart"]),
+
   // Histórico de correos salientes: qué salió, a quién y qué contestó el
   // servicio. Guarda el sobre —destinatarios, copia oculta, asunto y resultado—
   // y nunca el cuerpo, que ya vive en la ficha de la incidencia o en el resumen.

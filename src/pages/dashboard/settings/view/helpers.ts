@@ -3,6 +3,7 @@ import {
   Bell,
   Database,
   FolderTree,
+  Sparkles,
   Layers,
   Mail,
 } from "lucide-react";
@@ -63,6 +64,7 @@ export function getAvailableTabs(
     list.push({ id: "mail", label: "Correo", icon: Mail });
   }
   if (canManageData) {
+    list.push({ id: "ai", label: "IA y DeepSeek", icon: Sparkles });
     list.push({ id: "data", label: "Datos del taller", icon: Database });
   }
 

@@ -206,6 +206,8 @@ services:
       VLY_INTEGRATION_BASE_URL: ${VLY_INTEGRATION_BASE_URL:-}
       # Verificación anti-bot de Cloudflare Turnstile (opcional).
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      # Clave de DeepSeek para escáner de etiquetas y asistente IA (opcional).
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # El **modo de instalación**. Con una base recién hecha —sin ninguna
       # cuenta— el taller queda listo de una sola pasada: la base vacía y la
       # cuenta de administrador ya creada, sin cargar ningún dato de ejemplo. Con

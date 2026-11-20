@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { EquipmentLabelScanner, type AppliedLabelFields } from "@/components/ai/EquipmentLabelScanner";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,25 @@ export function CorrectEquipmentDialog({
   const [serialNumber, setSerialNumber] = useState(incident.serialNumber ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const undoSnapshotRef = useRef<{ model: string; serialNumber: string } | null>(
+    null,
+  );
+
+  const handleApplyLabel = (fields: AppliedLabelFields) => {
+    if (!undoSnapshotRef.current) {
+      undoSnapshotRef.current = { model, serialNumber };
+    }
+    if (fields.model) setModel(fields.model);
+    if (fields.serialNumber) setSerialNumber(fields.serialNumber);
+  };
+
+  const handleUndoLabel = () => {
+    const snap = undoSnapshotRef.current;
+    if (!snap) return;
+    setModel(snap.model);
+    setSerialNumber(snap.serialNumber);
+    undoSnapshotRef.current = null;
+  };
 
   const modelEmpty = model.trim() === "";
   const unchanged =
@@ -73,6 +93,13 @@ export function CorrectEquipmentDialog({
             incidencia.
           </DialogDescription>
         </DialogHeader>
+
+        <EquipmentLabelScanner
+          isAuthenticated={true}
+          disabled={busy}
+          onApply={handleApplyLabel}
+          onUndo={handleUndoLabel}
+        />
 
         <div className="grid gap-4">
           <div className="grid gap-2">

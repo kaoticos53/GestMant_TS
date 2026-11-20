@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { EquipmentLabelScanner, type AppliedLabelFields } from "@/components/ai/EquipmentLabelScanner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -55,6 +57,33 @@ export function EquipmentFormDialog(props: EquipmentFormDialogProps) {
     handleSubmit,
   } = useEquipmentForm(props);
 
+  const undoSnapshotRef = useRef<{
+    brand: string;
+    name: string;
+    model: string;
+    serialNumber: string;
+  } | null>(null);
+
+  const handleApplyLabel = (fields: AppliedLabelFields) => {
+    if (!undoSnapshotRef.current) {
+      undoSnapshotRef.current = { brand, name, model, serialNumber };
+    }
+    if (fields.brand) setBrand(fields.brand);
+    if (fields.equipmentKind && !name.trim()) setName(fields.equipmentKind);
+    if (fields.model) handleModelChange(fields.model);
+    if (fields.serialNumber) setSerialNumber(fields.serialNumber);
+  };
+
+  const handleUndoLabel = () => {
+    const snap = undoSnapshotRef.current;
+    if (!snap) return;
+    setBrand(snap.brand);
+    setName(snap.name);
+    handleModelChange(snap.model);
+    setSerialNumber(snap.serialNumber);
+    undoSnapshotRef.current = null;
+  };
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -66,6 +95,13 @@ export function EquipmentFormDialog(props: EquipmentFormDialogProps) {
               : "El equipo quedará disponible en las peticiones de repuestos."}
           </DialogDescription>
         </DialogHeader>
+
+        <EquipmentLabelScanner
+          isAuthenticated={true}
+          disabled={busy}
+          onApply={handleApplyLabel}
+          onUndo={handleUndoLabel}
+        />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <EquipmentIdentityFields

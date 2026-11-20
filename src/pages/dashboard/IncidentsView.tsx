@@ -1,4 +1,8 @@
+import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { IncidentAiAssistantDialog } from "./incidents/components/IncidentAiAssistantDialog";
 import { IncidentReportsDialog } from "./IncidentReportsDialog";
 import { QueueToolbar } from "./QueueToolbar";
 import { SORT_OPTIONS } from "./incidents/types";
@@ -29,6 +33,15 @@ export function IncidentsView({
   onOpenRequest?: (id: Id<"partRequests">) => void;
 }) {
   const state = useIncidentsViewState({ initialDetailId });
+  const aiAvailability = useQuery(api.ai.availability, {});
+  const [aiOpen, setAiOpen] = useState(false);
+
+  const handleOpenCitedIncident = (reference: string) => {
+    const match = state.incidents.find((inc) => inc.reference === reference);
+    if (!match) return;
+    setAiOpen(false);
+    state.setDetailId(match._id);
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -37,7 +50,18 @@ export function IncidentsView({
         onFilterChange={state.setFilter}
         counts={state.counts}
         onOpenReports={() => state.setReportsOpen(true)}
+        onOpenAiAssistant={
+          aiAvailability?.available ? () => setAiOpen(true) : undefined
+        }
       />
+
+      {aiOpen && (
+        <IncidentAiAssistantDialog
+          open={aiOpen}
+          onOpenChange={setAiOpen}
+          onOpenIncident={handleOpenCitedIncident}
+        />
+      )}
 
       {state.reportsOpen && (
         <IncidentReportsDialog

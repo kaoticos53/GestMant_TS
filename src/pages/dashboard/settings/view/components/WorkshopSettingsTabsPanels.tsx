@@ -1,4 +1,5 @@
 import { TabsContent } from "@/components/ui/tabs";
+import { AiSettingsCard } from "@/pages/dashboard/settings/AiSettingsCard";
 import { AuditAlertSettingsCard } from "@/pages/dashboard/settings/AuditAlertSettingsCard";
 import { AutomaticArchiveCard } from "@/pages/dashboard/settings/AutomaticArchiveCard";
 import { CatalogsCard } from "@/pages/dashboard/settings/CatalogsCard";
@@ -75,6 +76,14 @@ export function WorkshopSettingsTabsPanels({
         </TabsContent>
       )}
 
+      {canManageData && (
+        <TabsContent
+          value="ai"
+          className="space-y-5 focus-visible:outline-none"
+        >
+          <AiSettingsCard />
+        </TabsContent>
+      )}
       {canManageData && (
         <TabsContent
           value="data"

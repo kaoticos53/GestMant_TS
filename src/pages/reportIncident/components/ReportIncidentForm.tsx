@@ -116,7 +116,7 @@ export function ReportIncidentForm({
           <ReporterFields {...reporterProps} />
 
           {/* Bloque 2: Equipo y notificación */}
-          <EquipmentFields {...equipmentProps} />
+          <EquipmentFields {...equipmentProps} isAuthenticated={isAuthenticated} />
 
           {/* Bloque 3: Descripción ocupando todo el ancho de la ficha */}
           <DescriptionField {...descriptionProps} />

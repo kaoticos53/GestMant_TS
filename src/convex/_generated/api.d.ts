@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _ai_client from "../_ai/client.js";
 import type * as _auth_secretCrypto from "../_auth/secretCrypto.js";
 import type * as _auth_secureMutation from "../_auth/secureMutation.js";
 import type * as _incidents_documents from "../_incidents/documents.js";
@@ -20,6 +21,8 @@ import type * as _partRequests_incidentSync from "../_partRequests/incidentSync.
 import type * as _partRequests_trash from "../_partRequests/trash.js";
 import type * as _purchasing_helpers from "../_purchasing/helpers.js";
 import type * as _purchasing_queries from "../_purchasing/queries.js";
+import type * as ai from "../ai.js";
+import type * as aiSettings from "../aiSettings.js";
 import type * as alerts from "../alerts.js";
 import type * as archive from "../archive.js";
 import type * as audit from "../audit.js";
@@ -72,6 +75,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_ai/client": typeof _ai_client;
   "_auth/secretCrypto": typeof _auth_secretCrypto;
   "_auth/secureMutation": typeof _auth_secureMutation;
   "_incidents/documents": typeof _incidents_documents;
@@ -84,6 +88,8 @@ declare const fullApi: ApiFromModules<{
   "_partRequests/trash": typeof _partRequests_trash;
   "_purchasing/helpers": typeof _purchasing_helpers;
   "_purchasing/queries": typeof _purchasing_queries;
+  ai: typeof ai;
+  aiSettings: typeof aiSettings;
   alerts: typeof alerts;
   archive: typeof archive;
   audit: typeof audit;
