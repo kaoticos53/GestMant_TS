@@ -162,13 +162,34 @@ describe("protección en backend (Turnstile + PoW fallback + exención autentica
     expect(issued).not.toBeNull();
     expect(issued!.bits).toBe(POW_DEFAULT_BITS);
 
-    const nonce = await solvePowChallenge(issued!.salt, issued!.bits);
-
-    // Recién emitido (< 1500ms) dispara el Time-Trap
+    // Recién emitido (< 1500ms) dispara el Time-Trap. Se firma un reto de
+    // dificultad baja en lugar de resolver el de 16 bits: lo que se prueba es
+    // el plazo desde la emisión, no la velocidad de la máquina que resuelve.
+    const freshIssuedAt = Date.now();
+    const freshExpiresAt = freshIssuedAt + 60_000;
+    const freshSalt = "ffeeddccbbaa99887766554433221100";
+    const freshSignature = await signPowChallenge(
+      process.env.PULSO_CHALLENGE_SECRET,
+      {
+        salt: freshSalt,
+        issuedAt: freshIssuedAt,
+        expiresAt: freshExpiresAt,
+        bits: 10,
+      },
+    );
+    const freshNonce = await solvePowChallenge(freshSalt, 10);
     await expect(
       t.action(api.incidents.report, {
         ...baseReportArgs,
-        challenge: { kind: "pow", ...issued!, nonce },
+        challenge: {
+          kind: "pow",
+          salt: freshSalt,
+          issuedAt: freshIssuedAt,
+          expiresAt: freshExpiresAt,
+          bits: 10,
+          signature: freshSignature,
+          nonce: freshNonce,
+        },
       }),
     ).rejects.toThrow(/demasiado rápido/i);
 
@@ -236,7 +257,9 @@ describe("protección en backend (Turnstile + PoW fallback + exención autentica
           reportedAt: now - 1000,
           createdAt: now - 1000,
           updatedAt: now - 1000,
-          history: [{ status: "reported", at: now - 1000, by: `Visitante ${i}` }],
+          history: [
+            { status: "reported", at: now - 1000, by: `Visitante ${i}` },
+          ],
         });
       }
       for (let i = 0; i < MAX_UPLOADS_PER_HOUR; i += 1) {
@@ -254,11 +277,7 @@ describe("protección en backend (Turnstile + PoW fallback + exención autentica
     const created = await authed.action(api.incidents.report, baseReportArgs);
     expect(created.reference).toMatch(/^INC-/);
 
-    const upload = await authed.action(
-      api.reportUploads.generateUploadUrl,
-      {},
-    );
+    const upload = await authed.action(api.reportUploads.generateUploadUrl, {});
     expect(upload.ticket).toMatch(/^[0-9a-f]{32}$/);
   });
 });
-
