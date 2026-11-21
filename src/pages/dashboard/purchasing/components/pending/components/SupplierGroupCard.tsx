@@ -1,6 +1,7 @@
 import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import {
   groupSummary,
   type PurchaseRequestDoc,
@@ -50,13 +51,18 @@ export function SupplierGroupCard({
       </CardHeader>
       <CardContent className="grid gap-2">
         {group.items.map((row: PurchaseRequestDoc) => (
-          <PurchaseRequestRow
-            key={row._id}
-            row={row}
-            selected={selectedIds.has(row._id)}
-            onToggle={() => onToggleItem(row._id)}
-            onAction={onAction}
-          />
+          <div key={row._id} className="grid gap-2">
+            <PurchaseRequestRow
+              row={row}
+              selected={selectedIds.has(row._id)}
+              onToggle={() => onToggleItem(row._id)}
+              onAction={onAction}
+            />
+            <SharedMailSection
+              destinationType="purchaseRequest"
+              destinationId={row._id}
+            />
+          </div>
         ))}
       </CardContent>
     </Card>

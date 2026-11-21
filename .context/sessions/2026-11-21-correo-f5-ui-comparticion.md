@@ -111,3 +111,13 @@ total en el archivo).
 
 Pendiente: el botón en el diálogo del visor y el aviso a coordinación que sí
 hace el alta pública (`registerIncidentIntake`).
+
+---
+
+## 10. Petición de compra sin tratar
+
+La sección «Correos compartidos» se monta también bajo cada petición de compra
+agrupada por proveedor (`pending/components/SupplierGroupCard`), con
+`destinationType="purchaseRequest"`. Como la sección no se pinta sin copias, la
+cola de compras no cambia para las peticiones que no tienen correo. Con esto
+los seis destinos de SPEC-0018 tienen su sección.
