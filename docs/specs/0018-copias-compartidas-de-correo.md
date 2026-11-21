@@ -2,10 +2,10 @@
 
 - **ID:** `SPEC-0018`
 - **Título:** Copias de correo compartidas con incidencias, peticiones, equipos, manuales y compras: privacidad, visibilidad, retención y ciclo de vida
-- **Estado:** **Propuesta — reglas de privacidad cerradas; pendiente de aprobación formal**
+- **Estado:** **Propuesta — reglas de privacidad cerradas; pendiente de aprobación formal antes de F5**
 - **Fecha:** 2026-11-21
 - **Fuentes clave:** `SPEC-0017` (buzón y caché), `SPEC-0002` (roles y capacidades), `SPEC-0004` (incidencias), `SPEC-0005` (equipos), `SPEC-0007` (peticiones), `SPEC-0008` (compras), `SPEC-0009` (manuales), `SPEC-0011` (papelera y almacenamiento), `SPEC-0013` (auditoría), `SPEC-0016` (modelo de datos), `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/permissions.ts`, `src/convex/schema.ts`, `src/convex/incidents.ts`, `src/convex/partRequests.ts`, `src/convex/equipment.ts`, `src/convex/manuals.ts`, `src/convex/purchasing.ts`, `src/convex/trash.ts`, `src/convex/audit.ts`, `src/convex/workshopBackup.ts`, `src/convex/workshopReset.ts`, `src/convex/storageCleanup.ts`
-- **Dependencia:** requiere que `SPEC-0017` esté aprobada e implementada al menos en su fase de visor y descarga. Esta spec no implementa el buzón ni su caché.
+- **Dependencia:** `SPEC-0017` está aprobada, pero su fase de visor y descarga (F4) sigue pendiente; 0018 no empieza antes de esa puerta (F5). Esta spec no implementa el buzón ni su caché.
 
 ---
 
@@ -308,7 +308,7 @@ La fila purgada es una **lápida**: la ficha muestra «Correo compartido retirad
 
 ## 8. Baja de usuario y cambios de rol
 
-- **Baja lógica (`users.active = false`):** el usuario no puede entrar, no puede compartir y no puede ver la ficha. Sus copias **no se borran**, no se purgan y no cambian de audiencia. La baja de 0017 detiene la sincronización y purga la caché del buzón; esta spec no toca esa caché.
+- **Baja lógica (`users.active = false`):** el usuario no puede entrar, no puede compartir y no puede ver la ficha. Sus copias **no se borran**, no se purgan y no cambian de audiencia. La baja de 0017 detiene la sincronización y deja la caché del buzón inaccesible y sujeta a su barrido; esta spec no toca esa caché.
 - **Usuario que compartió:** `sharedBy` puede estar inactivo; `sharedByName` conserva el nombre visible. La copia no depende de que el autor siga activo.
 - **Pérdida de `viewMailbox`:** no puede compartir nuevas copias; las existentes siguen visibles según el destino. No se purgan por perder el buzón.
 - **Pérdida de una capacidad del destino:** la copia desaparece de la vista de esa persona, pero no se borra. Si recupera la capacidad, vuelve a verla.
@@ -473,7 +473,9 @@ tests/mailSharesBackup.test.ts
 | 2. Compartir y ver       | Acción `share`, creación de incidencia, sección en fichas, visor y descargas. | Test de aislamiento y visibilidad.                 |
 | 3. Retención y huérfanas | Enganches en papeleras, borrado de equipos/manuales, cron de huérfanas.       | Test de restauración, purga y plazo.               |
 | 4. Backup y reset        | `mailShares` en backup, sanitización, restauración como resumen, reset.       | Test de backup y storage cleanup.                  |
-| 5. UI y cierre           | Diálogo, sección, papelera administrativa, accesibilidad.                     | `tests/mailSharesView.test.tsx` y revisión visual. |
+| 5. UI y cierre           | Revisión de accesibilidad, móvil y cierre de la UI construida en fases 2–3.  | `tests/mailSharesView.test.tsx` y revisión visual. |
+
+Equivalencia con el plan: fases 1–2 = F5, fase 3 = F6, fases 4–5 = F7; F8 es el pilotaje posterior.
 
 ---
 
