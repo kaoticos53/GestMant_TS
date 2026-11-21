@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { downloadFileFromUrl } from "@/lib/downloadFile";
 import { DESTINATION_LABELS } from "@/lib/mailShare";
 import { formatDate, getErrorMessage } from "@/lib/workshop";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -44,13 +45,7 @@ export function OrphanMailSharesCard() {
         file: file.kind,
         ...(file.index === null ? {} : { index: file.index }),
       });
-      const link = document.createElement("a");
-      link.href = result.url;
-      link.download = result.name || file.name;
-      link.rel = "noopener noreferrer";
-      document.body.append(link);
-      link.click();
-      link.remove();
+      await downloadFileFromUrl(result.url, result.name || file.name);
     } catch (reason) {
       toast.error(getErrorMessage(reason));
     } finally {
@@ -96,13 +91,13 @@ export function OrphanMailSharesCard() {
           {rows.map((row) => (
             <li
               key={row.shareId}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
+              className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-sm font-medium">
                   {row.subject || "(sin asunto)"}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="mt-0.5 break-words text-xs text-muted-foreground">
                   {DESTINATION_LABELS[row.destinationType]} ·{" "}
                   {row.destinationReference || "sin referencia"} ·{" "}
                   {row.fromAddress || row.fromName} · borrado el{" "}
@@ -110,7 +105,7 @@ export function OrphanMailSharesCard() {
                   {formatDate(row.purgeAt)} · {formatSize(row.size)}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1 sm:justify-end">
                 {row.files.map((file) => {
                   const key = `${row.shareId}:${file.kind}:${file.index ?? ""}`;
                   return (
@@ -119,7 +114,7 @@ export function OrphanMailSharesCard() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="max-w-48 gap-1.5"
+                      className="max-w-full gap-1.5 sm:max-w-48"
                       disabled={downloading === key}
                       onClick={() => void handleDownload(row.shareId, file)}
                     >

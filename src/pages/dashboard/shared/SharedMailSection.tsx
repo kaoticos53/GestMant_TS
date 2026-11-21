@@ -8,12 +8,13 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { downloadFileFromUrl } from "@/lib/downloadFile";
+import type { MailShareDestinationType } from "@/lib/mailShare";
 import {
   formatDateTime,
   formatFileSize,
   getErrorMessage,
 } from "@/lib/workshop";
-import type { MailShareDestinationType } from "@/lib/mailShare";
 import { HtmlFrame } from "@/pages/dashboard/mailbox/HtmlFrame";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Download, Loader2, Mail, Trash2 } from "lucide-react";
@@ -76,13 +77,7 @@ export function SharedMailSection({
     setDownloading(index);
     try {
       const result = await download({ shareId, index });
-      const link = document.createElement("a");
-      link.href = result.url;
-      link.download = result.name || name;
-      link.rel = "noopener noreferrer";
-      document.body.append(link);
-      link.click();
-      link.remove();
+      await downloadFileFromUrl(result.url, result.name || name);
     } catch (reason) {
       toast.error(getErrorMessage(reason));
     } finally {
@@ -146,7 +141,7 @@ export function SharedMailSection({
           if (!value) setSelected(null);
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {state === "loading"

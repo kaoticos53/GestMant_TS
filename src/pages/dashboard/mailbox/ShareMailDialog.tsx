@@ -107,7 +107,7 @@ export function ShareMailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-1.5">
             <Share2 className="size-4" /> Compartir con el expediente
