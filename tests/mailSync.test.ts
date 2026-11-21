@@ -42,6 +42,15 @@ function syncResponse({
   );
 }
 
+function invalidSyncTokenResponse(): string {
+  return soap(
+    "<soap:Fault><soap:Code><soap:Value>soap:Sender</soap:Value></soap:Code>" +
+      "<soap:Reason><soap:Text>invalid sync token</soap:Text></soap:Reason>" +
+      '<soap:Detail><Error xmlns="urn:zimbra"><Code>mail.INVALID_SYNC_TOKEN</Code>' +
+      "<Trace>trace-invalid-token</Trace></Error></soap:Detail></soap:Fault>",
+  );
+}
+
 function searchResponse({
   messageIds,
   more = false,
@@ -228,6 +237,49 @@ describe("sincronización de cabeceras", () => {
     expect(
       await t.run((ctx) => ctx.db.query("mailHeaders").collect()),
     ).toHaveLength(2);
+  });
+
+  test("un token inválido se vacía, reindexa y conserva las cabeceras", async () => {
+    const { first, t, firstId } = await setup();
+    const fetchMock = stubMailbox({
+      searchPages: [
+        searchResponse({ messageIds: ["17438", "17436"] }),
+        searchResponse({ messageIds: ["17438", "17436"] }),
+      ],
+      syncPages: [syncResponse({ token: "tok-1" }), invalidSyncTokenResponse()],
+    });
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    const result = await first.action(api.mailSync.syncNow, {
+      folderRemoteId: "2",
+    });
+
+    expect(result).toEqual({ ok: true, folders: 1, headers: 2 });
+    expect(
+      fetchMock.mock.calls.filter(([, init]) =>
+        String((init as RequestInit | undefined)?.body ?? "").includes(
+          "<SearchRequest",
+        ),
+      ),
+    ).toHaveLength(2);
+
+    const list = await first.query(api.mailHeaders.list, {
+      folderRemoteId: "2",
+    });
+    expect(list.total).toBe(2);
+    expect(list.headers.map((header) => header.messageId)).toEqual([
+      "17438",
+      "17436",
+    ]);
+    const rows = await t.run((ctx) => ctx.db.query("mailHeaders").collect());
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.deletedRemoteAt === undefined)).toBe(true);
+
+    const folder = await t.run((ctx) =>
+      ctx.db.query("mailFolders").withIndex("by_account").first(),
+    );
+    expect(folder?.syncToken).toBeUndefined();
+    expect((await accountFor(t, firstId))?.status).toBe("connected");
   });
 
   test("una desaparición marca tumba y una reaparición la limpia", async () => {

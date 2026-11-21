@@ -51,7 +51,7 @@ incremento.
 
 - **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores.
 - **Codegen (`npx convex codegen`):** ✅ Exit 0.
-- **Tests F3 (`npx vitest run tests/mailSync.test.ts`):** ✅ 10/10.
+- **Tests F3 (`npx vitest run tests/mailSync.test.ts`):** ✅ 11/11.
 - **Suite completa (`npx vitest run`):** ✅ 2769 pasando, 69 omitidos.
 - **Arquitectura y seguridad:** ✅ 9/9 y 13/13.
 - **Lint (`npm run lint`):** ✅ 0 errores; 19 warnings preexistentes.
@@ -63,8 +63,8 @@ incremento.
 corte por `MAX_PAGES` o una página vacía con `more=1` lanza un error, deja la
 carpeta como estaba y no avanza el token ni marca tumbas. La lectura del delta y
 la de cabeceras son dos funciones separadas; el guardado queda detrás de ambas y
-solo ocurre al agotar el recorrido. Cubierto con tres tests (`more=1` vacío,
-`MAX_PAGES` en `Search` y `MAX_PAGES` en `Sync`), 10/10 en total.
+solo ocurre al agotar el recorrido. Cubierto con cuatro tests (`more=1` vacío,
+`MAX_PAGES` en `Search`, `MAX_PAGES` en `Sync` y token inválido), 11/11 en total.
 
 ---
 
