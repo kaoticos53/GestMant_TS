@@ -26,7 +26,7 @@ El código de este sistema gestiona operaciones reales de mantenimiento industri
 4. **NO añadir librerías externas sin autorización explícita:**  
    No introduzcas paquetes npm (ej. `moment`, `lodash`, `date-fns`, `axios`) cuando el proyecto ya provee utilidades nativas (`Intl`, utilidades en `src/lib/`, hooks y clientes Convex).
 5. **NO omitir tipado estricto:**  
-   El uso de `any` está prohibido. Si un tipo de Convex aún no se ha regenerado, ejecuta `npm run convex:codegen` o deriva el tipo usando `Doc<"tableName">` o `Id<"tableName">` importados de `src/convex/_generated/dataModel`.
+   El uso de `any` está prohibido. Si un tipo de Convex aún no se ha regenerado, ejecuta `npx convex codegen` o deriva el tipo usando `Doc<"tableName">` o `Id<"tableName">` importados de `src/convex/_generated/dataModel`.
 6. **NO omitir comprobaciones de identidad en mutaciones de Convex ni hardcodear privilegios:**  
    Toda mutación pública en `src/convex/` (salvo puertas expresas de intake público con rate limiting) DEBE verificar identidad y permisos (`requireUser`, `requireAdmin`, etc.). Queda prohibido hardcodear correos literales para conceder rol `admin` (usar `INITIAL_ADMIN_EMAIL`). *(Existe un test automático en `tests/seguridad.test.ts`)*.
 7. **NO usar `eval()`, `new Function()` ni `dangerouslySetInnerHTML` no autorizado:**  

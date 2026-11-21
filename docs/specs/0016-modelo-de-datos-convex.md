@@ -52,7 +52,7 @@ erDiagram
 
 - **RF-001 (Contadores atómicos `references.ts`):** `referenceCounters` asigna referencias correlativas únicas sin colisiones (`INC-XXXX`, `PET-XXXX`, `PC-XXXX`, `OC-XXXX`, `EQ-XXX`).
 - **RF-002 (Organización modular `src/convex/`):** Helpers internos agrupados en `_ai/`, `_auth/`, `_incidents/`, `_inventory/`, `_mail/`, `_partRequests/`, `_purchasing/`, expuestos solo mediante `internalQuery`/`internalMutation` o funciones de dominio.
-- **RF-003 (Registro estático de tipos):** Toda nueva función o módulo bajo `src/convex/` debe quedar declarado en `src/convex/_generated/api.d.ts` (validado automáticamente por `tests/nasSetup.test.ts`).
+- **RF-003 (Registro estático de tipos):** Toda nueva función o módulo bajo `src/convex/` debe quedar declarado en `src/convex/_generated/api.d.ts` (validado automáticamente por `tests/nasSetup.test.ts`). El índice se regenera con `npx convex codegen` contra un deployment activo.
 
 ---
 
@@ -75,4 +75,4 @@ erDiagram
 
 ## 7. Preguntas Abiertas / Deuda Técnica
 
-- **Q-001:** `npx convex codegen` requiere un deployment local/remoto activo para regenerar `api.d.ts` automáticamente; en entornos offline se mantiene `api.d.ts` actualizado manualmente y validado por `tests/nasSetup.test.ts`.
+- Sin deuda abierta.

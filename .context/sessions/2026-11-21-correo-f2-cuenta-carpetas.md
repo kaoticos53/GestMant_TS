@@ -58,7 +58,7 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 - **TypeScript:** ✅ `npx tsc --noEmit`.
 - **Lint:** ✅ 0 errores; 19 warnings preexistentes.
 - **Arquitectura y seguridad:** ✅ incluidas en la pasada amplia.
-- **Codegen:** ✅ `npx convex codegen` contra el backend local; `api.d.ts` idéntico al ajuste manual (mismo SHA-256).
+- **Codegen:** ✅ `npx convex codegen` contra el backend local; `api.d.ts` idéntico a la versión versionada (mismo SHA-256).
 - **Prueba real contra Hermes:** ❌ no ejecutada; los contratos usan fixtures y `fetch` simulado.
 
 ---
