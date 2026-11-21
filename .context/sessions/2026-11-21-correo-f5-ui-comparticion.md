@@ -121,3 +121,13 @@ agrupada por proveedor (`pending/components/SupplierGroupCard`), con
 `destinationType="purchaseRequest"`. Como la sección no se pinta sin copias, la
 cola de compras no cambia para las peticiones que no tienen correo. Con esto
 los seis destinos de SPEC-0018 tienen su sección.
+
+---
+
+## 11. Idempotencia por destino
+
+El índice `by_client_share` solo conoce autor y marca, así que ambos reusos
+filtran también el destino esperado: `persistShare` reutiliza únicamente la
+copia que apunta al mismo tipo e id, y `createIncidentWithShare` solo la que
+lleva `createdDestination` —una incidencia nacida del correo—, no una copia
+compartida a una incidencia que ya existía. Añadidas dos pruebas de colisión.

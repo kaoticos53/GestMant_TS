@@ -227,15 +227,23 @@ export const persistShare = internalMutation({
   },
   handler: async (ctx, args): Promise<Id<"mailShares">> => {
     if (args.clientShareId) {
-      const existing = await ctx.db
+      // El índice solo sabe de autor y marca: el mismo `clientShareId` puede
+      // haberse usado para otra ficha, y entonces no es un reintento sino otra
+      // copia. Se reutiliza únicamente la que apunta al destino esperado.
+      const rows = await ctx.db
         .query("mailShares")
         .withIndex("by_client_share", (q) =>
           q
             .eq("sharedBy", args.sharedBy)
             .eq("clientShareId", args.clientShareId),
         )
-        .first();
-      if (existing) return existing._id;
+        .collect();
+      const same = rows.find(
+        (row) =>
+          row.destinationType === args.destinationType &&
+          row.destinationId === args.destinationId,
+      );
+      if (same) return same._id;
     }
 
     const bytes = shareSnapshotBytes({
@@ -526,14 +534,21 @@ export const createIncidentWithShare = internalMutation({
     created: boolean;
   }> => {
     if (args.clientShareId) {
-      const existing = await ctx.db
+      // Solo vale una copia que creó su incidencia: compartir el mismo correo
+      // con una incidencia que ya existía también apunta a una incidencia, pero
+      // no es el alta que este reintento busca.
+      const rows = await ctx.db
         .query("mailShares")
         .withIndex("by_client_share", (q) =>
           q
             .eq("sharedBy", args.sharedBy)
             .eq("clientShareId", args.clientShareId),
         )
-        .first();
+        .collect();
+      const existing = rows.find(
+        (row) =>
+          row.destinationType === "incident" && row.createdDestination === true,
+      );
       if (existing) {
         return {
           incidentId: existing.destinationId as Id<"incidents">,
@@ -599,6 +614,7 @@ export const createIncidentWithShare = internalMutation({
       sharedByName: args.sharedByName,
       sharedAt: now,
       clientShareId: args.clientShareId,
+      createdDestination: true,
     });
     return { incidentId, shareId, reference, created: true };
   },

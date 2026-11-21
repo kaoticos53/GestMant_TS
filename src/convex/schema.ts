@@ -1604,6 +1604,9 @@ const schema = defineSchema({
     sharedAt: v.number(),
     // Idempotencia del formulario: un reintento no duplica la copia.
     clientShareId: v.optional(v.string()),
+    // La copia creó su destino (una incidencia nacida del correo): solo esas
+    // cuentan como el alta que un reintento de `createIncidentFromMail` busca.
+    createdDestination: v.optional(v.boolean()),
     // Solo equipos y manuales: el destino se borró y la copia queda huérfana.
     destinationDeletedAt: v.optional(v.number()),
     orphanPurgeAt: v.optional(v.number()),

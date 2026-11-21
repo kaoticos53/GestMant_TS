@@ -262,6 +262,44 @@ describe("mailShares.share", () => {
     expect(rows).toHaveLength(1);
   });
 
+  test("el mismo clientShareId en otra ficha no reutiliza la copia", async () => {
+    const { t, admin, incidentId } = await setup();
+    const otraIncidencia = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-9001",
+        reporterName: "Otro",
+        description: "Otra incidencia",
+        reportedAt: 1,
+        status: "reported",
+        history: [{ status: "reported", at: 1, by: "Otro" }],
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
+
+    const first = await admin.action(api.mailShares.share, {
+      messageId: "m-1",
+      destinationType: "incident",
+      destinationId: incidentId,
+      mode: "summary",
+      clientShareId: "misma-marca",
+    });
+    const second = await admin.action(api.mailShares.share, {
+      messageId: "m-1",
+      destinationType: "incident",
+      destinationId: otraIncidencia,
+      mode: "summary",
+      clientShareId: "misma-marca",
+    });
+
+    expect(second.shareId).not.toBe(first.shareId);
+    const rows = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.destinationId))).toEqual(
+      new Set([incidentId, otraIncidencia]),
+    );
+  });
+
   test("sin viewMailbox no se puede compartir", async () => {
     // El rechazo lo da la puerta del buzón (`requireMailboxMember`), que es la
     // única comprobación de `viewMailbox`: compartir no repite esa regla.
@@ -401,6 +439,36 @@ describe("mailShares.createIncidentFromMail", () => {
     expect(second.shareId).toBe(first.shareId);
     const incidents = await t.run((ctx) => ctx.db.query("incidents").collect());
     expect(incidents).toHaveLength(2);
+  });
+
+  test("una copia a una incidencia existente no se toma por un alta", async () => {
+    const { t, admin, incidentId } = await setup();
+
+    // El mismo `clientShareId` con el que antes se compartió el correo con una
+    // incidencia que ya existía no puede devolver esa incidencia: la petición
+    // era crear una nueva.
+    await admin.action(api.mailShares.share, {
+      messageId: "m-1",
+      destinationType: "incident",
+      destinationId: incidentId,
+      mode: "summary",
+      clientShareId: "alta-confundida",
+    });
+
+    const result = await admin.action(api.mailShares.createIncidentFromMail, {
+      messageId: "m-1",
+      mode: "summary",
+      clientShareId: "alta-confundida",
+    });
+
+    expect(result.incidentId).not.toBe(incidentId);
+    expect(result.reference).not.toBe("INC-0001");
+    const incident = await t.run((ctx) => ctx.db.get(result.incidentId));
+    expect(incident?.history[0]?.note).toBe("Creada desde correo");
+    const share = await t.run((ctx) => ctx.db.get(result.shareId));
+    expect(share?.createdDestination).toBe(true);
+    const rows = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(rows).toHaveLength(2);
   });
 
   test("sin buzón no se crea la incidencia", async () => {
