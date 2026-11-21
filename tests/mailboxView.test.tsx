@@ -2,6 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAILBOX_PAGE_SIZE } from "@/pages/dashboard/mailbox/helpers";
 import { settle } from "./settle";
 
 (
@@ -101,6 +102,22 @@ type HeadersResult = {
   unread: number;
 };
 
+function makeHeaders(
+  offset: number,
+  count: number,
+  folderRemoteId = "inbox",
+): typeof HEADERS {
+  return Array.from({ length: count }, (_, index) => ({
+    ...HEADERS[index % HEADERS.length],
+    messageId: `${folderRemoteId}-${offset + index}`,
+    folderRemoteId,
+    subject: `Asunto ${offset + index + 1}`,
+    flags: "",
+    hasAttachments: false,
+    snippet: `Fragmento ${offset + index + 1}`,
+  }));
+}
+
 function setupQueries({
   account = ACCOUNT,
   folders = FOLDERS,
@@ -198,21 +215,6 @@ describe("MailboxView", () => {
   });
 
   it("pagina por offset y vuelve a la primera página al cambiar carpeta o búsqueda", async () => {
-    const makeHeaders = (
-      offset: number,
-      count: number,
-      folderRemoteId: string,
-    ): typeof HEADERS =>
-      Array.from({ length: count }, (_, index) => ({
-        ...HEADERS[index % HEADERS.length],
-        messageId: `${folderRemoteId}-${offset + index}`,
-        folderRemoteId,
-        subject: `Asunto ${offset + index + 1}`,
-        flags: "",
-        hasAttachments: false,
-        snippet: `Fragmento ${offset + index + 1}`,
-      }));
-
     setupQueries({
       headersForArgs: (args) => {
         if (args.folderRemoteId === "sent") {
@@ -227,7 +229,11 @@ describe("MailboxView", () => {
         }
         const offset = typeof args.offset === "number" ? args.offset : 0;
         return {
-          headers: makeHeaders(offset, 100, "inbox"),
+          headers: makeHeaders(
+            offset,
+            Math.min(MAILBOX_PAGE_SIZE, 250 - offset),
+            "inbox",
+          ),
           total: 250,
           unread: 0,
         };
@@ -300,6 +306,56 @@ describe("MailboxView", () => {
     const last = listCalls().at(-1);
     expect(last).toMatchObject({ folderRemoteId: "sent", offset: 0 });
     expect(last?.search).toBeUndefined();
+  });
+
+  it("corrige la página cuando el total encoge y deja de pedir un offset vacío", async () => {
+    let total = 250;
+    setupQueries({
+      headersForArgs: (args) => {
+        const offset = typeof args.offset === "number" ? args.offset : 0;
+        return {
+          headers: makeHeaders(
+            offset,
+            Math.max(0, Math.min(MAILBOX_PAGE_SIZE, total - offset)),
+          ),
+          total,
+          unread: 0,
+        };
+      },
+    });
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    const lastPage = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Última página"]',
+    );
+    expect(lastPage).not.toBeNull();
+    await act(async () => {
+      lastPage?.click();
+      await settle();
+    });
+
+    const listCalls = () =>
+      mockUseQuery.mock.calls
+        .map(([, args]) => args)
+        .filter(
+          (args): args is Record<string, unknown> =>
+            args !== null && typeof args === "object",
+        );
+    expect(listCalls().at(-1)).toMatchObject({ offset: 2 * MAILBOX_PAGE_SIZE });
+
+    total = 20;
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    expect(listCalls().at(-1)).toMatchObject({ offset: 0 });
+    expect(container.textContent).toContain("Asunto 1");
+    expect(container.textContent).not.toContain("Esta carpeta está vacía");
   });
 
   it("avisa cuando las credenciales necesitan reautenticación", async () => {

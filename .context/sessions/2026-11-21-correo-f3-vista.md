@@ -49,6 +49,9 @@ reservado a F4.
   `mailHeaders.list`; el pie compartido `TablePagination` permite recorrer el
   total real del buzón. La página se reinicia en el mismo render al cambiar de
   carpeta o de búsqueda, y el área vuelve arriba al cambiar de página.
+- Si el total encoge y la página deja de existir, se corrige en el render y se
+  vuelve a pedir el offset válido; mientras tanto se muestra el esqueleto, no
+  un vacío falso.
 - No hay visor de cuerpo ni descarga: la fila solo muestra asunto, remitente,
   fecha, fragmento y marca de adjuntos.
 - En móvil se alterna entre carpetas y mensajes con un botón de vuelta; en
@@ -63,8 +66,8 @@ reservado a F4.
 ## 4. Estado de Verificación y Testing
 
 - **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores.
-- **Tests de F3 y navegación:** ✅ 32/32 (`mailSync`, `mailboxView` con
-  paginación, `navConfig`, `dashboardTabRouterRules`).
+- **Tests de F3 y navegación:** ✅ 33/33 (`mailSync`, `mailboxView` con
+  paginación y corrección de total, `navConfig`, `dashboardTabRouterRules`).
 - **Arquitectura y seguridad:** ✅ 22/22 (`arquitectura`, `seguridad`).
 - **Lint (`npx eslint .`):** ✅ 0 errores; 19 warnings preexistentes.
 - **Suite completa (`npx vitest run`):** 2778 pasando, 69 omitidos y 1 fallo
@@ -84,6 +87,7 @@ reservado a F4.
 - [ ] Prueba real de credenciales, token inválido y renovación.
 - [ ] Integrar la lista con el visor de F4; no hay cuerpos todavía.
 - [x] Paginación por offset sobre `mailHeaders.list`, con 100 cabeceras por
-  página y reinicio al cambiar carpeta o búsqueda.
+  página, reinicio al cambiar carpeta o búsqueda y corrección si el total
+  encoge.
 - ⚠️ **Riesgo conocido:** `npm audit` mantiene la vulnerabilidad moderada
   preexistente de `hono`; no se ha tocado.

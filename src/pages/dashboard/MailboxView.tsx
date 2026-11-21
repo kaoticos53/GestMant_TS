@@ -110,6 +110,15 @@ export function MailboxView({
   );
   const paging = pageWindow(headersResult?.total ?? 0, page, MAILBOX_PAGE_SIZE);
 
+  // El total puede encoger entre dos pasadas —una sincronización, un borrado—.
+  // Si la página ya no existe, se corrige en el mismo render: la siguiente
+  // consulta pide el offset de la última página válida, no uno vacío.
+  const pageOutOfRange = headersResult !== undefined && paging.page !== page;
+  if (pageOutOfRange) {
+    page = paging.page;
+    setPageState({ key: pageKey, page });
+  }
+
   const handlePageChange = (nextPage: number) => {
     setPageState({ key: pageKey, page: nextPage });
   };
@@ -257,7 +266,7 @@ export function MailboxView({
               onOpenSettings={onOpenSettings}
             />
 
-            {headersResult === undefined ? (
+            {headersResult === undefined || pageOutOfRange ? (
               <MessageListSkeleton />
             ) : (
               <MessageList
@@ -271,7 +280,7 @@ export function MailboxView({
                 onClearSearch={() => setSearch("")}
               />
             )}
-            {headersResult !== undefined && (
+            {headersResult !== undefined && !pageOutOfRange && (
               <TablePagination
                 paging={{ ...paging, setPage: handlePageChange }}
                 singular="mensaje"
