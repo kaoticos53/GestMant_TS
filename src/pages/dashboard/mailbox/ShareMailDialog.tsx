@@ -205,7 +205,9 @@ export function ShareMailDialog({
                   adjuntos.
                 </span>
               </label>
-              {effectiveType !== undefined && allowsOriginal(effectiveType) && (
+              {(asIncident ||
+                (effectiveType !== undefined &&
+                  allowsOriginal(effectiveType))) && (
                 <label className="flex items-start gap-2 text-xs">
                   <input
                     type="radio"

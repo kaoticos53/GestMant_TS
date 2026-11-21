@@ -155,3 +155,12 @@ capacidad `createIncidentFromMail`. Marcado, oculta destino y referencia y
 manda `createIncidentFromMail` con el modo elegido y un `clientShareId` nuevo;
 el aviso dice que el remitente queda como notificante. El texto del diálogo
 explica que la incidencia nace «Reportada» y sin asignar.
+
+---
+
+## 14. Modo del alta en el visor
+
+Al crear la incidencia desde el diálogo del visor, «Resumen» y «Original» se
+ofrecen siempre: antes el radio de original dependía del destino seleccionado y,
+con el destino en manual o sin destinos, el alta se quedaba solo con el
+resumen. El aviso de éxito ya dice la referencia creada.
