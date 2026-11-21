@@ -8,7 +8,6 @@ import {
   mutation,
   query,
   type ActionCtx,
-  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { logSecurityEvent } from "./audit";
@@ -16,6 +15,7 @@ import { readAccount, requireMailboxMember } from "./mailAccounts";
 import type { Capability } from "../lib/permissions";
 import { hasCapability, memberOrNull, requireAdmin } from "./permissions";
 import { resolveDestination } from "./_mailShares/destinations";
+import { wipeShareContent } from "./_mailShares/purge";
 import { INCIDENT_STATUSES } from "./schema";
 import { freeReference } from "./references";
 import {
@@ -877,54 +877,6 @@ export const downloadContext = internalQuery({
  * Purga de administrador: borra adjuntos y `.eml`, vacía el contenido y deja
  * la fila como lápida. No toca la caché, la cuenta ni el mensaje original.
  */
-/**
- * Borra el contenido de una copia y deja la fila como lápida.
- *
- * Es lo común a la purga manual y a la de las huérfanas: los objetos de
- * `_storage` —adjuntos y `.eml`— se borran aquí, y la fila conserva su
- * procedencia y su fecha de purga para que la traza explique qué hubo. El
- * barrido nocturno de `storageCleanup` recoge lo que fallara al borrar.
- */
-async function wipeShareContent(
-  ctx: MutationCtx,
-  row: Doc<"mailShares">,
-  purge: { reason: "manual" | "orphan"; by?: Id<"users">; now: number },
-): Promise<void> {
-  for (const attachment of row.attachments ?? []) {
-    try {
-      await ctx.storage.delete(attachment.storageId);
-    } catch {
-      // El barrido nocturno recoge lo que quede sin cita.
-    }
-  }
-  if (row.emlStorageId) {
-    try {
-      await ctx.storage.delete(row.emlStorageId);
-    } catch {
-      // Igual que los adjuntos.
-    }
-  }
-
-  await ctx.db.patch(row._id, {
-    subject: undefined,
-    fromName: undefined,
-    fromAddress: undefined,
-    summary: undefined,
-    bodyText: undefined,
-    bodyHtml: undefined,
-    bodyTruncated: undefined,
-    emlStorageId: undefined,
-    emlFileName: undefined,
-    emlSize: undefined,
-    attachments: undefined,
-    sourceMessageId: undefined,
-    sourceEmail: undefined,
-    contentPurgedAt: purge.now,
-    contentPurgedBy: purge.by,
-    purgeReason: purge.reason,
-  });
-}
-
 export const purge = mutation({
   args: { shareId: v.id("mailShares") },
   handler: async (ctx, args) => {

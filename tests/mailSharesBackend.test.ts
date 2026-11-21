@@ -726,3 +726,127 @@ describe("mailShares: audiencia y purga", () => {
     );
   });
 });
+
+describe("mailShares: purga al borrar el destino", () => {
+  test("la pasada de la papelera de incidencias se lleva sus copias y sus objetos", async () => {
+    const { t, admin, incidentId } = await setup();
+    await admin.action(api.mailShares.share, {
+      messageId: "m-1",
+      destinationType: "incident",
+      destinationId: incidentId,
+      mode: "original",
+    });
+    const share = await t.run(
+      async (ctx) => (await ctx.db.query("mailShares").collect())[0],
+    );
+
+    await admin.mutation(api.incidents.withdraw, { incidentId });
+    await t.run((ctx) =>
+      ctx.db.patch(incidentId, { purgeAt: Date.now() - 1000 }),
+    );
+    expect(await t.mutation(internal.incidents.purgeExpired, {})).toBe(1);
+
+    expect(await t.run((ctx) => ctx.db.get(share._id))).toBeNull();
+    expect(
+      await t.run((ctx) => ctx.db.system.get(share.attachments![0].storageId)),
+    ).toBeNull();
+    // El objeto de la caché del buzón no se toca.
+    const stored = await t.run((ctx) =>
+      ctx.db.system.query("_storage").collect(),
+    );
+    expect(stored).toHaveLength(1);
+
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    expect(
+      audit.some(
+        (row) =>
+          row.action === "mail_share_purge" &&
+          String(row.metadata).includes("destination"),
+      ),
+    ).toBe(true);
+  });
+
+  test("borrar una petición se lleva sus copias, también la que ya era lápida", async () => {
+    const { t, admin } = await setup();
+    const reference = await admin.mutation(api.partRequests.create, {
+      requesterName: "Iván Torres",
+      priority: "normal",
+      description: "Con el albarán del proveedor.",
+    });
+    const request = await t.run(async (ctx) => {
+      const row = (await ctx.db.query("partRequests").collect()).find(
+        (candidate) => candidate.reference === reference,
+      );
+      if (!row) throw new Error("Sin petición");
+      return row;
+    });
+
+    for (const mode of ["summary", "original"] as const) {
+      await admin.action(api.mailShares.share, {
+        messageId: "m-1",
+        destinationType: "request",
+        destinationId: request._id,
+        mode,
+      });
+    }
+    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(shares).toHaveLength(2);
+
+    // Una copia ya purgada a mano no se audita otra vez: su lápida se va con
+    // la petición.
+    const purged = shares.find((row) => row.mode === "original")!;
+    await admin.mutation(api.mailShares.purge, { shareId: purged._id });
+
+    await admin.mutation(api.partRequests.withdraw, {
+      requestId: request._id,
+    });
+    await admin.mutation(api.partRequests.deleteNow, {
+      requestId: request._id,
+    });
+
+    expect(await t.run((ctx) => ctx.db.get(request._id))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.query("mailShares").collect())).toEqual(
+      [],
+    );
+    // Solo queda el objeto de la caché: la copia se llevó el suyo.
+    expect(
+      await t.run((ctx) => ctx.db.system.query("_storage").collect()),
+    ).toHaveLength(1);
+  });
+
+  test("la purga de un destino no toca las copias de otro", async () => {
+    const { t, admin, incidentId } = await setup();
+    const otherId = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-9001",
+        reporterName: "Otro",
+        description: "Otra incidencia",
+        reportedAt: 1,
+        status: "reported",
+        history: [{ status: "reported", at: 1, by: "Otro" }],
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    );
+    for (const destinationId of [incidentId, otherId]) {
+      await admin.action(api.mailShares.share, {
+        messageId: "m-1",
+        destinationType: "incident",
+        destinationId,
+        mode: "summary",
+      });
+    }
+
+    await admin.mutation(api.incidents.withdraw, { incidentId });
+    await t.run((ctx) =>
+      ctx.db.patch(incidentId, { purgeAt: Date.now() - 1000 }),
+    );
+    await t.mutation(internal.incidents.purgeExpired, {});
+
+    const rows = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].destinationId).toBe(otherId);
+  });
+});

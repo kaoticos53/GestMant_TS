@@ -10,15 +10,16 @@ import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
 import { trashRetentionDays } from "../trash";
 import { identityNotice, secureMutation } from "../_auth/secureMutation";
+import { purgeForDestination } from "../_mailShares/purge";
 import { actorName, requireDecisionCapability } from "./helpers";
 
 /** Tandas de la pasada nocturna, como en la papelera de incidencias. */
 const PURGE_LIMIT = 100;
 
 /**
- * Borra de verdad una petición retirada: su fila y los archivos que adjuntaba.
- * Es lo irreversible, así que solo lo llaman el borrado a mano y la pasada de la
- * papelera, nunca la retirada.
+ * Borra de verdad una petición retirada: su fila, sus copias de correo y los
+ * archivos que adjuntaba. Es lo irreversible, así que solo lo llaman el borrado
+ * a mano y la pasada de la papelera, nunca la retirada.
  *
  * Lo que sí se queda son las peticiones de compra que se pidieron por ella: son
  * la constancia de lo que se compró, y guardan copiada la referencia de la
@@ -29,6 +30,8 @@ async function purgeRequest(
   ctx: MutationCtx,
   request: Doc<"partRequests">,
 ): Promise<void> {
+  // La copia de correo sigue al destino: sin ficha no queda dónde leerla.
+  await purgeForDestination(ctx, "request", request._id, Date.now());
   for (const attachment of request.attachments ?? []) {
     await ctx.storage.delete(attachment.storageId);
   }

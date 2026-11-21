@@ -14,6 +14,7 @@ import { isClosedIncident } from "../../lib/incidentFlow";
 import { richDocToPlainText } from "../../lib/richDoc";
 import { trashPurgeAt } from "../../lib/trash";
 import { hasCapability } from "../permissions";
+import { purgeForDestination } from "../_mailShares/purge";
 import { identityNotice, secureMutation } from "../_auth/secureMutation";
 import {
   actorName,
@@ -140,9 +141,9 @@ export const archiveClosedBefore = mutation({
 const PURGE_LIMIT = 100;
 
 /**
- * Borra de verdad una incidencia retirada: su expediente y los avisos que la
- * señalaban. Es lo irreversible, así que solo lo llaman el borrado a mano y la
- * pasada de la papelera, nunca la retirada.
+ * Borra de verdad una incidencia retirada: su expediente, sus copias de correo
+ * y los avisos que la señalaban. Es lo irreversible, así que solo lo llaman el
+ * borrado a mano y la pasada de la papelera, nunca la retirada.
  *
  * Dos cosas se quedan a propósito: el rastro de auditoría de los documentos
  * (`incidentDocumentLog` no se borra nunca: es la única constancia de un adjunto
@@ -153,6 +154,8 @@ async function purgeIncident(
   ctx: MutationCtx,
   incident: Doc<"incidents">,
 ): Promise<void> {
+  // La copia de correo sigue al destino: sin ficha no queda dónde leerla.
+  await purgeForDestination(ctx, "incident", incident._id, Date.now());
   const documents = await ctx.db
     .query("incidentDocuments")
     .withIndex("by_incident", (q) => q.eq("incidentId", incident._id))

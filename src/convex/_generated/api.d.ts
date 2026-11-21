@@ -22,6 +22,7 @@ import type * as _mail_deliver from "../_mail/deliver.js";
 import type * as _mail_soap from "../_mail/soap.js";
 import type * as _mailShares_destinations from "../_mailShares/destinations.js";
 import type * as _mailShares_orphans from "../_mailShares/orphans.js";
+import type * as _mailShares_purge from "../_mailShares/purge.js";
 import type * as _partRequests_helpers from "../_partRequests/helpers.js";
 import type * as _partRequests_incidentSync from "../_partRequests/incidentSync.js";
 import type * as _partRequests_trash from "../_partRequests/trash.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "_mail/soap": typeof _mail_soap;
   "_mailShares/destinations": typeof _mailShares_destinations;
   "_mailShares/orphans": typeof _mailShares_orphans;
+  "_mailShares/purge": typeof _mailShares_purge;
   "_partRequests/helpers": typeof _partRequests_helpers;
   "_partRequests/incidentSync": typeof _partRequests_incidentSync;
   "_partRequests/trash": typeof _partRequests_trash;
