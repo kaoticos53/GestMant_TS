@@ -1,4 +1,3 @@
-import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
@@ -140,9 +139,14 @@ export default defineConfig({
      */
     pool: "threads",
   },
+  /**
+   * `vlyPlugin()` (de `@vly-ai/integrations`) no está en la lista a propósito:
+   * solo servía a la miniatura y a los avisos de error del panel de diseño de
+   * vly, y al cargarse pedía `html2canvas-pro` a `cdn.jsdelivr.net`, que la CSP
+   * (`script-src 'self'`) bloquea. Ninguna función de la app lo usa.
+   */
   plugins: [
     react(),
-    vlyPlugin(),
     tailwindcss(),
     apiCspPlugin(),
     /**
@@ -201,9 +205,8 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    // Force a single copy of React across all packages (including vlyPlugin).
-    // Without this, @vly-ai/integrations can resolve its own React copy, which
-    // triggers "Invalid hook call" errors at runtime.
+    // Una sola copia de React para todos los paquetes: dos copias dan
+    // «Invalid hook call» en tiempo de ejecución.
     dedupe: ["react", "react/jsx-runtime", "react-dom", "react-dom/client"],
   },
   build: {
@@ -274,10 +277,6 @@ export default defineConfig({
       'react-router',
       '@convex-dev/auth/react',
       'framer-motion',
-      // vlyPlugin() injects this import at serve time, so the dep scanner
-      // never sees it. Without it here the first page load discovers it,
-      // re-optimizes and full-reloads the preview mid-screenshot.
-      '@vly-ai/integrations',
     ],
   },
   // Performance hints
