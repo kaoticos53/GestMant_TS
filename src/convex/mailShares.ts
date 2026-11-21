@@ -7,6 +7,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type ActionCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { logSecurityEvent } from "./audit";
@@ -14,6 +15,7 @@ import { readAccount, requireMailboxMember } from "./mailAccounts";
 import type { Capability } from "../lib/permissions";
 import { hasCapability, memberOrNull, requireAdmin } from "./permissions";
 import { resolveDestination } from "./_mailShares/destinations";
+import { freeReference } from "./references";
 import {
   BODY_HTML_MAX_CHARS,
   BODY_TEXT_MAX_CHARS,
@@ -297,6 +299,65 @@ export const auditShare = internalMutation({
 });
 
 /**
+ * Copia los adjuntos cacheados a objetos propios de una copia. Devuelve lo que
+ * hay que guardar en la fila y los ids escritos, para poder limpiarlos si algo
+ * falla después.
+ */
+async function copyCachedAttachments(
+  ctx: ActionCtx,
+  cached: CachedShareContent | null,
+  mode: MailShareMode,
+): Promise<{
+  attachments:
+    | {
+        storageId: Id<"_storage">;
+        name: string;
+        contentType: string;
+        size: number;
+      }[]
+    | undefined;
+  copied: Id<"_storage">[];
+}> {
+  if (mode !== "original" || !cached) {
+    return { attachments: undefined, copied: [] };
+  }
+  const copied: Id<"_storage">[] = [];
+  const attachments: {
+    storageId: Id<"_storage">;
+    name: string;
+    contentType: string;
+    size: number;
+  }[] = [];
+  for (const attachment of cached.attachments) {
+    const url = await ctx.storage.getUrl(attachment.storageId);
+    if (url === null) {
+      throw new ConvexError(
+        `El adjunto «${attachment.name}» ya no está disponible; vuelve a abrir el mensaje.`,
+      );
+    }
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new ConvexError(
+        `No se pudo copiar el adjunto «${attachment.name}».`,
+      );
+    }
+    const storageId = await ctx.storage.store(
+      new Blob([await response.arrayBuffer()], {
+        type: attachment.contentType,
+      }),
+    );
+    copied.push(storageId);
+    attachments.push({
+      storageId,
+      name: attachment.name,
+      contentType: attachment.contentType,
+      size: attachment.size,
+    });
+  }
+  return { attachments, copied };
+}
+
+/**
  * Comparte un mensaje del buzón propio con una ficha del taller.
  *
  * El contenido sale de la caché del buzón —abrir el mensaje es el paso previo
@@ -333,41 +394,10 @@ export const share = action({
       ? truncateShareText(cached.html, BODY_HTML_MAX_CHARS)
       : null;
 
-    const copied: Id<"_storage">[] = [];
+    let copied: Id<"_storage">[] = [];
     try {
-      const attachments: {
-        storageId: Id<"_storage">;
-        name: string;
-        contentType: string;
-        size: number;
-      }[] = [];
-      for (const attachment of cached?.attachments ?? []) {
-        if (args.mode !== "original") break;
-        const url = await ctx.storage.getUrl(attachment.storageId);
-        if (url === null) {
-          throw new ConvexError(
-            `El adjunto «${attachment.name}» ya no está disponible; vuelve a abrir el mensaje.`,
-          );
-        }
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new ConvexError(
-            `No se pudo copiar el adjunto «${attachment.name}».`,
-          );
-        }
-        const storageId = await ctx.storage.store(
-          new Blob([await response.arrayBuffer()], {
-            type: attachment.contentType,
-          }),
-        );
-        copied.push(storageId);
-        attachments.push({
-          storageId,
-          name: attachment.name,
-          contentType: attachment.contentType,
-          size: attachment.size,
-        });
-      }
+      const materialized = await copyCachedAttachments(ctx, cached, args.mode);
+      copied = materialized.copied;
 
       const shareId = await ctx.runMutation(internal.mailShares.persistShare, {
         sourceMessageId: base.header.messageId,
@@ -391,7 +421,7 @@ export const share = action({
           args.mode === "original"
             ? text.truncated || (html?.truncated ?? false)
             : undefined,
-        attachments: args.mode === "original" ? attachments : undefined,
+        attachments: materialized.attachments,
         sharedBy: base.userId,
         sharedByName: base.userName,
         clientShareId: args.clientShareId,
@@ -409,6 +439,271 @@ export const share = action({
           await ctx.storage.delete(storageId);
         } catch {
           // El objeto pudo no llegar a escribirse; el barrido lo recoge igual.
+        }
+      }
+      throw error;
+    }
+  },
+});
+
+/** El contexto de un alta desde correo: sesión, capacidad y mensaje propio. */
+export const incidentMailContext = internalQuery({
+  args: { messageId: v.string() },
+  handler: async (ctx, args): Promise<ShareContext> => {
+    const user = await requireMailboxMember(ctx);
+    if (!(await hasCapability(ctx, user, "createIncidentFromMail"))) {
+      throw new ConvexError(
+        "Tu rol no puede crear incidencias desde el correo. Pídeselo al administrador.",
+      );
+    }
+    const account = await readAccount(ctx, user._id);
+    if (!account) throw new ConvexError("Todavía no has configurado tu buzón.");
+
+    const header = await ctx.db
+      .query("mailHeaders")
+      .withIndex("by_user_message", (q) =>
+        q
+          .eq("userId", user._id)
+          .eq("accountId", account._id)
+          .eq("messageId", args.messageId),
+      )
+      .first();
+    if (!header || header.deletedRemoteAt !== undefined) {
+      throw new ConvexError("Ese mensaje no pertenece a tu buzón.");
+    }
+
+    return {
+      userId: user._id,
+      userName: user.name?.trim() || user.email?.trim() || "Miembro del taller",
+      email: account.email,
+      destinationReference: "",
+      header: {
+        messageId: header.messageId,
+        subject: header.subject,
+        fromName: header.fromName,
+        fromAddress: header.fromAddress,
+        date: header.date,
+        snippet: header.snippet,
+      },
+    };
+  },
+});
+
+/**
+ * Alta atómica de la incidencia y su copia.
+ *
+ * Las dos filas se escriben en la misma mutación: si la copia no cabe en el
+ * límite o la inserción falla, la incidencia no llega a existir. La referencia
+ * la reparte `convex/references`, la misma serie que el resto de altas, y el
+ * historial deja constancia de que nació de un correo.
+ */
+export const createIncidentWithShare = internalMutation({
+  args: {
+    sourceMessageId: v.string(),
+    sourceEmail: v.string(),
+    mode: modeValidator,
+    subject: v.string(),
+    fromName: v.string(),
+    fromAddress: v.string(),
+    sentAt: v.number(),
+    summary: v.string(),
+    bodyText: v.optional(v.string()),
+    bodyHtml: v.optional(v.string()),
+    bodyTruncated: v.optional(v.boolean()),
+    attachments: v.optional(v.array(storedAttachmentValidator)),
+    sharedBy: v.id("users"),
+    sharedByName: v.string(),
+    clientShareId: v.optional(v.string()),
+    description: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    incidentId: Id<"incidents">;
+    shareId: Id<"mailShares">;
+    reference: string;
+    created: boolean;
+  }> => {
+    if (args.clientShareId) {
+      const existing = await ctx.db
+        .query("mailShares")
+        .withIndex("by_client_share", (q) =>
+          q
+            .eq("sharedBy", args.sharedBy)
+            .eq("clientShareId", args.clientShareId),
+        )
+        .first();
+      if (existing) {
+        return {
+          incidentId: existing.destinationId as Id<"incidents">,
+          shareId: existing._id,
+          reference: existing.destinationReference ?? "",
+          created: false,
+        };
+      }
+    }
+
+    const bytes = shareSnapshotBytes({
+      bodyText: new TextEncoder().encode(args.bodyText ?? "").length,
+      bodyHtml: new TextEncoder().encode(args.bodyHtml ?? "").length,
+      attachments: (args.attachments ?? []).reduce(
+        (sum, attachment) => sum + attachment.size,
+        0,
+      ),
+      eml: 0,
+    });
+    if (!fitsShareLimit(bytes)) {
+      throw new ConvexError(
+        "La copia supera el límite de 50 MB del correo: compártela en modo resumen.",
+      );
+    }
+
+    const now = Date.now();
+    const reference = await freeReference(ctx, "incident");
+    const incidentId = await ctx.db.insert("incidents", {
+      reference,
+      reporterName: args.fromName.trim() || args.fromAddress,
+      reporterEmail: args.fromAddress,
+      description: args.description,
+      reportedAt: now,
+      status: "reported",
+      history: [
+        {
+          status: "reported",
+          at: now,
+          by: args.sharedByName,
+          note: "Creada desde correo",
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const shareId = await ctx.db.insert("mailShares", {
+      sourceMessageId: args.sourceMessageId,
+      sourceEmail: args.sourceEmail,
+      destinationType: "incident",
+      destinationId: incidentId,
+      destinationReference: reference,
+      mode: args.mode,
+      subject: args.subject,
+      fromName: args.fromName,
+      fromAddress: args.fromAddress,
+      sentAt: args.sentAt,
+      summary: args.summary,
+      bodyText: args.bodyText,
+      bodyHtml: args.bodyHtml,
+      bodyTruncated: args.bodyTruncated,
+      attachments: args.attachments,
+      sharedBy: args.sharedBy,
+      sharedByName: args.sharedByName,
+      sharedAt: now,
+      clientShareId: args.clientShareId,
+    });
+    return { incidentId, shareId, reference, created: true };
+  },
+});
+
+/**
+ * Crea una incidencia en `reported` desde un correo del buzón propio.
+ *
+ * El remitente del mensaje es el notificante y el técnico que comparte queda
+ * como autor en el historial. La incidencia y la copia se escriben juntas: si
+ * una falla, no queda la otra, y los adjuntos ya copiados se borran.
+ */
+export const createIncidentFromMail = action({
+  args: {
+    messageId: v.string(),
+    mode: modeValidator,
+    clientShareId: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    incidentId: Id<"incidents">;
+    shareId: Id<"mailShares">;
+    reference: string;
+  }> => {
+    const base = await ctx.runQuery(internal.mailShares.incidentMailContext, {
+      messageId: args.messageId,
+    });
+    const cached = await ctx.runQuery(internal.mailShares.cachedForShare, {
+      messageId: args.messageId,
+    });
+    if (args.mode === "original" && !cached) {
+      throw new ConvexError(
+        "Abre el mensaje antes de crear la incidencia en modo original: su contenido aún no se ha descargado.",
+      );
+    }
+
+    const text = truncateShareText(cached?.text ?? "", BODY_TEXT_MAX_CHARS);
+    const html = cached?.html
+      ? truncateShareText(cached.html, BODY_HTML_MAX_CHARS)
+      : null;
+    const summary = buildShareSummary(
+      cached?.text ?? base.header.snippet,
+      base.header.subject,
+    );
+
+    let copied: Id<"_storage">[] = [];
+    try {
+      const materialized = await copyCachedAttachments(ctx, cached, args.mode);
+      copied = materialized.copied;
+
+      const result = await ctx.runMutation(
+        internal.mailShares.createIncidentWithShare,
+        {
+          sourceMessageId: base.header.messageId,
+          sourceEmail: base.email,
+          mode: args.mode,
+          subject: base.header.subject,
+          fromName: base.header.fromName,
+          fromAddress: base.header.fromAddress,
+          sentAt: base.header.date,
+          summary,
+          bodyText: args.mode === "original" ? text.value : undefined,
+          bodyHtml:
+            args.mode === "original" ? (html?.value ?? undefined) : undefined,
+          bodyTruncated:
+            args.mode === "original"
+              ? text.truncated || (html?.truncated ?? false)
+              : undefined,
+          attachments: materialized.attachments,
+          sharedBy: base.userId,
+          sharedByName: base.userName,
+          clientShareId: args.clientShareId,
+          description: `${base.header.subject}\n\n${summary}`
+            .trim()
+            .slice(0, 4000),
+        },
+      );
+
+      if (!result.created) {
+        // Reintento idempotente: la incidencia ya existía, así que los objetos
+        // copiados en esta llamada no los cita nadie.
+        for (const storageId of copied) {
+          try {
+            await ctx.storage.delete(storageId);
+          } catch {
+            // El barrido nocturno lo recoge igual.
+          }
+        }
+        return result;
+      }
+
+      await ctx.runMutation(internal.mailShares.auditShare, {
+        shareId: result.shareId,
+        destinationType: "incident",
+        destinationReference: result.reference,
+      });
+      return result;
+    } catch (error) {
+      for (const storageId of copied) {
+        try {
+          await ctx.storage.delete(storageId);
+        } catch {
+          // El barrido nocturno lo recoge igual.
         }
       }
       throw error;

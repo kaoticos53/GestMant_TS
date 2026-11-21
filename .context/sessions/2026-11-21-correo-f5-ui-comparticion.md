@@ -93,3 +93,21 @@ con lápida y borrado de objetos, y purga rechazada a quien no es administrador.
 puerta del buzón lanza antes. Se elimina y `shareContext`, `findTarget` y
 `canShare` llaman directamente a `requireMailboxMember`. El test «sin
 viewMailbox» comprueba la puerta real, que es la única que aplica esa regla.
+
+---
+
+## 9. Alta de incidencia desde correo
+
+`mailShares.createIncidentFromMail` crea la incidencia en `reported`, sin
+asignar, con referencia nueva de la serie de incidencias (`convex/references`).
+El remitente del mensaje queda como `reporterName`/`reporterEmail`, la
+descripción se compone con asunto y extracto, y el historial arranca con
+`by: sharedByName` y la nota «Creada desde correo». La incidencia y su copia se
+escriben en la misma mutación (`createIncidentWithShare`): si la copia no cabe
+o falla, no queda la incidencia, y los adjuntos copiados se borran. El
+`clientShareId` hace idempotente el reintento y, si la copia ya existía, los
+objetos de esta llamada se descartan. Añadidas 3 pruebas de backend (14 en
+total en el archivo).
+
+Pendiente: el botón en el diálogo del visor y el aviso a coordinación que sí
+hace el alta pública (`registerIncidentIntake`).

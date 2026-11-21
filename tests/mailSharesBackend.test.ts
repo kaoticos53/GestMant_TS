@@ -341,6 +341,80 @@ describe("mailShares.share", () => {
   });
 });
 
+describe("mailShares.createIncidentFromMail", () => {
+  test("nace en reported con el remitente como notificante y su copia", async () => {
+    const { t, admin } = await setup();
+
+    const result = await admin.action(api.mailShares.createIncidentFromMail, {
+      messageId: "m-1",
+      mode: "summary",
+    });
+
+    const incident = await t.run((ctx) => ctx.db.get(result.incidentId));
+    expect(incident?.status).toBe("reported");
+    expect(incident?.reporterName).toBe("Proveedor");
+    expect(incident?.reporterEmail).toBe("sat@proveedor.es");
+    expect(incident?.description).toContain("Presupuesto del SAT");
+    expect(incident?.assigneeId).toBeUndefined();
+    expect(incident?.history).toHaveLength(1);
+    expect(incident?.history[0]).toMatchObject({
+      status: "reported",
+      by: "Administradora",
+      note: "Creada desde correo",
+    });
+    expect(result.reference).toMatch(/^INC-\d+$/);
+    expect(result.reference).not.toBe("INC-0001");
+
+    const share = await t.run((ctx) => ctx.db.get(result.shareId));
+    expect(share?.destinationType).toBe("incident");
+    expect(share?.destinationId).toBe(result.incidentId);
+    expect(share?.destinationReference).toBe(result.reference);
+    expect(share?.mode).toBe("summary");
+    expect(share?.bodyText).toBeUndefined();
+
+    const incidents = await t.run((ctx) => ctx.db.query("incidents").collect());
+    expect(incidents).toHaveLength(2); // la del arnés y la nueva
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    expect(audit.some((row) => row.action === "mail_share_create")).toBe(true);
+  });
+
+  test("un reintento con el mismo clientShareId no duplica la incidencia", async () => {
+    const { t, admin } = await setup();
+    const args = {
+      messageId: "m-1",
+      mode: "summary" as const,
+      clientShareId: "alta-1",
+    };
+
+    const first = await admin.action(
+      api.mailShares.createIncidentFromMail,
+      args,
+    );
+    const second = await admin.action(
+      api.mailShares.createIncidentFromMail,
+      args,
+    );
+
+    expect(second.incidentId).toBe(first.incidentId);
+    expect(second.shareId).toBe(first.shareId);
+    const incidents = await t.run((ctx) => ctx.db.query("incidents").collect());
+    expect(incidents).toHaveLength(2);
+  });
+
+  test("sin buzón no se crea la incidencia", async () => {
+    const { noMailbox } = await setup();
+    await expectConvexError(
+      noMailbox.action(api.mailShares.createIncidentFromMail, {
+        messageId: "m-1",
+        mode: "summary",
+      }),
+      "buzón",
+    );
+  });
+});
+
 describe("mailShares: audiencia y purga", () => {
   async function shareWithIncident() {
     const context = await setup();
