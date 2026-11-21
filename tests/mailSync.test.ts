@@ -270,6 +270,69 @@ describe("sincronización de cabeceras", () => {
     ).toBe(2);
   });
 
+  test("una página vacía con more=1 no marca ausentes ni avanza el token", async () => {
+    const { first, t, firstId } = await setup();
+    stubMailbox({
+      searchPages: [
+        searchResponse({ messageIds: ["17438", "17436"] }),
+        searchResponse({ messageIds: ["17438"], more: true }),
+        searchResponse({ messageIds: [], more: true }),
+      ],
+      syncPages: [
+        syncResponse({ token: "tok-1" }),
+        syncResponse({ token: "tok-2", deletedIds: ["17436"] }),
+      ],
+    });
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    await expectConvexError(
+      first.action(api.mailSync.syncNow, { folderRemoteId: "2" }),
+      "no terminó",
+    );
+
+    const rows = await t.run((ctx) => ctx.db.query("mailHeaders").collect());
+    expect(
+      rows.find((row) => row.messageId === "17436")?.deletedRemoteAt,
+    ).toBeUndefined();
+    const folder = await t.run((ctx) =>
+      ctx.db.query("mailFolders").withIndex("by_account").first(),
+    );
+    expect(folder?.syncToken).toBe("tok-1");
+    expect((await accountFor(t, firstId))?.status).toBe("error");
+  });
+
+  test("un corte por MAX_PAGES no marca ausentes ni avanza el token", async () => {
+    const { first, t, firstId } = await setup();
+    stubMailbox({
+      searchPages: [
+        searchResponse({ messageIds: ["17438", "17436"] }),
+        ...Array.from({ length: 100 }, () =>
+          searchResponse({ messageIds: ["17438"], more: true }),
+        ),
+      ],
+      syncPages: [
+        syncResponse({ token: "tok-1" }),
+        syncResponse({ token: "tok-2", deletedIds: ["17436"] }),
+      ],
+    });
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    await expectConvexError(
+      first.action(api.mailSync.syncNow, { folderRemoteId: "2" }),
+      "no terminó",
+    );
+
+    const rows = await t.run((ctx) => ctx.db.query("mailHeaders").collect());
+    expect(
+      rows.find((row) => row.messageId === "17436")?.deletedRemoteAt,
+    ).toBeUndefined();
+    const folder = await t.run((ctx) =>
+      ctx.db.query("mailFolders").withIndex("by_account").first(),
+    );
+    expect(folder?.syncToken).toBe("tok-1");
+    expect((await accountFor(t, firstId))?.status).toBe("error");
+  });
+
   test("un mensaje que cambia de carpeta se mueve sin duplicarse ni quedar oculto", async () => {
     const { first, t, firstId } = await setup();
     stubMailbox({

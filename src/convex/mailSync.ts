@@ -327,6 +327,12 @@ async function resolveAuth(
   };
 }
 
+function incompleteTraversal(folder: MailFolder): ConvexError {
+  return new ConvexError(
+    `El recorrido de la carpeta «${folder.name}» no terminó; no se guardó y se reintentará en la próxima pasada.`,
+  );
+}
+
 async function syncFolder(
   ctx: ActionCtx,
   session: SyncSession,
@@ -336,6 +342,7 @@ async function syncFolder(
 ): Promise<number> {
   let token = savedToken;
   const deletedIds: string[] = [];
+  let syncComplete = false;
 
   try {
     let more = true;
@@ -355,6 +362,7 @@ async function syncFolder(
       more = shouldContinueSync(page.more);
       pages += 1;
     }
+    syncComplete = !more;
   } catch (error) {
     const invalidToken =
       error instanceof MailSoapError &&
@@ -365,13 +373,16 @@ async function syncFolder(
     if (!invalidToken) throw error;
     token = null;
     deletedIds.length = 0;
+    syncComplete = true;
   }
+
+  if (!syncComplete) throw incompleteTraversal(folder);
 
   const headers: MailHeader[] = [];
   let offset = 0;
-  let more = true;
   let pages = 0;
-  while (more && pages < MAX_PAGES) {
+  let searchComplete = false;
+  while (pages < MAX_PAGES) {
     const page = parseSearchResponse(
       await postSoap(
         buildSearchRequest({
@@ -385,16 +396,24 @@ async function syncFolder(
     );
     headers.push(...page.headers);
     const count = page.headers.length;
-    more =
-      count > 0 &&
-      hasMoreSearchResults({
-        more: page.more,
-        count,
-        limit: PAGE_SIZE,
-      });
+    const more = hasMoreSearchResults({
+      more: page.more,
+      count,
+      limit: PAGE_SIZE,
+    });
+
+    // Una página vacía con `more=1` es un corte, no una carpeta vacía: no se
+    // puede distinguir de un salto perdido, así que se deja todo como estaba.
+    if (count === 0 && page.more) break;
+    if (!more) {
+      searchComplete = true;
+      break;
+    }
     offset = nextSearchOffset(offset, count);
     pages += 1;
   }
+
+  if (!searchComplete) throw incompleteTraversal(folder);
 
   return await ctx.runMutation(internal.mailSync.saveFolder, {
     accountId: session.accountId,

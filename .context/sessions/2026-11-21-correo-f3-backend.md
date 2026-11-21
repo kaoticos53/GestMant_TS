@@ -51,11 +51,18 @@ incremento.
 
 - **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores.
 - **Codegen (`npx convex codegen`):** ✅ Exit 0.
-- **Tests F3 (`npx vitest run tests/mailSync.test.ts`):** ✅ 7/7.
+- **Tests F3 (`npx vitest run tests/mailSync.test.ts`):** ✅ 9/9.
 - **Suite completa (`npx vitest run`):** ✅ 2769 pasando, 69 omitidos.
 - **Arquitectura y seguridad:** ✅ 9/9 y 13/13.
 - **Lint (`npm run lint`):** ✅ 0 errores; 19 warnings preexistentes.
 - **Formato:** Prettier aplicado a los archivos tocados.
+
+### Corrección posterior: recorridos cortados
+
+`syncFolder` ya no guarda una carpeta si el `Sync` o el `Search` no terminan: un
+corte por `MAX_PAGES` o una página vacía con `more=1` lanza un error, deja la
+carpeta como estaba y no avanza el token ni marca tumbas. Cubierto con dos tests
+nuevos (`more=1` vacío y `MAX_PAGES`), 9/9 en total.
 
 ---
 
