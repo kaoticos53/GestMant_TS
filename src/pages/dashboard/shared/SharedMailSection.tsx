@@ -52,6 +52,21 @@ export function SharedMailSection({
   if (rows === undefined || rows.length === 0) return null;
 
   const isAdmin = permissions?.role === "admin";
+  // Una sola lectura del estado del detalle: cargando, sin acceso, lápida o
+  // copia viva. Antes se repetía la misma cadena de ternarios en título,
+  // descripción y cuerpo.
+  const state =
+    detail === undefined
+      ? "loading"
+      : detail === null
+        ? "missing"
+        : detail.purgedAt !== null
+          ? "purged"
+          : "ready";
+  const shown = state === "ready" ? detail : null;
+  const shownMeta = shown
+    ? `${shown.fromName || shown.fromAddress} · ${formatDateTime(shown.sentAt)} · ${shown.mode === "original" ? "original" : "resumen"} · compartido por ${shown.sharedByName}`
+    : "";
 
   const handleDownload = async (
     shareId: Id<"mailShares">,
@@ -134,37 +149,37 @@ export function SharedMailSection({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {detail === undefined
+              {state === "loading"
                 ? "Correo compartido"
-                : detail === null
+                : state === "missing"
                   ? "Copia no disponible"
-                  : detail.purgedAt !== null
+                  : state === "purged"
                     ? "Correo compartido retirado"
-                    : detail.subject || "(Sin asunto)"}
+                    : shown?.subject || "(Sin asunto)"}
             </DialogTitle>
             <DialogDescription>
-              {detail === undefined
+              {state === "loading"
                 ? "Cargando la copia…"
-                : detail === null
+                : state === "missing"
                   ? "Esta copia ya no existe o no tienes acceso a su ficha."
-                  : detail.purgedAt !== null
+                  : state === "purged"
                     ? "Se conserva la constancia, no el contenido."
-                    : `${detail.fromName || detail.fromAddress} · ${formatDateTime(detail.sentAt)} · ${detail.mode === "original" ? "original" : "resumen"} · compartido por ${detail.sharedByName}`}
+                    : shownMeta}
             </DialogDescription>
           </DialogHeader>
 
-          {detail === undefined ? (
+          {state === "loading" ? (
             <div
               className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-6 text-xs text-muted-foreground"
               role="status"
             >
               <Loader2 className="size-4 animate-spin" /> Cargando la copia…
             </div>
-          ) : detail === null ? (
+          ) : state === "missing" ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               Esta copia ya no existe o tu rol ya no puede ver su ficha.
             </p>
-          ) : detail.purgedAt !== null ? (
+          ) : state === "purged" || !detail ? (
             <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               El administrador retiró el contenido de esta copia. La ficha
               conserva la fecha y el motivo, pero no el asunto, el remitente ni

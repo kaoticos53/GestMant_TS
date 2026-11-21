@@ -72,9 +72,10 @@ export function ShareMailDialog({
   const createIncident = useAction(api.mailShares.createIncidentFromMail);
 
   const submit = async () => {
-    if (asIncident) {
-      setSaving(true);
-      try {
+    if (!asIncident && (effectiveType === undefined || !target)) return;
+    setSaving(true);
+    try {
+      if (asIncident) {
         const result = await createIncident({
           messageId,
           mode,
@@ -83,28 +84,19 @@ export function ShareMailDialog({
         toast.success(
           `Incidencia ${result.reference} creada desde este correo. El remitente queda como notificante.`,
         );
-        onOpenChange(false);
-      } catch (reason) {
-        toast.error(getErrorMessage(reason));
-      } finally {
-        setSaving(false);
+      } else if (effectiveType !== undefined && target) {
+        await share({
+          messageId,
+          destinationType: effectiveType,
+          destinationId: target.id,
+          mode,
+          clientShareId: crypto.randomUUID(),
+        });
+        toast.success(
+          `Correo compartido con ${target.reference}. La copia no se borra al vaciar la caché del buzón.`,
+        );
+        setReference("");
       }
-      return;
-    }
-    if (effectiveType === undefined || target === null || !target) return;
-    setSaving(true);
-    try {
-      await share({
-        messageId,
-        destinationType: effectiveType,
-        destinationId: target.id,
-        mode,
-        clientShareId: crypto.randomUUID(),
-      });
-      toast.success(
-        `Correo compartido con ${target.reference}. La copia no se borra al vaciar la caché del buzón.`,
-      );
-      setReference("");
       onOpenChange(false);
     } catch (reason) {
       toast.error(getErrorMessage(reason));

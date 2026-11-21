@@ -54,18 +54,52 @@ const AUDIENCE_CAPABILITIES = new Set([
   ...DESTINATION_AUDIENCE.purchaseOrder,
 ]);
 
-interface ShareContext {
-  userId: Id<"users">;
-  userName: string;
+/** El mensaje propio que se va a compartir, ya autorizado a leerse. */
+interface MailboxMessage {
+  user: Doc<"users">;
   email: string;
+  header: Doc<"mailHeaders">;
+}
+
+interface MailboxActor extends MailboxMessage {
+  userName: string;
+}
+
+interface ShareContext extends MailboxActor {
   destinationReference: string;
-  header: {
-    messageId: string;
-    subject: string;
-    fromName: string;
-    fromAddress: string;
-    date: number;
-    snippet: string;
+}
+
+/**
+ * La sesión con buzón y el mensaje propio —cabecera viva, cuenta del taller— o
+ * el aviso que corresponda. Lo comparten compartir y el alta desde correo: las
+ * dos puertas piden lo mismo y solo se diferencian en la capacidad y el destino.
+ */
+async function requireMailboxActor(
+  ctx: QueryCtx,
+  messageId: string,
+): Promise<MailboxActor> {
+  const user = await requireMailboxMember(ctx);
+  const account = await readAccount(ctx, user._id);
+  if (!account) throw new ConvexError("Todavía no has configurado tu buzón.");
+
+  const header = await ctx.db
+    .query("mailHeaders")
+    .withIndex("by_user_message", (q) =>
+      q
+        .eq("userId", user._id)
+        .eq("accountId", account._id)
+        .eq("messageId", messageId),
+    )
+    .first();
+  if (!header || header.deletedRemoteAt !== undefined) {
+    throw new ConvexError("Ese mensaje no pertenece a tu buzón.");
+  }
+
+  return {
+    user,
+    email: account.email,
+    header,
+    userName: user.name?.trim() || user.email?.trim() || "Miembro del taller",
   };
 }
 
@@ -82,24 +116,9 @@ export const shareContext = internalQuery({
     mode: modeValidator,
   },
   handler: async (ctx, args): Promise<ShareContext> => {
-    // `requireMailboxMember` ya exige sesión de taller y `viewMailbox`, que es
+    // La puerta del buzón ya exige sesión de taller y `viewMailbox`, que es
     // justo lo que pide compartir: no hay una segunda comprobación que hacer.
-    const user = await requireMailboxMember(ctx);
-    const account = await readAccount(ctx, user._id);
-    if (!account) throw new ConvexError("Todavía no has configurado tu buzón.");
-
-    const header = await ctx.db
-      .query("mailHeaders")
-      .withIndex("by_user_message", (q) =>
-        q
-          .eq("userId", user._id)
-          .eq("accountId", account._id)
-          .eq("messageId", args.messageId),
-      )
-      .first();
-    if (!header || header.deletedRemoteAt !== undefined) {
-      throw new ConvexError("Ese mensaje no pertenece a tu buzón.");
-    }
+    const base = await requireMailboxActor(ctx, args.messageId);
 
     const destination = await resolveDestination(
       ctx,
@@ -113,7 +132,11 @@ export const shareContext = internalQuery({
     }
 
     if (
-      !(await hasCapability(ctx, user, SHARE_CAPABILITY[args.destinationType]))
+      !(await hasCapability(
+        ctx,
+        base.user,
+        SHARE_CAPABILITY[args.destinationType],
+      ))
     ) {
       throw new ConvexError(
         `Tu rol no puede adjuntar correo a ${DESTINATION_LABELS[args.destinationType].toLowerCase()}.`,
@@ -123,32 +146,14 @@ export const shareContext = internalQuery({
     const mode = resolveShareMode(args.destinationType, args.mode);
     if (!mode.ok) throw new ConvexError(mode.error);
 
-    return {
-      userId: user._id,
-      userName: user.name?.trim() || user.email?.trim() || "Miembro del taller",
-      email: account.email,
-      destinationReference: destination.reference,
-      header: {
-        messageId: header.messageId,
-        subject: header.subject,
-        fromName: header.fromName,
-        fromAddress: header.fromAddress,
-        date: header.date,
-        snippet: header.snippet,
-      },
-    };
+    return { ...base, destinationReference: destination.reference };
   },
 });
 
 interface CachedShareContent {
   text: string;
   html: string | null;
-  attachments: {
-    storageId: Id<"_storage">;
-    name: string;
-    contentType: string;
-    size: number;
-  }[];
+  attachments: StoredAttachment[];
 }
 
 /**
@@ -196,6 +201,14 @@ export const cachedForShare = internalQuery({
   },
 });
 
+/** Un adjunto ya copiado a un objeto propio de la copia. */
+interface StoredAttachment {
+  storageId: Id<"_storage">;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
 const storedAttachmentValidator = v.object({
   storageId: v.id("_storage"),
   name: v.string(),
@@ -204,29 +217,59 @@ const storedAttachmentValidator = v.object({
 });
 
 /**
+ * Los campos de la instantánea, iguales para una copia a una ficha y para el
+ * alta que crea la suya. Lo que cambia —el destino, o la descripción— va aparte.
+ */
+const snapshotArgs = {
+  sourceMessageId: v.string(),
+  sourceEmail: v.string(),
+  mode: modeValidator,
+  subject: v.string(),
+  fromName: v.string(),
+  fromAddress: v.string(),
+  sentAt: v.number(),
+  summary: v.string(),
+  bodyText: v.optional(v.string()),
+  bodyHtml: v.optional(v.string()),
+  bodyTruncated: v.optional(v.boolean()),
+  attachments: v.optional(v.array(storedAttachmentValidator)),
+  sharedBy: v.id("users"),
+  sharedByName: v.string(),
+  clientShareId: v.optional(v.string()),
+};
+
+/** La copia no puede pasar de 50 MB: el límite protege el almacén y la ficha. */
+function assertShareFits(args: {
+  bodyText?: string;
+  bodyHtml?: string;
+  attachments?: StoredAttachment[];
+}): void {
+  const bytes = shareSnapshotBytes({
+    bodyText: new TextEncoder().encode(args.bodyText ?? "").length,
+    bodyHtml: new TextEncoder().encode(args.bodyHtml ?? "").length,
+    attachments: (args.attachments ?? []).reduce(
+      (sum, attachment) => sum + attachment.size,
+      0,
+    ),
+    eml: 0,
+  });
+  if (!fitsShareLimit(bytes)) {
+    throw new ConvexError(
+      "La copia supera el límite de 50 MB del correo: compártela en modo resumen.",
+    );
+  }
+}
+
+/**
  * Guarda la copia ya materializada. Idempotente por `clientShareId`: un
  * reintento devuelve la copia existente en vez de duplicarla.
  */
 export const persistShare = internalMutation({
   args: {
-    sourceMessageId: v.string(),
-    sourceEmail: v.string(),
     destinationType: destinationTypeValidator,
     destinationId: v.string(),
     destinationReference: v.string(),
-    mode: modeValidator,
-    subject: v.string(),
-    fromName: v.string(),
-    fromAddress: v.string(),
-    sentAt: v.number(),
-    summary: v.string(),
-    bodyText: v.optional(v.string()),
-    bodyHtml: v.optional(v.string()),
-    bodyTruncated: v.optional(v.boolean()),
-    attachments: v.optional(v.array(storedAttachmentValidator)),
-    sharedBy: v.id("users"),
-    sharedByName: v.string(),
-    clientShareId: v.optional(v.string()),
+    ...snapshotArgs,
   },
   handler: async (ctx, args): Promise<Id<"mailShares">> => {
     if (args.clientShareId) {
@@ -249,20 +292,7 @@ export const persistShare = internalMutation({
       if (same) return same._id;
     }
 
-    const bytes = shareSnapshotBytes({
-      bodyText: new TextEncoder().encode(args.bodyText ?? "").length,
-      bodyHtml: new TextEncoder().encode(args.bodyHtml ?? "").length,
-      attachments: (args.attachments ?? []).reduce(
-        (sum, attachment) => sum + attachment.size,
-        0,
-      ),
-      eml: 0,
-    });
-    if (!fitsShareLimit(bytes)) {
-      throw new ConvexError(
-        "La copia supera el límite de 50 MB del correo: compártela en modo resumen.",
-      );
-    }
+    assertShareFits(args);
 
     return await ctx.db.insert("mailShares", {
       sourceMessageId: args.sourceMessageId,
@@ -292,18 +322,14 @@ export const persistShare = internalMutation({
 
 /** Traza de la compartición: ids y destino, nunca asunto, remitente ni cuerpo. */
 export const auditShare = internalMutation({
-  args: {
-    shareId: v.id("mailShares"),
-    destinationType: destinationTypeValidator,
-    destinationReference: v.string(),
-  },
+  args: { shareId: v.id("mailShares") },
   handler: async (ctx, args) => {
     const share = await ctx.db.get(args.shareId);
     if (!share) return;
     await logSecurityEvent(ctx, {
       actorId: share.sharedBy,
       action: "mail_share_create",
-      target: `${args.destinationType}:${args.destinationReference}`,
+      target: `${share.destinationType}:${share.destinationReference ?? ""}`,
       metadata: { shareId: args.shareId, mode: share.mode },
     });
   },
@@ -319,26 +345,14 @@ async function copyCachedAttachments(
   cached: CachedShareContent | null,
   mode: MailShareMode,
 ): Promise<{
-  attachments:
-    | {
-        storageId: Id<"_storage">;
-        name: string;
-        contentType: string;
-        size: number;
-      }[]
-    | undefined;
+  attachments: StoredAttachment[] | undefined;
   copied: Id<"_storage">[];
 }> {
   if (mode !== "original" || !cached) {
     return { attachments: undefined, copied: [] };
   }
   const copied: Id<"_storage">[] = [];
-  const attachments: {
-    storageId: Id<"_storage">;
-    name: string;
-    contentType: string;
-    size: number;
-  }[] = [];
+  const attachments: StoredAttachment[] = [];
   for (const attachment of cached.attachments) {
     const url = await ctx.storage.getUrl(attachment.storageId);
     if (url === null) {
@@ -369,6 +383,67 @@ async function copyCachedAttachments(
 }
 
 /**
+ * Lo que se guarda de un mensaje, ya recortado, según el modo.
+ *
+ * En `summary` solo va el extracto: ni cuerpo ni adjuntos. En `original` van
+ * el texto y el HTML recortados a sus límites, y la marca de que hubo recorte.
+ */
+function buildShareSnapshot(
+  cached: CachedShareContent | null,
+  header: Doc<"mailHeaders">,
+  mode: MailShareMode,
+): {
+  summary: string;
+  bodyText?: string;
+  bodyHtml?: string;
+  bodyTruncated?: boolean;
+} {
+  const summary = buildShareSummary(
+    cached?.text ?? header.snippet,
+    header.subject,
+  );
+  if (mode !== "original") return { summary };
+
+  const text = truncateShareText(cached?.text ?? "", BODY_TEXT_MAX_CHARS);
+  const html = cached?.html
+    ? truncateShareText(cached.html, BODY_HTML_MAX_CHARS)
+    : null;
+  return {
+    summary,
+    bodyText: text.value,
+    bodyHtml: html?.value ?? undefined,
+    bodyTruncated: text.truncated || (html?.truncated ?? false),
+  };
+}
+
+/** El modo original exige el mensaje ya abierto: compartir no descarga. */
+function requireCachedForOriginal(
+  cached: CachedShareContent | null,
+  mode: MailShareMode,
+  action: string,
+): void {
+  if (mode === "original" && !cached) {
+    throw new ConvexError(
+      `Abre el mensaje antes de ${action} en modo original: su contenido aún no se ha descargado.`,
+    );
+  }
+}
+
+/** Borra los objetos de una llamada que no llegó a dejar su cita. */
+async function deleteObjects(
+  ctx: ActionCtx,
+  storageIds: Id<"_storage">[],
+): Promise<void> {
+  for (const storageId of storageIds) {
+    try {
+      await ctx.storage.delete(storageId);
+    } catch {
+      // El barrido nocturno de `storageCleanup` lo recoge igual.
+    }
+  }
+}
+
+/**
  * Comparte un mensaje del buzón propio con una ficha del taller.
  *
  * El contenido sale de la caché del buzón —abrir el mensaje es el paso previo
@@ -394,16 +469,7 @@ export const share = action({
     const cached = await ctx.runQuery(internal.mailShares.cachedForShare, {
       messageId: args.messageId,
     });
-    if (args.mode === "original" && !cached) {
-      throw new ConvexError(
-        "Abre el mensaje antes de compartirlo en modo original: su contenido aún no se ha descargado.",
-      );
-    }
-
-    const text = truncateShareText(cached?.text ?? "", BODY_TEXT_MAX_CHARS);
-    const html = cached?.html
-      ? truncateShareText(cached.html, BODY_HTML_MAX_CHARS)
-      : null;
+    requireCachedForOriginal(cached, args.mode, "compartirlo");
 
     let copied: Id<"_storage">[] = [];
     try {
@@ -421,37 +487,17 @@ export const share = action({
         fromName: base.header.fromName,
         fromAddress: base.header.fromAddress,
         sentAt: base.header.date,
-        summary: buildShareSummary(
-          cached?.text ?? base.header.snippet,
-          base.header.subject,
-        ),
-        bodyText: args.mode === "original" ? text.value : undefined,
-        bodyHtml:
-          args.mode === "original" ? (html?.value ?? undefined) : undefined,
-        bodyTruncated:
-          args.mode === "original"
-            ? text.truncated || (html?.truncated ?? false)
-            : undefined,
+        ...buildShareSnapshot(cached, base.header, args.mode),
         attachments: materialized.attachments,
-        sharedBy: base.userId,
+        sharedBy: base.user._id,
         sharedByName: base.userName,
         clientShareId: args.clientShareId,
       });
 
-      await ctx.runMutation(internal.mailShares.auditShare, {
-        shareId,
-        destinationType: args.destinationType,
-        destinationReference: base.destinationReference,
-      });
+      await ctx.runMutation(internal.mailShares.auditShare, { shareId });
       return { shareId };
     } catch (error) {
-      for (const storageId of copied) {
-        try {
-          await ctx.storage.delete(storageId);
-        } catch {
-          // El objeto pudo no llegar a escribirse; el barrido lo recoge igual.
-        }
-      }
+      await deleteObjects(ctx, copied);
       throw error;
     }
   },
@@ -460,43 +506,14 @@ export const share = action({
 /** El contexto de un alta desde correo: sesión, capacidad y mensaje propio. */
 export const incidentMailContext = internalQuery({
   args: { messageId: v.string() },
-  handler: async (ctx, args): Promise<ShareContext> => {
-    const user = await requireMailboxMember(ctx);
-    if (!(await hasCapability(ctx, user, "createIncidentFromMail"))) {
+  handler: async (ctx, args): Promise<MailboxActor> => {
+    const base = await requireMailboxActor(ctx, args.messageId);
+    if (!(await hasCapability(ctx, base.user, "createIncidentFromMail"))) {
       throw new ConvexError(
         "Tu rol no puede crear incidencias desde el correo. Pídeselo al administrador.",
       );
     }
-    const account = await readAccount(ctx, user._id);
-    if (!account) throw new ConvexError("Todavía no has configurado tu buzón.");
-
-    const header = await ctx.db
-      .query("mailHeaders")
-      .withIndex("by_user_message", (q) =>
-        q
-          .eq("userId", user._id)
-          .eq("accountId", account._id)
-          .eq("messageId", args.messageId),
-      )
-      .first();
-    if (!header || header.deletedRemoteAt !== undefined) {
-      throw new ConvexError("Ese mensaje no pertenece a tu buzón.");
-    }
-
-    return {
-      userId: user._id,
-      userName: user.name?.trim() || user.email?.trim() || "Miembro del taller",
-      email: account.email,
-      destinationReference: "",
-      header: {
-        messageId: header.messageId,
-        subject: header.subject,
-        fromName: header.fromName,
-        fromAddress: header.fromAddress,
-        date: header.date,
-        snippet: header.snippet,
-      },
-    };
+    return base;
   },
 });
 
@@ -510,21 +527,7 @@ export const incidentMailContext = internalQuery({
  */
 export const createIncidentWithShare = internalMutation({
   args: {
-    sourceMessageId: v.string(),
-    sourceEmail: v.string(),
-    mode: modeValidator,
-    subject: v.string(),
-    fromName: v.string(),
-    fromAddress: v.string(),
-    sentAt: v.number(),
-    summary: v.string(),
-    bodyText: v.optional(v.string()),
-    bodyHtml: v.optional(v.string()),
-    bodyTruncated: v.optional(v.boolean()),
-    attachments: v.optional(v.array(storedAttachmentValidator)),
-    sharedBy: v.id("users"),
-    sharedByName: v.string(),
-    clientShareId: v.optional(v.string()),
+    ...snapshotArgs,
     description: v.string(),
   },
   handler: async (
@@ -562,20 +565,7 @@ export const createIncidentWithShare = internalMutation({
       }
     }
 
-    const bytes = shareSnapshotBytes({
-      bodyText: new TextEncoder().encode(args.bodyText ?? "").length,
-      bodyHtml: new TextEncoder().encode(args.bodyHtml ?? "").length,
-      attachments: (args.attachments ?? []).reduce(
-        (sum, attachment) => sum + attachment.size,
-        0,
-      ),
-      eml: 0,
-    });
-    if (!fitsShareLimit(bytes)) {
-      throw new ConvexError(
-        "La copia supera el límite de 50 MB del correo: compártela en modo resumen.",
-      );
-    }
+    assertShareFits(args);
 
     const now = Date.now();
     const reference = await freeReference(ctx, "incident");
@@ -650,20 +640,9 @@ export const createIncidentFromMail = action({
     const cached = await ctx.runQuery(internal.mailShares.cachedForShare, {
       messageId: args.messageId,
     });
-    if (args.mode === "original" && !cached) {
-      throw new ConvexError(
-        "Abre el mensaje antes de crear la incidencia en modo original: su contenido aún no se ha descargado.",
-      );
-    }
+    requireCachedForOriginal(cached, args.mode, "crear la incidencia");
 
-    const text = truncateShareText(cached?.text ?? "", BODY_TEXT_MAX_CHARS);
-    const html = cached?.html
-      ? truncateShareText(cached.html, BODY_HTML_MAX_CHARS)
-      : null;
-    const summary = buildShareSummary(
-      cached?.text ?? base.header.snippet,
-      base.header.subject,
-    );
+    const snapshot = buildShareSnapshot(cached, base.header, args.mode);
 
     let copied: Id<"_storage">[] = [];
     try {
@@ -680,19 +659,12 @@ export const createIncidentFromMail = action({
           fromName: base.header.fromName,
           fromAddress: base.header.fromAddress,
           sentAt: base.header.date,
-          summary,
-          bodyText: args.mode === "original" ? text.value : undefined,
-          bodyHtml:
-            args.mode === "original" ? (html?.value ?? undefined) : undefined,
-          bodyTruncated:
-            args.mode === "original"
-              ? text.truncated || (html?.truncated ?? false)
-              : undefined,
+          ...snapshot,
           attachments: materialized.attachments,
-          sharedBy: base.userId,
+          sharedBy: base.user._id,
           sharedByName: base.userName,
           clientShareId: args.clientShareId,
-          description: `${base.header.subject}\n\n${summary}`
+          description: `${base.header.subject}\n\n${snapshot.summary}`
             .trim()
             .slice(0, 4000),
         },
@@ -701,30 +673,16 @@ export const createIncidentFromMail = action({
       if (!result.created) {
         // Reintento idempotente: la incidencia ya existía, así que los objetos
         // copiados en esta llamada no los cita nadie.
-        for (const storageId of copied) {
-          try {
-            await ctx.storage.delete(storageId);
-          } catch {
-            // El barrido nocturno lo recoge igual.
-          }
-        }
+        await deleteObjects(ctx, copied);
         return result;
       }
 
       await ctx.runMutation(internal.mailShares.auditShare, {
         shareId: result.shareId,
-        destinationType: "incident",
-        destinationReference: result.reference,
       });
       return result;
     } catch (error) {
-      for (const storageId of copied) {
-        try {
-          await ctx.storage.delete(storageId);
-        } catch {
-          // El barrido nocturno lo recoge igual.
-        }
-      }
+      await deleteObjects(ctx, copied);
       throw error;
     }
   },
@@ -751,11 +709,9 @@ async function audienceFor(
   ctx: QueryCtx,
   type: MailShareDestinationType,
   destinationId: string,
-  options: { purgedOrOrphan?: boolean } = {},
 ): Promise<Doc<"users"> | null> {
   const user = await memberOrNull(ctx);
   if (!user) return null;
-  if (options.purgedOrOrphan === true && user.role !== "admin") return null;
 
   let inTrash = false;
   try {
@@ -787,9 +743,7 @@ export interface MailShareSummaryRow {
   summary: string;
   sharedByName: string;
   sharedAt: number;
-  attachmentCount: number;
   purgedAt: number | null;
-  backupRestored: boolean;
 }
 
 function summaryRow(row: Doc<"mailShares">): MailShareSummaryRow {
@@ -804,9 +758,7 @@ function summaryRow(row: Doc<"mailShares">): MailShareSummaryRow {
     summary: purged ? "" : (row.summary ?? ""),
     sharedByName: row.sharedByName,
     sharedAt: row.sharedAt,
-    attachmentCount: row.attachments?.length ?? 0,
     purgedAt: row.contentPurgedAt ?? null,
-    backupRestored: row.backupRestored === true,
   };
 }
 
@@ -839,12 +791,7 @@ export interface MailShareDetail extends MailShareSummaryRow {
   bodyText: string | null;
   bodyHtml: string | null;
   bodyTruncated: boolean;
-  attachments: {
-    index: number;
-    name: string;
-    contentType: string;
-    size: number;
-  }[];
+  attachments: { index: number; name: string; size: number }[];
   destinationType: MailShareDestinationType;
   destinationId: string;
   destinationReference: string;
@@ -866,7 +813,6 @@ export const get = query({
       attachments: (row.attachments ?? []).map((attachment, index) => ({
         index,
         name: attachment.name,
-        contentType: attachment.contentType,
         size: attachment.size,
       })),
       destinationType: row.destinationType,
@@ -1178,9 +1124,7 @@ export const findTarget = query({
 /** Lo que el diálogo necesita para ofrecer destinos: solo las capacidades. */
 export const canShare = query({
   args: {},
-  handler: async (
-    ctx,
-  ): Promise<{ canShare: boolean; grants: Record<string, boolean> }> => {
+  handler: async (ctx): Promise<{ grants: Record<string, boolean> }> => {
     const user = await requireMailboxMember(ctx);
     const capabilities: Capability[] = [
       ...Object.values(SHARE_CAPABILITY),
@@ -1190,9 +1134,6 @@ export const canShare = query({
     for (const capability of new Set(capabilities)) {
       grants[capability] = await hasCapability(ctx, user, capability);
     }
-    const canShare = Object.values(SHARE_CAPABILITY).some(
-      (capability) => grants[capability] === true,
-    );
-    return { canShare, grants };
+    return { grants };
   },
 });
