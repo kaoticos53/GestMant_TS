@@ -18,5 +18,9 @@ También se acotó la tarjeta de huérfanas en móvil (`min-w-0` en la fila y el
 nombre del archivo): ya no ensancha la página. Handover en
 `.context/sessions/2026-11-21-huerfanas-desbordamiento-movil.md`.
 
+Los cierres de diálogos y fichas pasaron a 44×44 con «Cerrar» como nombre
+accesible, sin mover la cruz. Handover en
+`.context/sessions/2026-11-21-cierre-dialogos-44.md`.
+
 Lo siguiente es F8: pilotaje con buzones reales, validación contra Hermes y
 ensayo de rollback.

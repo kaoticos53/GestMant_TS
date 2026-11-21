@@ -86,8 +86,12 @@ function SheetContent({
         {/* El aspa se queda en la cabecera de la ficha (y por encima de ella):
             al bajar desaparece con el contenido, y para cerrar está el botón
             «Cerrar» del pie, que no se mueve. */}
-        <SheetPrimitive.Close className="ring-offset-background focus-visible:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 z-30 rounded-md bg-background/80 p-1 opacity-70 backdrop-blur-sm transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none">
-          <XIcon className="size-4" />
+        {/* El botón mide 44×44 para el dedo; la cruz conserva su chip de 24 px
+            centrado donde estaba (6 + 22 = 16 + 12), así que la ficha no cambia. */}
+        <SheetPrimitive.Close className="ring-offset-background focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none">
+          <span className="inline-flex size-6 items-center justify-center rounded-md bg-secondary">
+            <XIcon className="size-4" />
+          </span>
           <span className="sr-only">Cerrar</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
