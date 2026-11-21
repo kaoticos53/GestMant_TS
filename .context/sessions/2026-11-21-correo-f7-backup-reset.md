@@ -46,8 +46,8 @@ vaciado debe dejar vacías.
 
 ## Verificación
 
-`npx tsc -b` 0, `npm run lint` 0 errores (19 avisos preexistentes) y
-`npx vite build` 0. Suite completa 2 857 pasan / 69 saltadas / 0 fallan.
+`npx tsc --noEmit` 0, `npm run lint` 0 errores (19 avisos preexistentes) y
+`npx vite build` 0. Suite completa 2 859 pasan / 69 saltadas / 0 fallan.
 `npm run security:check` 62 pruebas en verde y `npm audit --audit-level=high`
 sin hallazgos altos (queda el aviso moderado preexistente de `hono`).
 
@@ -64,32 +64,40 @@ metadatos», el extracto y la apertura con teclado de la fila funcionan; el
 diálogo de compartir resuelve la referencia y deshabilita el envío hasta tener
 destino.
 
-Defectos encontrados, que impiden cerrar F7:
+Defectos encontrados y corregidos antes de cerrar F7:
 
-1. **Descargas que navegan fuera.** En la papelera de huérfanas y en la sección
-   de la ficha, el enlace con `download` apunta al almacén en otro origen; el
-   navegador ignora el atributo y abre el archivo en la pestaña actual. Probado
-   con el `.eml` y el adjunto: la app acabó en
-   `http://127.0.0.1:3210/api/storage/…`. Afecta a los dos `handleDownload`.
-2. **La tarjeta de huérfanas desborda en móvil.** La línea de metadatos mide
-   554 px dentro de una tarjeta de 342 px; `truncate` no recorta porque el
-   contenedor no tiene ancho acotado. A 390 px la página entera scrollea a
-   612 px.
-3. **Cierre de diálogo en inglés y diminuto.** El botón mide 16×16 px y su
-   nombre accesible es «Close» en toda la app; debería ser «Cerrar» y un blanco
-   táctil de al menos 24×24 (mejor 44×44).
+1. **Descargas que navegaban fuera.** El enlace con `download` apuntaba al
+   almacén en otro origen; el navegador ignoraba el atributo y abría el archivo
+   en la pestaña actual. Ahora `src/lib/downloadFile.ts` trae el contenido con
+   `fetch`, lo envuelve en un blob y lo descarga con un objeto local. Verificado
+   con el `.eml` de la huérfana: `GET /api/storage/… → 200 (Fetch)` y la pestaña
+   siguió en `/dashboard`. La prueba `tests/downloadFile.test.ts` fija el
+   comportamiento.
+2. **La tarjeta de huérfanas desbordaba en móvil.** La línea de metadatos medía
+   554 px dentro de una tarjeta de 342 px. La fila pasa a apilarse, el bloque de
+   texto tiene `min-w-0`, los metadatos envuelven y los botones caben en el
+   ancho. Medido a 390 px: documento 374 px, sin scroll horizontal, metadatos
+   282×48 px.
+3. **Cierre de diálogo en inglés y diminuto.** El botón genérico pasó a 36×36
+   (`size-9`), con anillo de foco y nombre accesible «Cerrar». Medido a 390 px:
+   34×34 px y diálogo de la copia de 340 px, con márgenes laterales; en
+   escritorio el diálogo conserva `max-w-2xl` (672 px).
 
-Riesgos de UX, no bloqueantes: «Purgar ahora» y «Retirar el contenido» purgan
-sin confirmación; el diálogo a 390 px ocupa el ancho completo porque `max-w-md`
-sustituye al `max-w-[calc(100%-2rem)]` base.
+Riesgo de UX que no bloquea F7: «Purgar ahora» y «Retirar el contenido» purgan
+sin confirmación. La spec no la exige, pero conviene revisarlo en F8.
 
 No se pudieron juzgar los anillos de foco ni la restauración del foco al
 cerrar: la pestaña del navegador estaba oculta y las transiciones de Radix se
-quedaron congeladas en el primer fotograma.
+quedaron congeladas en el primer fotograma. Sí se abrió la copia con Enter y el
+foco inicial quedó en «Cerrar».
+
+## Resultado
+
+F7 cerrada el 2026-11-21: backup, restauración como metadatos, reset y papelera
+de huérfanas documentados en los tres manuales; hardening en verde; los tres
+defectos visuales corregidos y revisados de nuevo en escritorio y móvil.
 
 ## Pendiente
 
-- Corregir los tres defectos y repetir la revisión visual; F7 no se cierra
-  hasta entonces.
 - F8: pilotaje con buzones reales, validación contra Hermes y ensayo de rollback
   (el runbook vive en la fase 8 del plan).

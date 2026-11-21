@@ -233,6 +233,13 @@ El Administrador tiene la responsabilidad máxima de la plataforma: gobierno de 
    - Consulta el registro inmutable de qué usuario adjuntó, modificó o descargó documentos del expediente técnico de cualquier incidencia.
    - Filtrado por rango temporal, técnico o tipo de archivo.
 
+#### 6.5 Datos, Copias de Seguridad y Correos Huérfanos
+
+1. **Copia de seguridad:** en **Ajustes del taller → Datos**, descarga el JSON del taller. Los correos compartidos viajan solo como metadatos: ficha, referencia, asunto, remitente, fechas y autor; nunca el cuerpo, los adjuntos ni el `.eml`.
+2. **Restauración:** al restaurar el JSON, cada correo vuelve enganchado a su ficha y como resumen, con la marca **«Copia restaurada: solo metadatos»**. Si la ficha destino no está en la copia, el correo se omite y queda registrado en auditoría; no se convierte en huérfano.
+3. **Vaciado del taller:** el reset borra también las copias compartidas. Sus archivos quedan para la limpieza nocturna del almacén y el registro de auditoría no se toca.
+4. **Papelera de huérfanas:** si se borra un equipo o un manual, sus correos compartidos esperan siete días en **Ajustes del taller → Almacenamiento → «Copias de correo huérfanas»**. Solo el administrador la ve; puede descargar lo que quede o pulsar **«Purgar ahora»**. No hay restauración: la ficha ya no existe.
+
 ---
 
 ## 4. Matriz Completa de Capacidades por Rol del Sistema

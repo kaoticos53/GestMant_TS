@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y **0018 aprobada el 2026-11-21 por el usuario**. F5 y F6 cerradas. F7 implementada, documentada y con el hardening en verde, pero **no cerrada**: la revisión visual del 2026-11-21 encontró tres defectos —las descargas navegan fuera de la app, la tarjeta de huérfanas desborda en móvil y el cierre de los diálogos mide 16×16 y se anuncia en inglés— que hay que corregir antes de darla por buena. Queda F8: pilotaje con buzones reales y ensayo de rollback.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y **0018 aprobada el 2026-11-21 por el usuario**. F5, F6 y **F7 cerradas**: backup, restauración como metadatos, reset y papelera de huérfanas documentados en los tres manuales; los tres defectos de la revisión visual corregidos y revisados de nuevo; hardening en verde. Queda F8: pilotaje con buzones reales y ensayo de rollback.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -389,7 +389,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 ### Fase 7 — 0018: backup, reset, documentación y hardening
 
-**Estado:** implementación y documentación cerradas, pendiente de corrección (2026-11-21). Backup y restauración de `mailShares` solo con metadatos y omisión auditada; reset con `purgeForReset`; documentación en los dos manuales y en 0011/0016/0018; `tsc`, lint, build, suite completa y `npm run security:check` en verde. La revisión visual encontró tres defectos que impiden cerrar la fase: las descargas abren el archivo en la pestaña actual en vez de descargarlo, la tarjeta de huérfanas desborda a lo ancho en móvil y el botón de cerrar de los diálogos mide 16×16 y se anuncia como «Close». El runbook de rollback vive en F8.
+**Estado:** cerrada (2026-11-21). Backup y restauración de `mailShares` solo con metadatos y omisión auditada; reset con `purgeForReset`; documentación del backup, la restauración, el reset y la papelera de huérfanas en los tres manuales y en 0011/0016/0018; `tsc`, lint, build, suite completa y `npm run security:check` en verde. La revisión visual encontró tres defectos —descargas que sustituían la app, desbordamiento de la tarjeta de huérfanas en móvil y cierre de diálogo de 16×16 en inglés—; los tres están corregidos (descarga por blob, fila apilada y cierre de 36×36 con «Cerrar») y revisados de nuevo en escritorio y móvil. El runbook de rollback vive en F8.
 
 **Objetivo:** dejar la funcionalidad operable, reversible y documentada.
 

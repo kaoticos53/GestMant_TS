@@ -477,6 +477,7 @@ La pestaña **«Datos»** de Ajustes del taller permite descargar una copia comp
 - **Correos compartidos en la copia:** viajan solo como metadatos (tipo de ficha, referencia, asunto, remitente, fechas y autor). Nunca se incluyen el extracto, el cuerpo, los adjuntos ni el archivo `.eml`: el contenido de los correos se queda en el expediente y no se duplica en el JSON.
 - **Restauración:** cada copia vuelve enganchada a su ficha restaurada y como resumen. La que era original vuelve marcada «Copia restaurada: solo metadatos», sin cuerpo ni archivos. Si la ficha destino no está en la copia, el correo compartido se omite y el intento queda registrado en la auditoría de seguridad; no se crea una copia huérfana.
 - **Vaciado del taller:** se lleva también los correos compartidos. Sus adjuntos y `.eml` dejan de estar citados y la limpieza nocturna del almacén los retira a la papelera, donde esperan su plazo antes de borrarse. El registro de auditoría de seguridad no se toca.
+- **Papelera de copias huérfanas:** al borrar un equipo o un manual, sus correos compartidos no se destruyen en el acto. Quedan siete días en **Ajustes del taller → Almacenamiento**, en la tarjeta **«Copias de correo huérfanas»**, visible solo para el administrador. Desde ahí se puede descargar el `.eml` o los adjuntos que queden y adelantar la purga con **«Purgar ahora»**. No hay «restaurar»: la ficha ya no existe y la copia no se puede volver a enganchar. Al vencer el plazo, el barrido nocturno la purga y deja constancia en la auditoría de seguridad.
 
 ---
 
