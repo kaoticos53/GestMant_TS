@@ -30,7 +30,8 @@ reservado a F4.
 | `src/pages/dashboard/mailbox/MessageList.tsx` | Nuevo | Lista de cabeceras con `ListArea` y `useVirtualRows`; estados vacío y carga; reinicio del scroll por página. |
 | `src/pages/dashboard/mailbox/helpers.ts` | Nuevo | Fecha compacta, remitente, no leído, contadores y tamaño de página. |
 | `src/pages/dashboard/mailbox/types.ts` | Nuevo | Tipos derivados de las consultas existentes. |
-| `tests/mailboxView.test.tsx` | Nuevo | Cuenta ausente, carpetas/cabeceras, carpeta vacía y reautenticación. |
+| `tests/mailboxView.test.tsx` | Nuevo | Cuenta ausente, carpetas/cabeceras, carpeta vacía, reautenticación y límites de paginación. |
+| `tests/mailHeaders.test.ts` | Nuevo | Offset fuera de rango, última página parcial y total filtrado por búsqueda. |
 | `tests/navConfig.test.ts` | Extensión | Metadatos, navegación, badge y resumen de «Correo». |
 | `tests/dashboardTabRouterRules.test.ts` | Extensión | Acceso a `mailbox` solo con `viewMailbox` y sesión no invitada. |
 
@@ -66,8 +67,9 @@ reservado a F4.
 ## 4. Estado de Verificación y Testing
 
 - **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores.
-- **Tests de F3 y navegación:** ✅ 33/33 (`mailSync`, `mailboxView` con
-  paginación y corrección de total, `navConfig`, `dashboardTabRouterRules`).
+- **Tests de F3 y navegación:** ✅ 34/34 (`mailSync`, `mailHeaders`,
+  `mailboxView` con paginación y corrección de total, `navConfig`,
+  `dashboardTabRouterRules`).
 - **Arquitectura y seguridad:** ✅ 22/22 (`arquitectura`, `seguridad`).
 - **Lint (`npx eslint .`):** ✅ 0 errores; 19 warnings preexistentes.
 - **Suite completa (`npx vitest run`):** 2778 pasando, 69 omitidos y 1 fallo
