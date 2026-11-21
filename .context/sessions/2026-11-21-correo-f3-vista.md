@@ -26,9 +26,9 @@ reservado a F4.
 | `src/pages/dashboard/components/content/router/DashboardTabRenderer.tsx` | Extensión | Despacha `MailboxView` y permite abrir Ajustes. |
 | `src/pages/dashboard/components/content/helpers.ts` | Extensión | «Correo» queda exento del aviso de taller vacío. |
 | `src/pages/dashboard/hooks/useDashboardNavigation.ts` | Extensión | `viewKeys.mailbox` para remontar la vista al volver a la pestaña. |
-| `src/pages/dashboard/MailboxView.tsx` | Nuevo | Composición de carpetas, búsqueda, sincronización, estados y modo móvil de un panel. |
-| `src/pages/dashboard/mailbox/MessageList.tsx` | Nuevo | Lista de cabeceras con `ListArea` y `useVirtualRows`; estados vacío y carga. |
-| `src/pages/dashboard/mailbox/helpers.ts` | Nuevo | Fecha compacta, remitente, no leído y contadores. |
+| `src/pages/dashboard/MailboxView.tsx` | Nuevo | Composición de carpetas, búsqueda, sincronización, estados, paginación por offset y modo móvil de un panel. |
+| `src/pages/dashboard/mailbox/MessageList.tsx` | Nuevo | Lista de cabeceras con `ListArea` y `useVirtualRows`; estados vacío y carga; reinicio del scroll por página. |
+| `src/pages/dashboard/mailbox/helpers.ts` | Nuevo | Fecha compacta, remitente, no leído, contadores y tamaño de página. |
 | `src/pages/dashboard/mailbox/types.ts` | Nuevo | Tipos derivados de las consultas existentes. |
 | `tests/mailboxView.test.tsx` | Nuevo | Cuenta ausente, carpetas/cabeceras, carpeta vacía y reautenticación. |
 | `tests/navConfig.test.ts` | Extensión | Metadatos, navegación, badge y resumen de «Correo». |
@@ -45,8 +45,10 @@ reservado a F4.
   efecto que copie estado. Al cambiar de carpeta se limpia la búsqueda.
 - La lista usa la caja de `ListArea` como elemento de scroll de
   `useVirtualRows`; por debajo de 40 filas se pintan todas.
-- El límite de cabeceras es 200 por consulta y se avisa cuando el total es
-  mayor; la paginación completa pertenece a la evolución del visor.
+- La consulta pagina de 100 en 100 con `limit` y `offset` sobre
+  `mailHeaders.list`; el pie compartido `TablePagination` permite recorrer el
+  total real del buzón. La página se reinicia en el mismo render al cambiar de
+  carpeta o de búsqueda, y el área vuelve arriba al cambiar de página.
 - No hay visor de cuerpo ni descarga: la fila solo muestra asunto, remitente,
   fecha, fragmento y marca de adjuntos.
 - En móvil se alterna entre carpetas y mensajes con un botón de vuelta; en
@@ -61,8 +63,8 @@ reservado a F4.
 ## 4. Estado de Verificación y Testing
 
 - **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores.
-- **Tests de F3 y navegación:** ✅ 31/31 (`mailSync`, `mailboxView`,
-  `navConfig`, `dashboardTabRouterRules`).
+- **Tests de F3 y navegación:** ✅ 32/32 (`mailSync`, `mailboxView` con
+  paginación, `navConfig`, `dashboardTabRouterRules`).
 - **Arquitectura y seguridad:** ✅ 22/22 (`arquitectura`, `seguridad`).
 - **Lint (`npx eslint .`):** ✅ 0 errores; 19 warnings preexistentes.
 - **Suite completa (`npx vitest run`):** 2778 pasando, 69 omitidos y 1 fallo
@@ -81,7 +83,7 @@ reservado a F4.
   los 1 554 mensajes en menos de 30 s con 0 cuerpos.
 - [ ] Prueba real de credenciales, token inválido y renovación.
 - [ ] Integrar la lista con el visor de F4; no hay cuerpos todavía.
-- [ ] Añadir paginación incremental si el visor necesita más de 200 cabeceras
-  por carpeta; hoy se avisa del límite.
+- [x] Paginación por offset sobre `mailHeaders.list`, con 100 cabeceras por
+  página y reinicio al cambiar carpeta o búsqueda.
 - ⚠️ **Riesgo conocido:** `npm audit` mantiene la vulnerabilidad moderada
   preexistente de `hono`; no se ha tocado.

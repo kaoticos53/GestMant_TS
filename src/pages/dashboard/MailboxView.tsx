@@ -1,6 +1,8 @@
+import { TablePagination } from "@/components/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
+import { pageWindow } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import { formatDateTime, getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
@@ -24,13 +26,17 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { countLabel } from "./mailbox/helpers";
+import { countLabel, MAILBOX_PAGE_SIZE } from "./mailbox/helpers";
 import { MessageList, MessageListSkeleton } from "./mailbox/MessageList";
 import type { MailboxAccount, MailboxFolder } from "./mailbox/types";
 
-const HEADER_LIMIT = 200;
-
 type MobilePane = "folders" | "messages";
+
+interface PageState {
+  /** Carpeta + búsqueda a la que pertenece la página. */
+  key: string;
+  page: number;
+}
 
 function folderIcon(kind: string | null) {
   switch (kind) {
@@ -70,22 +76,43 @@ export function MailboxView({
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("folders");
   const [syncing, setSyncing] = useState(false);
+  const [pageState, setPageState] = useState<PageState>({
+    key: "",
+    page: 1,
+  });
 
   const activeFolder =
     folders?.find((folder) => folder.remoteId === selectedFolderId) ??
     folders?.[0] ??
     null;
   const activeFolderId = activeFolder?.remoteId ?? null;
+  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}`;
+
+  // Al cambiar de carpeta o de búsqueda se vuelve a la primera página en el
+  // mismo render. Así la consulta siguiente ya pide `offset: 0` y no llega a
+  // verse un instante la página de la lista anterior.
+  let page = pageState.page;
+  if (pageState.key !== pageKey) {
+    page = 1;
+    setPageState({ key: pageKey, page: 1 });
+  }
+
   const headersResult = useQuery(
     api.mailHeaders.list,
     activeFolderId
       ? {
           folderRemoteId: activeFolderId,
           search: search.trim() || undefined,
-          limit: HEADER_LIMIT,
+          limit: MAILBOX_PAGE_SIZE,
+          offset: (page - 1) * MAILBOX_PAGE_SIZE,
         }
       : "skip",
   );
+  const paging = pageWindow(headersResult?.total ?? 0, page, MAILBOX_PAGE_SIZE);
+
+  const handlePageChange = (nextPage: number) => {
+    setPageState({ key: pageKey, page: nextPage });
+  };
 
   const handleSelectFolder = (folder: MailboxFolder) => {
     setSelectedFolderId(folder.remoteId);
@@ -235,13 +262,25 @@ export function MailboxView({
             ) : (
               <MessageList
                 headers={headersResult.headers}
-                total={headersResult.total}
                 folderName={activeFolder.name}
                 folderRemoteId={activeFolder.remoteId}
+                page={page}
                 search={search}
                 syncing={syncing}
                 onSync={() => void handleSync()}
                 onClearSearch={() => setSearch("")}
+              />
+            )}
+            {headersResult !== undefined && (
+              <TablePagination
+                paging={{ ...paging, setPage: handlePageChange }}
+                singular="mensaje"
+                plural="mensajes"
+                detail={
+                  search.trim() === ""
+                    ? activeFolder.name
+                    : `con la búsqueda «${search.trim()}»`
+                }
               />
             )}
           </>

@@ -95,14 +95,22 @@ const HEADERS = [
   },
 ];
 
+type HeadersResult = {
+  headers: typeof HEADERS;
+  total: number;
+  unread: number;
+};
+
 function setupQueries({
   account = ACCOUNT,
   folders = FOLDERS,
   headers = { headers: HEADERS, total: HEADERS.length, unread: 1 },
+  headersForArgs,
 }: {
   account?: typeof ACCOUNT | null;
   folders?: typeof FOLDERS | undefined;
-  headers?: { headers: typeof HEADERS; total: number; unread: number };
+  headers?: HeadersResult;
+  headersForArgs?: (args: Record<string, unknown>) => HeadersResult;
 } = {}) {
   // `api` es un proxy de Convex y cada acceso puede devolver una referencia
   // distinta, así que se distingue por los argumentos y el orden de las dos
@@ -110,7 +118,9 @@ function setupQueries({
   let callsWithoutArgs = 0;
   mockUseQuery.mockImplementation(
     (_query: unknown, args?: Record<string, unknown>) => {
-      if (args && typeof args === "object") return headers;
+      if (args && typeof args === "object") {
+        return headersForArgs ? headersForArgs(args) : headers;
+      }
       callsWithoutArgs += 1;
       return callsWithoutArgs % 2 === 1 ? account : folders;
     },
@@ -185,6 +195,111 @@ describe("MailboxView", () => {
     });
 
     expect(container.textContent).toContain("Esta carpeta está vacía");
+  });
+
+  it("pagina por offset y vuelve a la primera página al cambiar carpeta o búsqueda", async () => {
+    const makeHeaders = (
+      offset: number,
+      count: number,
+      folderRemoteId: string,
+    ): typeof HEADERS =>
+      Array.from({ length: count }, (_, index) => ({
+        ...HEADERS[index % HEADERS.length],
+        messageId: `${folderRemoteId}-${offset + index}`,
+        folderRemoteId,
+        subject: `Asunto ${offset + index + 1}`,
+        flags: "",
+        hasAttachments: false,
+        snippet: `Fragmento ${offset + index + 1}`,
+      }));
+
+    setupQueries({
+      headersForArgs: (args) => {
+        if (args.folderRemoteId === "sent") {
+          return { headers: makeHeaders(0, 4, "sent"), total: 4, unread: 0 };
+        }
+        if (typeof args.search === "string" && args.search !== "") {
+          return {
+            headers: makeHeaders(0, 1, "inbox"),
+            total: 1,
+            unread: 0,
+          };
+        }
+        const offset = typeof args.offset === "number" ? args.offset : 0;
+        return {
+          headers: makeHeaders(offset, 100, "inbox"),
+          total: 250,
+          unread: 0,
+        };
+      },
+    });
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    const listCalls = () =>
+      mockUseQuery.mock.calls
+        .map(([, args]) => args)
+        .filter(
+          (args): args is Record<string, unknown> =>
+            args !== null && typeof args === "object",
+        );
+
+    expect(listCalls().at(-1)).toMatchObject({
+      folderRemoteId: "inbox",
+      offset: 0,
+    });
+    expect(container.textContent).toContain("Asunto 1");
+
+    const next = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Página siguiente"]',
+    );
+    expect(next).not.toBeNull();
+    await act(async () => {
+      next?.click();
+      await settle();
+    });
+
+    expect(listCalls().at(-1)).toMatchObject({
+      folderRemoteId: "inbox",
+      offset: 100,
+    });
+    expect(container.textContent).toContain("Asunto 101");
+
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Buscar en esta carpeta"]',
+    );
+    expect(search).not.toBeNull();
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(search, "filtro");
+      search?.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+
+    expect(listCalls().at(-1)).toMatchObject({
+      folderRemoteId: "inbox",
+      offset: 0,
+      search: "filtro",
+    });
+
+    const sent = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Enviados",
+    );
+    expect(sent).not.toBeNull();
+    await act(async () => {
+      sent?.click();
+      await settle();
+    });
+
+    const last = listCalls().at(-1);
+    expect(last).toMatchObject({ folderRemoteId: "sent", offset: 0 });
+    expect(last?.search).toBeUndefined();
   });
 
   it("avisa cuando las credenciales necesitan reautenticación", async () => {

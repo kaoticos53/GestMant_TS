@@ -1,3 +1,6 @@
+/** Cabeceras por página; `mailHeaders.list` admite hasta 200 por consulta. */
+export const MAILBOX_PAGE_SIZE = 100;
+
 /** Fecha compacta de una cabecera: hora si es de hoy, día/mes si es del año. */
 export function formatMailDate(timestamp: number): string {
   const date = new Date(timestamp);

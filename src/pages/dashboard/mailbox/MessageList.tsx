@@ -4,14 +4,14 @@ import { useVirtualRows } from "@/hooks/use-virtual-rows";
 import { cn } from "@/lib/utils";
 import { Loader2, MailOpen, Paperclip, RefreshCw, SearchX } from "lucide-react";
 import { useCallback, useState } from "react";
-import { countLabel, formatMailDate, isUnread, senderLabel } from "./helpers";
+import { formatMailDate, isUnread, senderLabel } from "./helpers";
 import type { MailboxHeader } from "./types";
 
 interface MessageListProps {
   headers: MailboxHeader[];
-  total: number;
   folderName: string;
   folderRemoteId: string;
+  page: number;
   search: string;
   syncing: boolean;
   onSync: () => void;
@@ -24,9 +24,9 @@ interface MessageListProps {
  */
 export function MessageList({
   headers,
-  total,
   folderName,
   folderRemoteId,
+  page,
   search,
   syncing,
   onSync,
@@ -46,7 +46,10 @@ export function MessageList({
 
   if (headers.length === 0) {
     return (
-      <ListArea resetKey={`${folderRemoteId}|${search}`} ref={attachArea}>
+      <ListArea
+        resetKey={`${folderRemoteId}|${search}|${page}`}
+        ref={attachArea}
+      >
         <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
           <span className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
             {searching ? (
@@ -97,7 +100,7 @@ export function MessageList({
   }
 
   return (
-    <ListArea resetKey={`${folderRemoteId}|${search}`} ref={attachArea}>
+    <ListArea resetKey={`${folderRemoteId}|${search}|${page}`} ref={attachArea}>
       <ul className="divide-y divide-border/60">
         {virtual.active && virtual.paddingTop > 0 && (
           <li aria-hidden style={{ height: virtual.paddingTop }} />
@@ -175,12 +178,6 @@ export function MessageList({
           <li aria-hidden style={{ height: virtual.paddingBottom }} />
         )}
       </ul>
-      {headers.length < total && (
-        <p className="border-t border-border/60 bg-muted/20 px-4 py-2 text-center text-xs text-muted-foreground">
-          Mostrando {countLabel(headers.length, "mensaje", "mensajes")} de{" "}
-          {total}. Sincroniza de nuevo para actualizar la copia local.
-        </p>
-      )}
     </ListArea>
   );
 }
