@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 con backend y vista implementados; falta la medición real contra Hermes) y 0018 pendiente de aprobación antes de F5.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 implementada con backend, vista, lista virtualizada y paginación por offset; queda solo la validación real contra Hermes) y 0018 pendiente de aprobación antes de F5.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -162,7 +162,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 6. Implementar desconexión (borra credenciales y token; conserva o borra la caché según elección) y borrado de cuenta (credenciales, token, carpetas, cabeceras, cuerpos y adjuntos); las copias compartidas no se tocan.
 7. Comprobar que el administrador no puede leer ni configurar el buzón de otra persona.
 8. Emitir eventos de auditoría de alta, cambio de credenciales y desconexión, sin contenido.
-9. Dejar la pestaña «Mi buzón» en Ajustes y la entrada de Ajustes para `viewMailbox`; el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) se crea en F3 junto con la lista.
+9. Dejar la pestaña «Mi buzón» en Ajustes y la entrada de Ajustes para `viewMailbox`; el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) se creó en F3 junto con la lista.
 10. Resolver el árbol de carpetas y excluir tipos que no son correo (`Calendar`, `Contacts`, `Tasks`, RSS).
 11. Probar aislamiento entre dos técnicos: cada uno ve solo su cuenta y sus carpetas.
 12. Verificar que ninguna consulta devuelve contraseña, token ni pista completa.
@@ -187,7 +187,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 **Objetivo:** listar el buzón sin descargar cuerpos y mantenerlo actualizado sin duplicados.
 
-**Estado:** backend implementado y probado con `fetch` simulado (`mailHeaders`, `mailSync`, tumbas, token, lease y cron). La vista del módulo «Correo» está implementada con carpetas, búsqueda local, lista virtualizada, estados y modo móvil. Falta la medición real contra Hermes.
+**Estado:** backend implementado y probado con `fetch` simulado (`mailHeaders`, `mailSync`, tumbas, token, lease y cron). La vista del módulo «Correo» está implementada con carpetas, búsqueda local, lista virtualizada, estados, modo móvil y paginación por offset. Solo falta la validación real contra Hermes.
 
 **Tareas**
 
@@ -205,19 +205,20 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
    - lease por cuenta;
    - máximo 2 peticiones simultáneas;
    - espera de 2 s entre cuentas.
-5. Crear el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) y la vista de lista virtualizada, con el estado de sincronización, los vacíos/errores explicados y el modo móvil de un panel a la vez.
+5. Crear el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) y la vista de lista virtualizada, con el estado de sincronización, los vacíos/errores explicados, el modo móvil de un panel a la vez y paginación por offset.
 6. Medir la primera sincronización con el buzón de referencia.
 
 **Entregables**
 
 - `mailHeaders`, `mailSync` y cron.
 - Lista de correo con carpetas, búsqueda local y estados.
-- Tests de paginación, token, borrados, reaparición y baja de usuario.
+- Tests de paginación por offset, token, borrados, reaparición y baja de usuario.
 
 **Puerta de salida**
 
 - `CA-002`, `CA-003`, `CA-004`, `CA-010`, `CA-014` y `CA-015` de 0017.
 - 1 554 cabeceras en menos de 30 s y **0 cuerpos descargados**.
+- Paginación por offset verificada con offset fuera de rango, última página parcial y total filtrado por búsqueda.
 - Segunda pasada sin duplicados.
 - Cron saltando cuentas de usuarios `active === false`, sin tocar `mailAccounts`.
 - Conexión real validada si F2 se cerró con fixtures; token inválido reinicia sin perder datos.
@@ -519,7 +520,7 @@ F0 Aprobación
 | ---- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | F1   | `tests/mailClient.test.ts`, `tests/mailCache.test.ts`, `tests/arquitectura.test.ts`  | Ninguna; solo fixtures.                                    |
 | F2   | `tests/mailAccounts.test.ts`, tests de ajustes                                       | Alta, prueba de conexión y aislamiento entre dos usuarios. |
-| F3   | `tests/mailSync.test.ts`, `tests/mailboxView.test.tsx`, tests de navegación          | Sincronización real, 1 554 cabeceras, sin cuerpos.         |
+| F3   | `tests/mailSync.test.ts`, `tests/mailHeaders.test.ts`, `tests/mailboxView.test.tsx`, tests de navegación | Sincronización real, 1 554 cabeceras, sin cuerpos.         |
 | F4   | `tests/mailBody.test.ts`, `tests/mailboxView.test.tsx`                               | Abrir mensaje, adjuntos, HTML, `cid:`, no marcar leído.    |
 | F5   | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`                          | Compartir en cada destino, permisos y modos.               |
 | F6   | `tests/mailShares.test.ts`, `tests/trash.test.ts`, `tests/storageCleanup.test.ts`    | Restaurar, purgar, borrar equipo/manual, lápida.           |
@@ -633,4 +634,4 @@ La implantación se considera terminada cuando:
 
 ## 11. Próxima acción
 
-El plan no arranca hasta que 0017 y 0018 estén aprobadas. La primera tarea es la **Fase 0**: confirmar conectividad, contraseñas de aplicación, cifrado, backup y usuarios del piloto. Sin esa puerta, la Fase 1 puede avanzar con fixtures, pero no se debe sincronizar ningún buzón real.
+0017 está aprobada y F1–F3 están implementadas en código. La siguiente acción es cerrar F3 con la validación real contra Hermes: conectividad, contraseñas de aplicación, cifrado, backup y usuarios del piloto, además de 1 554 cabeceras, 0 cuerpos y segunda pasada sin duplicados. 0018 sigue en Propuesta y debe aprobarse antes de F5; no se debe abrir el piloto ni empezar F5 sin cerrar esa validación.
