@@ -16,11 +16,13 @@ import {
   MailOpen,
   Paperclip,
   RefreshCw,
+  Share2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HtmlFrame } from "./HtmlFrame";
+import { ShareMailDialog } from "./ShareMailDialog";
 import { senderLabel } from "./helpers";
 import type { MailboxHeader } from "./types";
 
@@ -56,6 +58,7 @@ export function MessageViewer({
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState<ViewMode>("html");
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,6 +132,17 @@ export function MessageViewer({
         </div>
         <Button
           type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 gap-1.5 px-2 text-xs"
+          disabled={loading || opened === null}
+          onClick={() => setSharing(true)}
+        >
+          <Share2 className="size-3.5" />
+          <span className="hidden sm:inline">Compartir</span>
+        </Button>
+        <Button
+          type="button"
           variant="ghost"
           size="sm"
           className="size-8 shrink-0 p-0"
@@ -138,6 +152,12 @@ export function MessageViewer({
           <X className="size-4" />
         </Button>
       </header>
+
+      <ShareMailDialog
+        messageId={header.messageId}
+        open={sharing}
+        onOpenChange={setSharing}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {loading ? (

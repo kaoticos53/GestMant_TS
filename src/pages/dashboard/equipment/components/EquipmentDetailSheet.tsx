@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetFooter } from "@/components/ui/sheet";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { ClipboardList } from "lucide-react";
 import { MaintenanceDialog } from "../dialogs/MaintenanceDialog";
 import { useEquipmentDerivedData } from "../hooks/useEquipmentDerivedData";
@@ -144,6 +145,10 @@ export function EquipmentDetailSheet({
           </div>
         </SheetFooter>
         {children}
+        <SharedMailSection
+          destinationType="equipment"
+          destinationId={item._id}
+        />
       </SheetContent>
     </Sheet>
   );

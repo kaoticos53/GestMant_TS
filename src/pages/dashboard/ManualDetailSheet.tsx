@@ -1,4 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { getErrorMessage } from "@/lib/workshop";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ export function ManualDetailSheet({
           <ManualNotesCard notes={manual.notes} />
           <ManualHistoryCard manual={manual} />
         </div>
+        <SharedMailSection destinationType="manual" destinationId={manual._id} />
       </SheetContent>
     </Sheet>
   );

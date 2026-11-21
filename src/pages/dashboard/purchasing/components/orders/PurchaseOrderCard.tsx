@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { Progress } from "@/components/ui/progress";
 import { asPurchaseOrder } from "@/lib/abilities";
 import { canAdvancePurchaseOrder } from "@/lib/purchaseFlow";
@@ -87,6 +88,10 @@ export function PurchaseOrderCard({
           </div>
         </div>
         <Progress value={Math.round(total.ratio * 100)} />
+        <SharedMailSection
+          destinationType="purchaseOrder"
+          destinationId={order._id}
+        />
       </CardContent>
     </Card>
   );

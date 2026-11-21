@@ -1,4 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { JourneySummary } from "@/components/JourneySummary";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { incidentJourney } from "@/lib/incidentJourney";
@@ -160,6 +161,10 @@ export function IncidentDetailSheet({
           createEquipmentOpen={createEquipmentOpen}
           onCloseEquipment={() => setEquipmentOpen(false)}
           onCloseCreateEquipment={() => setCreateEquipmentOpen(false)}
+        />
+        <SharedMailSection
+          destinationType="incident"
+          destinationId={incident._id}
         />
       </SheetContent>
     </Sheet>

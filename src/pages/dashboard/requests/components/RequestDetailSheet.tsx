@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { canEditRequest, isRequestSettled } from "@/lib/requestFlow";
 import {
   blockedJourneySteps,
@@ -202,6 +203,10 @@ export function RequestDetailSheet({
           withdrawReason={withdrawReason}
           setWithdrawReason={setWithdrawReason}
           onWithdraw={() => handleWithdraw(request, onClose)}
+        />
+        <SharedMailSection
+          destinationType="request"
+          destinationId={request._id}
         />
       </SheetContent>
     </Sheet>

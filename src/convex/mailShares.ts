@@ -677,6 +677,76 @@ export const purge = mutation({
   },
 });
 
+/**
+ * Busca la ficha destino por su referencia visible, para el diálogo de
+ * compartición: `INC-0004`, `PET-0007`, `OC-0003`, el código o nombre del equipo
+ * y el título del manual. Devuelve el id y la referencia canónica.
+ */
+export const findTarget = query({
+  args: {
+    destinationType: destinationTypeValidator,
+    reference: v.string(),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ id: string; reference: string } | null> => {
+    const user = await memberForSharing(ctx);
+    if (
+      !(await hasCapability(ctx, user, SHARE_CAPABILITY[args.destinationType]))
+    ) {
+      return null;
+    }
+    const wanted = args.reference.trim();
+    if (wanted === "") return null;
+    const wantedLower = wanted.toLowerCase();
+
+    if (args.destinationType === "incident") {
+      const row = await ctx.db
+        .query("incidents")
+        .withIndex("by_reference", (q) => q.eq("reference", wanted))
+        .first();
+      return row ? { id: row._id, reference: row.reference } : null;
+    }
+    if (args.destinationType === "request") {
+      const row = await ctx.db
+        .query("partRequests")
+        .withIndex("by_reference", (q) => q.eq("reference", wanted))
+        .first();
+      return row ? { id: row._id, reference: row.reference } : null;
+    }
+    if (args.destinationType === "purchaseOrder") {
+      const row = await ctx.db
+        .query("purchaseOrders")
+        .withIndex("by_reference", (q) => q.eq("reference", wanted))
+        .first();
+      return row ? { id: row._id, reference: row.reference } : null;
+    }
+    if (args.destinationType === "purchaseRequest") {
+      const row = await ctx.db
+        .query("purchaseRequests")
+        .withIndex("by_reference", (q) => q.eq("reference", wanted))
+        .first();
+      return row ? { id: row._id, reference: row.reference } : null;
+    }
+    if (args.destinationType === "equipment") {
+      const row = await ctx.db
+        .query("equipment")
+        .withIndex("by_code", (q) => q.eq("code", wanted))
+        .first();
+      if (row) return { id: row._id, reference: row.code ?? row.name };
+      return null;
+    }
+    // Los manuales no tienen índice por título: se buscan en la lista, que es
+    // corta y ya se lee entera en su módulo.
+    const manuals = await ctx.db.query("manuals").collect();
+    const manual = manuals.find(
+      (row) => row.title.trim().toLowerCase() === wantedLower,
+    );
+    return manual ? { id: manual._id, reference: manual.title } : null;
+  },
+});
+
 /** Lo que el diálogo necesita para ofrecer destinos: solo las capacidades. */
 export const canShare = query({
   args: {},
