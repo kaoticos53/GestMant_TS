@@ -55,10 +55,41 @@ Se endureció `tests/humanChallenge.test.ts`: el Time-Trap se prueba con un reto
 de dificultad baja firmado al momento, para no depender de que resolver 16 bits
 entre en los 1 500 ms. La prueba aislada pasó de fallar a 60 ms.
 
-No se miró la ficha restaurada ni la papelera administrativa en el navegador.
+## Revisión visual (2026-11-21)
+
+Se sembraron dos copias sintéticas (una restaurada y otra huérfana con `.eml` y
+adjunto) y un mensaje de prueba, se revisó en escritorio (1600×900) y móvil
+(390×844 y 320×700) y se retiraron después. La marca «Copia restaurada: solo
+metadatos», el extracto y la apertura con teclado de la fila funcionan; el
+diálogo de compartir resuelve la referencia y deshabilita el envío hasta tener
+destino.
+
+Defectos encontrados, que impiden cerrar F7:
+
+1. **Descargas que navegan fuera.** En la papelera de huérfanas y en la sección
+   de la ficha, el enlace con `download` apunta al almacén en otro origen; el
+   navegador ignora el atributo y abre el archivo en la pestaña actual. Probado
+   con el `.eml` y el adjunto: la app acabó en
+   `http://127.0.0.1:3210/api/storage/…`. Afecta a los dos `handleDownload`.
+2. **La tarjeta de huérfanas desborda en móvil.** La línea de metadatos mide
+   554 px dentro de una tarjeta de 342 px; `truncate` no recorta porque el
+   contenedor no tiene ancho acotado. A 390 px la página entera scrollea a
+   612 px.
+3. **Cierre de diálogo en inglés y diminuto.** El botón mide 16×16 px y su
+   nombre accesible es «Close» en toda la app; debería ser «Cerrar» y un blanco
+   táctil de al menos 24×24 (mejor 44×44).
+
+Riesgos de UX, no bloqueantes: «Purgar ahora» y «Retirar el contenido» purgan
+sin confirmación; el diálogo a 390 px ocupa el ancho completo porque `max-w-md`
+sustituye al `max-w-[calc(100%-2rem)]` base.
+
+No se pudieron juzgar los anillos de foco ni la restauración del foco al
+cerrar: la pestaña del navegador estaba oculta y las transiciones de Radix se
+quedaron congeladas en el primer fotograma.
 
 ## Pendiente
 
-- Revisión visual en navegador de la sección con una copia restaurada.
+- Corregir los tres defectos y repetir la revisión visual; F7 no se cierra
+  hasta entonces.
 - F8: pilotaje con buzones reales, validación contra Hermes y ensayo de rollback
   (el runbook vive en la fase 8 del plan).
