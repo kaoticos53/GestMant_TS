@@ -131,3 +131,17 @@ filtran también el destino esperado: `persistShare` reutiliza únicamente la
 copia que apunta al mismo tipo e id, y `createIncidentWithShare` solo la que
 lleva `createdDestination` —una incidencia nacida del correo—, no una copia
 compartida a una incidencia que ya existía. Añadidas dos pruebas de colisión.
+
+---
+
+## 12. Arreglo del arnés de las fichas
+
+Los tests de las fichas que ahora montan `SharedMailSection` fallaban con «No
+`useAction` export is defined on the `convex/react` mock» y, en
+`purchasingView`, con «`api.mailShares` is undefined» porque su mock de `api` no
+tenía el módulo. Añadidos `useAction` a los mocks de `convex/react`
+(`requestsViewFlow`, `withdrawnSheet`, `incidentPartRequests`,
+`purchasingView`, `purchasingAndAuditSheets`) y el módulo `mailShares` al de
+`purchasingView`. Además, `createIncidentWithShare` escribe el estado inicial
+con `INCIDENT_STATUSES.REPORTED` en vez de a pelo, que era lo que señalaba
+`arquitectura`.

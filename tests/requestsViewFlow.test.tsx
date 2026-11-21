@@ -41,6 +41,8 @@ vi.mock("convex/react", async () => {
       return [];
     },
     useMutation: () => async () => undefined,
+    // La sección de correos compartidos de la ficha, sin copias que enseñar.
+    useAction: () => async () => undefined,
   };
 });
 

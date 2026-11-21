@@ -15,6 +15,7 @@ import { readAccount, requireMailboxMember } from "./mailAccounts";
 import type { Capability } from "../lib/permissions";
 import { hasCapability, memberOrNull, requireAdmin } from "./permissions";
 import { resolveDestination } from "./_mailShares/destinations";
+import { INCIDENT_STATUSES } from "./schema";
 import { freeReference } from "./references";
 import {
   BODY_HTML_MAX_CHARS,
@@ -582,10 +583,10 @@ export const createIncidentWithShare = internalMutation({
       reporterEmail: args.fromAddress,
       description: args.description,
       reportedAt: now,
-      status: "reported",
+      status: INCIDENT_STATUSES.REPORTED,
       history: [
         {
-          status: "reported",
+          status: INCIDENT_STATUSES.REPORTED,
           at: now,
           by: args.sharedByName,
           note: "Creada desde correo",

@@ -21,6 +21,8 @@ vi.mock("convex/react", () => ({
   // La ficha retirada no pide nada al servidor: se le entrega el documento.
   useQuery: () => undefined,
   useMutation: () => async () => undefined,
+  // La sección de correos compartidos de la ficha, sin copias.
+  useAction: () => async () => undefined,
 }));
 
 vi.mock("sonner", () => ({

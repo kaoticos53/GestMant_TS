@@ -47,6 +47,14 @@ vi.mock("@/convex/_generated/api", () => ({
     },
     partRequests: { list: { nombre: "partRequests.list" } },
     spareParts: { list: { nombre: "spareParts.list" } },
+    // La sección de correos compartidos de cada petición: aquí no hay copias.
+    mailShares: {
+      listForDestination: { nombre: "mailShares.listForDestination" },
+      get: { nombre: "mailShares.get" },
+      downloadAttachment: { nombre: "mailShares.downloadAttachment" },
+      purge: { nombre: "mailShares.purge" },
+    },
+    permissions: { myPermissions: { nombre: "permissions.myPermissions" } },
   },
 }));
 
@@ -64,6 +72,7 @@ vi.mock("convex/react", async () => {
       if (query === api.spareParts.list) return DATOS.parts;
       return undefined;
     },
+    useAction: () => async () => undefined,
     useMutation: (mutation: unknown) => async (args: unknown) => {
       if (mutation === api.purchasing.createOrder) {
         CREADAS.push(args);
