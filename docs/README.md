@@ -11,7 +11,7 @@ Bienvenido a la documentación oficial de **Pulso Taller**, sistema de gestión 
    - Control documental formal, histórico de revisiones de ingeniería y aprobación técnica.
    - Vocabulario Ubicuo innegociable (`GLOSARIO.md`) y principios de trazabilidad industrial.
    - Arquitectura C4 desacoplada, motor reactivo Convex y aislamiento estricto de `src/lib/`.
-   - Modelo de seguridad RBAC: 4 roles nativos, matriz completa de las 18 capacidades granulares y `securityAuditLog` inmutable.
+   - Modelo de seguridad RBAC: 4 roles nativos, matriz completa de las 19 capacidades granulares y `securityAuditLog` inmutable.
    - Ciclo de vida completo de incidencias, máquina de estados finita, triaje, Cuaderno Técnico TipTap con diff de versiones y partes en PDF.
    - Inventario serializado de equipos, catálogo normalizado de modelos, hoja de vida y planes periódicos de preventivos (30/90/180/365 días).
    - Gestión integral de almacén de repuestos, codificación P/N, topología física de gavetas (`EST-MOD-CAJ`), stock mínimo y algoritmos de rotura.
@@ -33,7 +33,7 @@ Bienvenido a la documentación oficial de **Pulso Taller**, sistema de gestión 
    - **Operador de Plató / Público:** Notificación rápida sin cuenta y seguimiento por código.
    - **Técnico:** Diagnóstico, cuaderno enriquecido, petición de repuestos y manuales de servicio.
    - **Responsable de Repuestos:** Aprobación de material, órdenes de compra, albaranes, catálogo y emisión de partes de trabajo en PDF.
-   - **Administrador:** Gestión de usuarios, matriz de 18 capacidades, roles personalizados y auditoría.
+   - **Administrador:** Gestión de usuarios, matriz de 19 capacidades, roles personalizados y auditoría.
 
 4. **Documentación de Arquitectura y Desarrollo:**
    - [Gobernanza y Guardrails para Agentes (`AGENTS.md`)](../AGENTS.md)
@@ -41,3 +41,4 @@ Bienvenido a la documentación oficial de **Pulso Taller**, sistema de gestión 
    - [Bitácora Oficial de Cambios (`CHANGELOG.md`)](../CHANGELOG.md)
    - [Guía de Despliegue en Synology NAS (`SYNOLOGY.md`)](../SYNOLOGY.md)
    - [Entorno Local de Desarrollo (`LOCAL_SETUP.md`)](../LOCAL_SETUP.md)
+   - [Plan de implantación del correo](plan-implantacion-correo.md)
