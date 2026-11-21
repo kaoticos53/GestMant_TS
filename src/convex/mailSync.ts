@@ -333,21 +333,20 @@ function incompleteTraversal(folder: MailFolder): ConvexError {
   );
 }
 
-async function syncFolder(
-  ctx: ActionCtx,
-  session: SyncSession,
+async function readSyncDelta(
   authToken: string,
   folder: MailFolder,
   savedToken: string | null,
-): Promise<number> {
+): Promise<{ token: string | null; deletedIds: string[] }> {
   let token = savedToken;
   const deletedIds: string[] = [];
-  let syncComplete = false;
 
   try {
     let more = true;
     let pages = 0;
-    while (more && pages < MAX_PAGES) {
+    while (more) {
+      if (pages >= MAX_PAGES) throw incompleteTraversal(folder);
+      pages += 1;
       const page = parseSyncResponse(
         await postSoap(
           buildSyncRequest({
@@ -360,9 +359,8 @@ async function syncFolder(
       deletedIds.push(...page.deletedIds);
       token = page.token ?? token;
       more = shouldContinueSync(page.more);
-      pages += 1;
     }
-    syncComplete = !more;
+    return { token, deletedIds };
   } catch (error) {
     const invalidToken =
       error instanceof MailSoapError &&
@@ -371,18 +369,22 @@ async function syncFolder(
         fault: error.fault,
       }).invalidSyncToken;
     if (!invalidToken) throw error;
-    token = null;
-    deletedIds.length = 0;
-    syncComplete = true;
+    return { token: null, deletedIds: [] };
   }
+}
 
-  if (!syncComplete) throw incompleteTraversal(folder);
-
+async function readHeaders(
+  authToken: string,
+  folder: MailFolder,
+): Promise<MailHeader[]> {
   const headers: MailHeader[] = [];
   let offset = 0;
+  let more = true;
   let pages = 0;
-  let searchComplete = false;
-  while (pages < MAX_PAGES) {
+
+  while (more) {
+    if (pages >= MAX_PAGES) throw incompleteTraversal(folder);
+    pages += 1;
     const page = parseSearchResponse(
       await postSoap(
         buildSearchRequest({
@@ -396,24 +398,34 @@ async function syncFolder(
     );
     headers.push(...page.headers);
     const count = page.headers.length;
-    const more = hasMoreSearchResults({
+
+    // Una página vacía con `more=1` es un corte, no una carpeta vacía: no se
+    // puede distinguir de un salto perdido, así que se deja todo como estaba.
+    if (count === 0 && page.more) throw incompleteTraversal(folder);
+    more = hasMoreSearchResults({
       more: page.more,
       count,
       limit: PAGE_SIZE,
     });
-
-    // Una página vacía con `more=1` es un corte, no una carpeta vacía: no se
-    // puede distinguir de un salto perdido, así que se deja todo como estaba.
-    if (count === 0 && page.more) break;
-    if (!more) {
-      searchComplete = true;
-      break;
-    }
-    offset = nextSearchOffset(offset, count);
-    pages += 1;
+    if (more) offset = nextSearchOffset(offset, count);
   }
 
-  if (!searchComplete) throw incompleteTraversal(folder);
+  return headers;
+}
+
+async function syncFolder(
+  ctx: ActionCtx,
+  session: SyncSession,
+  authToken: string,
+  folder: MailFolder,
+  savedToken: string | null,
+): Promise<number> {
+  const { token, deletedIds } = await readSyncDelta(
+    authToken,
+    folder,
+    savedToken,
+  );
+  const headers = await readHeaders(authToken, folder);
 
   return await ctx.runMutation(internal.mailSync.saveFolder, {
     accountId: session.accountId,

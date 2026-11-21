@@ -24,16 +24,18 @@ function soap(body: string): string {
 function syncResponse({
   token,
   deletedIds = [],
+  more = false,
 }: {
   token: string;
   deletedIds?: string[];
+  more?: boolean;
 }): string {
   const deleted =
     deletedIds.length > 0
       ? `<deleted><m ids="${deletedIds.join(",")}"/></deleted>`
       : "";
   return soap(
-    `<SyncResponse xmlns="urn:zimbraMail" token="${token}" more="0">` +
+    `<SyncResponse xmlns="urn:zimbraMail" token="${token}" more="${more ? "1" : "0"}">` +
       `<folder id="2" name="Inbox" absFolderPath="/Inbox" view="message" n="2" u="1" s="10"/>` +
       deleted +
       "</SyncResponse>",
@@ -313,6 +315,35 @@ describe("sincronización de cabeceras", () => {
       syncPages: [
         syncResponse({ token: "tok-1" }),
         syncResponse({ token: "tok-2", deletedIds: ["17436"] }),
+      ],
+    });
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    await expectConvexError(
+      first.action(api.mailSync.syncNow, { folderRemoteId: "2" }),
+      "no terminó",
+    );
+
+    const rows = await t.run((ctx) => ctx.db.query("mailHeaders").collect());
+    expect(
+      rows.find((row) => row.messageId === "17436")?.deletedRemoteAt,
+    ).toBeUndefined();
+    const folder = await t.run((ctx) =>
+      ctx.db.query("mailFolders").withIndex("by_account").first(),
+    );
+    expect(folder?.syncToken).toBe("tok-1");
+    expect((await accountFor(t, firstId))?.status).toBe("error");
+  });
+
+  test("un corte por MAX_PAGES en Sync tampoco guarda la carpeta", async () => {
+    const { first, t, firstId } = await setup();
+    stubMailbox({
+      searchPages: [searchResponse({ messageIds: ["17438", "17436"] })],
+      syncPages: [
+        syncResponse({ token: "tok-1" }),
+        ...Array.from({ length: 100 }, () =>
+          syncResponse({ token: "tok-2", deletedIds: ["17436"], more: true }),
+        ),
       ],
     });
 
