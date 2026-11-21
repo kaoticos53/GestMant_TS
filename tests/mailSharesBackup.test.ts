@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
 import { BACKUP_FORMAT, BACKUP_VERSION } from "../src/lib/backup";
 import { backend } from "./backend";
 
@@ -79,6 +79,21 @@ async function seedShare(
       sharedAt: 1_795_179_963_000,
     });
     return { equipmentId, incidentId, shareId, attachment, eml };
+  });
+}
+
+/** ¿Sigue el archivo en el almacén del taller? La papelera no lo borra aún. */
+async function stillStored(
+  t: ReturnType<typeof backend>,
+  storageId: Awaited<ReturnType<typeof seedShare>>["attachment"],
+): Promise<boolean> {
+  return (await t.run((ctx) => ctx.storage.getUrl(storageId))) !== null;
+}
+
+/** La limpieza, dándolo todo por viejo: la prueba no depende del reloj. */
+async function sweepEverything(t: ReturnType<typeof backend>) {
+  return await t.mutation(internal.storageCleanup.sweepOrphanFiles, {
+    before: Date.now() + 1000,
   });
 }
 
@@ -213,6 +228,41 @@ describe("mailShares en el backup", () => {
           String(entry.metadata).includes("destination_missing"),
       ),
     ).toBe(true);
+  });
+});
+
+describe("mailShares y la limpieza del almacén", () => {
+  test("la copia protege sus archivos y, tras el reset, la limpieza los retira", async () => {
+    const { t, admin, adminId } = await setup();
+    const seeded = await seedShare(t, adminId);
+
+    // Con la copia viva, el adjunto y el `.eml` están citados: no se tocan.
+    expect(await sweepEverything(t)).toBe(0);
+    expect(await stillStored(t, seeded.attachment)).toBe(true);
+    expect(await stillStored(t, seeded.eml)).toBe(true);
+    expect(await t.run((ctx) => ctx.db.query("trashFiles").collect())).toEqual(
+      [],
+    );
+
+    // Tampoco cuando la ficha desaparece y la copia queda huérfana: sus siete
+    // días de papelera administrativa la siguen citando.
+    await admin.mutation(api.equipment.remove, { id: seeded.equipmentId });
+    expect(await sweepEverything(t)).toBe(0);
+    expect(await stillStored(t, seeded.attachment)).toBe(true);
+    expect(await stillStored(t, seeded.eml)).toBe(true);
+
+    // Tras vaciar el taller ya no queda fila que los cite: la limpieza los
+    // retira a la papelera, donde esperan su plazo antes de borrarse del todo.
+    await admin.action(api.workshopReset.resetWorkshop, {});
+    expect(await sweepEverything(t)).toBe(2);
+
+    const trashed = await t.run((ctx) => ctx.db.query("trashFiles").collect());
+    expect(trashed.map((row) => row.storageId).sort()).toEqual(
+      [seeded.attachment, seeded.eml].sort(),
+    );
+    expect(trashed.every((row) => row.pass === "orphanFiles")).toBe(true);
+    expect(await stillStored(t, seeded.attachment)).toBe(true);
+    expect(await stillStored(t, seeded.eml)).toBe(true);
   });
 });
 

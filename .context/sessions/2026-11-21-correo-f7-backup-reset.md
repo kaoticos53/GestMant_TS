@@ -25,23 +25,27 @@
 
 ## Pruebas
 
-`tests/mailSharesBackup.test.ts` (4):
+`tests/mailSharesBackup.test.ts` (5):
 
 - la exportación deja solo metadatos, ya como resumen restaurado;
 - la restauración remapea la incidencia, vuelve como resumen con la marca y
   descarta el contenido inyectado en el JSON;
 - una copia sin destino restaurado se omite y audita;
-- el reset vacía `mailShares` y deja los objetos de `_storage` vivos.
+- el reset vacía `mailShares` y deja los objetos de `_storage` vivos;
+- ciclo completo: con la copia viva u huérfana, `storageCleanup` no toca sus
+  archivos; tras el reset los retira a `trashFiles` (siguen en el almacén hasta
+  que venza el plazo de la papelera), que es lo que cierra el ciclo.
 
 `tests/workshopReset.test.ts` incluye `mailShares` entre las tablas que el
 vaciado debe dejar vacías.
 
 ## Verificación
 
-`npx tsc -b` 0 y `npx vite build` 0. En verde `mailSharesBackup` (4),
+`npx tsc -b` 0 y `npx vite build` 0. En verde `mailSharesBackup` (5),
 `workshopBackup` (2), `workshopReset` (6), `mailSharesBackend` (28),
-`workshopSettingsView` (8), `arquitectura` (9) y `seguridad` (13). No se ejecutó
-la suite completa ni se miró la ficha restaurada en el navegador.
+`workshopSettingsView` (8), `storageCleanup` (25), `arquitectura` (9) y
+`seguridad` (13). No se ejecutó la suite completa ni se miró la ficha restaurada
+en el navegador.
 
 ## Pendiente
 
