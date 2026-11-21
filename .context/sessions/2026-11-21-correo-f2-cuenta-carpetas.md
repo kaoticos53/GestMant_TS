@@ -2,7 +2,7 @@
 
 - **Fecha y Hora:** 2026-11-21
 - **Agente / Modelo:** Buffy / Freebuff
-- **Rama / Commit:** `feat/correo-f1-base-pura` / pendiente al escribir este resumen
+- **Rama / Commit:** `feat/correo-f1-base-pura` / revisión `491f3d9` + tipado `f665985`
 
 ---
 
@@ -14,24 +14,24 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 
 ## 2. Archivos Modificados y Justificación Técnica
 
-| Archivo                                                                             | Tipo          | Justificación                                                                    |
-| ----------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------- |
-| `src/convex/schema.ts`                                                              | Cambio        | Tablas `mailAccounts` y `mailFolders` con sus índices.                           |
-| `src/convex/mailAccounts.ts`                                                        | Nuevo         | Alta/edición, consulta, carpetas, prueba SOAP, desconexión y borrado.            |
-| `src/lib/mailClient/account.ts`                                                     | Nuevo         | Servidor fijo, validación del buzón y límites de caché.                          |
-| `src/lib/mailClient/auth.ts`                                                        | Nuevo         | Parseo puro de `AuthResponse`.                                                   |
-| `src/lib/mailClient/types.ts`                                                       | Cambio        | DTO `MailAuthSession`.                                                           |
-| `src/lib/permissions.ts`                                                            | Cambio        | Capacidad `viewMailbox` y defaults por rol.                                      |
-| `src/lib/abilities.ts`                                                              | Cambio        | Sujeto `Mailbox` con propiedad por `userId`.                                     |
-| `src/pages/dashboard/settings/MailboxCard.tsx`                                      | Nuevo         | Formulario de «Mi buzón», prueba, estado, caché y borrado.                       |
-| `src/pages/dashboard/settings/view/*`                                               | Cambio        | Pestaña `mailbox` y permiso `canUseMailbox`.                                     |
-| `src/pages/dashboard/WorkshopSettingsView.tsx`                                      | Cambio        | Propaga la nueva pestaña.                                                        |
-| `src/pages/dashboard/components/content/router/DashboardTabRenderer.tsx`            | Cambio        | Pasa `viewMailbox` no invitado a Ajustes.                                        |
-| `src/pages/dashboard/constants/navConfig.ts`                                        | Cambio        | Ajustes visible también con `viewMailbox`.                                       |
-| `src/convex/_generated/api.d.ts`                                                    | Cambio manual | Registra `mailAccounts`; `convex codegen` no pudo conectar con el backend local. |
-| `tests/mailAccounts.test.ts`                                                        | Nuevo         | 12 contratos de cuenta, cifrado, conexión, aislamiento y ciclo de vida.          |
-| `tests/fixtures/mail/auth.xml`                                                      | Nuevo         | Fixture de autenticación anonimizada.                                            |
-| `tests/abilities.test.ts`, `tests/navConfig.test.ts`, `tests/workshopSettingsView*` | Cambio        | Cobertura de la capacidad, navegación y pestaña.                                 |
+| Archivo                                                                             | Tipo     | Justificación                                                           |
+| ----------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `src/convex/schema.ts`                                                              | Cambio   | Tablas `mailAccounts` y `mailFolders` con sus índices.                  |
+| `src/convex/mailAccounts.ts`                                                        | Nuevo    | Alta/edición, consulta, carpetas, prueba SOAP, desconexión y borrado.   |
+| `src/lib/mailClient/account.ts`                                                     | Nuevo    | Servidor fijo, validación del buzón y límites de caché.                 |
+| `src/lib/mailClient/auth.ts`                                                        | Nuevo    | Parseo puro de `AuthResponse`.                                          |
+| `src/lib/mailClient/types.ts`                                                       | Cambio   | DTO `MailAuthSession`.                                                  |
+| `src/lib/permissions.ts`                                                            | Cambio   | Capacidad `viewMailbox` y defaults por rol.                             |
+| `src/lib/abilities.ts`                                                              | Cambio   | Sujeto `Mailbox` con propiedad por `userId`.                            |
+| `src/pages/dashboard/settings/MailboxCard.tsx`                                      | Nuevo    | Formulario de «Mi buzón», prueba, estado, caché y borrado.              |
+| `src/pages/dashboard/settings/view/*`                                               | Cambio   | Pestaña `mailbox` y permiso `canUseMailbox`.                            |
+| `src/pages/dashboard/WorkshopSettingsView.tsx`                                      | Cambio   | Propaga la nueva pestaña.                                               |
+| `src/pages/dashboard/components/content/router/DashboardTabRenderer.tsx`            | Cambio   | Pasa `viewMailbox` no invitado a Ajustes.                               |
+| `src/pages/dashboard/constants/navConfig.ts`                                        | Cambio   | Ajustes visible también con `viewMailbox`.                              |
+| `src/convex/_generated/api.d.ts`                                                    | Generado | Registra `mailAccounts`; regenerado contra el backend local y sin diff. |
+| `tests/mailAccounts.test.ts`                                                        | Nuevo    | 13 contratos de cuenta, cifrado, conexión, aislamiento y ciclo de vida. |
+| `tests/fixtures/mail/auth.xml`                                                      | Nuevo    | Fixture de autenticación anonimizada.                                   |
+| `tests/abilities.test.ts`, `tests/navConfig.test.ts`, `tests/workshopSettingsView*` | Cambio   | Cobertura de la capacidad, navegación y pestaña.                        |
 
 ---
 
@@ -58,6 +58,7 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 - **TypeScript:** ✅ `npx tsc --noEmit`.
 - **Lint:** ✅ 0 errores; 19 warnings preexistentes.
 - **Arquitectura y seguridad:** ✅ incluidas en la pasada amplia.
+- **Codegen:** ✅ `npx convex codegen` contra el backend local; `api.d.ts` idéntico al ajuste manual (mismo SHA-256).
 - **Prueba real contra Hermes:** ❌ no ejecutada; los contratos usan fixtures y `fetch` simulado.
 
 ---
@@ -71,6 +72,7 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 - **Permisos:** `canManageMailbox` pasa a `canUseMailbox`. Quien solo tiene `viewMailbox` ve únicamente «Mi buzón», sin Catálogos ni Modelos.
 - **UI:** `MailboxCard` ya no resetea un formulario que se remonta por `key=updatedAt`; la vista pública se limita a los campos usados.
 - **Código muerto:** eliminados `asMailbox`, `isMailAccountStatus` y `MailAccountStatus` al no tener consumidores.
+- **Codegen verificado:** con el backend local en `127.0.0.1:3210`, `npx convex codegen` terminó con exit 0 y dejó `_generated/api.d.ts` sin diff; el SHA-256 se mantuvo en `258bbc00ed1aba184810e7d2cea83bcb53484cc6bafd34c0c5770094a9e4c924`. El typecheck interno de Convex exigió anotar el retorno de `testConnection` para evitar una inferencia circular; ese ajuste quedó en `f665985`.
 - **Verificación:** 191/191 tests relacionados, `security:check` 62/62, `tsc` limpio, lint 0 errores/19 warnings preexistentes y Prettier correcto.
 
 ---
@@ -79,7 +81,5 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 
 - [ ] F3: `mailHeaders`, sincronización inicial/incremental y vista de lista.
 - [ ] Añadir el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) cuando exista la lista; ahora solo está la pestaña de Ajustes.
-- [ ] Ejecutar `npx convex codegen` con el backend local encendido para regenerar `_generated/api.d.ts` en lugar del ajuste manual.
 - [ ] Validar conexión real y tiempos con el buzón de referencia.
-- ⚠️ **Codegen:** falló porque no había backend en `127.0.0.1:3210`; el ajuste manual de tipos es equivalente para compilar y probar, pero debe regenerarse.
 - ⚠️ **UI no inspeccionada visualmente:** sin navegador; tests de render y lint, no revisión visual.
