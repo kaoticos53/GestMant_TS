@@ -29,6 +29,10 @@ import { toast } from "sonner";
  * referencia (`INC-0004`, `PET-0007`, `OC-0003`, el código del equipo o el
  * título del manual) resuelve la ficha antes de habilitar el botón. La copia no
  * se borra al vaciar la caché del buzón: vive con su ficha.
+ *
+ * Con la capacidad `createIncidentFromMail`, el diálogo ofrece además crear una
+ * incidencia desde el propio mensaje: nace en «Reportada», sin asignar, con el
+ * remitente como notificante, y la copia se guarda con ella en el mismo alta.
  */
 export function ShareMailDialog({
   messageId,
@@ -44,6 +48,10 @@ export function ShareMailDialog({
   const [reference, setReference] = useState("");
   const [mode, setMode] = useState<MailShareMode>("summary");
   const [saving, setSaving] = useState(false);
+  const [asIncident, setAsIncident] = useState(false);
+
+  const canCreateIncident =
+    permissions?.grants?.createIncidentFromMail === true;
 
   const options = useMemo(
     () =>
@@ -56,13 +64,33 @@ export function ShareMailDialog({
   const effectiveType = options.includes(type) ? type : options[0];
   const target = useQuery(
     api.mailShares.findTarget,
-    reference.trim() === "" || effectiveType === undefined
+    asIncident || reference.trim() === "" || effectiveType === undefined
       ? "skip"
       : { destinationType: effectiveType, reference },
   );
   const share = useAction(api.mailShares.share);
+  const createIncident = useAction(api.mailShares.createIncidentFromMail);
 
   const submit = async () => {
+    if (asIncident) {
+      setSaving(true);
+      try {
+        const result = await createIncident({
+          messageId,
+          mode,
+          clientShareId: crypto.randomUUID(),
+        });
+        toast.success(
+          `Incidencia ${result.reference} creada desde este correo. El remitente queda como notificante.`,
+        );
+        onOpenChange(false);
+      } catch (reason) {
+        toast.error(getErrorMessage(reason));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (effectiveType === undefined || target === null || !target) return;
     setSaving(true);
     try {
@@ -98,7 +126,7 @@ export function ShareMailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {options.length === 0 ? (
+        {options.length === 0 && !canCreateIncident ? (
           <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             Tu rol no puede adjuntar correo a ninguna ficha. Pide al
             administrador la capacidad del destino (incidencias, peticiones,
@@ -106,37 +134,61 @@ export function ShareMailDialog({
           </p>
         ) : (
           <div className="space-y-3">
-            <label className="block text-xs font-medium">
-              Destino
-              <select
-                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                value={effectiveType}
-                onChange={(event) => {
-                  setType(event.target.value as MailShareDestinationType);
-                  setMode("summary");
-                }}
-              >
-                {options.map((item) => (
-                  <option key={item} value={item}>
-                    {DESTINATION_LABELS[item]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {canCreateIncident && (
+              <label className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={asIncident}
+                  onChange={(event) => setAsIncident(event.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">
+                    Crear incidencia desde este correo
+                  </span>
+                  <br />
+                  Nace en «Reportada», sin asignar, y el remitente del mensaje
+                  queda como notificante. No se adjunta a ninguna ficha que ya
+                  exista.
+                </span>
+              </label>
+            )}
 
-            <label className="block text-xs font-medium">
-              Referencia
-              <input
-                className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                value={reference}
-                placeholder="INC-0004, PET-0007, OC-0003, EQ-001…"
-                onChange={(event) => setReference(event.target.value)}
-              />
-            </label>
-            {reference.trim() !== "" && target === null && (
-              <p className="text-xs text-destructive">
-                No hay ninguna ficha con esa referencia.
-              </p>
+            {!asIncident && options.length > 0 && (
+              <>
+                <label className="block text-xs font-medium">
+                  Destino
+                  <select
+                    className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                    value={effectiveType}
+                    onChange={(event) => {
+                      setType(event.target.value as MailShareDestinationType);
+                      setMode("summary");
+                    }}
+                  >
+                    {options.map((item) => (
+                      <option key={item} value={item}>
+                        {DESTINATION_LABELS[item]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-xs font-medium">
+                  Referencia
+                  <input
+                    className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                    value={reference}
+                    placeholder="INC-0004, PET-0007, OC-0003, EQ-001…"
+                    onChange={(event) => setReference(event.target.value)}
+                  />
+                </label>
+                {reference.trim() !== "" && target === null && (
+                  <p className="text-xs text-destructive">
+                    No hay ninguna ficha con esa referencia.
+                  </p>
+                )}
+              </>
             )}
 
             <fieldset className="space-y-1.5">
@@ -167,7 +219,7 @@ export function ShareMailDialog({
                   </span>
                 </label>
               )}
-              {effectiveType === "manual" && (
+              {!asIncident && effectiveType === "manual" && (
                 <p className="text-xs text-muted-foreground">
                   Los manuales solo admiten el resumen del correo.
                 </p>
@@ -188,14 +240,15 @@ export function ShareMailDialog({
             type="button"
             disabled={
               saving ||
-              options.length === 0 ||
-              effectiveType === undefined ||
-              !target
+              (!asIncident &&
+                (options.length === 0 ||
+                  effectiveType === undefined ||
+                  !target))
             }
             onClick={() => void submit()}
           >
             {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-            Compartir
+            {asIncident ? "Crear incidencia" : "Compartir"}
           </Button>
         </DialogFooter>
       </DialogContent>

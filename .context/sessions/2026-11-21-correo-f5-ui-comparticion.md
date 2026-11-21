@@ -145,3 +145,13 @@ tenía el módulo. Añadidos `useAction` a los mocks de `convex/react`
 `purchasingView`. Además, `createIncidentWithShare` escribe el estado inicial
 con `INCIDENT_STATUSES.REPORTED` en vez de a pelo, que era lo que señalaba
 `arquitectura`.
+
+---
+
+## 13. Alta desde el diálogo
+
+ShareMailDialog ofrece «Crear incidencia desde este correo» a quien tiene la
+capacidad `createIncidentFromMail`. Marcado, oculta destino y referencia y
+manda `createIncidentFromMail` con el modo elegido y un `clientShareId` nuevo;
+el aviso dice que el remitente queda como notificante. El texto del diálogo
+explica que la incidencia nace «Reportada» y sin asignar.
