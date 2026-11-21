@@ -9,5 +9,10 @@ tarjeta de huérfanas y el cierre de los diálogos; y pasó el hardening complet
 Handovers en `.context/sessions/2026-11-21-correo-purga-por-destino.md` y
 `.context/sessions/2026-11-21-correo-f7-backup-reset.md`.
 
+Después se endureció la descarga de esos adjuntos (`src/lib/downloadFile.ts`):
+entrega binaria, nombre saneado y revocación diferida, para que WebKit no abra
+el `.eml` en la pestaña. Handover en
+`.context/sessions/2026-11-21-descargas-correo.md`.
+
 Lo siguiente es F8: pilotaje con buzones reales, validación contra Hermes y
 ensayo de rollback.
