@@ -621,6 +621,62 @@ describe("mailShares: copias huérfanas", () => {
     expect(await t.run((ctx) => ctx.db.get(equipmentId))).toBeNull();
   });
 
+  test("borrar el manual deja su copia huérfana con sus siete días", async () => {
+    const { t, admin } = await setup();
+
+    // Un manual completo: archivo PDF, título, tipo y clasificación.
+    const pdf = await t.run((ctx) =>
+      ctx.storage.store(
+        new Blob(["%PDF-1.4 manual"], { type: "application/pdf" }),
+      ),
+    );
+    await admin.mutation(api.manuals.create, {
+      title: "Manual de servicio HDC-3500",
+      kind: "file",
+      type: "Manual de servicio",
+      brand: "Sony",
+      model: "HDC-3500",
+      storageId: pdf,
+      fileName: "HDC-3500.pdf",
+    });
+    const manual = await t.run(async (ctx) => {
+      const row = (await ctx.db.query("manuals").collect())[0];
+      if (!row) throw new Error("Sin manual");
+      return row;
+    });
+
+    // Un manual solo admite el resumen: no copia cuerpo ni adjuntos.
+    await admin.action(api.mailShares.share, {
+      messageId: "m-1",
+      destinationType: "manual",
+      destinationId: manual._id,
+      mode: "summary",
+    });
+
+    await admin.mutation(api.manuals.remove, { id: manual._id });
+
+    const share = await t.run(
+      async (ctx) =>
+        (
+          await ctx.db
+            .query("mailShares")
+            .withIndex("by_destination", (q) =>
+              q.eq("destinationType", "manual").eq("destinationId", manual._id),
+            )
+            .collect()
+        )[0],
+    );
+    expect(share?.destinationReference).toBe("Manual de servicio HDC-3500");
+    expect(share?.subject).toBe("Presupuesto del SAT");
+    expect(share?.destinationDeletedAt).toBeGreaterThan(0);
+    expect(share?.orphanPurgeAt).toBe(
+      share!.destinationDeletedAt! + 7 * 24 * 60 * 60 * 1000,
+    );
+    expect(await t.run((ctx) => ctx.db.get(manual._id))).toBeNull();
+    // El PDF del manual se va con él; la copia es solo resumen.
+    expect(await t.run((ctx) => ctx.db.system.get(pdf))).toBeNull();
+  });
+
   test("el barrido purga solo las que cumplieron los siete días", async () => {
     const { t, adminId } = await setup();
     const old = await seedOrphan(t, { deletedAt: 1_000_000, adminId });

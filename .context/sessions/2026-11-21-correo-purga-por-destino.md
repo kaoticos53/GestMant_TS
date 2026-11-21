@@ -22,23 +22,27 @@
 
 ## Pruebas
 
-`tests/mailSharesBackend.test.ts` (24, tres nuevas):
+`tests/mailSharesBackend.test.ts` (25, cuatro nuevas):
 
 - la pasada de la papelera de incidencias se lleva la copia, su adjunto de
   `_storage` y deja la auditoría `destination`, sin tocar el objeto de la caché;
 - borrar una petición se lleva sus dos copias, incluida la que ya era lápida,
   sin dejar objetos;
-- purgar una incidencia no toca las copias de otra.
+- purgar una incidencia no toca las copias de otra;
+- borrar un manual completo —archivo PDF, título, tipo, marca y modelo— deja su
+  copia huérfana con `destinationDeletedAt` y siete días exactos, borra el
+  manual y su PDF, y conserva la copia con su referencia y su asunto.
 
 ## Verificación
 
 `npx tsc -b` 0, `npx vite build` 0. `tests/mailSharesBackend.test.ts`,
-`tests/requestTrash.test.ts` (33) y `tests/incidents.test.ts` (112) en verde.
-No se ejecutó la suite completa en esta sesión.
+`tests/requestTrash.test.ts` (33), `tests/incidents.test.ts` (112) y
+`tests/manuales.test.ts` (55) en verde, con `tests/arquitectura.test.ts` y
+`tests/seguridad.test.ts` también en verde. No se ejecutó la suite completa en
+esta sesión.
 
 ## Pendiente
 
 - Descarga de huérfanas desde la tarjeta de Ajustes (hace falta ruta propia).
-- Prueba propia de `manuals.remove` con un manual sembrado completo.
 - F7: backup y reset (`purgeForReset`, `backupRestored`).
 - Revisión visual en navegador del diálogo, la sección y la tarjeta.
