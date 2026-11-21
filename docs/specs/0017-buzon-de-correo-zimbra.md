@@ -4,7 +4,7 @@
 - **Título:** Módulo de correo: buzón personal de solo lectura sobre `hermes.rtva.es`, con sincronización de cabeceras, descarga bajo demanda y caché con descarte
 - **Estado:** **Aprobada — F1/F2 implementadas; fases 2–6 de esta spec y prueba real contra Hermes pendientes**
 - **Fecha:** 2026-11-21
-- **Fuentes clave:** `docs/referencia-servidor-hermes.md` (canónica), `docs/especificacion-cliente-sync-correo.md`, `src/convex/mailSettings.ts`, `src/convex/_auth/secretCrypto.ts`, `src/convex/permissions.ts`, `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/crons.ts`, `src/convex/storageCleanup.ts`
+- **Fuentes clave:** [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md) (canónica), [`docs/especificacion-cliente-sync-correo.md`](../especificacion-cliente-sync-correo.md), `src/convex/mailSettings.ts`, `src/convex/_auth/secretCrypto.ts`, `src/convex/permissions.ts`, `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/crons.ts`, `src/convex/storageCleanup.ts`
 - **Fase del producto:** fase 1 (cliente de correo). La integración con IA es fase 2 y queda fuera de esta spec.
 - **Autoridad documental:** ver §0.
 
@@ -16,8 +16,8 @@ Tres documentos gobiernan este módulo y **no tienen el mismo rango**:
 
 | Materia                                                                                          | Documento que manda                          | Cómo se aplica aquí                                                                                                                                            |
 | ------------------------------------------------------------------------------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoints, operaciones SOAP, atributos, semántica de ids, errores, límites y cifras del servidor | `docs/referencia-servidor-hermes.md`         | **Canónico.** Si 0017 o la guía del cliente discrepan en esto, manda la referencia.                                                                            |
-| Algoritmo de cliente, parseo MIME, visor, saneado y verificación de descargas                    | `docs/especificacion-cliente-sync-correo.md` | **Guía.** Se adopta salvo que 0017 decida otra cosa por el modelo Convex; sus decisiones de escritorio (SQLite, `.eml` en disco, WebView2) no son vinculantes. |
+| Endpoints, operaciones SOAP, atributos, semántica de ids, errores, límites y cifras del servidor | [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md)         | **Canónico.** Si 0017 o la guía del cliente discrepan en esto, manda la referencia.                                                                            |
+| Algoritmo de cliente, parseo MIME, visor, saneado y verificación de descargas                    | [`docs/especificacion-cliente-sync-correo.md`](../especificacion-cliente-sync-correo.md) | **Guía.** Se adopta salvo que 0017 decida otra cosa por el modelo Convex; sus decisiones de escritorio (SQLite, `.eml` en disco, WebView2) no son vinculantes. |
 | Producto, modelo de datos Convex, permisos, caché, UI y programación                             | esta `SPEC-0017`                             | **Decide** lo que no fijan el servidor ni el protocolo.                                                                                                        |
 
 ### 0.1 Discrepancias detectadas y criterio aplicado
