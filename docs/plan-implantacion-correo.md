@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** propuesta de plan; no autoriza por sí mismo a implementar. Requiere la aprobación formal de ambas specs.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 implementadas) y 0018 pendiente de aprobación antes de F5.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -58,7 +58,7 @@ Las estimaciones son de trabajo efectivo, no de calendario. Cada fase termina co
 
 ## 3. Supuestos y dependencias
 
-1. **Aprobación previa:** 0017 y 0018 están aprobadas y sus decisiones de producto no cambian durante la fase.
+1. **Aprobación previa:** 0017 está aprobada; 0018 debe aprobarse antes de F5. Sus decisiones de producto no cambian durante la fase.
 2. **Servidor:** `hermes.rtva.es` es accesible desde el entorno Convex con TLS y SOAP en 443. La referencia canónica es [`docs/referencia-servidor-hermes.md`](referencia-servidor-hermes.md).
 3. **Credenciales:** cada usuario que pruebe el buzón dispone de contraseña de aplicación; no se usan credenciales maestras ni se guardan en el repositorio.
 4. **Cifrado:** `PULSO_SETTINGS_ENCRYPTION_KEY` está configurada en el entorno y se ha probado el ciclo guardar/leer/borrar de `secretCrypto`.
@@ -86,7 +86,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 **Tareas**
 
-1. Aprobar formalmente 0017 y 0018 y registrar la fecha de aprobación.
+1. Aprobar formalmente 0017 (hecho) y 0018 antes de F5, registrando la fecha de aprobación.
 2. Confirmar el alcance del piloto: usuarios, buzones, permisos iniciales y ventana de prueba.
 3. Verificar conectividad a `hermes.rtva.es` desde el entorno de ejecución de Convex: TLS, SOAP, tiempos y límites por IP.
 4. Probar el ciclo de `secretCrypto` con una clave de entorno no productiva.
@@ -162,7 +162,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 6. Implementar desconexión (borra credenciales y token; conserva o borra la caché según elección) y borrado de cuenta (credenciales, token, carpetas, cabeceras, cuerpos y adjuntos); las copias compartidas no se tocan.
 7. Comprobar que el administrador no puede leer ni configurar el buzón de otra persona.
 8. Emitir eventos de auditoría de alta, cambio de credenciales y desconexión, sin contenido.
-9. Crear el módulo «Correo», `NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, `DashboardTabRenderer` y la pestaña «Mi buzón» en Ajustes.
+9. Dejar la pestaña «Mi buzón» en Ajustes y la entrada de Ajustes para `viewMailbox`; el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) se crea en F3 junto con la lista.
 10. Resolver el árbol de carpetas y excluir tipos que no son correo (`Calendar`, `Contacts`, `Tasks`, RSS).
 11. Probar aislamiento entre dos técnicos: cada uno ve solo su cuenta y sus carpetas.
 12. Verificar que ninguna consulta devuelve contraseña, token ni pista completa.
@@ -203,7 +203,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
    - lease por cuenta;
    - máximo 2 peticiones simultáneas;
    - espera de 2 s entre cuentas.
-5. Crear la vista de lista virtualizada, el estado de sincronización, los vacíos/errores explicados y el modo móvil de un panel a la vez.
+5. Crear el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY` y `DashboardTabRenderer`) y la vista de lista virtualizada, con el estado de sincronización, los vacíos/errores explicados y el modo móvil de un panel a la vez.
 6. Medir la primera sincronización con el buzón de referencia.
 
 **Entregables**
