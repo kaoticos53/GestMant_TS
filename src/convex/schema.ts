@@ -1493,6 +1493,42 @@ const schema = defineSchema({
     .index("by_account", ["accountId"])
     .index("by_account_remote", ["accountId", "remoteId"])
     .index("by_account_path", ["accountId", "path"]),
+
+  // Índice local de cabeceras: lo que pinta la lista sin descargar cuerpos. La
+  // identidad estable es cuenta + mensaje; la carpeta se actualiza cuando el
+  // mensaje se mueve. `deletedRemoteAt` es una tumba: oculta la fila y deja que
+  // el barrido de la caché decida cuándo se va de verdad.
+  mailHeaders: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("mailAccounts"),
+    folderRemoteId: v.string(),
+    messageId: v.string(),
+    conversationId: v.optional(v.string()),
+    subject: v.string(),
+    fromName: v.string(),
+    fromAddress: v.string(),
+    toSummary: v.optional(v.string()),
+    date: v.number(),
+    size: v.number(),
+    flags: v.string(),
+    hasAttachments: v.boolean(),
+    snippet: v.string(),
+    bodyState: v.union(
+      v.literal("none"),
+      v.literal("cached"),
+      v.literal("tooLarge"),
+      v.literal("error"),
+    ),
+    cachedAt: v.optional(v.number()),
+    lastOpenedAt: v.optional(v.number()),
+    cachedBytes: v.optional(v.number()),
+    deletedRemoteAt: v.optional(v.number()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user_folder_date", ["userId", "folderRemoteId", "date"])
+    .index("by_user_message", ["userId", "accountId", "messageId"])
+    .index("by_user_cached", ["userId", "bodyState", "cachedAt"])
+    .index("by_user_last_opened", ["userId", "lastOpenedAt"]),
 });
 
 export default schema;

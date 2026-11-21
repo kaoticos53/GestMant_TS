@@ -2,7 +2,7 @@
 
 - **ID:** `SPEC-0017`
 - **Título:** Módulo de correo: buzón personal de solo lectura sobre `hermes.rtva.es`, con sincronización de cabeceras, descarga bajo demanda y caché con descarte
-- **Estado:** **Aprobada — F1/F2 implementadas; fases 2–6 de esta spec y prueba real contra Hermes pendientes**
+- **Estado:** **Aprobada — F1/F2 cerradas; F3 con backend y tests implementados, vista del módulo y prueba real pendientes; fases 4–6 pendientes**
 - **Fecha:** 2026-11-21
 - **Fuentes clave:** [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md) (canónica), [`docs/especificacion-cliente-sync-correo.md`](../especificacion-cliente-sync-correo.md), `src/convex/mailSettings.ts`, `src/convex/_auth/secretCrypto.ts`, `src/convex/permissions.ts`, `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/crons.ts`, `src/convex/storageCleanup.ts`
 - **Fase del producto:** fase 1 (cliente de correo). La integración con IA es fase 2 y queda fuera de esta spec.
@@ -429,15 +429,15 @@ F1 instaló `fast-xml-parser`. `postal-mime` y `dompurify` (y `@types/dompurify`
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------- |
 | **0. Base pura**          | `fast-xml-parser`; `mailClient/` con builders/parsers, paginación, política de caché y fixtures XML                          | `tests/mailClient.test.ts` y `tests/mailCache.test.ts` en verde; `tsc` sin errores                                                                                     | 1 sesión     | ✅ F1 cerrada                                |
 | **1. Cuenta y carpetas**  | Tablas, `mailAccounts`, ajustes «Mi buzón», capacidad `viewMailbox`, `GetFolder` y prueba de conexión                        | Alta y prueba de conexión con fixtures; la prueba real contra Hermes es puerta de F3; aislamiento entre dos usuarios probado                                           | 1–2 sesiones | ✅ F2 implementada; prueba real pendiente   |
-| **2. Cabeceras**          | `Search` paginado, upsert, listado virtualizado, contadores, búsqueda local y módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) | 1 554 cabeceras < 30 s (medido en la referencia: 5,4 s); 0 cuerpos descargados; segunda pasada sin duplicados                                                          | 1–2 sesiones | Pendiente                                   |
-| **3. Incremental y cron** | `Sync` (borrados + token), reanudación, reconciliación, cron horario y estado                                                | Delta de Archive `41 → 0`; token inválido reinicia sin perder datos; cron corre y salta cuentas al día **y las de usuarios de baja**                                   | 1–2 sesiones | Pendiente                                   |
+| **2. Cabeceras**          | `Search` paginado, upsert, listado virtualizado, contadores, búsqueda local y módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) | 1 554 cabeceras < 30 s (medido en la referencia: 5,4 s); 0 cuerpos descargados; segunda pasada sin duplicados                                                          | 1–2 sesiones | Backend y tests ✅; vista y módulo pendientes |
+| **3. Incremental y cron** | `Sync` (borrados + token), reanudación, reconciliación, cron horario y estado                                                | Delta de Archive `41 → 0`; token inválido reinicia sin perder datos; cron corre y salta cuentas al día **y las de usuarios de baja**                                   | 1–2 sesiones | ✅ Backend y tests; prueba real pendiente    |
 | **4. Cuerpo y visor**     | `postal-mime` y `dompurify`; `GetMsg` + servlet, verificación de bytes, MIME, una sola copia, HTML saneado, texto, `cid:`     | Bytes = `s`; el RFC822 no queda almacenado; 4 adjuntos visibles; sin cambios de leído en el webmail                                                                    | 2 sesiones   | Pendiente                                   |
 | **5. Adjuntos y caché**   | Extracción y descarga de adjuntos, LRU configurable (512 MB/30 días por defecto), barrido diario, «Vaciar caché»             | Expulsión correcta contando cuerpo y adjuntos; descarga posterior sin volver a bajar el mensaje; **ninguna copia compartida entra en el presupuesto ni en el barrido** | 1–2 sesiones | Pendiente                                   |
 | **6. Cierre**             | Tests de seguridad/arquitectura, `tsc`, docs (`0010`, `0013`, `0015`, `0016`, esta spec) y revisión de `storageCleanup`      | Suite relevante en verde; sin regresiones en `tests/arquitectura.test.ts` ni `tests/seguridad.test.ts`                                                                 | 1 sesión     | Pendiente                                   |
 
-F1 y F2 están implementadas y verificadas con tests; la prueba real contra Hermes y el módulo «Correo» se trasladan a F3.
+F1 y F2 están cerradas. En F3 ya están el esquema `mailHeaders`, el listado/búsqueda local, la sincronización inicial e incremental, las tumbas, el lease y el cron, con tests con `fetch` simulado. Quedan la vista del módulo «Correo» y la medición/prueba real contra Hermes.
 
-Total orientativo: **8–11 sesiones de trabajo**; F1/F2 ya están implementadas. Cada fase termina con algo usable y verificable; no se empieza la siguiente sin su criterio de salida.
+Total orientativo: **8–11 sesiones de trabajo**; F1/F2 están cerradas y F3 tiene el backend terminado. Cada fase termina con algo usable y verificable; no se empieza la siguiente sin su criterio de salida.
 
 ---
 
@@ -512,10 +512,10 @@ Total orientativo: **8–11 sesiones de trabajo**; F1/F2 ya están implementadas
 | Política de caché (LRU, caducidad, presupuesto)                | `tests/mailCache.test.ts`                               | ✅ F1           |
 | Cuenta, cifrado y aislamiento                                  | `tests/mailAccounts.test.ts`                            | ✅ F2           |
 | Ajustes «Mi buzón» y permisos                                  | `tests/workshopSettingsView.test.tsx`, `tests/workshopSettingsViewHelpers.test.ts`, `tests/abilities.test.ts`, `tests/navConfig.test.ts` | ✅ F2 |
-| Paginación, token, borrados y reanudación con `fetch` simulado | `tests/mailSync.test.ts`                                | Pendiente (F3)  |
+| Paginación, token, borrados y reanudación con `fetch` simulado | `tests/mailSync.test.ts`                                | ✅ F3 backend    |
 | Bytes, MIME y extracción de adjuntos                           | `tests/mailBody.test.ts`                                | Pendiente (F4)  |
 | Visor, estados y permisos                                      | `tests/mailboxView.test.tsx`                            | Pendiente (F4)  |
-| Baja de usuario en el cron                                     | `tests/mailSync.test.ts`                                | Pendiente (F3)  |
+| Baja de usuario en el cron                                     | `tests/mailSync.test.ts`                                | ✅ F3 backend    |
 | Reglas del repositorio                                         | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts` | ✅              |
 
 Comandos de cierre por fase: `npx tsc --noEmit`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
@@ -563,4 +563,4 @@ La aprobación de esta spec autoriza a:
 - La baja de un usuario (`users.active = false`) detiene la sincronización de su cuenta: el cron y la sincronización bajo demanda comprueban el estado del usuario antes de tocar `mailAccounts`.
 - Las copias compartidas al expediente **no son caché**: no cuentan en `cacheBytes`, no las toca el LRU, el barrido de caducidad ni «Vaciar caché», y no se borran al desconectar o borrar la cuenta de correo. Su retención es la del destino (SPEC-0018).
 
-F1/F2 ya están implementadas. Quedan las fases 2–6 de esta spec; la prueba real contra Hermes se valida en la puerta de F3.
+F1/F2 están cerradas y el backend de F3 está implementado. Quedan la vista del módulo «Correo», la prueba real contra Hermes y las fases 4–6.

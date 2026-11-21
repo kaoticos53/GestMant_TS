@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 implementadas) y 0018 pendiente de aprobación antes de F5.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 con backend implementado, vista pendiente) y 0018 pendiente de aprobación antes de F5.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -186,6 +186,8 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 ### Fase 3 — 0017: cabeceras, sincronización inicial e incremental
 
 **Objetivo:** listar el buzón sin descargar cuerpos y mantenerlo actualizado sin duplicados.
+
+**Estado:** backend implementado y probado con `fetch` simulado (`mailHeaders`, `mailSync`, tumbas, token, lease y cron). Faltan la vista del módulo «Correo» y la medición real contra Hermes.
 
 **Tareas**
 

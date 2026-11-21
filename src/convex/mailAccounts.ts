@@ -20,11 +20,7 @@ import {
   normalizeMailAddress,
 } from "../lib/mailClient/account";
 import { parseAuthResponse } from "../lib/mailClient/auth";
-import {
-  classifyHttpFailure,
-  parseSoapFault,
-  type MailFault,
-} from "../lib/mailClient/errors";
+import { classifyHttpFailure } from "../lib/mailClient/errors";
 import { parseMailFolders } from "../lib/mailClient/folders";
 import {
   buildAuthRequest,
@@ -32,8 +28,7 @@ import {
 } from "../lib/mailClient/soap";
 import type { MailFolder } from "../lib/mailClient/types";
 import { hasCapability, memberStatus } from "./permissions";
-
-const SOAP_ENDPOINT = `${MAIL_SERVER_URL}/service/soap`;
+import { MailSoapError, postSoap } from "./_mail/soap";
 
 const MAILBOX_DENY =
   "No tienes permisos para usar el buzón de correo. Revisa la configuración de tu rol con el administrador.";
@@ -43,7 +38,7 @@ const MAILBOX_IDENTITY = identityNotice(
 );
 
 /** La cuenta de la persona de la sesión; una fila por usuario. */
-async function readAccount(
+export async function readAccount(
   ctx: QueryCtx,
   userId: Id<"users">,
 ): Promise<Doc<"mailAccounts"> | null> {
@@ -71,6 +66,18 @@ function publicAccount(row: Doc<"mailAccounts">) {
   };
 }
 
+/** Borra las cabeceras locales de una cuenta. No toca las copias compartidas. */
+async function deleteHeaders(
+  ctx: MutationCtx,
+  accountId: Id<"mailAccounts">,
+): Promise<void> {
+  const headers = await ctx.db
+    .query("mailHeaders")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .collect();
+  for (const header of headers) await ctx.db.delete(header._id);
+}
+
 /** Borra las carpetas locales de una cuenta. La usan editar, desconectar y borrar. */
 async function deleteFolders(
   ctx: MutationCtx,
@@ -84,7 +91,9 @@ async function deleteFolders(
 }
 
 /** La persona del taller con capacidad de buzón, o el aviso que corresponda. */
-async function requireMailboxMember(ctx: QueryCtx): Promise<Doc<"users">> {
+export async function requireMailboxMember(
+  ctx: QueryCtx,
+): Promise<Doc<"users">> {
   const { user, issue } = await memberStatus(ctx);
   if (!user || issue !== null) {
     throw new ConvexError(
@@ -204,7 +213,10 @@ export const save = mutation({
       let accountId: Id<"mailAccounts">;
       if (existing) {
         await ctx.db.patch(existing._id, record);
-        if (emailChanged) await deleteFolders(ctx, existing._id);
+        if (emailChanged) {
+          await deleteHeaders(ctx, existing._id);
+          await deleteFolders(ctx, existing._id);
+        }
         accountId = existing._id;
       } else {
         accountId = await ctx.db.insert("mailAccounts", {
@@ -285,7 +297,10 @@ export const connectionContext = internalQuery({
     if (!row) {
       throw new ConvexError("Todavía no has configurado tu buzón.");
     }
-    if ((row.password ?? "").trim() === "") {
+    if (
+      (row.password ?? "").trim() === "" &&
+      (row.authToken ?? "").trim() === ""
+    ) {
       throw new ConvexError(
         "Vuelve a guardar la contraseña de aplicación antes de probar el buzón.",
       );
@@ -294,6 +309,8 @@ export const connectionContext = internalQuery({
       accountId: row._id,
       email: row.email,
       password: row.password ?? "",
+      authToken: row.authToken ?? "",
+      tokenExpiresAt: row.tokenExpiresAt ?? 0,
     };
   },
 });
@@ -369,48 +386,6 @@ export const recordFailure = internalMutation({
   },
 });
 
-/** Texto saneado y corto: código y Trace, nunca el mensaje completo del servidor. */
-function failureLabel(status: number, fault: MailFault | null): string {
-  if (fault) {
-    return fault.trace ? `${fault.code} (Trace ${fault.trace})` : fault.code;
-  }
-  return `Error HTTP ${status}`;
-}
-
-class MailConnectionError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly fault: MailFault | null,
-  ) {
-    super(message);
-    this.name = "MailConnectionError";
-  }
-}
-
-async function postSoap(body: string): Promise<string> {
-  const response = await fetch(SOAP_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "text/xml; charset=utf-8" },
-    body,
-  });
-  const text = await response.text();
-  let fault: MailFault | null = null;
-  try {
-    fault = parseSoapFault(text);
-  } catch {
-    fault = null;
-  }
-  if (fault !== null || !response.ok) {
-    throw new MailConnectionError(
-      failureLabel(response.status, fault),
-      response.status,
-      fault,
-    );
-  }
-  return text;
-}
-
 /** Autentica y descubre carpetas; no persiste nada. */
 async function probeMailbox(
   email: string,
@@ -458,9 +433,9 @@ export const testConnection = action({
       probe = await probeMailbox(context.email, password);
     } catch (error) {
       const failure =
-        error instanceof MailConnectionError
+        error instanceof MailSoapError
           ? error
-          : new MailConnectionError(
+          : new MailSoapError(
               error instanceof Error ? error.message : "Error de conexión",
               0,
               null,
@@ -551,6 +526,7 @@ export const remove = mutation({
       const row = await readAccount(ctx, actor._id);
       if (!row) return true;
 
+      await deleteHeaders(ctx, row._id);
       await deleteFolders(ctx, row._id);
       await ctx.db.delete(row._id);
       await logSecurityEvent(ctx, {

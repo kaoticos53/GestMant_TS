@@ -163,4 +163,17 @@ crons.interval(
   {},
 );
 
+/**
+ * Sincronización de los buzones personales: una pasada por hora en el minuto
+ * 20. Solo mira cuentas encendidas de usuarios activos, salta las sincronizadas
+ * hace menos de 50 minutos y programa una acción por cuenta, espaciada 2 s,
+ * para no disparar el limitador del servidor. Cada acción toma su lease.
+ */
+crons.hourly(
+  "sincronizar los buzones",
+  { minuteUTC: 20 },
+  internal.mailSync.syncDue,
+  {},
+);
+
 export default crons;
