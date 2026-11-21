@@ -439,7 +439,9 @@ async function probeMailbox(
  */
 export const testConnection = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (
+    ctx,
+  ): Promise<{ ok: true; email: string; folderCount: number }> => {
     const context = await ctx.runQuery(
       internal.mailAccounts.connectionContext,
       {},
