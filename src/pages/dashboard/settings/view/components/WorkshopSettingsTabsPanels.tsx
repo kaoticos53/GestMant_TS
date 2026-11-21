@@ -8,6 +8,7 @@ import { EquipmentModelsCard } from "@/pages/dashboard/settings/EquipmentModelsC
 import { MailAudienceCard } from "@/pages/dashboard/settings/MailAudienceCard";
 import { MailboxCard } from "@/pages/dashboard/settings/MailboxCard";
 import { MailServerCard } from "@/pages/dashboard/settings/MailServerCard";
+import { OrphanMailSharesCard } from "@/pages/dashboard/settings/OrphanMailSharesCard";
 import { StorageCleanupCard } from "@/pages/dashboard/settings/StorageCleanupCard";
 import { TrashCard } from "@/pages/dashboard/settings/TrashCard";
 import { UnusedUploadsCard } from "@/pages/dashboard/settings/UnusedUploadsCard";
@@ -66,6 +67,7 @@ export function WorkshopSettingsTabsPanels({
           )}
           {canPurgeUploads && <UnusedUploadsCard />}
           {canPurgeUploads && <StorageCleanupCard />}
+          {canPurgeUploads && <OrphanMailSharesCard />}
         </TabsContent>
       )}
 

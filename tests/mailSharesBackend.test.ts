@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ConvexError } from "convex/values";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
+import { markDestinationDeleted } from "../src/convex/_mailShares/orphans";
 import type { Id } from "../src/convex/_generated/dataModel";
 import { backend } from "./backend";
 
@@ -480,6 +481,159 @@ describe("mailShares.createIncidentFromMail", () => {
       }),
       "buzón",
     );
+  });
+});
+
+/** Una copia de un equipo borrado, con su adjunto en `_storage`. */
+async function seedOrphan(
+  t: ReturnType<typeof backend>,
+  options: { deletedAt: number; adminId: Id<"users"> },
+) {
+  return t.run(async (ctx) => {
+    const storageId = await ctx.storage.store(
+      new Blob(["presupuesto"], { type: "application/pdf" }),
+    );
+    const equipmentId = await ctx.db.insert("equipment", {
+      name: "Cámara de estudio",
+      model: "HDC-3500",
+      code: "EQ-0001",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const shareId = await ctx.db.insert("mailShares", {
+      destinationType: "equipment",
+      destinationId: equipmentId,
+      destinationReference: "EQ-0001",
+      mode: "original",
+      subject: "Presupuesto del SAT",
+      fromName: "Proveedor",
+      fromAddress: "sat@proveedor.es",
+      sentAt: 1_795_179_963_000,
+      summary: "Presupuesto del SAT",
+      bodyText: "Cuerpo del correo",
+      attachments: [
+        {
+          storageId,
+          name: "presupuesto.pdf",
+          contentType: "application/pdf",
+          size: 11,
+        },
+      ],
+      sharedBy: options.adminId,
+      sharedByName: "Administradora",
+      sharedAt: 1_795_179_963_000,
+      destinationDeletedAt: options.deletedAt,
+      orphanPurgeAt: options.deletedAt + 7 * 24 * 60 * 60 * 1000,
+    });
+    return { shareId, storageId, equipmentId };
+  });
+}
+
+describe("mailShares: copias huérfanas", () => {
+  test("marcar un destino borrado fija el plazo de siete días", async () => {
+    const { t, adminId } = await setup();
+    const { shareId, equipmentId } = await seedOrphan(t, {
+      deletedAt: 0,
+      adminId,
+    });
+    const now = 1_800_000_000_000;
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(shareId, {
+        destinationDeletedAt: undefined,
+        orphanPurgeAt: undefined,
+      });
+      await markDestinationDeleted(ctx, "equipment", equipmentId, now);
+    });
+
+    const row = await t.run((ctx) => ctx.db.get(shareId));
+    expect(row?.destinationDeletedAt).toBe(now);
+    expect(row?.orphanPurgeAt).toBe(now + 7 * 24 * 60 * 60 * 1000);
+  });
+
+  test("la papelera lista la huérfana con su plazo y tamaño", async () => {
+    const { t, admin, tech, adminId } = await setup();
+    const { shareId } = await seedOrphan(t, {
+      deletedAt: 1_800_000_000_000,
+      adminId,
+    });
+
+    const rows = await admin.query(api.mailShares.listOrphaned, {});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      shareId,
+      destinationType: "equipment",
+      destinationReference: "EQ-0001",
+      subject: "Presupuesto del SAT",
+      fromAddress: "sat@proveedor.es",
+      size: 11,
+    });
+
+    await expectConvexError(
+      tech.query(api.mailShares.listOrphaned, {}),
+      "administrador",
+    );
+  });
+
+  test("purgar una huérfana borra su contenido, sus objetos y la fila", async () => {
+    const { t, admin, adminId } = await setup();
+    const { shareId, storageId } = await seedOrphan(t, {
+      deletedAt: 1_800_000_000_000,
+      adminId,
+    });
+
+    await admin.mutation(api.mailShares.purgeOrphaned, { shareId });
+
+    expect(await t.run((ctx) => ctx.db.get(shareId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.system.get(storageId))).toBeNull();
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    expect(
+      audit.some(
+        (row) =>
+          row.action === "mail_share_orphan_purge" &&
+          String(row.metadata).includes("orphan"),
+      ),
+    ).toBe(true);
+  });
+
+  test("borrar el equipo deja su copia huérfana", async () => {
+    const { t, admin, adminId } = await setup();
+    const { shareId, equipmentId } = await seedOrphan(t, {
+      deletedAt: 0,
+      adminId,
+    });
+    await t.run((ctx) =>
+      ctx.db.patch(shareId, {
+        destinationDeletedAt: undefined,
+        orphanPurgeAt: undefined,
+      }),
+    );
+
+    await admin.mutation(api.equipment.remove, { id: equipmentId });
+
+    const row = await t.run((ctx) => ctx.db.get(shareId));
+    expect(row?.destinationDeletedAt).toBeGreaterThan(0);
+    expect(row?.orphanPurgeAt).toBe(
+      row!.destinationDeletedAt! + 7 * 24 * 60 * 60 * 1000,
+    );
+    expect(await t.run((ctx) => ctx.db.get(equipmentId))).toBeNull();
+  });
+
+  test("el barrido purga solo las que cumplieron los siete días", async () => {
+    const { t, adminId } = await setup();
+    const old = await seedOrphan(t, { deletedAt: 1_000_000, adminId });
+    const fresh = await seedOrphan(t, {
+      deletedAt: Date.now() - 60_000,
+      adminId,
+    });
+
+    const purged = await t.mutation(internal.mailShares.sweepOrphaned, {});
+
+    expect(purged).toBe(1);
+    expect(await t.run((ctx) => ctx.db.get(old.shareId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(fresh.shareId))).not.toBeNull();
   });
 });
 

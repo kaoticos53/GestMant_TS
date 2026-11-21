@@ -8,6 +8,7 @@ import {
   mutation,
   query,
   type ActionCtx,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { logSecurityEvent } from "./audit";
@@ -26,6 +27,7 @@ import {
   buildShareSummary,
   canReadSharedMail,
   fitsShareLimit,
+  orphanPurgeAt,
   resolveShareMode,
   shareSnapshotBytes,
   truncateShareText,
@@ -929,6 +931,54 @@ export const downloadContext = internalQuery({
  * Purga de administrador: borra adjuntos y `.eml`, vacía el contenido y deja
  * la fila como lápida. No toca la caché, la cuenta ni el mensaje original.
  */
+/**
+ * Borra el contenido de una copia y deja la fila como lápida.
+ *
+ * Es lo común a la purga manual y a la de las huérfanas: los objetos de
+ * `_storage` —adjuntos y `.eml`— se borran aquí, y la fila conserva su
+ * procedencia y su fecha de purga para que la traza explique qué hubo. El
+ * barrido nocturno de `storageCleanup` recoge lo que fallara al borrar.
+ */
+async function wipeShareContent(
+  ctx: MutationCtx,
+  row: Doc<"mailShares">,
+  purge: { reason: "manual" | "orphan"; by?: Id<"users">; now: number },
+): Promise<void> {
+  for (const attachment of row.attachments ?? []) {
+    try {
+      await ctx.storage.delete(attachment.storageId);
+    } catch {
+      // El barrido nocturno recoge lo que quede sin cita.
+    }
+  }
+  if (row.emlStorageId) {
+    try {
+      await ctx.storage.delete(row.emlStorageId);
+    } catch {
+      // Igual que los adjuntos.
+    }
+  }
+
+  await ctx.db.patch(row._id, {
+    subject: undefined,
+    fromName: undefined,
+    fromAddress: undefined,
+    summary: undefined,
+    bodyText: undefined,
+    bodyHtml: undefined,
+    bodyTruncated: undefined,
+    emlStorageId: undefined,
+    emlFileName: undefined,
+    emlSize: undefined,
+    attachments: undefined,
+    sourceMessageId: undefined,
+    sourceEmail: undefined,
+    contentPurgedAt: purge.now,
+    contentPurgedBy: purge.by,
+    purgeReason: purge.reason,
+  });
+}
+
 export const purge = mutation({
   args: { shareId: v.id("mailShares") },
   handler: async (ctx, args) => {
@@ -937,38 +987,10 @@ export const purge = mutation({
     if (!row) throw new ConvexError("Esa copia ya no existe.");
     if (row.contentPurgedAt !== undefined) return true;
 
-    for (const attachment of row.attachments ?? []) {
-      try {
-        await ctx.storage.delete(attachment.storageId);
-      } catch {
-        // El barrido nocturno recoge lo que quede sin cita.
-      }
-    }
-    if (row.emlStorageId) {
-      try {
-        await ctx.storage.delete(row.emlStorageId);
-      } catch {
-        // Igual que los adjuntos.
-      }
-    }
-
-    await ctx.db.patch(row._id, {
-      subject: undefined,
-      fromName: undefined,
-      fromAddress: undefined,
-      summary: undefined,
-      bodyText: undefined,
-      bodyHtml: undefined,
-      bodyTruncated: undefined,
-      emlStorageId: undefined,
-      emlFileName: undefined,
-      emlSize: undefined,
-      attachments: undefined,
-      sourceMessageId: undefined,
-      sourceEmail: undefined,
-      contentPurgedAt: Date.now(),
-      contentPurgedBy: admin._id,
-      purgeReason: "manual",
+    await wipeShareContent(ctx, row, {
+      reason: "manual",
+      by: admin._id,
+      now: Date.now(),
     });
     await logSecurityEvent(ctx, {
       actorId: admin._id,
@@ -977,6 +999,109 @@ export const purge = mutation({
       metadata: { shareId: row._id, reason: "manual" },
     });
     return true;
+  },
+});
+
+/**
+ * Papelera administrativa de copias huérfanas: equipos y manuales borrados.
+ *
+ * Solo el administrador las ve, y no hay «restaurar»: la ficha ya no existe y
+ * la copia no se puede volver a enganchar. La lista enseña lo que queda hasta
+ * que venza el plazo de siete días o alguien la purgue.
+ */
+export const listOrphaned = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx, "ver las copias de correo huérfanas");
+    const rows = await ctx.db.query("mailShares").collect();
+    return rows
+      .filter(
+        (row) =>
+          row.destinationDeletedAt !== undefined &&
+          row.contentPurgedAt === undefined,
+      )
+      .map((row) => ({
+        shareId: row._id,
+        destinationType: row.destinationType,
+        destinationReference: row.destinationReference ?? "",
+        subject: row.subject ?? "",
+        fromName: row.fromName ?? "",
+        fromAddress: row.fromAddress ?? "",
+        mode: row.mode,
+        deletedAt: row.destinationDeletedAt!,
+        purgeAt: row.orphanPurgeAt ?? orphanPurgeAt(row.destinationDeletedAt!),
+        size:
+          (row.attachments ?? []).reduce(
+            (sum, attachment) => sum + attachment.size,
+            0,
+          ) + (row.emlSize ?? 0),
+      }))
+      .sort((a, b) => a.purgeAt - b.purgeAt);
+  },
+});
+
+/**
+ * Purga una huérfana antes de su plazo. La fila desaparece: sin destino vivo no
+ * hay ficha que enseñe una lápida, así que solo queda la traza de auditoría.
+ */
+export const purgeOrphaned = mutation({
+  args: { shareId: v.id("mailShares") },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(
+      ctx,
+      "purgar una copia huérfana de correo",
+    );
+    const row = await ctx.db.get(args.shareId);
+    if (!row) throw new ConvexError("Esa copia ya no existe.");
+    if (row.destinationDeletedAt === undefined) {
+      throw new ConvexError("Esa copia no es huérfana: su ficha sigue viva.");
+    }
+
+    await wipeShareContent(ctx, row, {
+      reason: "orphan",
+      by: admin._id,
+      now: Date.now(),
+    });
+    await ctx.db.delete(row._id);
+    await logSecurityEvent(ctx, {
+      actorId: admin._id,
+      action: "mail_share_orphan_purge",
+      target: `${row.destinationType}:${row.destinationReference ?? ""}`,
+      metadata: { shareId: row._id, reason: "orphan" },
+    });
+    return true;
+  },
+});
+
+/**
+ * Barrido diario de huérfanas: purga las que cumplieron sus siete días.
+ *
+ * El plazo es fijo y no depende de `storageSettings.trashRetentionDays`: la
+ * papelera del taller es la del destino, no la de la copia. Va sin actor porque
+ * no lo ordena nadie; la traza queda igual en `securityAuditLog`.
+ */
+export const sweepOrphaned = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<number> => {
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("mailShares")
+      .withIndex("by_orphan_purge", (q) => q.lte("orphanPurgeAt", now))
+      .collect();
+
+    let purged = 0;
+    for (const row of rows) {
+      if (row.orphanPurgeAt === undefined || row.orphanPurgeAt > now) continue;
+      await wipeShareContent(ctx, row, { reason: "orphan", now });
+      await ctx.db.delete(row._id);
+      await logSecurityEvent(ctx, {
+        action: "mail_share_orphan_purge",
+        target: `${row.destinationType}:${row.destinationReference ?? ""}`,
+        metadata: { shareId: row._id, reason: "expired" },
+      });
+      purged += 1;
+    }
+    return purged;
   },
 });
 

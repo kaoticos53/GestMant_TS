@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
+import { markDestinationDeleted } from "./_mailShares/orphans";
 import {
   MANUAL_FILE_FORMAT,
   MANUAL_TYPES,
@@ -455,8 +456,7 @@ export const update = mutation({
           type: args.type ?? manual.type,
           brand: args.brand ?? manual.brand,
           model: args.model ?? manual.model,
-          modelId:
-            args.modelId === undefined ? manual.modelId : args.modelId,
+          modelId: args.modelId === undefined ? manual.modelId : args.modelId,
           equipmentId:
             args.equipmentId === undefined
               ? manual.equipmentId
@@ -601,6 +601,9 @@ export const remove = mutation({
       }
       if (manual.storageId) await ctx.storage.delete(manual.storageId);
       await ctx.db.delete(args.id);
+      // La copia del correo queda huérfana hasta que venza su plazo: el manual
+      // ya no existe y no hay forma de volver a engancharla.
+      await markDestinationDeleted(ctx, "manual", args.id, Date.now());
     },
   ),
 });
@@ -637,9 +640,10 @@ export const byModel = query({
     return await Promise.all(
       sortManuals(rows).map(async (manual) => ({
         ...manual,
-        url: manual.storageId ? await ctx.storage.getUrl(manual.storageId) : null,
+        url: manual.storageId
+          ? await ctx.storage.getUrl(manual.storageId)
+          : null,
       })),
     );
   },
 });
-

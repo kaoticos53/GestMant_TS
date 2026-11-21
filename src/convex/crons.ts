@@ -132,6 +132,20 @@ crons.daily(
   {},
 );
 
+/**
+ * Copias de correo huérfanas: equipos y manuales borrados dejan su copia en la
+ * papelera administrativa con un plazo fijo de siete días. Esta pasada purga
+ * las que ya vencieron —contenido, adjuntos y `.eml`— y borra la fila, porque
+ * sin destino vivo no hay ficha donde dejar la lápida. El plazo no depende del
+ * de la papelera del taller: la copia sigue al destino, no al módulo.
+ */
+crons.daily(
+  "purgar las copias de correo huerfanas",
+  { hourUTC: 6, minuteUTC: 10 },
+  internal.mailShares.sweepOrphaned,
+  {},
+);
+
 crons.daily(
   "purgar marcas caducadas de envio OTP",
   { hourUTC: 5, minuteUTC: 50 },

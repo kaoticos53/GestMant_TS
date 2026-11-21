@@ -2,12 +2,11 @@
 
 Sin tarea activa.
 
-`SPEC-0018` está aprobada (2026-11-21) y F5 tiene los seis destinos con su
-sección «Correos compartidos»: incidencia, petición de repuesto, equipo,
-manual, orden de compra y petición de compra sin tratar. También están la API
-de compartición, su diálogo en el visor, el alta de incidencia desde correo y
-los tests de backend. El handover vive en
-`.context/sessions/2026-11-21-correo-f5-ui-comparticion.md`.
+`SPEC-0018` aprobada (2026-11-21). F5 cerrada con los seis destinos, el alta de
+incidencia desde correo (acción y diálogo) y los tests de backend. F6 empezada:
+marcado de huérfanas al borrar equipos y manuales, barrido diario a siete días,
+papelera administrativa y tarjeta en Ajustes → Almacenamiento. El handover está
+en `.context/sessions/2026-11-21-correo-f6-huerfanas.md`.
 
-Lo siguiente: el botón «Crear incidencia desde este correo» en el diálogo, el
-`.eml` opcional y el montaje de la papelera administrativa de huérfanas (F6).
+Lo siguiente: descarga de huérfanas, `purgeForDestination` al vaciar la papelera
+de incidencias y peticiones, y F7 (backup y reset).

@@ -6,6 +6,7 @@ import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 import { detectEquipmentChanges } from "../lib/movements";
 import { recordEquipmentMovement } from "./_inventory/movements";
+import { markDestinationDeleted } from "./_mailShares/orphans";
 
 /** El inventario de equipos requiere sesión iniciada. */
 async function requireUser(ctx: QueryCtx) {
@@ -434,6 +435,9 @@ export const remove = mutation({
       }
 
       await ctx.db.delete(args.id);
+      // La copia del correo no se purga en el acto: queda huérfana siete días
+      // en la papelera administrativa, porque su ficha ya no existe.
+      await markDestinationDeleted(ctx, "equipment", args.id, Date.now());
     },
   ),
 });
