@@ -19,10 +19,16 @@
 - **Equipos y manuales no cambian.** Su borrado sigue marcando huérfanas con
   `markDestinationDeleted` y las purga `sweepOrphaned` a los siete días, como
   fija la spec: no tienen papelera de módulo.
+- **Descarga de huérfanas.** `mailShares.downloadOrphaned` (action) sirve la URL
+  de un adjunto o del `.eml` de una huérfana sin pasar por la audiencia del
+  destino; `orphanDownloadContext` comprueba administrador, que la copia siga
+  huérfana, que conserve contenido y que el archivo pedido exista.
+  `listOrphaned` devuelve ahora `files` con nombre y tamaño de cada archivo, y
+  la tarjeta ofrece un botón de descarga por archivo antes de «Purgar ahora».
 
 ## Pruebas
 
-`tests/mailSharesBackend.test.ts` (25, cuatro nuevas):
+`tests/mailSharesBackend.test.ts` (28, siete nuevas):
 
 - la pasada de la papelera de incidencias se lleva la copia, su adjunto de
   `_storage` y deja la auditoría `destination`, sin tocar el objeto de la caché;
@@ -31,18 +37,23 @@
 - purgar una incidencia no toca las copias de otra;
 - borrar un manual completo —archivo PDF, título, tipo, marca y modelo— deja su
   copia huérfana con `destinationDeletedAt` y siete días exactos, borra el
-  manual y su PDF, y conserva la copia con su referencia y su asunto.
+  manual y su PDF, y conserva la copia con su referencia y su asunto;
+- el administrador descarga adjunto y `.eml` de una huérfana, la ruta rechaza a
+  un técnico, rechaza una copia viva y avisa si no hay original que descargar.
+
+`tests/orphanMailSharesCard.test.tsx` (2): la tarjeta enseña los archivos
+ disponibles y descarga el adjunto llamando a `downloadOrphaned`.
 
 ## Verificación
 
-`npx tsc -b` 0, `npx vite build` 0. `tests/mailSharesBackend.test.ts`,
-`tests/requestTrash.test.ts` (33), `tests/incidents.test.ts` (112) y
-`tests/manuales.test.ts` (55) en verde, con `tests/arquitectura.test.ts` y
-`tests/seguridad.test.ts` también en verde. No se ejecutó la suite completa en
-esta sesión.
+`npx tsc -b` 0, `npx vite build` 0. `tests/mailSharesBackend.test.ts` (28),
+`tests/orphanMailSharesCard.test.tsx` (2), `tests/requestTrash.test.ts` (33),
+`tests/incidents.test.ts` (112), `tests/manuales.test.ts` (55) y
+`tests/workshopSettingsView.test.tsx` (8) en verde, con
+`tests/arquitectura.test.ts` y `tests/seguridad.test.ts` también en verde. No se
+ejecutó la suite completa en esta sesión.
 
 ## Pendiente
 
-- Descarga de huérfanas desde la tarjeta de Ajustes (hace falta ruta propia).
 - F7: backup y reset (`purgeForReset`, `backupRestored`).
 - Revisión visual en navegador del diálogo, la sección y la tarjeta.

@@ -337,16 +337,17 @@ La fila purgada es una **lápida**: la ficha muestra «Correo compartido retirad
 
 ### 10.1 Públicas
 
-| Función                             | Tipo       | Permiso                                  | Uso                                                                      |
-| ----------------------------------- | ---------- | ---------------------------------------- | ------------------------------------------------------------------------ |
-| `mailShares.share`                  | `action`   | `viewMailbox` + capacidad del destino    | Descarga/parsea si hace falta y crea la copia.                           |
-| `mailShares.createIncidentFromMail` | `action`   | `viewMailbox` + `createIncidentFromMail` | Crea incidencia y copia en un flujo.                                     |
-| `mailShares.listForDestination`     | `query`    | Audiencia del destino                    | Lista las copias visibles y las lápidas.                                 |
-| `mailShares.get`                    | `query`    | Audiencia del destino                    | Devuelve metadatos y contenido sanitizado.                               |
-| `mailShares.download`               | `query`    | Audiencia del destino                    | Devuelve URL de descarga de adjunto o `.eml` tras comprobar visibilidad. |
-| `mailShares.purge`                  | `mutation` | Administrador                            | Purga una copia viva con motivo.                                         |
-| `mailShares.listOrphaned`           | `query`    | Administrador                            | Papelera administrativa de equipos/manuales borrados.                    |
-| `mailShares.purgeOrphaned`          | `mutation` | Administrador                            | Purga una huérfana antes del plazo.                                      |
+| Función                             | Tipo       | Permiso                                  | Uso                                                                        |
+| ----------------------------------- | ---------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `mailShares.share`                  | `action`   | `viewMailbox` + capacidad del destino    | Descarga/parsea si hace falta y crea la copia.                             |
+| `mailShares.createIncidentFromMail` | `action`   | `viewMailbox` + `createIncidentFromMail` | Crea incidencia y copia en un flujo.                                       |
+| `mailShares.listForDestination`     | `query`    | Audiencia del destino                    | Lista las copias visibles y las lápidas.                                   |
+| `mailShares.get`                    | `query`    | Audiencia del destino                    | Devuelve metadatos y contenido sanitizado.                                 |
+| `mailShares.download`               | `query`    | Audiencia del destino                    | Devuelve URL de descarga de adjunto o `.eml` tras comprobar visibilidad.   |
+| `mailShares.purge`                  | `mutation` | Administrador                            | Purga una copia viva con motivo.                                           |
+| `mailShares.listOrphaned`           | `query`    | Administrador                            | Papelera administrativa de equipos/manuales borrados.                      |
+| `mailShares.purgeOrphaned`          | `mutation` | Administrador                            | Purga una huérfana antes del plazo.                                        |
+| `mailShares.downloadOrphaned`       | `action`   | Administrador                            | URL de un adjunto o del `.eml` de una huérfana, sin audiencia del destino. |
 
 ### 10.2 Internas
 
@@ -473,7 +474,7 @@ tests/mailSharesBackup.test.ts
 | 2. Compartir y ver       | Acción `share`, creación de incidencia, sección en fichas, visor y descargas. | Test de aislamiento y visibilidad.                 |
 | 3. Retención y huérfanas | Enganches en papeleras, borrado de equipos/manuales, cron de huérfanas.       | Test de restauración, purga y plazo.               |
 | 4. Backup y reset        | `mailShares` en backup, sanitización, restauración como resumen, reset.       | Test de backup y storage cleanup.                  |
-| 5. UI y cierre           | Revisión de accesibilidad, móvil y cierre de la UI construida en fases 2–3.  | `tests/mailSharesView.test.tsx` y revisión visual. |
+| 5. UI y cierre           | Revisión de accesibilidad, móvil y cierre de la UI construida en fases 2–3.   | `tests/mailSharesView.test.tsx` y revisión visual. |
 
 Equivalencia con el plan: fases 1–2 = F5, fase 3 = F6, fases 4–5 = F7; F8 es el pilotaje posterior.
 

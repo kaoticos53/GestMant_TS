@@ -900,16 +900,41 @@ export const purge = mutation({
   },
 });
 
+/** Un archivo descargable de una copia huérfana: el `.eml` o un adjunto. */
+export interface OrphanMailShareFile {
+  kind: "eml" | "attachment";
+  /** Posición en `attachments`; `null` para el `.eml`. */
+  index: number | null;
+  name: string;
+  size: number;
+}
+
+/** Una fila de la papelera administrativa de huérfanas. */
+export interface OrphanMailShareRow {
+  shareId: Id<"mailShares">;
+  destinationType: MailShareDestinationType;
+  destinationReference: string;
+  subject: string;
+  fromName: string;
+  fromAddress: string;
+  mode: MailShareMode;
+  deletedAt: number;
+  purgeAt: number;
+  size: number;
+  files: OrphanMailShareFile[];
+}
+
 /**
  * Papelera administrativa de copias huérfanas: equipos y manuales borrados.
  *
  * Solo el administrador las ve, y no hay «restaurar»: la ficha ya no existe y
- * la copia no se puede volver a enganchar. La lista enseña lo que queda hasta
- * que venza el plazo de siete días o alguien la purgue.
+ * la copia no se puede volver a enganchar. La lista enseña lo que queda —y qué
+ * archivos se pueden descargar— hasta que venza el plazo de siete días o
+ * alguien la purgue.
  */
 export const listOrphaned = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<OrphanMailShareRow[]> => {
     await requireAdmin(ctx, "ver las copias de correo huérfanas");
     const rows = await ctx.db.query("mailShares").collect();
     return rows
@@ -933,8 +958,111 @@ export const listOrphaned = query({
             (sum, attachment) => sum + attachment.size,
             0,
           ) + (row.emlSize ?? 0),
+        files: [
+          ...(row.emlStorageId === undefined
+            ? []
+            : [
+                {
+                  kind: "eml" as const,
+                  index: null,
+                  name: row.emlFileName ?? "mensaje.eml",
+                  size: row.emlSize ?? 0,
+                },
+              ]),
+          ...(row.attachments ?? []).map((attachment, index) => ({
+            kind: "attachment" as const,
+            index,
+            name: attachment.name,
+            size: attachment.size,
+          })),
+        ],
       }))
       .sort((a, b) => a.purgeAt - b.purgeAt);
+  },
+});
+
+const orphanFileValidator = v.union(v.literal("eml"), v.literal("attachment"));
+
+/**
+ * Resuelve el objeto de una copia huérfana para descargarlo.
+ *
+ * Es la ruta propia de la papelera administrativa: no pasa por la audiencia del
+ * destino —la ficha ya no existe— y solo el administrador puede usarla. Se pide
+ * expresamente el archivo, así que un adjunto fuera de rango o un `.eml` que no
+ * se conservó se rechazan sin devolver nada.
+ */
+export const orphanDownloadContext = internalQuery({
+  args: {
+    shareId: v.id("mailShares"),
+    file: orphanFileValidator,
+    index: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    storageId: Id<"_storage">;
+    name: string;
+    contentType: string;
+  }> => {
+    await requireAdmin(ctx, "descargar una copia huérfana de correo");
+    const row = await ctx.db.get(args.shareId);
+    if (!row) throw new ConvexError("Esa copia ya no existe.");
+    if (row.destinationDeletedAt === undefined) {
+      throw new ConvexError("Esa copia no es huérfana: su ficha sigue viva.");
+    }
+    if (row.contentPurgedAt !== undefined) {
+      throw new ConvexError("Esa copia ya no tiene contenido.");
+    }
+
+    if (args.file === "eml") {
+      if (row.emlStorageId === undefined) {
+        throw new ConvexError("Esa copia no conserva el archivo original.");
+      }
+      return {
+        storageId: row.emlStorageId,
+        name: row.emlFileName ?? "mensaje.eml",
+        contentType: "message/rfc822",
+      };
+    }
+
+    const attachment =
+      args.index === undefined ? undefined : row.attachments?.[args.index];
+    if (!attachment) {
+      throw new ConvexError("Ese adjunto no existe en la copia.");
+    }
+    return {
+      storageId: attachment.storageId,
+      name: attachment.name,
+      contentType: attachment.contentType,
+    };
+  },
+});
+
+/**
+ * URL de descarga de un archivo de una copia huérfana, solo para el
+ * administrador. La comprobación vive en `orphanDownloadContext`, porque una
+ * acción no lee la base de datos.
+ */
+export const downloadOrphaned = action({
+  args: {
+    shareId: v.id("mailShares"),
+    file: orphanFileValidator,
+    index: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ url: string; name: string; contentType: string }> => {
+    const target = await ctx.runQuery(
+      internal.mailShares.orphanDownloadContext,
+      args,
+    );
+    const url = await ctx.storage.getUrl(target.storageId);
+    if (url === null) {
+      throw new ConvexError("El archivo de la copia ya no está disponible.");
+    }
+    return { url, name: target.name, contentType: target.contentType };
   },
 });
 

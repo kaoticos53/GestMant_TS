@@ -3,8 +3,8 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { DESTINATION_LABELS } from "@/lib/mailShare";
 import { formatDate, getErrorMessage } from "@/lib/workshop";
-import { useMutation, useQuery } from "convex/react";
-import { Loader2, MailX, Trash2 } from "lucide-react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { Download, Loader2, MailX, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -21,13 +21,42 @@ function formatSize(bytes: number): string {
  * Un equipo o un manual se borra en el acto y no tiene papelera de módulo: su
  * copia de correo queda aquí siete días, visible solo para el administrador,
  * antes de que el barrido nocturno la purgue. No hay «restaurar»: la ficha ya
- * no existe y la copia no se puede volver a enganchar. Se puede adelantar la
- * purga; el plazo es fijo y no depende del de la papelera del taller.
+ * no existe y la copia no se puede volver a enganchar. Se puede descargar lo
+ * que quede o adelantar la purga; el plazo es fijo y no depende del de la
+ * papelera del taller.
  */
 export function OrphanMailSharesCard() {
   const rows = useQuery(api.mailShares.listOrphaned);
   const purge = useMutation(api.mailShares.purgeOrphaned);
+  const download = useAction(api.mailShares.downloadOrphaned);
   const [purging, setPurging] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  const handleDownload = async (
+    shareId: Id<"mailShares">,
+    file: { kind: "eml" | "attachment"; index: number | null; name: string },
+  ) => {
+    const key = `${shareId}:${file.kind}:${file.index ?? ""}`;
+    setDownloading(key);
+    try {
+      const result = await download({
+        shareId,
+        file: file.kind,
+        ...(file.index === null ? {} : { index: file.index }),
+      });
+      const link = document.createElement("a");
+      link.href = result.url;
+      link.download = result.name || file.name;
+      link.rel = "noopener noreferrer";
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } catch (reason) {
+      toast.error(getErrorMessage(reason));
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const handlePurge = async (shareId: Id<"mailShares">) => {
     setPurging(shareId);
@@ -81,21 +110,44 @@ export function OrphanMailSharesCard() {
                   {formatDate(row.purgeAt)} · {formatSize(row.size)}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={purging === row.shareId}
-                onClick={() => void handlePurge(row.shareId)}
-              >
-                {purging === row.shareId ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Trash2 className="size-4" />
-                )}
-                Purgar ahora
-              </Button>
+              <div className="flex flex-wrap items-center gap-1">
+                {row.files.map((file) => {
+                  const key = `${row.shareId}:${file.kind}:${file.index ?? ""}`;
+                  return (
+                    <Button
+                      key={key}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="max-w-48 gap-1.5"
+                      disabled={downloading === key}
+                      onClick={() => void handleDownload(row.shareId, file)}
+                    >
+                      {downloading === key ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
+                      <span className="truncate">{file.name}</span>
+                    </Button>
+                  );
+                })}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={purging === row.shareId}
+                  onClick={() => void handlePurge(row.shareId)}
+                >
+                  {purging === row.shareId ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="size-4" />
+                  )}
+                  Purgar ahora
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

@@ -598,6 +598,97 @@ describe("mailShares: copias huérfanas", () => {
     ).toBe(true);
   });
 
+  test("el administrador descarga el adjunto y el .eml de una huérfana", async () => {
+    const { t, admin, adminId } = await setup();
+    const { shareId } = await seedOrphan(t, {
+      deletedAt: 1_800_000_000_000,
+      adminId,
+    });
+
+    // La copia aún no conserva el original: la ruta propia lo dice, no devuelve
+    // una URL vacía.
+    await expectConvexError(
+      admin.action(api.mailShares.downloadOrphaned, {
+        shareId,
+        file: "eml",
+      }),
+      "no conserva el archivo original",
+    );
+
+    await t.run(async (ctx) => {
+      const emlStorageId = await ctx.storage.store(
+        new Blob(["Subject: Presupuesto del SAT"], {
+          type: "message/rfc822",
+        }),
+      );
+      await ctx.db.patch(shareId, {
+        emlStorageId,
+        emlFileName: "correo.eml",
+        emlSize: 27,
+      });
+    });
+
+    const rows = await admin.query(api.mailShares.listOrphaned, {});
+    expect(rows[0].files).toEqual([
+      { kind: "eml", index: null, name: "correo.eml", size: 27 },
+      { kind: "attachment", index: 0, name: "presupuesto.pdf", size: 11 },
+    ]);
+
+    const attachment = await admin.action(api.mailShares.downloadOrphaned, {
+      shareId,
+      file: "attachment",
+      index: 0,
+    });
+    expect(attachment.name).toBe("presupuesto.pdf");
+    expect(attachment.contentType).toBe("application/pdf");
+    expect(attachment.url).toContain("api/storage/");
+
+    const original = await admin.action(api.mailShares.downloadOrphaned, {
+      shareId,
+      file: "eml",
+    });
+    expect(original.name).toBe("correo.eml");
+    expect(original.contentType).toBe("message/rfc822");
+    expect(original.url).toContain("api/storage/");
+  });
+
+  test("la descarga de huérfanas es solo del administrador", async () => {
+    const { t, tech, adminId } = await setup();
+    const { shareId } = await seedOrphan(t, {
+      deletedAt: 1_800_000_000_000,
+      adminId,
+    });
+
+    await expectConvexError(
+      tech.action(api.mailShares.downloadOrphaned, {
+        shareId,
+        file: "attachment",
+        index: 0,
+      }),
+      "administrador",
+    );
+  });
+
+  test("una copia viva no se descarga por la ruta de huérfanas", async () => {
+    const { t, admin, adminId } = await setup();
+    const { shareId } = await seedOrphan(t, { deletedAt: 0, adminId });
+    await t.run((ctx) =>
+      ctx.db.patch(shareId, {
+        destinationDeletedAt: undefined,
+        orphanPurgeAt: undefined,
+      }),
+    );
+
+    await expectConvexError(
+      admin.action(api.mailShares.downloadOrphaned, {
+        shareId,
+        file: "attachment",
+        index: 0,
+      }),
+      "no es huérfana",
+    );
+  });
+
   test("borrar el equipo deja su copia huérfana", async () => {
     const { t, admin, adminId } = await setup();
     const { shareId, equipmentId } = await seedOrphan(t, {
