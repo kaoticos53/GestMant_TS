@@ -83,3 +83,13 @@ idempotencia por `clientShareId`, rechazo sin `viewMailbox`, rechazo de un
 mensaje ajeno, rechazo sin la capacidad del destino, audiencia de incidencia
 para un miembro activo, invitado sin acceso, lectura sin `viewMailbox`, purga
 con lápida y borrado de objetos, y purga rechazada a quien no es administrador.
+
+---
+
+## 8. Corrección posterior
+
+`memberForSharing` repetía la comprobación de `viewMailbox` que ya hace
+`requireMailboxMember` dentro de `mailAccounts`, así que era inalcanzable: la
+puerta del buzón lanza antes. Se elimina y `shareContext`, `findTarget` y
+`canShare` llaman directamente a `requireMailboxMember`. El test «sin
+viewMailbox» comprueba la puerta real, que es la única que aplica esa regla.

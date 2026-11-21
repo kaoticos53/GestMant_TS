@@ -64,17 +64,6 @@ interface ShareContext {
   };
 }
 
-/** El miembro de la sesión con `viewMailbox`: compartir exige el módulo abierto. */
-async function memberForSharing(ctx: QueryCtx): Promise<Doc<"users">> {
-  const user = await requireMailboxMember(ctx);
-  if (!(await hasCapability(ctx, user, "viewMailbox"))) {
-    throw new ConvexError(
-      "Tu rol no tiene el buzón personal: no puedes compartir correo con el expediente.",
-    );
-  }
-  return user;
-}
-
 /**
  * Comprueba identidad, mensaje propio, destino vivo, capacidad y modo antes de
  * tocar red o almacenamiento. Una acción no lee la base de datos, así que todo
@@ -88,7 +77,9 @@ export const shareContext = internalQuery({
     mode: modeValidator,
   },
   handler: async (ctx, args): Promise<ShareContext> => {
-    const user = await memberForSharing(ctx);
+    // `requireMailboxMember` ya exige sesión de taller y `viewMailbox`, que es
+    // justo lo que pide compartir: no hay una segunda comprobación que hacer.
+    const user = await requireMailboxMember(ctx);
     const account = await readAccount(ctx, user._id);
     if (!account) throw new ConvexError("Todavía no has configurado tu buzón.");
 
@@ -691,7 +682,7 @@ export const findTarget = query({
     ctx,
     args,
   ): Promise<{ id: string; reference: string } | null> => {
-    const user = await memberForSharing(ctx);
+    const user = await requireMailboxMember(ctx);
     if (
       !(await hasCapability(ctx, user, SHARE_CAPABILITY[args.destinationType]))
     ) {
@@ -753,7 +744,7 @@ export const canShare = query({
   handler: async (
     ctx,
   ): Promise<{ canShare: boolean; grants: Record<string, boolean> }> => {
-    const user = await memberForSharing(ctx);
+    const user = await requireMailboxMember(ctx);
     const capabilities: Capability[] = [
       ...Object.values(SHARE_CAPABILITY),
       "createIncidentFromMail",

@@ -263,6 +263,8 @@ describe("mailShares.share", () => {
   });
 
   test("sin viewMailbox no se puede compartir", async () => {
+    // El rechazo lo da la puerta del buzón (`requireMailboxMember`), que es la
+    // única comprobación de `viewMailbox`: compartir no repite esa regla.
     const { noMailbox, incidentId } = await setup();
     await expectConvexError(
       noMailbox.action(api.mailShares.share, {
