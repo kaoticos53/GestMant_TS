@@ -91,7 +91,9 @@ export function OrphanMailSharesCard() {
           {rows.map((row) => (
             <li
               key={row.shareId}
-              className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+              // `min-w-0`: un ítem de grid no baja de su ancho mínimo, y el
+              // nombre largo de un archivo ensanchaba la fila y la tarjeta.
+              className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             >
               <div className="min-w-0 flex-1">
                 <p className="break-words text-sm font-medium">
@@ -105,7 +107,7 @@ export function OrphanMailSharesCard() {
                   {formatDate(row.purgeAt)} · {formatSize(row.size)}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+              <div className="flex min-w-0 flex-wrap items-center gap-1 sm:justify-end">
                 {row.files.map((file) => {
                   const key = `${row.shareId}:${file.kind}:${file.index ?? ""}`;
                   return (
@@ -114,7 +116,7 @@ export function OrphanMailSharesCard() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="max-w-full gap-1.5 sm:max-w-48"
+                      className="min-w-0 max-w-full gap-1.5 sm:max-w-48"
                       disabled={downloading === key}
                       onClick={() => void handleDownload(row.shareId, file)}
                     >
@@ -123,7 +125,7 @@ export function OrphanMailSharesCard() {
                       ) : (
                         <Download className="size-4" />
                       )}
-                      <span className="truncate">{file.name}</span>
+                      <span className="min-w-0 truncate">{file.name}</span>
                     </Button>
                   );
                 })}
