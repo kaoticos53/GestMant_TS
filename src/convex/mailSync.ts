@@ -327,7 +327,7 @@ async function resolveAuth(
   };
 }
 
-function incompleteTraversal(folder: MailFolder): ConvexError {
+function incompleteTraversal(folder: MailFolder): ConvexError<string> {
   return new ConvexError(
     `El recorrido de la carpeta «${folder.name}» no terminó; no se guardó y se reintentará en la próxima pasada.`,
   );

@@ -2,7 +2,7 @@
 
 - **ID:** `SPEC-0017`
 - **Título:** Módulo de correo: buzón personal de solo lectura sobre `hermes.rtva.es`, con sincronización de cabeceras, descarga bajo demanda y caché con descarte
-- **Estado:** **Aprobada — F1/F2 cerradas; F3 implementada (backend, vista, lista virtualizada y paginación por offset); pendiente solo la validación real contra Hermes; fases 4–6 pendientes**
+- **Estado:** **Aprobada — F1/F2 cerradas; F3 y F4 implementadas (cabeceras, vista, cuerpo, visor, adjuntos y caché); pendiente la validación real contra Hermes; fase 6 pendiente**
 - **Fecha:** 2026-11-21
 - **Fuentes clave:** [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md) (canónica), [`docs/especificacion-cliente-sync-correo.md`](../especificacion-cliente-sync-correo.md), `src/convex/mailSettings.ts`, `src/convex/_auth/secretCrypto.ts`, `src/convex/permissions.ts`, `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/crons.ts`, `src/convex/storageCleanup.ts`
 - **Fase del producto:** fase 1 (cliente de correo). La integración con IA es fase 2 y queda fuera de esta spec.
@@ -14,11 +14,11 @@
 
 Tres documentos gobiernan este módulo y **no tienen el mismo rango**:
 
-| Materia                                                                                          | Documento que manda                          | Cómo se aplica aquí                                                                                                                                            |
-| ------------------------------------------------------------------------------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Endpoints, operaciones SOAP, atributos, semántica de ids, errores, límites y cifras del servidor | [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md)         | **Canónico.** Si 0017 o la guía del cliente discrepan en esto, manda la referencia.                                                                            |
+| Materia                                                                                          | Documento que manda                                                                      | Cómo se aplica aquí                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoints, operaciones SOAP, atributos, semántica de ids, errores, límites y cifras del servidor | [`docs/referencia-servidor-hermes.md`](../referencia-servidor-hermes.md)                 | **Canónico.** Si 0017 o la guía del cliente discrepan en esto, manda la referencia.                                                                            |
 | Algoritmo de cliente, parseo MIME, visor, saneado y verificación de descargas                    | [`docs/especificacion-cliente-sync-correo.md`](../especificacion-cliente-sync-correo.md) | **Guía.** Se adopta salvo que 0017 decida otra cosa por el modelo Convex; sus decisiones de escritorio (SQLite, `.eml` en disco, WebView2) no son vinculantes. |
-| Producto, modelo de datos Convex, permisos, caché, UI y programación                             | esta `SPEC-0017`                             | **Decide** lo que no fijan el servidor ni el protocolo.                                                                                                        |
+| Producto, modelo de datos Convex, permisos, caché, UI y programación                             | esta `SPEC-0017`                                                                         | **Decide** lo que no fijan el servidor ni el protocolo.                                                                                                        |
 
 ### 0.1 Discrepancias detectadas y criterio aplicado
 
@@ -413,31 +413,31 @@ El administrador **no** puede leer ni configurar el buzón de otra persona: no h
 
 ## 12. Dependencias (autorizadas por el usuario)
 
-| Paquete           | Para qué                                                  | Dónde se usa                | Estado              |
-| ----------------- | --------------------------------------------------------- | --------------------------- | ------------------- |
-| `fast-xml-parser` | Parsear SOAP en el runtime de Convex (no hay `DOMParser`) | `src/lib/mailClient/`       | ✅ Instalado en F1   |
-| `postal-mime`     | Parsear RFC822, texto, HTML, `cid:` y adjuntos            | Acción `mailBody` (y tests) | Pendiente (fase 4)  |
-| `dompurify`       | Sanear HTML en el navegador                               | `HtmlFrame.tsx`             | Pendiente (fase 4)  |
+| Paquete           | Para qué                                                  | Dónde se usa                | Estado             |
+| ----------------- | --------------------------------------------------------- | --------------------------- | ------------------ |
+| `fast-xml-parser` | Parsear SOAP en el runtime de Convex (no hay `DOMParser`) | `src/lib/mailClient/`       | ✅ Instalado en F1 |
+| `postal-mime`     | Parsear RFC822, texto, HTML, `cid:` y adjuntos            | Acción `mailBody` (y tests) | ✅ Instalado en F4 |
+| `dompurify`       | Sanear HTML en el navegador                               | `HtmlFrame.tsx`             | ✅ Instalado en F4 |
 
-F1 instaló `fast-xml-parser`. `postal-mime` y `dompurify` (y `@types/dompurify` solo si la versión instalada no trae tipos) se incorporan en la fase 4. Se fijan versiones en `package.json` y se pasa `npm audit`.
+F1 instaló `fast-xml-parser`. `postal-mime` y `dompurify` se instalaron en la fase 4; no hicieron falta tipos aparte. Las versiones quedan fijadas en `package.json`.
 
 ---
 
 ## 13. Plan de implementación
 
-| Fase                      | Entregable                                                                                                                   | Criterio de salida                                                                                                                                                     | Tamaño       | Estado                                      |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------- |
-| **0. Base pura**          | `fast-xml-parser`; `mailClient/` con builders/parsers, paginación, política de caché y fixtures XML                          | `tests/mailClient.test.ts` y `tests/mailCache.test.ts` en verde; `tsc` sin errores                                                                                     | 1 sesión     | ✅ F1 cerrada                                |
-| **1. Cuenta y carpetas**  | Tablas, `mailAccounts`, ajustes «Mi buzón», capacidad `viewMailbox`, `GetFolder` y prueba de conexión                        | Alta y prueba de conexión con fixtures; la prueba real contra Hermes es puerta de F3; aislamiento entre dos usuarios probado                                           | 1–2 sesiones | ✅ F2 cerrada; prueba real en F3             |
+| Fase                      | Entregable                                                                                                                                            | Criterio de salida                                                                                                                                                     | Tamaño       | Estado                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------ |
+| **0. Base pura**          | `fast-xml-parser`; `mailClient/` con builders/parsers, paginación, política de caché y fixtures XML                                                   | `tests/mailClient.test.ts` y `tests/mailCache.test.ts` en verde; `tsc` sin errores                                                                                     | 1 sesión     | ✅ F1 cerrada                                                |
+| **1. Cuenta y carpetas**  | Tablas, `mailAccounts`, ajustes «Mi buzón», capacidad `viewMailbox`, `GetFolder` y prueba de conexión                                                 | Alta y prueba de conexión con fixtures; la prueba real contra Hermes es puerta de F3; aislamiento entre dos usuarios probado                                           | 1–2 sesiones | ✅ F2 cerrada; prueba real en F3                             |
 | **2. Cabeceras**          | `Search` paginado, upsert, listado virtualizado, contadores, búsqueda local y módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) | 1 554 cabeceras < 30 s (medido en la referencia: 5,4 s); 0 cuerpos descargados; segunda pasada sin duplicados                                                          | 1–2 sesiones | ✅ Backend, vista, lista y paginación; prueba real pendiente |
-| **3. Incremental y cron** | `Sync` (borrados + token), reanudación, reconciliación, cron horario y estado                                                | Delta de Archive `41 → 0`; token inválido reinicia sin perder datos; cron corre y salta cuentas al día **y las de usuarios de baja**                                   | 1–2 sesiones | ✅ Backend y tests; prueba real pendiente    |
-| **4. Cuerpo y visor**     | `postal-mime` y `dompurify`; `GetMsg` + servlet, verificación de bytes, MIME, una sola copia, HTML saneado, texto, `cid:`     | Bytes = `s`; el RFC822 no queda almacenado; 4 adjuntos visibles; sin cambios de leído en el webmail                                                                    | 2 sesiones   | Pendiente                                   |
-| **5. Adjuntos y caché**   | Extracción y descarga de adjuntos, LRU configurable (512 MB/30 días por defecto), barrido diario, «Vaciar caché»             | Expulsión correcta contando cuerpo y adjuntos; descarga posterior sin volver a bajar el mensaje; **ninguna copia compartida entra en el presupuesto ni en el barrido** | 1–2 sesiones | Pendiente                                   |
-| **6. Cierre**             | Tests de seguridad/arquitectura, `tsc`, docs (`0010`, `0013`, `0015`, `0016`, esta spec) y revisión de `storageCleanup`      | Suite relevante en verde; sin regresiones en `tests/arquitectura.test.ts` ni `tests/seguridad.test.ts`                                                                 | 1 sesión     | Pendiente                                   |
+| **3. Incremental y cron** | `Sync` (borrados + token), reanudación, reconciliación, cron horario y estado                                                                         | Delta de Archive `41 → 0`; token inválido reinicia sin perder datos; cron corre y salta cuentas al día **y las de usuarios de baja**                                   | 1–2 sesiones | ✅ Backend y tests; prueba real pendiente                    |
+| **4. Cuerpo y visor**     | `postal-mime` y `dompurify`; `GetMsg` + servlet, verificación de bytes, MIME, una sola copia, HTML saneado, texto, `cid:`                             | Bytes = `s`; el RFC822 no queda almacenado; 4 adjuntos visibles; sin cambios de leído en el webmail                                                                    | 2 sesiones   | ✅ Implementada; prueba real pendiente                       |
+| **5. Adjuntos y caché**   | Extracción y descarga de adjuntos, LRU configurable (512 MB/30 días por defecto), barrido diario, «Vaciar caché»                                      | Expulsión correcta contando cuerpo y adjuntos; descarga posterior sin volver a bajar el mensaje; **ninguna copia compartida entra en el presupuesto ni en el barrido** | 1–2 sesiones | ✅ Implementada; prueba real pendiente                       |
+| **6. Cierre**             | Tests de seguridad/arquitectura, `tsc`, docs (`0010`, `0013`, `0015`, `0016`, esta spec) y revisión de `storageCleanup`                               | Suite relevante en verde; sin regresiones en `tests/arquitectura.test.ts` ni `tests/seguridad.test.ts`                                                                 | 1 sesión     | Pendiente                                                    |
 
-F1 y F2 están cerradas. F3 está implementada de extremo a extremo en código: esquema `mailHeaders`, listado/búsqueda local, sincronización inicial e incremental, tumbas, lease, cron, módulo «Correo», vista, lista virtualizada y paginación por offset. Solo queda la validación real contra Hermes (1 554 cabeceras, 0 cuerpos, segunda pasada y token).
+F1 y F2 están cerradas. F3 y F4 están implementadas de extremo a extremo en código: cabeceras, vista, lista virtualizada, paginación, descarga y verificación de cuerpos, MIME, visor HTML saneado en iframe, adjuntos, LRU, caducidad, «Vaciar caché» y barrido diario. Solo queda la validación real contra Hermes (1 554 cabeceras, apertura y adjuntos de un mensaje, segunda pasada y token).
 
-Total orientativo: **8–11 sesiones de trabajo**; F1/F2 están cerradas y F3 está implementada salvo la prueba real. Cada fase termina con algo usable y verificable; no se empieza la siguiente sin su criterio de salida.
+Total orientativo: **8–11 sesiones de trabajo**; F1/F2 están cerradas y F3/F4 implementadas salvo la prueba real. Cada fase termina con algo usable y verificable; no se empieza la siguiente sin su criterio de salida.
 
 ---
 
@@ -506,18 +506,18 @@ Total orientativo: **8–11 sesiones de trabajo**; F1/F2 están cerradas y F3 es
 
 ### 14.1 Verificación automatizada
 
-| Área                                                           | Tests                                                   | Estado          |
-| -------------------------------------------------------------- | ------------------------------------------------------- | --------------- |
-| Parsers SOAP y fixtures                                        | `tests/mailClient.test.ts`                              | ✅ F1           |
-| Política de caché (LRU, caducidad, presupuesto)                | `tests/mailCache.test.ts`                               | ✅ F1           |
-| Cuenta, cifrado y aislamiento                                  | `tests/mailAccounts.test.ts`                            | ✅ F2           |
-| Ajustes «Mi buzón» y permisos                                  | `tests/workshopSettingsView.test.tsx`, `tests/workshopSettingsViewHelpers.test.ts`, `tests/abilities.test.ts`, `tests/navConfig.test.ts` | ✅ F2 |
-| Paginación, token, borrados y reanudación con `fetch` simulado | `tests/mailSync.test.ts`                                | ✅ F3 backend    |
-| Bytes, MIME y extracción de adjuntos                           | `tests/mailBody.test.ts`                                | Pendiente (F4)  |
-| Vista, lista virtualizada, estados y paginación                 | `tests/mailboxView.test.tsx`, `tests/mailHeaders.test.ts` | ✅ F3            |
-| Visor de cuerpo, MIME, HTML y `cid:`                           | `tests/mailBody.test.ts`                                | Pendiente (F4)  |
-| Baja de usuario en el cron                                     | `tests/mailSync.test.ts`                                | ✅ F3 backend    |
-| Reglas del repositorio                                         | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts` | ✅              |
+| Área                                                           | Tests                                                                                                                                    | Estado         |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| Parsers SOAP y fixtures                                        | `tests/mailClient.test.ts`                                                                                                               | ✅ F1          |
+| Política de caché (LRU, caducidad, presupuesto)                | `tests/mailCache.test.ts`                                                                                                                | ✅ F1          |
+| Cuenta, cifrado y aislamiento                                  | `tests/mailAccounts.test.ts`                                                                                                             | ✅ F2          |
+| Ajustes «Mi buzón» y permisos                                  | `tests/workshopSettingsView.test.tsx`, `tests/workshopSettingsViewHelpers.test.ts`, `tests/abilities.test.ts`, `tests/navConfig.test.ts` | ✅ F2          |
+| Paginación, token, borrados y reanudación con `fetch` simulado | `tests/mailSync.test.ts`                                                                                                                 | ✅ F3 backend  |
+| Bytes, MIME y extracción de adjuntos                           | `tests/mailBody.test.ts`                                                                                                                 | Pendiente (F4) |
+| Vista, lista virtualizada, estados y paginación                | `tests/mailboxView.test.tsx`, `tests/mailHeaders.test.ts`                                                                                | ✅ F3          |
+| Visor de cuerpo, MIME, HTML y `cid:`                           | `tests/mailBody.test.ts`                                                                                                                 | Pendiente (F4) |
+| Baja de usuario en el cron                                     | `tests/mailSync.test.ts`                                                                                                                 | ✅ F3 backend  |
+| Reglas del repositorio                                         | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts`                                                                                  | ✅             |
 
 Comandos de cierre por fase: `npx tsc --noEmit`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
 

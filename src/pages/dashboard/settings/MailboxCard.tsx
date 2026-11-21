@@ -125,11 +125,13 @@ function MailboxEditor({
   const testConnection = useAction(api.mailAccounts.testConnection);
   const disconnect = useMutation(api.mailAccounts.disconnect);
   const remove = useMutation(api.mailAccounts.remove);
+  const emptyCache = useMutation(api.mailCache.empty);
 
   const [form, setForm] = useState<MailboxForm>(() => formFromAccount(account));
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
   const [deleteCache, setDeleteCache] = useState(false);
 
   const handleSave = async () => {
@@ -176,6 +178,29 @@ function MailboxEditor({
       toast.error(getErrorMessage(error));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleEmptyCache = async () => {
+    if (
+      !window.confirm(
+        "Se borrarán los cuerpos y adjuntos descargados. Las cabeceras y el buzón remoto no se tocan.",
+      )
+    ) {
+      return;
+    }
+    setClearingCache(true);
+    try {
+      const result = await emptyCache({});
+      toast.success(
+        `Caché vaciada: ${result.messages} ${
+          result.messages === 1 ? "mensaje" : "mensajes"
+        } y ${formatFileSize(result.bytes)}.`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setClearingCache(false);
     }
   };
 
@@ -422,6 +447,20 @@ function MailboxEditor({
               {formatFileSize(account.cacheLimitBytes)} ·{" "}
               {account.cacheRetentionDays} días de retención
             </p>
+            <p className="text-xs text-muted-foreground">
+              Cuerpo: {formatFileSize(account.cacheBodyBytes)} · Adjuntos:{" "}
+              {formatFileSize(account.cacheAttachmentBytes)}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1 w-fit"
+              disabled={clearingCache || account.cacheBytes === 0}
+              onClick={() => void handleEmptyCache()}
+            >
+              {clearingCache ? "Vaciando..." : "Vaciar caché"}
+            </Button>
             {account.lastSyncAt !== null && (
               <p className="text-xs text-muted-foreground">
                 Última sincronización: {formatDateTime(account.lastSyncAt)}

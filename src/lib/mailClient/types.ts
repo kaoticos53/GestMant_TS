@@ -57,3 +57,23 @@ export interface MailAuthSession {
   authToken: string;
   lifetimeMs: number;
 }
+
+/** Una parte adjunta ya decodificada, antes de guardarla en `_storage`. */
+export interface MailAttachmentPart {
+  partIndex: number;
+  filename: string | null;
+  contentType: string;
+  contentId: string | null;
+  inline: boolean;
+  content: Uint8Array;
+}
+
+/** Lo que se persiste del RFC822: texto, HTML y partes, nunca el original. */
+export interface MailMessageContent {
+  text: string;
+  textTruncated: boolean;
+  html: string | null;
+  htmlTruncated: boolean;
+  bodyBytes: number;
+  attachments: MailAttachmentPart[];
+}

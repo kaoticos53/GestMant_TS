@@ -29,6 +29,7 @@ import {
 import type { MailFolder } from "../lib/mailClient/types";
 import { hasCapability, memberStatus } from "./permissions";
 import { MailSoapError, postSoap } from "./_mail/soap";
+import { deleteAccountContent } from "./_mail/cache";
 
 const MAILBOX_DENY =
   "No tienes permisos para usar el buzón de correo. Revisa la configuración de tu rol con el administrador.";
@@ -58,6 +59,8 @@ function publicAccount(row: Doc<"mailAccounts">) {
     cacheLimitBytes: row.cacheLimitBytes,
     cacheRetentionDays: row.cacheRetentionDays,
     cacheBytes: row.cacheBytes,
+    cacheBodyBytes: row.cacheBodyBytes,
+    cacheAttachmentBytes: row.cacheAttachmentBytes,
     hasPassword: (row.password ?? "").trim() !== "",
     passwordHint: row.passwordHint ?? "",
     lastSyncAt: row.lastSyncAt ?? null,
@@ -214,6 +217,7 @@ export const save = mutation({
       if (existing) {
         await ctx.db.patch(existing._id, record);
         if (emailChanged) {
+          await deleteAccountContent(ctx, existing._id);
           await deleteHeaders(ctx, existing._id);
           await deleteFolders(ctx, existing._id);
         }
@@ -312,6 +316,26 @@ export const connectionContext = internalQuery({
       authToken: row.authToken ?? "",
       tokenExpiresAt: row.tokenExpiresAt ?? 0,
     };
+  },
+});
+
+/** Guarda el token renovado por una apertura de cuerpo, sin tocar carpetas. */
+export const recordAuthToken = internalMutation({
+  args: {
+    accountId: v.id("mailAccounts"),
+    authToken: v.string(),
+    tokenExpiresAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.accountId);
+    if (!account) throw new ConvexError("La cuenta del buzón ya no existe.");
+    await ctx.db.patch(account._id, {
+      status: "connected",
+      authToken: args.authToken,
+      tokenExpiresAt: args.tokenExpiresAt,
+      lastSyncError: undefined,
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -484,7 +508,10 @@ export const disconnect = mutation({
       const row = await readAccount(ctx, actor._id);
       if (!row) return true;
 
-      if (args.deleteCache) await deleteFolders(ctx, row._id);
+      if (args.deleteCache) {
+        await deleteAccountContent(ctx, row._id);
+        await deleteFolders(ctx, row._id);
+      }
 
       await ctx.db.patch(row._id, {
         status: "disconnected",
@@ -527,6 +554,7 @@ export const remove = mutation({
       if (!row) return true;
 
       await deleteHeaders(ctx, row._id);
+      await deleteAccountContent(ctx, row._id);
       await deleteFolders(ctx, row._id);
       await ctx.db.delete(row._id);
       await logSecurityEvent(ctx, {

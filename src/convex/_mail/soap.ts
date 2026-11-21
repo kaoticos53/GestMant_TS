@@ -6,13 +6,14 @@ export const SOAP_ENDPOINT = `${MAIL_SERVER_URL}/service/soap`;
 
 /** Fallo de transporte o fault de negocio, con el código ya separado. */
 export class MailSoapError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly fault: MailFault | null,
-  ) {
+  readonly status: number;
+  readonly fault: MailFault | null;
+
+  constructor(message: string, status: number, fault: MailFault | null) {
     super(message);
     this.name = "MailSoapError";
+    this.status = status;
+    this.fault = fault;
   }
 }
 

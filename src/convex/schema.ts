@@ -1529,6 +1529,41 @@ const schema = defineSchema({
     .index("by_user_message", ["userId", "accountId", "messageId"])
     .index("by_user_cached", ["userId", "bodyState", "cachedAt"])
     .index("by_user_last_opened", ["userId", "lastOpenedAt"]),
+
+  // Cuerpo ya extraído. El RFC822 completo no se guarda: se descarga, se
+  // verifica contra `s` y se descarta. `bodyBytes` es el contenido persistido y
+  // entra en el presupuesto de la caché.
+  mailBodies: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("mailAccounts"),
+    messageId: v.string(),
+    text: v.string(),
+    textTruncated: v.boolean(),
+    html: v.optional(v.string()),
+    htmlTruncated: v.boolean(),
+    bodyBytes: v.number(),
+    parsedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user_message", ["userId", "accountId", "messageId"]),
+
+  // Una fila por parte adjunta, incluidas las imágenes `cid:` sin nombre. El
+  // objeto de `_storage` es la única copia de sus bytes.
+  mailAttachments: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("mailAccounts"),
+    messageId: v.string(),
+    partIndex: v.number(),
+    filename: v.optional(v.string()),
+    contentType: v.string(),
+    size: v.number(),
+    contentId: v.optional(v.string()),
+    inline: v.boolean(),
+    storageId: v.id("_storage"),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user_message", ["userId", "accountId", "messageId"]),
 });
 
 export default schema;

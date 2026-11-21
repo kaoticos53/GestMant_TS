@@ -14,13 +14,15 @@ interface MessageListProps {
   page: number;
   search: string;
   syncing: boolean;
+  selectedMessageId: string | null;
+  onSelectMessage: (header: MailboxHeader) => void;
   onSync: () => void;
   onClearSearch: () => void;
 }
 
 /**
- * La lista de cabeceras de una carpeta. No pide ni pinta cuerpos: F3 termina en
- * el asunto, el remitente, la fecha y el fragmento que ya trae la cabecera.
+ * La lista de cabeceras de una carpeta. No pide ni pinta cuerpos: solo asunto,
+ * remitente, fecha y fragmento; abrir el mensaje es cosa del visor.
  */
 export function MessageList({
   headers,
@@ -29,6 +31,8 @@ export function MessageList({
   page,
   search,
   syncing,
+  selectedMessageId,
+  onSelectMessage,
   onSync,
   onClearSearch,
 }: MessageListProps) {
@@ -109,14 +113,27 @@ export function MessageList({
           const header = headers[index];
           if (!header) return null;
           const unread = isUnread(header.flags);
+          const selected = header.messageId === selectedMessageId;
           return (
             <li
               key={header.messageId}
               data-index={index}
               ref={virtual.active ? virtual.measureElement : undefined}
+              role="button"
+              tabIndex={0}
+              aria-current={selected ? "true" : undefined}
+              aria-label={`Abrir ${header.subject || "mensaje sin asunto"}`}
+              onClick={() => onSelectMessage(header)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectMessage(header);
+                }
+              }}
               className={cn(
-                "group flex gap-3 px-4 py-3 transition-colors hover:bg-muted/40",
+                "group flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-signal/60",
                 unread && "bg-signal/[0.035]",
+                selected && "bg-signal/10 hover:bg-signal/10",
               )}
             >
               <span

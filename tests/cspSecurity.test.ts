@@ -6,9 +6,16 @@ import { describe, expect, test } from "vitest";
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
 describe("Seguridad AppSec: Higiene de CSP y SCA (Fase 3)", () => {
-  test("package.json no contiene librerías huérfanas sin invocar (dompurify retirada)", () => {
+  test("dompurify está instalada y el visor la usa para sanear el HTML", () => {
     const pkg = JSON.parse(readFileSync(join(RAIZ, "package.json"), "utf8"));
-    expect(pkg.dependencies?.dompurify).toBeUndefined();
+    expect(pkg.dependencies?.dompurify).toBeTruthy();
+    const frame = readFileSync(
+      join(RAIZ, "src", "pages", "dashboard", "mailbox", "HtmlFrame.tsx"),
+      "utf8",
+    );
+    expect(frame).toContain("DOMPurify.sanitize");
+    expect(frame).toContain("sandbox");
+    expect(frame).not.toContain("dangerouslySetInnerHTML");
   });
 
   test("vite.config.ts contempla la limpieza de comodines localhost/127.0.0.1 en la CSP de producción", () => {

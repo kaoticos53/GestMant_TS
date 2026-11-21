@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 implementada con backend, vista, lista virtualizada y paginación por offset; queda solo la validación real contra Hermes) y 0018 pendiente de aprobación antes de F5.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y 0018 pendiente de aprobación antes de F5.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -276,6 +276,8 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 **Fin de F4:** el buzón de solo lectura está completo. A partir de aquí puede empezar 0018.
 
+**Estado:** implementada en código con `postal-mime`, `dompurify`, descarga verificada, visor de tres paneles, adjuntos, LRU, caducidad, «Vaciar caché» y barrido que purga la caché si el dueño pierde `viewMailbox`. Queda la validación real contra Hermes (apertura, adjuntos, `cid:` y comprobación de que no cambia el flag de leído).
+
 ---
 
 ### Fase 5 — 0018: esquema, permisos y compartición
@@ -516,16 +518,16 @@ F0 Aprobación
 
 ## 6. Matriz de verificación
 
-| Fase | Pruebas automatizadas                                                                | Verificación manual                                        |
-| ---- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| F1   | `tests/mailClient.test.ts`, `tests/mailCache.test.ts`, `tests/arquitectura.test.ts`  | Ninguna; solo fixtures.                                    |
-| F2   | `tests/mailAccounts.test.ts`, tests de ajustes                                       | Alta, prueba de conexión y aislamiento entre dos usuarios. |
+| Fase | Pruebas automatizadas                                                                                    | Verificación manual                                        |
+| ---- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| F1   | `tests/mailClient.test.ts`, `tests/mailCache.test.ts`, `tests/arquitectura.test.ts`                      | Ninguna; solo fixtures.                                    |
+| F2   | `tests/mailAccounts.test.ts`, tests de ajustes                                                           | Alta, prueba de conexión y aislamiento entre dos usuarios. |
 | F3   | `tests/mailSync.test.ts`, `tests/mailHeaders.test.ts`, `tests/mailboxView.test.tsx`, tests de navegación | Sincronización real, 1 554 cabeceras, sin cuerpos.         |
-| F4   | `tests/mailBody.test.ts`, `tests/mailboxView.test.tsx`                               | Abrir mensaje, adjuntos, HTML, `cid:`, no marcar leído.    |
-| F5   | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`                          | Compartir en cada destino, permisos y modos.               |
-| F6   | `tests/mailShares.test.ts`, `tests/trash.test.ts`, `tests/storageCleanup.test.ts`    | Restaurar, purgar, borrar equipo/manual, lápida.           |
-| F7   | `tests/workshopBackup.test.ts`, `tests/workshopReset.test.ts`, `tests/audit.test.ts` | Backup/restore y reset en local.                           |
-| F8   | Suite completa, `npm run security:check`                                             | Piloto con buzones reales y revisión de permisos.          |
+| F4   | `tests/mailBody.test.ts`, `tests/mailHtml.test.tsx`, `tests/mailboxView.test.tsx`                        | Abrir mensaje, adjuntos, HTML, `cid:`, no marcar leído.    |
+| F5   | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`                                              | Compartir en cada destino, permisos y modos.               |
+| F6   | `tests/mailShares.test.ts`, `tests/trash.test.ts`, `tests/storageCleanup.test.ts`                        | Restaurar, purgar, borrar equipo/manual, lápida.           |
+| F7   | `tests/workshopBackup.test.ts`, `tests/workshopReset.test.ts`, `tests/audit.test.ts`                     | Backup/restore y reset en local.                           |
+| F8   | Suite completa, `npm run security:check`                                                                 | Piloto con buzones reales y revisión de permisos.          |
 
 ### Comandos de cierre
 
@@ -634,4 +636,4 @@ La implantación se considera terminada cuando:
 
 ## 11. Próxima acción
 
-0017 está aprobada y F1–F3 están implementadas en código. La siguiente acción es cerrar F3 con la validación real contra Hermes: conectividad, contraseñas de aplicación, cifrado, backup y usuarios del piloto, además de 1 554 cabeceras, 0 cuerpos y segunda pasada sin duplicados. 0018 sigue en Propuesta y debe aprobarse antes de F5; no se debe abrir el piloto ni empezar F5 sin cerrar esa validación.
+0017 está aprobada y F1–F4 están implementadas en código. La siguiente acción es cerrar la validación real contra Hermes: conectividad, contraseñas de aplicación, cifrado, backup y usuarios del piloto, además de 1 554 cabeceras, 0 cuerpos en la sincronización, segunda pasada sin duplicados y apertura de un mensaje con adjuntos y `cid:` sin marcar leído. 0018 sigue en Propuesta y debe aprobarse antes de F5; no se debe abrir el piloto ni empezar F5 sin cerrar esa validación.

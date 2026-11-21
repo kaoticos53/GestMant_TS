@@ -59,6 +59,19 @@ crons.daily(
 );
 
 /**
+ * Caducidad de la caché de correo: borra los cuerpos y adjuntos que llevan más
+ * días sin abrirse que la retención de cada cuenta y reconcilia sus contadores.
+ * Va después de la limpieza general del almacén y no toca las cabeceras ni las
+ * copias compartidas.
+ */
+crons.daily(
+  "caducar la cache de correo",
+  { hourUTC: 4, minuteUTC: 45 },
+  internal.mailCache.sweepExpired,
+  {},
+);
+
+/**
  * Papelera del almacén: borra de verdad lo que cumplió su plazo sin que nadie
  * lo rescatara. Va después de las dos pasadas que retiran archivos —así la
  * papelera de esta noche ya está llena antes de mirar qué caduca— y no toca nada

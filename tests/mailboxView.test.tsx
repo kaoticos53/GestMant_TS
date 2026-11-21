@@ -123,11 +123,17 @@ function setupQueries({
   folders = FOLDERS,
   headers = { headers: HEADERS, total: HEADERS.length, unread: 1 },
   headersForArgs,
+  actions,
 }: {
   account?: typeof ACCOUNT | null;
   folders?: typeof FOLDERS | undefined;
   headers?: HeadersResult;
   headersForArgs?: (args: Record<string, unknown>) => HeadersResult;
+  actions?: {
+    sync?: ReturnType<typeof vi.fn>;
+    open?: ReturnType<typeof vi.fn>;
+    download?: ReturnType<typeof vi.fn>;
+  };
 } = {}) {
   // `api` es un proxy de Convex y cada acceso puede devolver una referencia
   // distinta, así que se distingue por los argumentos y el orden de las dos
@@ -142,9 +148,34 @@ function setupQueries({
       return callsWithoutArgs % 2 === 1 ? account : folders;
     },
   );
-  mockUseAction.mockReturnValue(
-    vi.fn().mockResolvedValue({ ok: true, folders: 1, headers: 2 }),
-  );
+  const sync =
+    actions?.sync ??
+    vi.fn().mockResolvedValue({ ok: true, folders: 1, headers: 2 });
+  const open =
+    actions?.open ??
+    vi.fn().mockResolvedValue({
+      cached: false,
+      text: "",
+      textTruncated: false,
+      html: null,
+      htmlTruncated: false,
+      bodyBytes: 0,
+      attachments: [],
+    });
+  const download =
+    actions?.download ??
+    vi
+      .fn()
+      .mockResolvedValue({
+        url: "https://storage.example/a",
+        filename: "a.pdf",
+      });
+  const dispatch = vi.fn((args: Record<string, unknown> = {}) => {
+    if ("messageId" in args) return open(args);
+    if ("attachmentId" in args) return download(args);
+    return sync(args);
+  });
+  mockUseAction.mockReturnValue(dispatch);
 }
 
 describe("MailboxView", () => {
@@ -356,6 +387,38 @@ describe("MailboxView", () => {
     expect(listCalls().at(-1)).toMatchObject({ offset: 0 });
     expect(container.textContent).toContain("Asunto 1");
     expect(container.textContent).not.toContain("Esta carpeta está vacía");
+  });
+
+  it("abre el mensaje seleccionado en el visor sin pedir cuerpo al listar", async () => {
+    const open = vi.fn().mockResolvedValue({
+      cached: false,
+      text: "Cuerpo del mensaje seleccionado.",
+      textTruncated: false,
+      html: null,
+      htmlTruncated: false,
+      bodyBytes: 29,
+      attachments: [],
+    });
+    setupQueries({ actions: { open } });
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+    expect(open).not.toHaveBeenCalled();
+
+    const firstRow = container.querySelector<HTMLElement>('li[role="button"]');
+    expect(firstRow).not.toBeNull();
+    await act(async () => {
+      firstRow?.click();
+      await settle();
+    });
+
+    expect(open).toHaveBeenCalledWith({ messageId: "m-2" });
+    expect(container.textContent).toContain("Cuerpo del mensaje seleccionado.");
+    expect(
+      container.querySelector('[aria-label="Volver a la lista"]'),
+    ).not.toBeNull();
   });
 
   it("avisa cuando las credenciales necesitan reautenticación", async () => {

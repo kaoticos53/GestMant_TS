@@ -6,6 +6,7 @@ import { pageWindow } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import { formatDateTime, getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   AlertTriangle,
   Archive,
@@ -28,9 +29,17 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { countLabel, MAILBOX_PAGE_SIZE } from "./mailbox/helpers";
 import { MessageList, MessageListSkeleton } from "./mailbox/MessageList";
-import type { MailboxAccount, MailboxFolder } from "./mailbox/types";
+import {
+  MessageViewer,
+  MessageViewerPlaceholder,
+} from "./mailbox/MessageViewer";
+import type {
+  MailboxAccount,
+  MailboxFolder,
+  MailboxHeader,
+} from "./mailbox/types";
 
-type MobilePane = "folders" | "messages";
+type MobilePane = "folders" | "messages" | "message";
 
 interface PageState {
   /** Carpeta + búsqueda a la que pertenece la página. */
@@ -75,6 +84,9 @@ export function MailboxView({
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("folders");
+  const [selectedMessage, setSelectedMessage] = useState<MailboxHeader | null>(
+    null,
+  );
   const [syncing, setSyncing] = useState(false);
   const [pageState, setPageState] = useState<PageState>({
     key: "",
@@ -120,12 +132,24 @@ export function MailboxView({
   }
 
   const handlePageChange = (nextPage: number) => {
+    setSelectedMessage(null);
     setPageState({ key: pageKey, page: nextPage });
   };
 
   const handleSelectFolder = (folder: MailboxFolder) => {
     setSelectedFolderId(folder.remoteId);
     setSearch("");
+    setSelectedMessage(null);
+    setMobilePane("messages");
+  };
+
+  const handleSelectMessage = (header: MailboxHeader) => {
+    setSelectedMessage(header);
+    setMobilePane("message");
+  };
+
+  const handleCloseMessage = () => {
+    setSelectedMessage(null);
     setMobilePane("messages");
   };
 
@@ -176,125 +200,162 @@ export function MailboxView({
         onOpenSettings={onOpenSettings}
       />
 
-      <section
-        className={cn(
-          "min-w-0 flex-1 flex-col",
-          mobilePane === "messages" ? "flex" : "hidden lg:flex",
-        )}
-      >
-        {activeFolder === null ? (
-          folders === undefined ? (
-            <MessageAreaSkeleton />
-          ) : (
-            <MailboxWithoutFolders
-              syncing={syncing}
-              onSync={() => void handleSync()}
-            />
-          )
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2.5 sm:px-4">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1 lg:hidden"
-                onClick={() => setMobilePane("folders")}
-              >
-                <ChevronLeft className="size-4" />
-                Carpetas
-              </Button>
-              <div className="min-w-0 flex-1">
-                <h2 className="truncate text-sm font-semibold">
-                  {activeFolder.name}
-                </h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {headersResult === undefined
-                    ? "Cargando mensajes..."
-                    : headersResult.total === 0
-                      ? "Sin mensajes"
-                      : `${countLabel(
-                          headersResult.total,
-                          "mensaje",
-                          "mensajes",
-                        )}${
-                          headersResult.unread > 0
-                            ? ` · ${countLabel(
-                                headersResult.unread,
-                                "sin leer",
-                                "sin leer",
-                              )}`
-                            : ""
-                        }`}
-                </p>
-              </div>
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Buscar asunto o remitente"
-                    aria-label="Buscar en esta carpeta"
-                    className="h-9 pl-8"
-                  />
+      <PanelGroup direction="horizontal" className="min-h-0 min-w-0 flex-1">
+        <Panel
+          defaultSize={52}
+          minSize={30}
+          className={cn(
+            "min-w-0 flex-col",
+            mobilePane === "messages" ? "flex" : "hidden lg:flex",
+          )}
+        >
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {activeFolder === null ? (
+              folders === undefined ? (
+                <MessageAreaSkeleton />
+              ) : (
+                <MailboxWithoutFolders
+                  syncing={syncing}
+                  onSync={() => void handleSync()}
+                />
+              )
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2.5 sm:px-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 lg:hidden"
+                    onClick={() => setMobilePane("folders")}
+                  >
+                    <ChevronLeft className="size-4" />
+                    Carpetas
+                  </Button>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-sm font-semibold">
+                      {activeFolder.name}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {headersResult === undefined
+                        ? "Cargando mensajes..."
+                        : headersResult.total === 0
+                          ? "Sin mensajes"
+                          : `${countLabel(
+                              headersResult.total,
+                              "mensaje",
+                              "mensajes",
+                            )}${
+                              headersResult.unread > 0
+                                ? ` · ${countLabel(
+                                    headersResult.unread,
+                                    "sin leer",
+                                    "sin leer",
+                                  )}`
+                                : ""
+                            }`}
+                    </p>
+                  </div>
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={search}
+                        onChange={(event) => {
+                          setSearch(event.target.value);
+                          setSelectedMessage(null);
+                        }}
+                        placeholder="Buscar asunto o remitente"
+                        aria-label="Buscar en esta carpeta"
+                        className="h-9 pl-8"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-2"
+                      disabled={syncing}
+                      onClick={() => void handleSync()}
+                    >
+                      {syncing ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="size-4" />
+                      )}
+                      <span className="hidden sm:inline">
+                        {syncing ? "Sincronizando..." : "Sincronizar"}
+                      </span>
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-2"
-                  disabled={syncing}
-                  onClick={() => void handleSync()}
-                >
-                  {syncing ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-4" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {syncing ? "Sincronizando..." : "Sincronizar"}
-                  </span>
-                </Button>
-              </div>
-            </div>
 
-            <MailboxAlert
-              account={account}
-              syncing={syncing}
-              onSync={() => void handleSync()}
+                <MailboxAlert
+                  account={account}
+                  syncing={syncing}
+                  onSync={() => void handleSync()}
+                  onOpenSettings={onOpenSettings}
+                />
+
+                {headersResult === undefined || pageOutOfRange ? (
+                  <MessageListSkeleton />
+                ) : (
+                  <MessageList
+                    headers={headersResult.headers}
+                    folderName={activeFolder.name}
+                    folderRemoteId={activeFolder.remoteId}
+                    page={page}
+                    search={search}
+                    syncing={syncing}
+                    selectedMessageId={selectedMessage?.messageId ?? null}
+                    onSelectMessage={handleSelectMessage}
+                    onSync={() => void handleSync()}
+                    onClearSearch={() => {
+                      setSearch("");
+                      setSelectedMessage(null);
+                    }}
+                  />
+                )}
+                {headersResult !== undefined && !pageOutOfRange && (
+                  <TablePagination
+                    paging={{ ...paging, setPage: handlePageChange }}
+                    singular="mensaje"
+                    plural="mensajes"
+                    detail={
+                      search.trim() === ""
+                        ? activeFolder.name
+                        : `con la búsqueda «${search.trim()}»`
+                    }
+                  />
+                )}
+              </>
+            )}
+          </section>
+        </Panel>
+
+        <PanelResizeHandle className="hidden w-1 shrink-0 bg-border/70 transition-colors hover:bg-signal/40 lg:block" />
+
+        <Panel
+          defaultSize={48}
+          minSize={28}
+          className={cn(
+            "min-w-0 flex-col",
+            mobilePane === "message" ? "flex" : "hidden lg:flex",
+          )}
+        >
+          {selectedMessage ? (
+            <MessageViewer
+              key={selectedMessage.messageId}
+              header={selectedMessage}
+              folderName={activeFolder?.name ?? "Correo"}
+              onClose={handleCloseMessage}
               onOpenSettings={onOpenSettings}
             />
-
-            {headersResult === undefined || pageOutOfRange ? (
-              <MessageListSkeleton />
-            ) : (
-              <MessageList
-                headers={headersResult.headers}
-                folderName={activeFolder.name}
-                folderRemoteId={activeFolder.remoteId}
-                page={page}
-                search={search}
-                syncing={syncing}
-                onSync={() => void handleSync()}
-                onClearSearch={() => setSearch("")}
-              />
-            )}
-            {headersResult !== undefined && !pageOutOfRange && (
-              <TablePagination
-                paging={{ ...paging, setPage: handlePageChange }}
-                singular="mensaje"
-                plural="mensajes"
-                detail={
-                  search.trim() === ""
-                    ? activeFolder.name
-                    : `con la búsqueda «${search.trim()}»`
-                }
-              />
-            )}
-          </>
-        )}
-      </section>
+          ) : (
+            <MessageViewerPlaceholder />
+          )}
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }
@@ -321,7 +382,7 @@ function MailboxSidebar({
   return (
     <aside
       className={cn(
-        "w-full shrink-0 flex-col border-b border-border/70 bg-muted/15 lg:w-64 lg:border-b-0 lg:border-r",
+        "min-h-0 w-full shrink-0 flex-1 flex-col border-b border-border/70 bg-muted/15 lg:w-64 lg:flex-none lg:border-b-0 lg:border-r",
         mobilePane === "folders" ? "flex" : "hidden lg:flex",
       )}
     >
