@@ -1547,6 +1547,84 @@ const schema = defineSchema({
     .index("by_account", ["accountId"])
     .index("by_user_message", ["userId", "accountId", "messageId"]),
 
+  // Copias de correo compartidas con el expediente (SPEC-0018). No son caché:
+  // no cuentan en `mailAccounts.cacheBytes`, no las toca el LRU ni «Vaciar
+  // caché» y sobreviven a la desconexión de la cuenta. El snapshot es
+  // autocontenido —cuerpo y objetos propios— para no depender de `mailBodies`.
+  // La purga vacía el contenido y deja la fila como lápida.
+  mailShares: defineTable({
+    // Identidad del mensaje en Zimbra al compartir. No es clave foránea y se
+    // vacía al purgar: la copia no vuelve a la caché del buzón.
+    sourceMessageId: v.optional(v.string()),
+    sourceEmail: v.optional(v.string()),
+    destinationType: v.union(
+      v.literal("incident"),
+      v.literal("request"),
+      v.literal("equipment"),
+      v.literal("manual"),
+      v.literal("purchaseOrder"),
+      v.literal("purchaseRequest"),
+    ),
+    destinationId: v.union(
+      v.id("incidents"),
+      v.id("partRequests"),
+      v.id("equipment"),
+      v.id("manuals"),
+      v.id("purchaseOrders"),
+      v.id("purchaseRequests"),
+    ),
+    // Referencia visible copiada (`INC-0001`, `OC-0003`, título…): sirve para
+    // la papelera administrativa cuando el destino ya no existe.
+    destinationReference: v.optional(v.string()),
+    mode: v.union(v.literal("summary"), v.literal("original")),
+    subject: v.optional(v.string()),
+    fromName: v.optional(v.string()),
+    fromAddress: v.optional(v.string()),
+    sentAt: v.number(),
+    summary: v.optional(v.string()),
+    bodyText: v.optional(v.string()),
+    bodyHtml: v.optional(v.string()),
+    bodyTruncated: v.optional(v.boolean()),
+    emlStorageId: v.optional(v.id("_storage")),
+    emlFileName: v.optional(v.string()),
+    emlSize: v.optional(v.number()),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          storageId: v.id("_storage"),
+          name: v.string(),
+          contentType: v.string(),
+          size: v.number(),
+        }),
+      ),
+    ),
+    sharedBy: v.id("users"),
+    // Instantánea del nombre visible: la copia sobrevive a la baja del autor.
+    sharedByName: v.string(),
+    sharedAt: v.number(),
+    // Idempotencia del formulario: un reintento no duplica la copia.
+    clientShareId: v.optional(v.string()),
+    // Solo equipos y manuales: el destino se borró y la copia queda huérfana.
+    destinationDeletedAt: v.optional(v.number()),
+    orphanPurgeAt: v.optional(v.number()),
+    contentPurgedAt: v.optional(v.number()),
+    contentPurgedBy: v.optional(v.id("users")),
+    purgeReason: v.optional(
+      v.union(
+        v.literal("manual"),
+        v.literal("destination"),
+        v.literal("orphan"),
+        v.literal("reset"),
+      ),
+    ),
+    // Volvió de un backup: solo resumen, sin cuerpo ni `.eml`.
+    backupRestored: v.optional(v.boolean()),
+  })
+    .index("by_destination", ["destinationType", "destinationId", "sharedAt"])
+    .index("by_orphan_purge", ["orphanPurgeAt"])
+    .index("by_client_share", ["sharedBy", "clientShareId"])
+    .index("by_source_message", ["sourceMessageId"]),
+
   // Una fila por parte adjunta, incluidas las imágenes `cid:` sin nombre. El
   // objeto de `_storage` es la única copia de sus bytes.
   mailAttachments: defineTable({

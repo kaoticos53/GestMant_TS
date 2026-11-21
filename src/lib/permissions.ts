@@ -7,6 +7,7 @@ import type { Role } from "./roles";
 export type Capability =
   | "viewIncidents"
   | "manageIncidents"
+  | "createIncidentFromMail"
   | "viewRequests"
   | "createRequests"
   | "lookupCatalog"
@@ -62,6 +63,13 @@ export const CAPABILITIES: CapabilityMeta[] = [
     label: "Asignar y cerrar incidencias",
     description:
       "Asignar a otros técnicos, verificar, derivar a taller, cerrar y gestionar los documentos adjuntos. Las notas las escribe también el técnico al que esté asignada la incidencia.",
+  },
+  {
+    id: "createIncidentFromMail",
+    group: "Incidencias",
+    label: "Crear incidencia desde correo",
+    description:
+      "Dar de alta una incidencia a partir de un mensaje del buzón propio, con el remitente como notificante. No permite asignar, cerrar ni modificar incidencias ya existentes.",
   },
   {
     id: "viewRequests",
@@ -200,6 +208,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
   admin: {
     viewIncidents: true,
     manageIncidents: true,
+    createIncidentFromMail: true,
     viewRequests: true,
     createRequests: true,
     lookupCatalog: true,
@@ -222,6 +231,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
   manager: {
     viewIncidents: true,
     manageIncidents: true,
+    createIncidentFromMail: true,
     viewRequests: true,
     createRequests: true,
     lookupCatalog: true,
@@ -244,6 +254,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
   technician: {
     viewIncidents: true,
     manageIncidents: false,
+    createIncidentFromMail: true,
     viewRequests: true,
     createRequests: true,
     lookupCatalog: true,
@@ -268,6 +279,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
   guest: {
     viewIncidents: false,
     manageIncidents: false,
+    createIncidentFromMail: false,
     viewRequests: false,
     createRequests: false,
     lookupCatalog: false,

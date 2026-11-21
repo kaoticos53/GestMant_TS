@@ -2,8 +2,9 @@
 
 Sin tarea activa.
 
-F4 de correo (cuerpo, visor, adjuntos y caché) quedó implementada y validada en
-código; el handover está en
-`.context/sessions/2026-11-21-correo-f4-cuerpo-visor.md`. La siguiente puerta es
-la validación real contra Hermes y, después, la aprobación de `SPEC-0018` antes
-de F5.
+F5 de correo (`SPEC-0018`) quedó abierta: el primer incremento —tabla
+`mailShares`, capacidad `createIncidentFromMail` y políticas puras de modo,
+tamaño y audiencia— está cerrado, y el handover vive en
+`.context/sessions/2026-11-21-correo-f5-esquema-permisos.md`. Lo siguiente es la
+acción de compartir con su diálogo y la sección «Correos compartidos» en las
+fichas de incidencia, petición, equipo, manual y compra.
