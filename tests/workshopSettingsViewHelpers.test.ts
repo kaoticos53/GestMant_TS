@@ -35,6 +35,11 @@ describe("workshopSettingsView helpers", () => {
       expect(tabs.some((t) => t.id === "mail")).toBe(true);
     });
 
+    it("agrega 'mailbox' si puede usar su buzón personal", () => {
+      const tabs = getAvailableTabs({ canManageMailbox: true });
+      expect(tabs.some((t) => t.id === "mailbox")).toBe(true);
+    });
+
     it("agrega 'data' si puede gestionar datos del taller", () => {
       const tabs = getAvailableTabs({ canManageData: true });
       expect(tabs.some((t) => t.id === "data")).toBe(true);
@@ -47,6 +52,7 @@ describe("workshopSettingsView helpers", () => {
         canManageArchive: true,
         canPurgeUploads: true,
         canManageMail: true,
+        canManageMailbox: true,
         canManageData: true,
       });
       expect(tabs.map((t) => t.id)).toEqual([
@@ -55,6 +61,7 @@ describe("workshopSettingsView helpers", () => {
         "alerts",
         "storage",
         "mail",
+        "mailbox",
         "ai",
         "data",
       ]);
@@ -69,7 +76,9 @@ describe("workshopSettingsView helpers", () => {
     ];
 
     it("selecciona currentTab si está disponible", () => {
-      expect(resolveActiveTabId(sampleTabs, "models", "storage")).toBe("models");
+      expect(resolveActiveTabId(sampleTabs, "models", "storage")).toBe(
+        "models",
+      );
     });
 
     it("usa defaultTab si currentTab no está disponible", () => {
@@ -79,9 +88,9 @@ describe("workshopSettingsView helpers", () => {
     });
 
     it("cae al primer tab disponible si ni currentTab ni defaultTab son válidos", () => {
-      expect(resolveActiveTabId(sampleTabs, "inexistente", "otro_invalido")).toBe(
-        "catalogs",
-      );
+      expect(
+        resolveActiveTabId(sampleTabs, "inexistente", "otro_invalido"),
+      ).toBe("catalogs");
     });
 
     it("devuelve 'catalogs' como fallback si la lista está vacía", () => {

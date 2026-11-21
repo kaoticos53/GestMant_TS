@@ -20,6 +20,7 @@ export type Capability =
   | "lookupEquipment"
   | "viewManuals"
   | "manageManuals"
+  | "viewMailbox"
   | "sendMessages"
   | "manageUsers"
   | "configurePermissions"
@@ -148,6 +149,13 @@ export const CAPABILITIES: CapabilityMeta[] = [
       "Carga de manuales en PDF, cambio de su clasificación y borrado. Las notas del taller las escribe su autor, tenga o no este permiso.",
   },
   {
+    id: "viewMailbox",
+    group: "Correo",
+    label: "Usar el buzón personal",
+    description:
+      "Muestra el módulo de correo y los ajustes de «Mi buzón». Cada persona solo accede a su propia cuenta; el administrador no puede leer la de nadie más.",
+  },
+  {
     id: "sendMessages",
     group: "Comunicación",
     label: "Enviar mensajes internos",
@@ -205,6 +213,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     lookupEquipment: false,
     viewManuals: true,
     manageManuals: true,
+    viewMailbox: true,
     sendMessages: true,
     manageUsers: true,
     configurePermissions: true,
@@ -226,6 +235,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     lookupEquipment: false,
     viewManuals: true,
     manageManuals: true,
+    viewMailbox: true,
     sendMessages: true,
     manageUsers: false,
     configurePermissions: false,
@@ -249,6 +259,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     // del taller, pero no sube ni borra los manuales del módulo.
     viewManuals: true,
     manageManuals: false,
+    viewMailbox: true,
     sendMessages: true,
     manageUsers: false,
     configurePermissions: false,
@@ -270,6 +281,7 @@ export const DEFAULT_GRANTS: Record<Role, Record<Capability, boolean>> = {
     lookupEquipment: false,
     viewManuals: false,
     manageManuals: false,
+    viewMailbox: false,
     sendMessages: false,
     manageUsers: false,
     configurePermissions: false,

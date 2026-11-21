@@ -1436,6 +1436,63 @@ const schema = defineSchema({
   })
     .index("by_kind", ["kind"])
     .index("by_kind_normalized", ["kind", "normalized"]),
+
+  // Buzón personal de Zimbra: una fila por usuario. El servidor es fijo (no se
+  // acepta un host del cliente) y la contraseña y el token viven cifrados con
+  // AES-GCM. Ninguna consulta pública devuelve esos campos.
+  mailAccounts: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    serverUrl: v.string(),
+    password: v.optional(v.string()),
+    passwordHint: v.optional(v.string()),
+    authToken: v.optional(v.string()),
+    tokenExpiresAt: v.optional(v.number()),
+    status: v.union(
+      v.literal("disconnected"),
+      v.literal("connected"),
+      v.literal("reauthRequired"),
+      v.literal("error"),
+    ),
+    enabled: v.boolean(),
+    cacheLimitBytes: v.number(),
+    cacheRetentionDays: v.number(),
+    cacheBytes: v.number(),
+    cacheBodyBytes: v.number(),
+    cacheAttachmentBytes: v.number(),
+    lastSyncAt: v.optional(v.number()),
+    lastSyncOkAt: v.optional(v.number()),
+    syncLeaseUntil: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_enabled", ["enabled"]),
+
+  // Carpetas descubiertas por GetFolder. Los datos son del usuario y de su
+  // cuenta; el listado de mensajes llegará en F3.
+  mailFolders: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("mailAccounts"),
+    remoteId: v.string(),
+    parentRemoteId: v.union(v.string(), v.null()),
+    name: v.string(),
+    path: v.string(),
+    kind: v.union(v.string(), v.null()),
+    isMail: v.boolean(),
+    syncEnabled: v.boolean(),
+    unread: v.number(),
+    total: v.number(),
+    size: v.number(),
+    syncToken: v.optional(v.string()),
+    lastSyncAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    sortOrder: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_remote", ["accountId", "remoteId"])
+    .index("by_account_path", ["accountId", "path"]),
 });
 
 export default schema;

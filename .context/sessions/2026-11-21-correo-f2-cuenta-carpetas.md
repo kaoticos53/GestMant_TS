@@ -1,0 +1,72 @@
+# Resumen de Sesión / Handover de Agente
+
+- **Fecha y Hora:** 2026-11-21
+- **Agente / Modelo:** Buffy / Freebuff
+- **Rama / Commit:** `feat/correo-f1-base-pura` / pendiente al escribir este resumen
+
+---
+
+## 1. Objetivo Principal de la Sesión
+
+Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado de credenciales, prueba `Auth + GetFolder`, carpetas de correo, capacidad `viewMailbox` y pestaña «Mi buzón» en Ajustes.
+
+---
+
+## 2. Archivos Modificados y Justificación Técnica
+
+| Archivo                                                                             | Tipo          | Justificación                                                                    |
+| ----------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `src/convex/schema.ts`                                                              | Cambio        | Tablas `mailAccounts` y `mailFolders` con sus índices.                           |
+| `src/convex/mailAccounts.ts`                                                        | Nuevo         | Alta/edición, consulta, carpetas, prueba SOAP, desconexión y borrado.            |
+| `src/lib/mailClient/account.ts`                                                     | Nuevo         | Servidor fijo, validación del buzón y límites de caché.                          |
+| `src/lib/mailClient/auth.ts`                                                        | Nuevo         | Parseo puro de `AuthResponse`.                                                   |
+| `src/lib/mailClient/types.ts`                                                       | Cambio        | DTO `MailAuthSession`.                                                           |
+| `src/lib/permissions.ts`                                                            | Cambio        | Capacidad `viewMailbox` y defaults por rol.                                      |
+| `src/lib/abilities.ts`                                                              | Cambio        | Sujeto `Mailbox` con propiedad por `userId`.                                     |
+| `src/pages/dashboard/settings/MailboxCard.tsx`                                      | Nuevo         | Formulario de «Mi buzón», prueba, estado, caché y borrado.                       |
+| `src/pages/dashboard/settings/view/*`                                               | Cambio        | Pestaña `mailbox` y permiso `canManageMailbox`.                                  |
+| `src/pages/dashboard/WorkshopSettingsView.tsx`                                      | Cambio        | Propaga la nueva pestaña.                                                        |
+| `src/pages/dashboard/components/content/router/DashboardTabRenderer.tsx`            | Cambio        | Pasa `viewMailbox` no invitado a Ajustes.                                        |
+| `src/pages/dashboard/constants/navConfig.ts`                                        | Cambio        | Ajustes visible también con `viewMailbox`.                                       |
+| `src/convex/_generated/api.d.ts`                                                    | Cambio manual | Registra `mailAccounts`; `convex codegen` no pudo conectar con el backend local. |
+| `tests/mailAccounts.test.ts`                                                        | Nuevo         | 12 contratos de cuenta, cifrado, conexión, aislamiento y ciclo de vida.          |
+| `tests/fixtures/mail/auth.xml`                                                      | Nuevo         | Fixture de autenticación anonimizada.                                            |
+| `tests/abilities.test.ts`, `tests/navConfig.test.ts`, `tests/workshopSettingsView*` | Cambio        | Cobertura de la capacidad, navegación y pestaña.                                 |
+
+---
+
+## 3. Decisiones Técnicas y de Diseño
+
+- **Servidor fijo:** `MAIL_SERVER_URL = https://hermes.rtva.es`; la API no acepta `serverUrl` ni `userId` del cliente.
+- **Cifrado:** contraseña y token con `secretCrypto` (AES-GCM). La vista pública expone solo `hasPassword`, pista de últimos cuatro y `hasToken`; nunca el secreto.
+- **Aislamiento:** una fila por usuario, búsqueda por `by_user`; el administrador solo gestiona su propia cuenta. La regla CASL `Mailbox` también limita por `userId`.
+- **Prueba de conexión:** `AuthRequest` + `GetFolderRequest` en una acción; solo se guardan carpetas `isMail`. `AUTH_FAILED` deja `reauthRequired` y borra token.
+- **Estado:** guardar credenciales deja `disconnected`; la prueba exitosa deja `connected`. El token usa `lifetime` real del `AuthResponse`.
+- **Caché:** límites 128 MiB–2 GiB y 7–365 días, normalizados en servidor.
+- **Baja/borrado:** desconectar conserva la cuenta y permite borrar la caché; borrar la cuenta elimina carpetas locales y credenciales. No toca copias compartidas (aún no existen).
+- **Datos personales:** `mailAccounts`/`mailFolders` no están en `RESET_TABLES` ni en `BACKUP_TABLES`.
+
+---
+
+## 4. Estado de Verificación
+
+- **TDD:** tests escritos antes de los módulos; rojo confirmado por `account.ts`/`auth.ts` ausentes.
+- **Tests de cuenta:** ✅ 12/12.
+- **Habilidades:** ✅ 13/13.
+- **Ajustes y navegación:** ✅ 13/13 helpers + 8/8 vista.
+- **Conjunto relacionado:** ✅ 190/190 en la pasada amplia.
+- **TypeScript:** ✅ `npx tsc --noEmit`.
+- **Lint:** ✅ 0 errores; 19 warnings preexistentes.
+- **Arquitectura y seguridad:** ✅ incluidas en la pasada amplia.
+- **Prueba real contra Hermes:** ❌ no ejecutada; los contratos usan fixtures y `fetch` simulado.
+
+---
+
+## 5. Deuda Técnica y Siguiente Agente
+
+- [ ] F3: `mailHeaders`, sincronización inicial/incremental y vista de lista.
+- [ ] Añadir el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) cuando exista la lista; ahora solo está la pestaña de Ajustes.
+- [ ] Ejecutar `npx convex codegen` con el backend local encendido para regenerar `_generated/api.d.ts` en lugar del ajuste manual.
+- [ ] Validar conexión real y tiempos con el buzón de referencia.
+- ⚠️ **Codegen:** falló porque no había backend en `127.0.0.1:3210`; el ajuste manual de tipos es equivalente para compilar y probar, pero debe regenerarse.
+- ⚠️ **UI no inspeccionada visualmente:** sin navegador; tests de render y lint, no revisión visual.

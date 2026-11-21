@@ -51,10 +51,21 @@ describe("navConfig", () => {
       });
       const idsGuest = navGuest.map((item) => item.id);
       expect(idsGuest).toContain("incidents");
+      expect(idsGuest).not.toContain("settings");
       expect(idsGuest).not.toContain("manuals");
       expect(idsGuest).not.toContain("machines");
       expect(idsGuest).not.toContain("users");
       expect(idsGuest).not.toContain("purchasing");
+
+      // El correo es personal: abre Ajustes sin dar acceso a la configuración
+      // del taller. La pestaña «Mi buzón» decide dentro con su capacidad.
+      const mailboxOnly = buildNavItems({
+        can: (cap) => cap === "viewMailbox",
+        adminOk: false,
+        isGuest: false,
+        canSeePurchasing: false,
+      });
+      expect(mailboxOnly.map((item) => item.id)).toContain("settings");
     });
   });
 
@@ -62,7 +73,13 @@ describe("navConfig", () => {
     it("calcula badges numéricos con summary presente", () => {
       const summary = {
         incidents: { reported: 5 },
-        requests: { pending: 3, urgent: 1, withoutReference: 0, issued: 10, active: 4 },
+        requests: {
+          pending: 3,
+          urgent: 1,
+          withoutReference: 0,
+          issued: 10,
+          active: 4,
+        },
         purchasing: { pending: 2 },
         equipment: 12,
         manuals: 7,
@@ -89,7 +106,13 @@ describe("navConfig", () => {
   describe("buildDashboardStats e isSummaryHidden", () => {
     it("genera métricas solo para las capacidades concedidas", () => {
       const summary = {
-        requests: { pending: 2, urgent: 1, withoutReference: 1, issued: 4, active: 2 },
+        requests: {
+          pending: 2,
+          urgent: 1,
+          withoutReference: 1,
+          issued: 4,
+          active: 2,
+        },
         parts: { lowStock: 2, total: 20 },
       } as unknown as WorkshopSummaryData;
 

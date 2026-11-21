@@ -44,6 +44,7 @@ import type * as humanChallenge from "../humanChallenge.js";
 import type * as incidentIntake from "../incidentIntake.js";
 import type * as incidentMail from "../incidentMail.js";
 import type * as incidents from "../incidents.js";
+import type * as mailAccounts from "../mailAccounts.js";
 import type * as mailLog from "../mailLog.js";
 import type * as mailSettings from "../mailSettings.js";
 import type * as maintenance from "../maintenance.js";
@@ -116,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   incidentIntake: typeof incidentIntake;
   incidentMail: typeof incidentMail;
   incidents: typeof incidents;
+  mailAccounts: typeof mailAccounts;
   mailLog: typeof mailLog;
   mailSettings: typeof mailSettings;
   maintenance: typeof maintenance;

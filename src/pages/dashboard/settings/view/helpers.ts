@@ -7,15 +7,14 @@ import {
   Layers,
   Mail,
 } from "lucide-react";
-import type {
-  WorkshopSettingsPermissions,
-  WorkshopTabItem,
-} from "./types";
+import type { WorkshopSettingsPermissions, WorkshopTabItem } from "./types";
 
 /**
  * Resuelve permisos derivados para la gestión de incidencias y decisión de peticiones en papelera.
  */
-export function resolveDerivedPermissions(permissions: WorkshopSettingsPermissions) {
+export function resolveDerivedPermissions(
+  permissions: WorkshopSettingsPermissions,
+) {
   const {
     canManageAlert = false,
     canManageArchive = false,
@@ -42,6 +41,7 @@ export function getAvailableTabs(
     canManageArchive = false,
     canPurgeUploads = false,
     canManageMail = false,
+    canManageMailbox = false,
     canManageData = false,
   } = permissions;
 
@@ -62,6 +62,9 @@ export function getAvailableTabs(
   }
   if (canManageMail) {
     list.push({ id: "mail", label: "Correo", icon: Mail });
+  }
+  if (canManageMailbox) {
+    list.push({ id: "mailbox", label: "Mi buzón", icon: Mail });
   }
   if (canManageData) {
     list.push({ id: "ai", label: "IA y DeepSeek", icon: Sparkles });

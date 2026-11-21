@@ -52,3 +52,8 @@ export interface MailMessageDownload {
   size: number;
   contentUrl: string;
 }
+
+export interface MailAuthSession {
+  authToken: string;
+  lifetimeMs: number;
+}

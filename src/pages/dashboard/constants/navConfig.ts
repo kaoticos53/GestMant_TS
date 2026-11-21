@@ -28,7 +28,10 @@ import type { NavId, NavItem } from "../types";
 export type WorkshopSummaryData = typeof api.dashboard.summary._returnType;
 
 /** Metadatos textuales de cabecera para cada módulo del panel de control. */
-export const MODULE_META: Record<NavId, { title: string; description: string }> = {
+export const MODULE_META: Record<
+  NavId,
+  { title: string; description: string }
+> = {
   analytics: {
     title: "Panel y gráficos",
     description:
@@ -238,6 +241,7 @@ export function buildNavItems({
       : []),
     ...(can("manageIncidents") ||
     can("decideRequests") ||
+    can("viewMailbox") ||
     (adminOk && can("viewAudit"))
       ? [
           {

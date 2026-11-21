@@ -4,7 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { settle } from "./settle";
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("@/pages/dashboard/settings/CatalogsCard", () => ({
   CatalogsCard: () => <div data-testid="card-catalogs">CatalogsCard</div>,
@@ -43,12 +45,17 @@ vi.mock("@/pages/dashboard/settings/StorageCleanupCard", () => ({
   ),
 }));
 vi.mock("@/pages/dashboard/settings/MailServerCard", () => ({
-  MailServerCard: () => <div data-testid="card-mail-server">MailServerCard</div>,
+  MailServerCard: () => (
+    <div data-testid="card-mail-server">MailServerCard</div>
+  ),
 }));
 vi.mock("@/pages/dashboard/settings/MailAudienceCard", () => ({
   MailAudienceCard: () => (
     <div data-testid="card-mail-audience">MailAudienceCard</div>
   ),
+}));
+vi.mock("@/pages/dashboard/settings/MailboxCard", () => ({
+  MailboxCard: () => <div data-testid="card-mailbox">MailboxCard</div>,
 }));
 vi.mock("@/pages/dashboard/settings/WorkshopDataCard", () => ({
   WorkshopDataCard: () => (
@@ -56,7 +63,9 @@ vi.mock("@/pages/dashboard/settings/WorkshopDataCard", () => ({
   ),
 }));
 vi.mock("@/pages/dashboard/settings/AiSettingsCard", () => ({
-  AiSettingsCard: () => <div data-testid="card-ai-settings">AiSettingsCard</div>,
+  AiSettingsCard: () => (
+    <div data-testid="card-ai-settings">AiSettingsCard</div>
+  ),
 }));
 vi.mock("@/pages/dashboard/settings/AiPromptsCard", () => ({
   AiPromptsCard: () => <div data-testid="card-ai-prompts">AiPromptsCard</div>,
@@ -95,13 +104,19 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
       "Modelos de equipos",
     ]);
 
-    expect(container.querySelector("[data-testid='card-catalogs']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-catalogs']"),
+    ).not.toBeNull();
     expect(
       container.querySelector("[data-testid='card-equipment-models']"),
     ).toBeNull();
-    expect(container.querySelector("[data-testid='card-mail-server']")).toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-mail-server']"),
+    ).toBeNull();
     expect(container.querySelector("[data-testid='card-archive']")).toBeNull();
-    expect(container.querySelector("[data-testid='card-work-alert']")).toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-work-alert']"),
+    ).toBeNull();
   });
 
   it("muestra todas las pestañas cuando se tienen todos los permisos", async () => {
@@ -114,6 +129,7 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
           canPurgeUploads={true}
           canManageData={true}
           canManageMail={true}
+          canManageMailbox={true}
         />,
       );
     });
@@ -127,6 +143,7 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     expect(labels).toContain("Avisos");
     expect(labels).toContain("Almacén y archivo");
     expect(labels).toContain("Correo");
+    expect(labels).toContain("Mi buzón");
     expect(labels).toContain("IA y DeepSeek");
     expect(labels).toContain("Datos del taller");
   });
@@ -147,7 +164,9 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     await settle();
 
     // Inicialmente está en Catálogos
-    expect(container.querySelector("[data-testid='card-catalogs']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-catalogs']"),
+    ).not.toBeNull();
 
     // Buscamos la pestaña "Correo"
     const mailTab = Array.from(container.querySelectorAll("[role='tab']")).find(
@@ -157,10 +176,18 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
 
     await act(async () => {
       mailTab!.dispatchEvent(
-        new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+        new MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
       );
       mailTab!.dispatchEvent(
-        new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }),
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }),
       );
       mailTab!.dispatchEvent(
         new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }),
@@ -172,8 +199,25 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     });
     await settle();
 
-    expect(container.querySelector("[data-testid='card-mail-server']")).not.toBeNull();
-    expect(container.querySelector("[data-testid='card-mail-audience']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-mail-server']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-mail-audience']"),
+    ).not.toBeNull();
+  });
+
+  it("abre «Mi buzón» con su tarjeta cuando la capacidad está concedida", async () => {
+    await act(async () => {
+      root.render(
+        <WorkshopSettingsView canManageMailbox={true} defaultTab="mailbox" />,
+      );
+    });
+    await settle();
+
+    expect(
+      container.querySelector("[data-testid='card-mailbox']"),
+    ).not.toBeNull();
   });
 
   it("abre la pestaña de modelos de equipos con su tarjeta", async () => {
@@ -191,15 +235,14 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
   it("respeta la prop defaultTab si está disponible", async () => {
     await act(async () => {
       root.render(
-        <WorkshopSettingsView
-          canManageMail={true}
-          defaultTab="mail"
-        />,
+        <WorkshopSettingsView canManageMail={true} defaultTab="mail" />,
       );
     });
     await settle();
 
-    expect(container.querySelector("[data-testid='card-mail-server']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-mail-server']"),
+    ).not.toBeNull();
   });
 
   it("muestra la pestaña Avisos con sus tarjetas según los permisos", async () => {
@@ -214,8 +257,12 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     });
     await settle();
 
-    expect(container.querySelector("[data-testid='card-work-alert']")).not.toBeNull();
-    expect(container.querySelector("[data-testid='card-audit-alert']")).toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-work-alert']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-audit-alert']"),
+    ).toBeNull();
   });
 
   it("muestra la pestaña Almacén y archivo con sus tarjetas según los permisos", async () => {
@@ -230,7 +277,9 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     });
     await settle();
 
-    expect(container.querySelector("[data-testid='card-archive']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-archive']"),
+    ).not.toBeNull();
     expect(container.querySelector("[data-testid='card-trash']")).toBeNull();
   });
 });

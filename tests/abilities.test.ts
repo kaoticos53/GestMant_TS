@@ -28,6 +28,7 @@ const todasLasCapacidades: Partial<Record<Capability, boolean>> = {
   manageEquipment: true,
   viewManuals: true,
   manageManuals: true,
+  viewMailbox: true,
   viewAudit: true,
 };
 
@@ -181,6 +182,22 @@ describe("defineAbilityFor", () => {
       decideRequests: true,
     });
     expect(taller.can("reserve", "Request")).toBe(false);
+  });
+
+  it("el buzón es personal, también para el administrador", () => {
+    const tecnicoConCorreo = defineAbilityFor(tecnico, { viewMailbox: true });
+    expect(
+      allowsOn(tecnicoConCorreo, "view", "Mailbox", { userId: tecnico.id }),
+    ).toBe(true);
+    expect(
+      allowsOn(tecnicoConCorreo, "manage", "Mailbox", { userId: "otro" }),
+    ).toBe(false);
+
+    const admin = defineAbilityFor({ id: "user-admin", role: "admin" });
+    expect(allowsOn(admin, "manage", "Mailbox", { userId: "user-admin" })).toBe(
+      true,
+    );
+    expect(allowsOn(admin, "view", "Mailbox", { userId: "otro" })).toBe(false);
   });
 
   it("las casillas de cada módulo son independientes", () => {

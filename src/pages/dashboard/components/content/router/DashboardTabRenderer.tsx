@@ -191,6 +191,7 @@ export function DashboardTabRenderer({
           canPurgeUploads={can("manageIncidents") || can("decideRequests")}
           canManageData={adminOk}
           canManageMail={adminOk}
+          canManageMailbox={!isGuest && can("viewMailbox")}
           canManageIncidents={can("manageIncidents")}
           canDecideRequests={can("decideRequests")}
         />

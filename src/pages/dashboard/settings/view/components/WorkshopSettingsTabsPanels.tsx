@@ -6,6 +6,7 @@ import { AutomaticArchiveCard } from "@/pages/dashboard/settings/AutomaticArchiv
 import { CatalogsCard } from "@/pages/dashboard/settings/CatalogsCard";
 import { EquipmentModelsCard } from "@/pages/dashboard/settings/EquipmentModelsCard";
 import { MailAudienceCard } from "@/pages/dashboard/settings/MailAudienceCard";
+import { MailboxCard } from "@/pages/dashboard/settings/MailboxCard";
 import { MailServerCard } from "@/pages/dashboard/settings/MailServerCard";
 import { StorageCleanupCard } from "@/pages/dashboard/settings/StorageCleanupCard";
 import { TrashCard } from "@/pages/dashboard/settings/TrashCard";
@@ -21,6 +22,7 @@ export function WorkshopSettingsTabsPanels({
   canPurgeUploads = false,
   canManageData = false,
   canManageMail = false,
+  canManageMailbox = false,
   hasManageIncidents,
   hasDecideRequests,
 }: WorkshopSettingsTabsPanelsProps) {
@@ -74,6 +76,15 @@ export function WorkshopSettingsTabsPanels({
         >
           <MailServerCard />
           <MailAudienceCard />
+        </TabsContent>
+      )}
+
+      {canManageMailbox && (
+        <TabsContent
+          value="mailbox"
+          className="space-y-5 focus-visible:outline-none"
+        >
+          <MailboxCard />
         </TabsContent>
       )}
 

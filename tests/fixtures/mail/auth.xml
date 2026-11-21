@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <AuthResponse xmlns="urn:zimbraAccount">
+      <authToken>zm_token_fixture_123</authToken>
+      <lifetime>43199999</lifetime>
+      <session id="42" type="soap"/>
+    </AuthResponse>
+  </soap:Body>
+</soap:Envelope>

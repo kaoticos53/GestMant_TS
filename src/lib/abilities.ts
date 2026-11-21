@@ -62,6 +62,7 @@ export type AppSubjectName =
   | "InventoryItem"
   | "Equipment"
   | "Manual"
+  | "Mailbox"
   | "Message"
   | "User"
   | "Role"
@@ -129,6 +130,11 @@ export function defineAbilityFor(
       status: { $in: [...CLOSED_INCIDENT_STATUSES] },
     });
     cannot("delete", "Audit");
+    // El buzón sigue siendo personal incluso para el administrador: puede
+    // gestionar el suyo, no leer ni configurar el de otra persona.
+    cannot(["view", "manage"], "Mailbox", {
+      userId: { $ne: actor.id },
+    });
     return build();
   }
 
@@ -176,6 +182,14 @@ export function defineAbilityFor(
   }
   if (allowed("viewManuals")) can("view", "Manual");
   if (allowed("manageManuals")) can(["create", "update", "delete"], "Manual");
+
+  // El buzón es personal: la capacidad abre el módulo, pero la regla de
+  // propiedad impide que un administrador —o cualquier otro rol— toque la
+  // cuenta de otra persona. El backend repite esta comprobación antes de leer
+  // o escribir credenciales.
+  if (allowed("viewMailbox")) {
+    can(["view", "manage"], "Mailbox", { userId: actor.id });
+  }
 
   if (allowed("sendMessages")) can("create", "Message");
   if (allowed("manageUsers")) can(["view", "update"], "User");
@@ -235,6 +249,11 @@ export function asIncident(incident: Record<string, unknown>) {
 /** La ficha de una petición, marcada como tal para la interfaz (`<Can>`). */
 export function asRequest(request: Record<string, unknown>) {
   return subject("Request", request);
+}
+
+/** La cuenta de correo propia, marcada para la interfaz (`<Can>`). */
+export function asMailbox(account: Record<string, unknown>) {
+  return subject("Mailbox", account);
 }
 
 /** La orden de compra, marcada como tal para la interfaz (`<Can>`). */
