@@ -2,10 +2,10 @@
 
 - **ID:** `SPEC-0018`
 - **Título:** Copias de correo compartidas con incidencias, peticiones, equipos, manuales y compras: privacidad, visibilidad, retención y ciclo de vida
-- **Estado:** **Aprobada** (2026-11-21). F5 en curso: el esquema, la capacidad `createIncidentFromMail` y las políticas puras están cerrados; la acción de compartir, la sección en fichas y las descargas son el siguiente incremento.
+- **Estado:** **Propuesta — reglas de privacidad cerradas; pendiente de aprobación formal antes de F5.** No consta aprobación expresa. El esquema `mailShares`, la capacidad `createIncidentFromMail` y las políticas puras se implementaron en el primer incremento de F5 antes de esa aprobación; la acción de compartir, la sección en fichas y las descargas no se inician hasta que conste.
 - **Fecha:** 2026-11-21
 - **Fuentes clave:** `SPEC-0017` (buzón y caché), `SPEC-0002` (roles y capacidades), `SPEC-0004` (incidencias), `SPEC-0005` (equipos), `SPEC-0007` (peticiones), `SPEC-0008` (compras), `SPEC-0009` (manuales), `SPEC-0011` (papelera y almacenamiento), `SPEC-0013` (auditoría), `SPEC-0016` (modelo de datos), `src/lib/permissions.ts`, `src/lib/abilities.ts`, `src/convex/permissions.ts`, `src/convex/schema.ts`, `src/convex/incidents.ts`, `src/convex/partRequests.ts`, `src/convex/equipment.ts`, `src/convex/manuals.ts`, `src/convex/purchasing.ts`, `src/convex/trash.ts`, `src/convex/audit.ts`, `src/convex/workshopBackup.ts`, `src/convex/workshopReset.ts`, `src/convex/storageCleanup.ts`
-- **Dependencia:** `SPEC-0017` está aprobada y su visor y descarga (F4) están implementados, así que la puerta de F5 está abierta. Esta spec no implementa el buzón ni su caché.
+- **Dependencia:** `SPEC-0017` está aprobada y su visor y descarga (F4) están implementados; la puerta de F5 es la aprobación formal de esta spec, que todavía no consta. Esta spec no implementa el buzón ni su caché.
 
 ---
 

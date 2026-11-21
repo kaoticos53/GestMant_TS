@@ -9,10 +9,15 @@
 ## 1. Objetivo Principal de la Sesión
 
 Abrir F5 de `SPEC-0018` tras confirmar el usuario que el cliente de correo
-funciona y que la spec puede aprobarse. Este incremento cierra la fase 1 de la
-spec: tabla `mailShares`, capacidad `createIncidentFromMail` y las políticas
-puras de modo, tamaño y audiencia. La acción de compartir, la sección en fichas
-y las descargas son el incremento siguiente.
+funciona. Este incremento cierra la fase 1 de la spec: tabla `mailShares`,
+capacidad `createIncidentFromMail` y las políticas puras de modo, tamaño y
+audiencia. La acción de compartir, la sección en fichas y las descargas son el
+incremento siguiente.
+
+**Corrección posterior:** la aprobación de la spec se dio por hecha a partir del
+«continúa» del usuario y no era tal. `SPEC-0018` vuelve a **Propuesta** y F5
+queda gateada hasta que conste aprobación expresa; este incremento permanece en
+código, pero no abre la fase.
 
 ---
 
@@ -24,8 +29,8 @@ y las descargas son el incremento siguiente.
 | `src/lib/permissions.ts` | Extensión | Capacidad `createIncidentFromMail` en el catálogo y en los defaults: activa para administrador, responsable y técnico; apagada para invitado y roles personalizados. |
 | `src/lib/mailShare.ts` | Nuevo | Políticas puras: modos por destino, límites (8 KB de resumen, 64 KB de texto, 512 KB de HTML, 50 MB por copia), resumen, tamaño del snapshot, plazo de huérfanas y audiencia derivada del destino. |
 | `tests/mailShares.test.ts` | Nuevo | 23 pruebas de esquema, índices, capacidad, modos, recortes, límites y audiencia. |
-| `docs/specs/0018-copias-compartidas-de-correo.md` | Estado | 0018 pasa a aprobada; se anota el incremento cerrado. |
-| `docs/plan-implantacion-correo.md` | Estado | El plan refleja la aprobación de 0018 y el estado de F5. |
+| `docs/specs/0018-copias-compartidas-de-correo.md` | Estado | 0018 permanece en Propuesta: no consta aprobación expresa y F5 sigue gateada. |
+| `docs/plan-implantacion-correo.md` | Estado | El plan deja 0018 en Propuesta y anota el incremento adelantado sin aprobación. |
 
 ---
 

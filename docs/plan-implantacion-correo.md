@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y 0018 aprobada el 2026-11-21; F5 en curso (esquema, capacidad y políticas puras cerrados; compartición y vista pendientes).
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y **0018 en Propuesta: su aprobación formal no consta, así que F5 no se abre**. El primer incremento de F5 (tabla `mailShares`, capacidad `createIncidentFromMail` y políticas puras) se adelantó sin esa aprobación y queda en código; compartición y vista no empiezan hasta que se registre la aprobación.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 

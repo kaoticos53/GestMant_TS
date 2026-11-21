@@ -2,9 +2,9 @@
 
 Sin tarea activa.
 
-F5 de correo (`SPEC-0018`) quedó abierta: el primer incremento —tabla
-`mailShares`, capacidad `createIncidentFromMail` y políticas puras de modo,
-tamaño y audiencia— está cerrado, y el handover vive en
-`.context/sessions/2026-11-21-correo-f5-esquema-permisos.md`. Lo siguiente es la
-acción de compartir con su diálogo y la sección «Correos compartidos» en las
-fichas de incidencia, petición, equipo, manual y compra.
+`SPEC-0018` sigue en **Propuesta**: no consta la aprobación expresa que exige la
+puerta de F5. El primer incremento —tabla `mailShares`, capacidad
+`createIncidentFromMail` y políticas puras— está en código y verificado, pero no
+abre la fase: la acción de compartir y la sección en fichas esperan esa
+aprobación. El handover está en
+`.context/sessions/2026-11-21-correo-f5-esquema-permisos.md`.
