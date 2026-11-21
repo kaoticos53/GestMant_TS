@@ -66,6 +66,24 @@ export async function wipeShareContent(
  * Se llama dentro de la mutación que borra la ficha, así que o se van las dos
  * cosas o no se va ninguna.
  */
+/**
+ * Purga de las copias al vaciar el taller: borra las filas en tandas.
+ *
+ * No borra los objetos de `_storage`: el reset no gasta su transacción en
+ * contenido que `storageCleanup` barrerá en cuanto ninguna fila lo cite. No
+ * deja lápida: al taller entero le pasa lo mismo, no queda ficha donde leerla.
+ */
+export async function purgeForReset(
+  ctx: MutationCtx,
+  limit: number,
+): Promise<number> {
+  const rows = await ctx.db.query("mailShares").take(limit);
+  for (const row of rows) {
+    await ctx.db.delete(row._id);
+  }
+  return rows.length;
+}
+
 export async function purgeForDestination(
   ctx: MutationCtx,
   destinationType: "incident" | "request",

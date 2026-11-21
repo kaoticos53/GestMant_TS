@@ -2,13 +2,12 @@
 
 Sin tarea activa.
 
-`SPEC-0018` aprobada (2026-11-21). F5 cerrada con los seis destinos, el alta de
-incidencia desde correo (acción y diálogo) y los tests de backend. F6 avanzada:
-marcado de huérfanas al borrar equipos y manuales, barrido diario a siete días,
-papelera administrativa, tarjeta en Ajustes → Almacenamiento y purga de copias
-al borrar definitivamente incidencias y peticiones (`purgeForDestination`), con
-prueba propia del borrado de manuales y descarga de huérfanas desde Ajustes por
-una ruta propia de administrador. El handover está en
-`.context/sessions/2026-11-21-correo-purga-por-destino.md`.
+`SPEC-0018` aprobada (2026-11-21). F5 y F6 cerradas. F7 con backup y reset: las
+copias viajan al backup solo como metadatos, la restauración las devuelve como
+resumen remapeado (u omite y audita si el destino no vuelve) y el vaciado del
+taller las borra dejando los objetos a `storageCleanup`. Handovers en
+`.context/sessions/2026-11-21-correo-purga-por-destino.md` y
+`.context/sessions/2026-11-21-correo-f7-backup-reset.md`.
 
-Lo siguiente: F7 (backup y reset).
+Lo siguiente: cierre de F7 (documentación de usuario y hardening) y revisión
+visual de la sección con una copia restaurada.

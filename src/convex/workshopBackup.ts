@@ -4,8 +4,10 @@ import {
   BACKUP_FORMAT,
   BACKUP_TABLES,
   BACKUP_VERSION,
+  backupMailShareRow,
   parseWorkshopBackup,
   remapBackupDocument,
+  restoreMailShareRow,
   type BackupSummary,
   type BackupTableName,
 } from "../lib/backup";
@@ -70,15 +72,25 @@ export const collectAllTables = internalQuery({
       throw new ConvexError(NO_ADMIN_MSG);
     }
 
-    const tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>> = {};
+    const tables: Partial<
+      Record<BackupTableName, Array<Record<string, unknown>>>
+    > = {};
     const tableCounts: Partial<Record<BackupTableName, number>> = {};
     let totalRecords = 0;
 
     for (const table of BACKUP_TABLES) {
       const rows = await ctx.db.query(table as TableNames).collect();
-      tables[table] = rows as unknown as Array<Record<string, unknown>>;
-      tableCounts[table] = rows.length;
-      totalRecords += rows.length;
+      // Las copias de correo salen solo como metadatos: el contenido es del
+      // expediente y no viaja en un JSON de backup.
+      const exported =
+        table === "mailShares"
+          ? (rows as unknown as Array<Record<string, unknown>>).map(
+              backupMailShareRow,
+            )
+          : (rows as unknown as Array<Record<string, unknown>>);
+      tables[table] = exported;
+      tableCounts[table] = exported.length;
+      totalRecords += exported.length;
     }
 
     return { tables, tableCounts, totalRecords };
@@ -91,9 +103,7 @@ export const clearBatch = internalMutation({
     await assertAdminUser(ctx, args.userId);
     let deleted = 0;
     for (const table of BACKUP_TABLES) {
-      const rows = await ctx.db
-        .query(table as TableNames)
-        .take(BATCH_DELETE);
+      const rows = await ctx.db.query(table as TableNames).take(BATCH_DELETE);
       for (const row of rows) {
         await ctx.db.delete(row._id as Id<TableNames>);
         deleted += 1;
@@ -128,11 +138,40 @@ export const insertTableBatch = internalMutation({
 
     for (const rawRow of rows) {
       const oldId = typeof rawRow._id === "string" ? rawRow._id : undefined;
+
+      // Una copia de correo sin su ficha no se restaura: sería una huérfana
+      // artificial. Se omite y queda la traza, sin inventar un destino.
+      if (table === "mailShares") {
+        const oldDestinationId =
+          typeof rawRow.destinationId === "string"
+            ? rawRow.destinationId
+            : undefined;
+        const destinationId =
+          oldDestinationId === undefined
+            ? undefined
+            : idMap.get(oldDestinationId);
+        if (destinationId === undefined) {
+          await logSecurityEvent(ctx, {
+            actorId: args.userId,
+            action: "mail_share_restore_skip",
+            target: `mailShares:${String(rawRow.destinationReference ?? "")}`,
+            metadata: { reason: "destination_missing" },
+          });
+          continue;
+        }
+        const insertedId = await ctx.db.insert(
+          "mailShares",
+          restoreMailShareRow(rawRow, destinationId) as never,
+        );
+        if (oldId) {
+          idMap.set(oldId, String(insertedId));
+          createdPairs.push({ oldId, newId: String(insertedId) });
+        }
+        continue;
+      }
+
       const doc = remapBackupDocument(table, rawRow, idMap);
-      const insertedId = await ctx.db.insert(
-        table as TableNames,
-        doc as never,
-      );
+      const insertedId = await ctx.db.insert(table as TableNames, doc as never);
       if (oldId) {
         idMap.set(oldId, String(insertedId));
         createdPairs.push({ oldId, newId: String(insertedId) });
@@ -216,7 +255,7 @@ export const restoreBackup = action({
   args: { rawJson: v.string() },
   handler: async (
     ctx,
-  args,
+    args,
   ): Promise<{ restoredRecords: number; exportedAt: number }> => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) {
@@ -266,7 +305,9 @@ export const restoreBackup = action({
         for (const pair of createdPairs) {
           idMap.set(pair.oldId, pair.newId);
         }
-        restoredRecords += chunk.length;
+        // Solo cuentan las filas que de verdad volvieron: una copia de correo
+        // omitida por no encontrar su ficha no es un registro restaurado.
+        restoredRecords += createdPairs.length;
       }
     }
 

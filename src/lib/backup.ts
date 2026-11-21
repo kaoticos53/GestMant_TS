@@ -28,6 +28,7 @@ export const BACKUP_TABLES = [
   "receptions",
   "maintenanceRecords",
   "manuals",
+  "mailShares",
   "stockMovements",
   "equipmentMovements",
   "notifications",
@@ -80,7 +81,8 @@ export function parseWorkshopBackup(
   if (obj.format !== BACKUP_FORMAT) {
     return {
       ok: false,
-      error: "El archivo no corresponde a una copia de seguridad de Pulso Taller.",
+      error:
+        "El archivo no corresponde a una copia de seguridad de Pulso Taller.",
     };
   }
   if (obj.version !== BACKUP_VERSION) {
@@ -89,7 +91,11 @@ export function parseWorkshopBackup(
       error: `Versión de copia no soportada (${String(obj.version)}).`,
     };
   }
-  if (!obj.tables || typeof obj.tables !== "object" || Array.isArray(obj.tables)) {
+  if (
+    !obj.tables ||
+    typeof obj.tables !== "object" ||
+    Array.isArray(obj.tables)
+  ) {
     return { ok: false, error: "La copia no contiene el bloque `tables`." };
   }
 
@@ -145,6 +151,70 @@ export function parseWorkshopBackup(
       tableCounts,
     },
   };
+}
+
+/**
+ * Los campos de una copia de correo que viajan en el backup: solo metadatos.
+ * No van el extracto, el cuerpo, los adjuntos, el `.eml` ni la identidad del
+ * mensaje en el buzón. `destinationId` sí viaja —es una referencia, no
+ * contenido— porque la restauración lo necesita para volver a enganchar la
+ * copia a su ficha.
+ */
+const MAIL_SHARE_BACKUP_FIELDS = [
+  "_id",
+  "destinationType",
+  "destinationId",
+  "destinationReference",
+  "subject",
+  "fromName",
+  "fromAddress",
+  "sentAt",
+  "sharedBy",
+  "sharedByName",
+  "sharedAt",
+  "contentPurgedAt",
+  "purgeReason",
+] as const;
+
+/**
+ * Proyecta una copia de correo para el backup: metadatos y nada más.
+ *
+ * Una copia `original` se exporta ya como resumen restaurado, porque el cuerpo
+ * y los archivos no viajan: al volver, la ficha lo indica en vez de fingir que
+ * conserva el mensaje entero.
+ */
+export function backupMailShareRow(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const copy: Record<string, unknown> = {};
+  for (const field of MAIL_SHARE_BACKUP_FIELDS) {
+    if (row[field] !== undefined) copy[field] = row[field];
+  }
+  copy.mode = "summary";
+  copy.backupRestored = true;
+  return copy;
+}
+
+/**
+ * Proyecta una copia de correo al restaurarla, con el destino ya remapeado.
+ *
+ * Se vuelve a filtrar aquí aunque el backup salga limpio: un archivo editado a
+ * mano no puede colar contenido por la tabla de copias. La marca de restaurada
+ * y el modo resumen se fuerzan igual.
+ */
+export function restoreMailShareRow(
+  row: Record<string, unknown>,
+  destinationId: string,
+): Record<string, unknown> {
+  const copy: Record<string, unknown> = {};
+  for (const field of MAIL_SHARE_BACKUP_FIELDS) {
+    if (field === "_id" || field === "destinationId") continue;
+    if (row[field] !== undefined) copy[field] = row[field];
+  }
+  copy.destinationId = destinationId;
+  copy.mode = "summary";
+  copy.backupRestored = true;
+  return copy;
 }
 
 const SINGLE_REF_FIELDS: Record<string, readonly string[]> = {

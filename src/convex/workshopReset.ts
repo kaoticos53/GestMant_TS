@@ -4,6 +4,7 @@ import type { Id, TableNames } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { ROLES } from "./schema";
+import { purgeForReset } from "./_mailShares/purge";
 
 /**
  * Vaciar el taller: dejar la base como recién instalada.
@@ -58,6 +59,8 @@ const RESET_TABLES: TableNames[] = [
   "receptions",
   "maintenanceRecords",
   "manuals",
+  // Las copias de correo son trabajo del taller: se van con sus fichas.
+  "mailShares",
   "notifications",
   "messages",
   "reportUploads",
@@ -129,6 +132,12 @@ export const clearBatch = internalMutation({
 
     let deleted = 0;
     for (const table of RESET_TABLES) {
+      // La copia de correo tiene su propia purga: borra filas y deja los objetos
+      // al barrido nocturno, que es lo que fija SPEC-0018 para el reset.
+      if (table === "mailShares") {
+        deleted += await purgeForReset(ctx, BATCH_PER_TABLE);
+        continue;
+      }
       const rows = await ctx.db.query(table).take(BATCH_PER_TABLE);
       for (const row of rows) {
         await ctx.db.delete(row._id as Id<TableNames>);

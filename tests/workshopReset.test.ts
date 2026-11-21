@@ -22,6 +22,7 @@ const WORKSHOP_TABLES: TableNames[] = [
   "receptions",
   "maintenanceRecords",
   "manuals",
+  "mailShares",
   "notifications",
   "messages",
   "reportUploads",
@@ -109,10 +110,12 @@ describe("vaciar el taller", () => {
 
   test("un responsable de repuestos (manager) no puede vaciar el taller", async () => {
     const manager = await authedTest("manager");
-    const error = await manager.action(api.workshopReset.resetWorkshop, {}).then(
-      () => null,
-      (err: unknown) => err,
-    );
+    const error = await manager
+      .action(api.workshopReset.resetWorkshop, {})
+      .then(
+        () => null,
+        (err: unknown) => err,
+      );
     expect(error).toBeInstanceOf(ConvexError);
     const message =
       error instanceof ConvexError ? String(error.data) : String(error);

@@ -744,6 +744,8 @@ export interface MailShareSummaryRow {
   sharedByName: string;
   sharedAt: number;
   purgedAt: number | null;
+  /** Volvió de un backup: solo metadatos, sin cuerpo ni archivos. */
+  backupRestored: boolean;
 }
 
 function summaryRow(row: Doc<"mailShares">): MailShareSummaryRow {
@@ -759,6 +761,7 @@ function summaryRow(row: Doc<"mailShares">): MailShareSummaryRow {
     sharedByName: row.sharedByName,
     sharedAt: row.sharedAt,
     purgedAt: row.contentPurgedAt ?? null,
+    backupRestored: row.backupRestored === true,
   };
 }
 

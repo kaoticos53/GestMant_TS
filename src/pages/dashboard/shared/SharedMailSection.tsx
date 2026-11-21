@@ -65,7 +65,7 @@ export function SharedMailSection({
           : "ready";
   const shown = state === "ready" ? detail : null;
   const shownMeta = shown
-    ? `${shown.fromName || shown.fromAddress} · ${formatDateTime(shown.sentAt)} · ${shown.mode === "original" ? "original" : "resumen"} · compartido por ${shown.sharedByName}`
+    ? `${shown.fromName || shown.fromAddress} · ${formatDateTime(shown.sentAt)} · ${shown.mode === "original" ? "original" : "resumen"} · compartido por ${shown.sharedByName}${shown.backupRestored ? " · Copia restaurada: solo metadatos" : ""}`
     : "";
 
   const handleDownload = async (
