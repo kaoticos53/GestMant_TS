@@ -8,7 +8,11 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { formatDateTime, formatFileSize, getErrorMessage } from "@/lib/workshop";
+import {
+  formatDateTime,
+  formatFileSize,
+  getErrorMessage,
+} from "@/lib/workshop";
 import type { MailShareDestinationType } from "@/lib/mailShare";
 import { HtmlFrame } from "@/pages/dashboard/mailbox/HtmlFrame";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -130,100 +134,113 @@ export function SharedMailSection({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {detail === undefined || detail === null
+              {detail === undefined
                 ? "Correo compartido"
-                : detail.purgedAt !== null
-                  ? "Correo compartido retirado"
-                  : detail.subject || "(Sin asunto)"}
+                : detail === null
+                  ? "Copia no disponible"
+                  : detail.purgedAt !== null
+                    ? "Correo compartido retirado"
+                    : detail.subject || "(Sin asunto)"}
             </DialogTitle>
             <DialogDescription>
-              {detail?.purgedAt !== null && detail !== null
-                ? "Se conserva la constancia, no el contenido."
-                : detail === null || detail === undefined
-                  ? "Cargando la copia…"
-                  : `${detail.fromName || detail.fromAddress} · ${formatDateTime(detail.sentAt)} · ${detail.mode === "original" ? "original" : "resumen"} · compartido por ${detail.sharedByName}`}
+              {detail === undefined
+                ? "Cargando la copia…"
+                : detail === null
+                  ? "Esta copia ya no existe o no tienes acceso a su ficha."
+                  : detail.purgedAt !== null
+                    ? "Se conserva la constancia, no el contenido."
+                    : `${detail.fromName || detail.fromAddress} · ${formatDateTime(detail.sentAt)} · ${detail.mode === "original" ? "original" : "resumen"} · compartido por ${detail.sharedByName}`}
             </DialogDescription>
           </DialogHeader>
 
-          {detail ? (
-            detail.purgedAt !== null ? (
-              <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                El administrador retiró el contenido de esta copia. La ficha
-                conserva la fecha y el motivo, pero no el asunto, el remitente ni
-                el cuerpo.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {detail.mode === "summary" ? (
-                  <p className="rounded-lg border border-border/60 bg-muted/15 p-3 text-sm leading-6">
-                    {detail.summary || "Sin extracto."}
-                  </p>
-                ) : detail.bodyHtml !== null ? (
-                  <div className="h-[min(55dvh,32rem)]">
-                    <HtmlFrame html={detail.bodyHtml} attachments={[]} />
-                  </div>
-                ) : detail.bodyText ? (
-                  <pre className="max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/15 p-3 font-sans text-sm leading-6">
-                    {detail.bodyText}
-                  </pre>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    La copia no guardó cuerpo legible.
-                  </p>
-                )}
+          {detail === undefined ? (
+            <div
+              className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-6 text-xs text-muted-foreground"
+              role="status"
+            >
+              <Loader2 className="size-4 animate-spin" /> Cargando la copia…
+            </div>
+          ) : detail === null ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              Esta copia ya no existe o tu rol ya no puede ver su ficha.
+            </p>
+          ) : detail.purgedAt !== null ? (
+            <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              El administrador retiró el contenido de esta copia. La ficha
+              conserva la fecha y el motivo, pero no el asunto, el remitente ni
+              el cuerpo.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {detail.mode === "summary" ? (
+                <p className="rounded-lg border border-border/60 bg-muted/15 p-3 text-sm leading-6">
+                  {detail.summary || "Sin extracto."}
+                </p>
+              ) : detail.bodyHtml !== null ? (
+                <div className="h-[min(55dvh,32rem)]">
+                  <HtmlFrame html={detail.bodyHtml} attachments={[]} />
+                </div>
+              ) : detail.bodyText ? (
+                <pre className="max-h-[55dvh] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/15 p-3 font-sans text-sm leading-6">
+                  {detail.bodyText}
+                </pre>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  La copia no guardó cuerpo legible.
+                </p>
+              )}
 
-                {detail.bodyTruncated && (
-                  <p className="text-xs text-muted-foreground">
-                    El cuerpo se recortó al guardar la copia.
-                  </p>
-                )}
+              {detail.bodyTruncated && (
+                <p className="text-xs text-muted-foreground">
+                  El cuerpo se recortó al guardar la copia.
+                </p>
+              )}
 
-                {detail.attachments.length > 0 && (
-                  <div className="rounded-lg border border-border/60">
-                    <p className="border-b border-border/60 px-3 py-2 text-xs font-medium">
-                      Adjuntos
-                    </p>
-                    <ul className="divide-y divide-border/60">
-                      {detail.attachments.map((attachment) => (
-                        <li
-                          key={attachment.index}
-                          className="flex items-center gap-2 px-3 py-2 text-xs"
+              {detail.attachments.length > 0 && (
+                <div className="rounded-lg border border-border/60">
+                  <p className="border-b border-border/60 px-3 py-2 text-xs font-medium">
+                    Adjuntos
+                  </p>
+                  <ul className="divide-y divide-border/60">
+                    {detail.attachments.map((attachment) => (
+                      <li
+                        key={attachment.index}
+                        className="flex items-center gap-2 px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 flex-1 truncate">
+                          {attachment.name}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {formatFileSize(attachment.size)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="size-7 shrink-0 p-0"
+                          disabled={downloading === attachment.index}
+                          aria-label={`Descargar ${attachment.name}`}
+                          onClick={() =>
+                            void handleDownload(
+                              detail.id,
+                              attachment.index,
+                              attachment.name,
+                            )
+                          }
                         >
-                          <span className="min-w-0 flex-1 truncate">
-                            {attachment.name}
-                          </span>
-                          <span className="shrink-0 text-muted-foreground">
-                            {formatFileSize(attachment.size)}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="size-7 shrink-0 p-0"
-                            disabled={downloading === attachment.index}
-                            aria-label={`Descargar ${attachment.name}`}
-                            onClick={() =>
-                              void handleDownload(
-                                detail.id,
-                                attachment.index,
-                                attachment.name,
-                              )
-                            }
-                          >
-                            {downloading === attachment.index ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <Download className="size-3.5" />
-                            )}
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )
-          ) : null}
+                          {downloading === attachment.index ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Download className="size-3.5" />
+                          )}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {isAdmin && detail && detail.purgedAt === null && (
             <Button

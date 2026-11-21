@@ -62,3 +62,13 @@ purgar sus copias desde las fichas del expediente.
 - ⚠️ **Riesgo conocido:** el diálogo resuelve por referencia exacta; si el
   usuario escribe mal el número, el botón queda deshabilitado sin más pista que
   el aviso de «no hay ninguna ficha con esa referencia».
+
+---
+
+## 6. Corrección posterior
+
+`SharedMailSection` mostraba «Se conserva la constancia, no el contenido»
+mientras la copia cargaba: `detail?.purgedAt !== null` también es cierto cuando
+`detail` es `undefined`. El diálogo distingue ahora tres estados —cargando, no
+disponible y lápida— en el título, la descripción y el cuerpo; la purga sigue
+oculta mientras no hay copia cargada.
