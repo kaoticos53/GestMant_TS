@@ -77,6 +77,11 @@ export const MODULE_META: Record<
     description:
       "Lo cerrado y lo decidido que ya no está en el día a día: búscalo aquí o recupéralo.",
   },
+  mailbox: {
+    title: "Correo",
+    description:
+      "Tu buzón de Zimbra, con las carpetas y las cabeceras sincronizadas sin descargar los cuerpos.",
+  },
   audit: {
     title: "Auditoría de documentos",
     description:
@@ -209,6 +214,16 @@ export function buildNavItems({
           },
         ]
       : []),
+    ...(!isGuest && can("viewMailbox")
+      ? [
+          {
+            id: "mailbox" as const,
+            label: "Correo",
+            icon: Mail,
+            badge: 0,
+          },
+        ]
+      : []),
     ...(adminOk && can("viewAudit")
       ? [
           {
@@ -269,6 +284,7 @@ export function computeNavBadges(
     manuals: summary?.manuals ?? 0,
     machines: 0,
     archive: 0,
+    mailbox: 0,
     audit: 0,
     users: 0,
     permissions: 0,
@@ -364,6 +380,7 @@ const TABS_WITHOUT_SUMMARY: ReadonlySet<NavId> = new Set([
   "permissions",
   "settings",
   "archive",
+  "mailbox",
   "machines",
   "audit",
 ]);

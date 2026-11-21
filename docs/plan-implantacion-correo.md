@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 con backend implementado, vista pendiente) y 0018 pendiente de aprobación antes de F5.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3 con backend y vista implementados; falta la medición real contra Hermes) y 0018 pendiente de aprobación antes de F5.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -187,7 +187,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 **Objetivo:** listar el buzón sin descargar cuerpos y mantenerlo actualizado sin duplicados.
 
-**Estado:** backend implementado y probado con `fetch` simulado (`mailHeaders`, `mailSync`, tumbas, token, lease y cron). Faltan la vista del módulo «Correo» y la medición real contra Hermes.
+**Estado:** backend implementado y probado con `fetch` simulado (`mailHeaders`, `mailSync`, tumbas, token, lease y cron). La vista del módulo «Correo» está implementada con carpetas, búsqueda local, lista virtualizada, estados y modo móvil. Falta la medición real contra Hermes.
 
 **Tareas**
 
@@ -519,7 +519,7 @@ F0 Aprobación
 | ---- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | F1   | `tests/mailClient.test.ts`, `tests/mailCache.test.ts`, `tests/arquitectura.test.ts`  | Ninguna; solo fixtures.                                    |
 | F2   | `tests/mailAccounts.test.ts`, tests de ajustes                                       | Alta, prueba de conexión y aislamiento entre dos usuarios. |
-| F3   | `tests/mailSync.test.ts`, tests de lista                                             | Sincronización real, 1 554 cabeceras, sin cuerpos.         |
+| F3   | `tests/mailSync.test.ts`, `tests/mailboxView.test.tsx`, tests de navegación          | Sincronización real, 1 554 cabeceras, sin cuerpos.         |
 | F4   | `tests/mailBody.test.ts`, `tests/mailboxView.test.tsx`                               | Abrir mensaje, adjuntos, HTML, `cid:`, no marcar leído.    |
 | F5   | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`                          | Compartir en cada destino, permisos y modos.               |
 | F6   | `tests/mailShares.test.ts`, `tests/trash.test.ts`, `tests/storageCleanup.test.ts`    | Restaurar, purgar, borrar equipo/manual, lápida.           |

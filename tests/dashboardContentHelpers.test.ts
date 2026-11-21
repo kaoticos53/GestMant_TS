@@ -6,12 +6,13 @@ import {
 
 describe("dashboardContentHelpers", () => {
   describe("EXEMPT_EMPTY_NOTICE_TABS", () => {
-    it("contiene exactamente las 5 pestañas de gestión y configuración exentas", () => {
+    it("contiene exactamente las 6 pestañas de gestión y configuración exentas", () => {
       expect(EXEMPT_EMPTY_NOTICE_TABS).toEqual([
         "profile",
         "permissions",
         "settings",
         "archive",
+        "mailbox",
         "audit",
       ]);
     });
@@ -23,6 +24,7 @@ describe("dashboardContentHelpers", () => {
       "permissions",
       "settings",
       "archive",
+      "mailbox",
       "audit",
     ])("devuelve true para la pestaña exenta '%s'", (tab) => {
       expect(isTabExemptFromEmptyNotice(tab)).toBe(true);

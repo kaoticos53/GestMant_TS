@@ -8,6 +8,7 @@ import {
   IncidentsView,
   InventoryView,
   MachinesView,
+  MailboxView,
   ManualsView,
   PermissionsView,
   ProfileView,
@@ -179,6 +180,14 @@ export function DashboardTabRenderer({
               ? () => goToTab("settings")
               : undefined
           }
+        />
+      );
+
+    case "mailbox":
+      return (
+        <MailboxView
+          key={`mailbox-${viewKeys.mailbox}`}
+          onOpenSettings={() => goToTab("settings")}
         />
       );
 

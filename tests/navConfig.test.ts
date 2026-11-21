@@ -16,6 +16,7 @@ describe("navConfig", () => {
     expect(MODULE_META.requests.title).toBe("Peticiones de repuesto");
     expect(MODULE_META.inventory.title).toBe("Repuestos");
     expect(MODULE_META.equipment.title).toBe("Equipos");
+    expect(MODULE_META.mailbox.title).toBe("Correo");
   });
 
   describe("buildNavItems", () => {
@@ -36,6 +37,7 @@ describe("navConfig", () => {
       expect(idsAll).toContain("manuals");
       expect(idsAll).toContain("machines");
       expect(idsAll).toContain("archive");
+      expect(idsAll).toContain("mailbox");
       expect(idsAll).toContain("audit");
       expect(idsAll).toContain("users");
       expect(idsAll).toContain("permissions");
@@ -54,6 +56,7 @@ describe("navConfig", () => {
       expect(idsGuest).not.toContain("settings");
       expect(idsGuest).not.toContain("manuals");
       expect(idsGuest).not.toContain("machines");
+      expect(idsGuest).not.toContain("mailbox");
       expect(idsGuest).not.toContain("users");
       expect(idsGuest).not.toContain("purchasing");
 
@@ -65,7 +68,9 @@ describe("navConfig", () => {
         isGuest: false,
         canSeePurchasing: false,
       });
-      expect(mailboxOnly.map((item) => item.id)).toContain("settings");
+      const mailboxOnlyIds = mailboxOnly.map((item) => item.id);
+      expect(mailboxOnlyIds).toContain("settings");
+      expect(mailboxOnlyIds).toContain("mailbox");
     });
   });
 
@@ -140,6 +145,7 @@ describe("navConfig", () => {
       expect(isSummaryHidden("profile", 4)).toBe(true);
       expect(isSummaryHidden("settings", 4)).toBe(true);
       expect(isSummaryHidden("permissions", 4)).toBe(true);
+      expect(isSummaryHidden("mailbox", 4)).toBe(true);
       expect(isSummaryHidden("incidents", 0)).toBe(true);
       expect(isSummaryHidden("incidents", 4)).toBe(false);
       expect(isSummaryHidden("requests", 2)).toBe(false);

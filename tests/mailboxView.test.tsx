@@ -1,0 +1,205 @@
+// @vitest-environment jsdom
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { settle } from "./settle";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+const { mockUseQuery, mockUseAction } = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(),
+  mockUseAction: vi.fn(),
+}));
+
+vi.mock("convex/react", () => ({
+  useQuery: mockUseQuery,
+  useAction: mockUseAction,
+}));
+
+import { MailboxView } from "@/pages/dashboard/MailboxView";
+
+const ACCOUNT = {
+  email: "tecnico@rtva.es",
+  serverUrl: "https://correo.rtva.es",
+  status: "connected",
+  enabled: true,
+  cacheLimitBytes: 512 * 1024 * 1024,
+  cacheRetentionDays: 30,
+  cacheBytes: 1024,
+  hasPassword: true,
+  passwordHint: "••••1234",
+  lastSyncAt: Date.UTC(2026, 10, 21, 9, 30),
+  lastSyncError: null,
+  updatedAt: Date.UTC(2026, 10, 21, 9, 30),
+};
+
+const FOLDERS = [
+  {
+    remoteId: "inbox",
+    parentRemoteId: null,
+    name: "Bandeja de entrada",
+    path: "/Inbox",
+    kind: "inbox",
+    isMail: true,
+    unread: 2,
+    total: 10,
+    size: 4096,
+  },
+  {
+    remoteId: "sent",
+    parentRemoteId: null,
+    name: "Enviados",
+    path: "/Sent",
+    kind: "sent",
+    isMail: true,
+    unread: 0,
+    total: 4,
+    size: 1024,
+  },
+];
+
+const HEADERS = [
+  {
+    messageId: "m-2",
+    folderRemoteId: "inbox",
+    conversationId: null,
+    subject: "Cambio de filtro en la línea 3",
+    fromName: "Taller Central",
+    fromAddress: "taller@rtva.es",
+    date: Date.UTC(2026, 10, 21, 8, 0),
+    size: 2048,
+    flags: "u",
+    hasAttachments: true,
+    snippet: "Adjuntamos la ficha del filtro que hay que sustituir.",
+    bodyState: "notCached",
+    cachedAt: null,
+    lastOpenedAt: null,
+  },
+  {
+    messageId: "m-1",
+    folderRemoteId: "inbox",
+    conversationId: null,
+    subject: "Revisión del compresor",
+    fromName: "Mantenimiento",
+    fromAddress: "mantenimiento@rtva.es",
+    date: Date.UTC(2026, 10, 20, 15, 0),
+    size: 1024,
+    flags: "",
+    hasAttachments: false,
+    snippet: "Queda revisada la presión del compresor.",
+    bodyState: "notCached",
+    cachedAt: null,
+    lastOpenedAt: null,
+  },
+];
+
+function setupQueries({
+  account = ACCOUNT,
+  folders = FOLDERS,
+  headers = { headers: HEADERS, total: HEADERS.length, unread: 1 },
+}: {
+  account?: typeof ACCOUNT | null;
+  folders?: typeof FOLDERS | undefined;
+  headers?: { headers: typeof HEADERS; total: number; unread: number };
+} = {}) {
+  // `api` es un proxy de Convex y cada acceso puede devolver una referencia
+  // distinta, así que se distingue por los argumentos y el orden de las dos
+  // consultas sin argumentos (cuenta y carpetas).
+  let callsWithoutArgs = 0;
+  mockUseQuery.mockImplementation(
+    (_query: unknown, args?: Record<string, unknown>) => {
+      if (args && typeof args === "object") return headers;
+      callsWithoutArgs += 1;
+      return callsWithoutArgs % 2 === 1 ? account : folders;
+    },
+  );
+  mockUseAction.mockReturnValue(
+    vi.fn().mockResolvedValue({ ok: true, folders: 1, headers: 2 }),
+  );
+}
+
+describe("MailboxView", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("pide configurar la cuenta cuando todavía no hay buzón", async () => {
+    setupQueries({ account: null });
+    const onOpenSettings = vi.fn();
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={onOpenSettings} />);
+      await settle();
+    });
+
+    expect(container.textContent).toContain("Configura tu buzón de correo");
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) =>
+        candidate.textContent?.includes("Abrir ajustes del taller"),
+    );
+    expect(button).not.toBeNull();
+    await act(async () => {
+      button?.click();
+      await settle();
+    });
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("muestra carpetas y cabeceras con su remitente y asunto", async () => {
+    setupQueries();
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Bandeja de entrada");
+    expect(text).toContain("Enviados");
+    expect(text).toContain("Taller Central");
+    expect(text).toContain("Cambio de filtro en la línea 3");
+    expect(text).toContain("2 mensajes");
+  });
+
+  it("explica que la carpeta está vacía cuando no hay cabeceras", async () => {
+    setupQueries({ headers: { headers: [], total: 0, unread: 0 } });
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    expect(container.textContent).toContain("Esta carpeta está vacía");
+  });
+
+  it("avisa cuando las credenciales necesitan reautenticación", async () => {
+    setupQueries({
+      account: { ...ACCOUNT, status: "reauthRequired" },
+    });
+
+    await act(async () => {
+      root.render(<MailboxView onOpenSettings={vi.fn()} />);
+      await settle();
+    });
+
+    expect(container.textContent).toContain(
+      "credenciales del buzón han caducado",
+    );
+    expect(container.textContent).toContain("Revisar cuenta");
+  });
+});

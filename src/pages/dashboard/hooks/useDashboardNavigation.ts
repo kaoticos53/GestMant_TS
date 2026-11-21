@@ -38,6 +38,7 @@ export function useDashboardNavigation(
     incidents: 0,
     requests: 0,
     archive: 0,
+    mailbox: 0,
     inventory: 0,
     equipment: 0,
   });
@@ -67,6 +68,7 @@ export function useDashboardNavigation(
       incidents: prev.incidents + 1,
       requests: prev.requests + 1,
       archive: prev.archive + 1,
+      mailbox: prev.mailbox + 1,
       inventory: prev.inventory + 1,
       equipment: prev.equipment + 1,
     }));

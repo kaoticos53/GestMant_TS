@@ -43,6 +43,7 @@ export const TAB_ACCESS_POLICY = {
   incidents: { kind: "open" },
   requests: { kind: "open" },
   archive: { kind: "open" },
+  mailbox: { kind: "capability", capability: "viewMailbox", staffOnly: true },
   settings: { kind: "open" },
   purchasing: { kind: "flag", flag: "canSeePurchasing" },
   inventory: { kind: "capability", capability: "viewInventory" },

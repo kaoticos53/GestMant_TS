@@ -63,6 +63,18 @@ describe("dashboardTabRouter rules", () => {
       ).toBe(true);
     });
 
+    it("controla acceso al correo según viewMailbox y no ser invitado", () => {
+      expect(
+        canAccessDashboardTab("mailbox", createMockContext({ isGuest: true }, ["viewMailbox"])),
+      ).toBe(false);
+      expect(
+        canAccessDashboardTab("mailbox", createMockContext({ isGuest: false }, [])),
+      ).toBe(false);
+      expect(
+        canAccessDashboardTab("mailbox", createMockContext({ isGuest: false }, ["viewMailbox"])),
+      ).toBe(true);
+    });
+
     it("controla acceso a máquinas según no ser invitado", () => {
       expect(
         canAccessDashboardTab("machines", createMockContext({ isGuest: true })),

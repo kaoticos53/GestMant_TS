@@ -18,6 +18,7 @@ const VIEW_LOADERS = {
   equipment: () => import("../../../EquipmentView"),
   incidents: () => import("../../../IncidentsView"),
   inventory: () => import("../../../InventoryView"),
+  mailbox: () => import("../../../MailboxView"),
   manuals: () => import("../../../ManualsView"),
   machines: () => import("../../../MachinesView"),
   permissions: () => import("../../../PermissionsView"),
@@ -57,6 +58,9 @@ export const IncidentsView = lazy(() =>
 );
 export const InventoryView = lazy(() =>
   VIEW_LOADERS.inventory().then((m) => ({ default: m.InventoryView })),
+);
+export const MailboxView = lazy(() =>
+  VIEW_LOADERS.mailbox().then((m) => ({ default: m.MailboxView })),
 );
 export const ManualsView = lazy(() =>
   VIEW_LOADERS.manuals().then((m) => ({ default: m.ManualsView })),

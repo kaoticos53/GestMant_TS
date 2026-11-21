@@ -4,6 +4,7 @@ export const EXEMPT_EMPTY_NOTICE_TABS: readonly string[] = [
   "permissions",
   "settings",
   "archive",
+  "mailbox",
   "audit",
 ];
 

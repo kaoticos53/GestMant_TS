@@ -13,6 +13,7 @@ export type NavId =
   | "manuals"
   | "machines"
   | "archive"
+  | "mailbox"
   | "audit"
   | "users"
   | "permissions"
@@ -47,4 +48,3 @@ export interface NavigationTarget {
   equipmentSearch?: string;
   timestamp?: number;
 }
-
