@@ -72,3 +72,14 @@ mientras la copia cargaba: `detail?.purgedAt !== null` también es cierto cuando
 `detail` es `undefined`. El diálogo distingue ahora tres estados —cargando, no
 disponible y lápida— en el título, la descripción y el cuerpo; la purga sigue
 oculta mientras no hay copia cargada.
+
+---
+
+## 7. Tests de backend añadidos
+
+`tests/mailSharesBackend.test.ts` (11 pruebas con `convex-test`): resumen sin
+cuerpo ni adjuntos, original con cuerpo y adjunto copiados a un objeto propio,
+idempotencia por `clientShareId`, rechazo sin `viewMailbox`, rechazo de un
+mensaje ajeno, rechazo sin la capacidad del destino, audiencia de incidencia
+para un miembro activo, invitado sin acceso, lectura sin `viewMailbox`, purga
+con lápida y borrado de objetos, y purga rechazada a quien no es administrador.
