@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <SearchResponse xmlns="urn:zimbraMail" offset="0" more="1" sortBy="dateAsc">
+      <m id="17438" s="2625302" d="1795179963000" f="an" l="2" cid="17206">
+        <e t="f" d="JAVIER LOBO CASTRO" a="jlobo@rtva.es"/>
+        <su>Re: Afectación de apagado</su>
+        <fr>Buenos días. En referencia al aviso recibido, revisamos el equipo.</fr>
+      </m>
+      <m id="17436" s="1536" d="1795179000000" f="u" l="5">
+        <e t="f" a="sat@proveedor.es"/>
+        <su>Presupuesto de reparación</su>
+        <fr>Adjuntamos el presupuesto solicitado.</fr>
+      </m>
+    </SearchResponse>
+  </soap:Body>
+</soap:Envelope>

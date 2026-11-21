@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <SyncResponse xmlns="urn:zimbraMail" s="759710383" token="138933" more="1">
+      <folder id="2" name="Inbox" absFolderPath="/Inbox" view="message" n="793" s="475132138" u="104" l="1">
+        <m ids="17438,17436"/>
+        <m ids="17435"/>
+      </folder>
+      <deleted>
+        <m ids="17001,17002"/>
+      </deleted>
+    </SyncResponse>
+  </soap:Body>
+</soap:Envelope>

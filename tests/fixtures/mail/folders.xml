@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <GetFolderResponse xmlns="urn:zimbraMail">
+      <folder id="1" name="USER_ROOT" absFolderPath="/" l="0">
+        <folder id="2" name="Inbox" l="1" absFolderPath="/Inbox" view="message" n="793" u="104" s="475132138"/>
+        <folder id="5" name="Sent" l="1" absFolderPath="/Sent" view="message" n="713" u="0" s="276743499"/>
+        <folder id="3" name="Trash" l="1" absFolderPath="/Trash" n="7" u="0" s="1210196"/>
+        <folder id="260" name="Personales" l="1" absFolderPath="/Personales" n="0" u="0" s="0"/>
+        <folder id="4820" name="Archive" l="1" absFolderPath="/Archive" view="message" n="41" u="0" s="6396714">
+          <folder id="4821" name="2026" l="4820" absFolderPath="/Archive/2026" view="message" n="10" u="1" s="1024"/>
+        </folder>
+        <folder id="8501" name="Fuentes RSS" l="1" absFolderPath="/Fuentes RSS" n="0" u="0" s="0"/>
+        <folder id="10" name="Calendar" l="1" absFolderPath="/Calendar" view="appointment" n="0" u="0" s="0"/>
+      </folder>
+    </GetFolderResponse>
+  </soap:Body>
+</soap:Envelope>

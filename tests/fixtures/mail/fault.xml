@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <soap:Fault>
+      <soap:Code>
+        <soap:Value>soap:Sender</soap:Value>
+      </soap:Code>
+      <soap:Reason>
+        <soap:Text>invalid credentials</soap:Text>
+      </soap:Reason>
+      <soap:Detail>
+        <Error xmlns="urn:zimbra">
+          <Code>account.AUTH_FAILED</Code>
+          <Trace>trace-abc-123</Trace>
+        </Error>
+      </soap:Detail>
+    </soap:Fault>
+  </soap:Body>
+</soap:Envelope>
