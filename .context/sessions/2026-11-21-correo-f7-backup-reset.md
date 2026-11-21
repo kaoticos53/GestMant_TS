@@ -20,8 +20,13 @@
 - **Ficha.** `MailShareSummaryRow` y el detalle exponen `backupRestored`; la
   sección de correos compartidos añade «Copia restaurada: solo metadatos» a la
   línea de metadatos del visor.
-- **Documentación.** Spec 0018: estado al día y nota de que `destinationId` y
-  `sharedBy` viajan como referencias además de los metadatos listados.
+- **Documentación.** Spec 0018: estado al día, nota de que `destinationId` y
+  `sharedBy` viajan como referencias y detalle de la restauración saneada y la
+  omisión auditada. Spec 0011: la limpieza y el vaciado incluyen `mailShares`.
+  Spec 0016: tabla reiniciable, backup de metadatos y RN-003. Manuales ejecutivo
+  y completo: apartados 8.6 y 10.5 con solo metadatos, marca de restaurada,
+  omisión con auditoría y barrido diferido tras el reset. Plan de implantación:
+  F7 cerrada y F8 como siguiente fase.
 
 ## Pruebas
 
@@ -41,13 +46,19 @@ vaciado debe dejar vacías.
 
 ## Verificación
 
-`npx tsc -b` 0 y `npx vite build` 0. En verde `mailSharesBackup` (5),
-`workshopBackup` (2), `workshopReset` (6), `mailSharesBackend` (28),
-`workshopSettingsView` (8), `storageCleanup` (25), `arquitectura` (9) y
-`seguridad` (13). No se ejecutó la suite completa ni se miró la ficha restaurada
-en el navegador.
+`npx tsc -b` 0, `npm run lint` 0 errores (19 avisos preexistentes) y
+`npx vite build` 0. Suite completa 2 857 pasan / 69 saltadas / 0 fallan.
+`npm run security:check` 62 pruebas en verde y `npm audit --audit-level=high`
+sin hallazgos altos (queda el aviso moderado preexistente de `hono`).
+
+Se endureció `tests/humanChallenge.test.ts`: el Time-Trap se prueba con un reto
+de dificultad baja firmado al momento, para no depender de que resolver 16 bits
+entre en los 1 500 ms. La prueba aislada pasó de fallar a 60 ms.
+
+No se miró la ficha restaurada ni la papelera administrativa en el navegador.
 
 ## Pendiente
 
 - Revisión visual en navegador de la sección con una copia restaurada.
-- Cierre de F7: documentación de usuario y hardening.
+- F8: pilotaje con buzones reales, validación contra Hermes y ensayo de rollback
+  (el runbook vive en la fase 8 del plan).

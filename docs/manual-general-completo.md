@@ -93,6 +93,7 @@
     - 10.2 Monitor de "Trabajo sin Traza" y Prevención de Desviaciones
     - 10.3 Motor de Informes Semanales Automatizados
     - 10.4 Mantenimiento del Almacenamiento, Detección de Huérfanos y Papelera
+    - 10.5 Copia de Seguridad, Restauración y Vaciado del Taller
 11. **[Capítulo 11: Infraestructura, Continuidad Operativa y Despliegue en Synology NAS](#capítulo-11-infraestructura-continuidad-operativa-y-despliegue-en-synology-nas)**
     - 11.1 Arquitectura del Servidor Local y Despliegue en Docker Container
     - 11.2 Estrategia de Copias de Seguridad 3-2-1 y Snapshots
@@ -691,6 +692,13 @@ El sistema genera resúmenes periódicos consolidados que se envían por correo 
 A lo largo de los meses, la subida de fotografías de averías y manuales técnicos puede consumir un volumen considerable de almacenamiento:
 - La herramienta de mantenimiento de almacenamiento localiza archivos huérfanos (imágenes subidas a notas técnicas que fueron posteriormente borradas sin guardar).
 - El sistema de papelera de reciclaje retiene los elementos eliminados durante 30 días antes de su purga definitiva, permitiendo la recuperación ante borrados accidentales de los usuarios.
+
+### 10.5 Copia de Seguridad, Restauración y Vaciado del Taller
+La pestaña **«Datos»** de Ajustes del taller ofrece la copia de seguridad operativa en JSON, su restauración con confirmación escrita y el vaciado completo del taller. Las copias de correo compartidas con incidencias, peticiones, equipos, manuales y compras tienen un tratamiento propio:
+- **Solo metadatos en el JSON.** Se guardan el tipo de ficha, la referencia, el asunto, el remitente, las fechas, el autor y el estado de purga. Quedan fuera el extracto, el cuerpo en texto y HTML, los adjuntos, el archivo `.eml` y la identidad del mensaje en el buzón: el contenido vive con el expediente, no dentro de la copia de seguridad.
+- **Restauración como resumen.** Toda copia vuelve con `mode: summary` y la marca **«Copia restaurada: solo metadatos»** que la ficha muestra en el visor. El destino se remapea a la ficha restaurada, de modo que la copia sigue visible solo para quien puede verla.
+- **Omisión con auditoría.** Si la ficha destino no forma parte de la copia, la copia de correo no se restaura: se registra `mail_share_restore_skip` en `securityAuditLog` y no se fabrica una huérfana artificial.
+- **Vaciado del taller.** El reset borra las filas de copias compartidas junto con el resto del trabajo del taller; no borra sus objetos de `_storage` en la misma transacción. La limpieza nocturna los retira a la papelera cuando ya nadie los cita y, vencido su plazo, se eliminan. `securityAuditLog` permanece intacto.
 
 ---
 

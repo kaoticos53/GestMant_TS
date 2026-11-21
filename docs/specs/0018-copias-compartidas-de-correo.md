@@ -447,21 +447,23 @@ tests/mailSharesBackup.test.ts
 - La exportación guarda **solo metadatos**: `destinationType`, `destinationReference`, `subject`, `fromName`, `fromAddress`, `sentAt`, `sharedByName`, `sharedAt`, `mode`, `contentPurgedAt` y `purgeReason`. Viajan también `destinationId` y `sharedBy` como referencias: sin el primero la restauración no puede remapear la ficha y sin el segundo no se puede reconstruir la fila; ninguno de los dos es contenido.
 - Se excluyen siempre `summary` (es un extracto del cuerpo), `bodyText`, `bodyHtml`, `emlStorageId`, `emlFileName`, `emlSize`, `attachments`, `sourceMessageId` y `sourceEmail`.
 - Una copia `original` se exporta con `mode: "summary"` y `backupRestored: true`. Al restaurar, no hay cuerpo, adjuntos ni `.eml`; la ficha lo indica con la marca «Copia restaurada: solo metadatos» y el resumen queda vacío.
-- Si el destino no se puede remapear al restaurar, la copia se omite y se registra `mail_share_restore_skip`; no se crea una huérfana artificial.
+- La restauración vuelve a filtrar la fila con la misma lista de campos: un JSON editado a mano no puede introducir extracto, cuerpo, adjuntos ni `.eml`, y siempre se fuerza `summary` + `backupRestored`.
+- Si el destino no se puede remapear al restaurar, la copia se omite y se registra `mail_share_restore_skip` con `reason: "destination_missing"` en `securityAuditLog`; no se crea una huérfana artificial. El contador de registros restaurados cuenta solo las filas insertadas.
 
 ### 13.2 Reset
 
 - `mailShares` entra en `RESET_TABLES` porque es trabajo del taller, no configuración.
-- El reset borra las filas; los objetos de `_storage` quedan sin cita y `storageCleanup` los barre en su pasada nocturna.
+- `purgeForReset` borra las filas en tandas, sin lápida: al taller entero le pasa lo mismo y no queda ficha donde leerla.
+- Los objetos de `_storage` no se borran en el reset: quedan sin cita y `storageCleanup` los retira a la papelera en su pasada nocturna, con el plazo normal antes de eliminarlos.
 - `securityAuditLog` no se toca.
 
 ### 13.3 Limpieza de almacenamiento
 
-`storageCleanup` ya recorre todas las tablas del esquema y sus cadenas. Al añadir `mailShares`, sus `emlStorageId` y `attachments[].storageId` quedan citados y no se borran mientras la fila exista. El test debe comprobar que:
+`storageCleanup` ya recorre todas las tablas del esquema y sus cadenas. Al añadir `mailShares`, sus `emlStorageId` y `attachments[].storageId` quedan citados y no se borran mientras la fila exista. `tests/mailSharesBackup.test.ts` comprueba el ciclo entero:
 
 - una copia activa protege su `.eml` y sus adjuntos;
-- una copia purgada ya no los protege;
 - una copia huérfana los protege hasta su purga;
+- tras el reset, sin fila que los cite, la limpieza los retira a `trashFiles` con `pass: "orphanFiles"` (siguen en el almacén hasta que vence el plazo de la papelera);
 - la caché del buzón no se ve afectada.
 
 ---
@@ -553,15 +555,15 @@ Equivalencia con el plan: fases 1–2 = F5, fase 3 = F6, fases 4–5 = F7; F8 es
 
 ## 16. Trazabilidad
 
-| Requisito              | Criterios              | Tests previstos                                               |
-| ---------------------- | ---------------------- | ------------------------------------------------------------- |
-| S1, S2, S3             | CA-001, CA-008, CA-012 | `tests/mailShares.test.ts`, `tests/storageCleanup.test.ts`    |
-| S4, S5                 | CA-002, CA-004, CA-009 | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`   |
-| S5, S6                 | CA-003, CA-005         | `tests/mailShares.test.ts`, `tests/seguridad.test.ts`         |
-| S7                     | CA-006, CA-007         | `tests/mailShares.test.ts`, `tests/trash.test.ts`             |
-| S8                     | CA-010, CA-011         | `tests/audit.test.ts`, `tests/mailSharesBackup.test.ts`       |
-| Backup/reset           | CA-010                 | `tests/workshopBackup.test.ts`, `tests/workshopReset.test.ts` |
-| Reglas del repositorio | —                      | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts`       |
+| Requisito              | Criterios              | Tests previstos                                                                                 |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------------------- |
+| S1, S2, S3             | CA-001, CA-008, CA-012 | `tests/mailShares.test.ts`, `tests/storageCleanup.test.ts`                                      |
+| S4, S5                 | CA-002, CA-004, CA-009 | `tests/mailShares.test.ts`, `tests/mailSharesView.test.tsx`                                     |
+| S5, S6                 | CA-003, CA-005         | `tests/mailShares.test.ts`, `tests/seguridad.test.ts`                                           |
+| S7                     | CA-006, CA-007         | `tests/mailShares.test.ts`, `tests/trash.test.ts`                                               |
+| S8                     | CA-010, CA-011         | `tests/audit.test.ts`, `tests/mailSharesBackup.test.ts`                                         |
+| Backup/reset           | CA-010, CA-012         | `tests/mailSharesBackup.test.ts`, `tests/workshopBackup.test.ts`, `tests/workshopReset.test.ts` |
+| Reglas del repositorio | —                      | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts`                                         |
 
 Comandos de cierre por fase: `npx tsc --noEmit`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
 

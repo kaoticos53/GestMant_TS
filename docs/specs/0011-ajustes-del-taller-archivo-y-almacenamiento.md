@@ -27,15 +27,15 @@ Agrupa la administración operativa del taller: listas maestras (`catalogs`), mo
 - **RF-001 (Catálogos y normalización):** `catalogs.ts` ofrece lectura pública acotada (`listPublic` para `/reportar`), alta automática (`ensureItem`), edición, borrado, fusión de duplicados (`mergeDuplicates`) y migración de ubicaciones heredadas.
 - **RF-002 (Archivo automático y manual):** `archive.runAutoArchive` (cron `03:15` UTC) archiva incidencias cerradas y peticiones decididas anteriores al umbral; `ArchiveView.tsx` permite consultar y recuperar fichas archivadas.
 - **RF-003 (Papelera y retención):** Las incidencias, peticiones y archivos retirados permanecen recuperables hasta vencer el plazo de retención (`trash.purgeExpired`, `incidents.purgeExpired`, `partRequests.purgeExpired`).
-- **RF-004 (Limpieza de almacenamiento):** `reportUploads.sweepUnused` (`04:00` UTC) y `storageCleanup.sweepOrphanFiles` (`04:30` UTC) eliminan ficheros no referenciados tras avisar (`03:45` UTC).
-- **RF-005 (Vaciado y datos de muestra):** `seed.ts` carga datos de demostración; `workshopReset.ts` vacía `RESET_TABLES` exigiendo confirmación y permiso administrativo.
+- **RF-004 (Limpieza de almacenamiento):** `reportUploads.sweepUnused` (`04:00` UTC) y `storageCleanup.sweepOrphanFiles` (`04:30` UTC) eliminan ficheros no referenciados tras avisar (`03:45` UTC). La pasada lee todas las tablas, así que también respeta los adjuntos y el `.eml` de `mailShares` mientras una copia los cite, y los retira cuando la copia desaparece.
+- **RF-005 (Vaciado y datos de muestra):** `seed.ts` carga datos de demostración; `workshopReset.ts` vacía `RESET_TABLES` exigiendo confirmación y permiso administrativo. El vaciado incluye `mailShares`: borra sus filas y deja los objetos a la limpieza nocturna, sin tocar `securityAuditLog`.
 
 ---
 
 ## 4. Reglas de Negocio e Invariantes
 
 - **RN-001:** `securityAuditLog` **NUNCA** se incluye en `RESET_TABLES` (`workshopReset.ts`).
-- **RN-002:** La limpieza nocturna nunca borra un `storageId` citado en `incidents`, `incidentDocuments`, `partRequests`, `receptions` o `manuals`.
+- **RN-002:** La limpieza nocturna nunca borra un `storageId` citado en `incidents`, `incidentDocuments`, `partRequests`, `receptions`, `manuals` o `mailShares`.
 
 ---
 
@@ -69,12 +69,12 @@ Agrupa la administración operativa del taller: listas maestras (`catalogs`), mo
 
 ## 9. Trazabilidad RF → CA → Tests
 
-| Requisito | Criterio | Cobertura automatizada |
-|---|---|---|
-| RF-001 | Catálogos y duplicados | `tests/catalogs.test.ts`, `tests/catalogsCard.test.tsx` |
-| RF-002 | Archivo automático y vistas | `tests/archive.test.ts`, `tests/archiveDataHelpers.test.ts`, `tests/archiveListHelpers.test.ts` |
-| RF-003, RF-004 | Papelera y limpieza de `_storage` | `tests/trash.test.ts`, `tests/trashCard.test.tsx`, `tests/storageCleanup.test.ts`, `tests/cleanupLog.test.ts`, `tests/reportUploads.test.ts` |
-| RF-005, CA-001, RN-001 | Seed y vaciado seguro | `tests/seed.test.ts`, `tests/workshopReset.test.ts`, `tests/emptyWorkshop.test.ts`, `tests/workshopSettingsView.test.tsx` |
+| Requisito              | Criterio                          | Cobertura automatizada                                                                                                                                      |
+| ---------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-001                 | Catálogos y duplicados            | `tests/catalogs.test.ts`, `tests/catalogsCard.test.tsx`                                                                                                     |
+| RF-002                 | Archivo automático y vistas       | `tests/archive.test.ts`, `tests/archiveDataHelpers.test.ts`, `tests/archiveListHelpers.test.ts`                                                             |
+| RF-003, RF-004         | Papelera y limpieza de `_storage` | `tests/trash.test.ts`, `tests/trashCard.test.tsx`, `tests/storageCleanup.test.ts`, `tests/cleanupLog.test.ts`, `tests/reportUploads.test.ts`                |
+| RF-005, CA-001, RN-001 | Seed y vaciado seguro             | `tests/seed.test.ts`, `tests/workshopReset.test.ts`, `tests/emptyWorkshop.test.ts`, `tests/workshopSettingsView.test.tsx`, `tests/mailSharesBackup.test.ts` |
 
 ---
 

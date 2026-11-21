@@ -36,12 +36,15 @@ erDiagram
 ## 3. Catálogo de Tablas (`src/convex/schema.ts`)
 
 ### A. Dominio operativo (reiniciables en `RESET_TABLES`)
-`spareParts`, `stockMovements`, `equipment`, `equipmentMovements`, `equipmentModels`, `incidents`, `incidentDocuments`, `incidentDocumentLog`, `partRequests`, `requestDecisions`, `purchaseRequests`, `purchaseOrders`, `receptions`, `maintenanceRecords`, `manuals`, `notifications`, `messages`, `reportUploads`, `storageCleanupRuns`, `reportUploadPurges`, `trashFiles`, `weeklyReports`, `catalogs`, `appSettings`, `publicStats`.
+
+`spareParts`, `stockMovements`, `equipment`, `equipmentMovements`, `equipmentModels`, `incidents`, `incidentDocuments`, `incidentDocumentLog`, `partRequests`, `requestDecisions`, `purchaseRequests`, `purchaseOrders`, `receptions`, `maintenanceRecords`, `manuals`, `mailShares`, `notifications`, `messages`, `reportUploads`, `storageCleanupRuns`, `reportUploadPurges`, `trashFiles`, `weeklyReports`, `catalogs`, `appSettings`, `publicStats`.
 
 ### B. Efímeras y control de tasa (incluidas en `RESET_TABLES` + purga cron)
+
 `publicLookupLimits`, `otpSendLimits`, `publicChallengeUsed`, `aiUsageLimits`.
 
 ### C. Identidad, configuración y auditoría (excluidas de `RESET_TABLES`)
+
 - `users`, `roles`, `referenceCounters`
 - `storageSettings`, `alertSettings`, `auditAlertSettings`, `reportSettings`, `archiveSettings`, `mailSettings`, `aiSettings`
 - `mailLog`, **`securityAuditLog`** (inmutable, nunca se purga).
@@ -60,16 +63,18 @@ erDiagram
 
 - **RN-001:** Ninguna tabla operativa con `deletedAt` se borra físicamente en la acción de usuario; primero pasa a papelera y solo vence en cron tras expirar retención.
 - **RN-002:** `securityAuditLog` jamás entra en `RESET_TABLES`.
+- **RN-003:** `mailShares` viaja en el backup solo como metadatos (`src/lib/backup.ts`): sin extracto, cuerpo, adjuntos ni `.eml`. Las referencias `destinationId` y `sharedBy` sí viajan para remapear la ficha. Una copia sin destino restaurado se omite y se registra `mail_share_restore_skip`; las restauradas vuelven como `summary` con `backupRestored: true`.
 
 ---
 
 ## 6. Trazabilidad RF → Tests
 
-| Requisito | Cobertura automatizada |
-|---|---|
-| RF-001 | `tests/references.test.ts` |
-| RF-003 | `tests/nasSetup.test.ts` |
-| RN-002 | `tests/workshopReset.test.ts`, `tests/seguridad.test.ts` |
+| Requisito | Cobertura automatizada                                                                     |
+| --------- | ------------------------------------------------------------------------------------------ |
+| RF-001    | `tests/references.test.ts`                                                                 |
+| RF-003    | `tests/nasSetup.test.ts`                                                                   |
+| RN-002    | `tests/workshopReset.test.ts`, `tests/seguridad.test.ts`, `tests/mailSharesBackup.test.ts` |
+| RN-003    | `tests/mailSharesBackup.test.ts`                                                           |
 
 ---
 

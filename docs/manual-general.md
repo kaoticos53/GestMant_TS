@@ -67,6 +67,7 @@
    - 8.3 Motor de Informes Semanales Automatizados
    - 8.4 Mantenimiento del Almacenamiento, Archivos Huérfanos y Papelera
    - 8.5 Políticas de Archivado Automático de Casos Antiguos
+   - 8.6 Copia de Seguridad, Restauración y Vaciado del Taller
 9. [Comunicaciones Internas, Avisos y Búsqueda Global](#9-comunicaciones-internas-avisos-y-búsqueda-global)
    - 9.1 Mensajería Directa entre Miembros del Taller
    - 9.2 Centro de Notificaciones Operativas en Tiempo Real
@@ -470,6 +471,12 @@ A lo largo de los meses, los técnicos suben cientos de fotografías de diagnós
 Para mantener las tablas de trabajo ágiles y con tiempos de respuesta instantáneos:
 - Se configura una política de archivado periódico (ej. *Archivar automáticamente incidencias resueltas hace más de 60 días*).
 - Los registros archivados salen de las colas operativas del día a día pero continúan plenamente accesibles desde la vista histórica **«Archivo»** para cualquier consulta pericial o estadística posterior.
+
+### 8.6 Copia de Seguridad, Restauración y Vaciado del Taller
+La pestaña **«Datos»** de Ajustes del taller permite descargar una copia completa en JSON, restaurarla después y vaciar el taller dejándolo como recién instalado.
+- **Correos compartidos en la copia:** viajan solo como metadatos (tipo de ficha, referencia, asunto, remitente, fechas y autor). Nunca se incluyen el extracto, el cuerpo, los adjuntos ni el archivo `.eml`: el contenido de los correos se queda en el expediente y no se duplica en el JSON.
+- **Restauración:** cada copia vuelve enganchada a su ficha restaurada y como resumen. La que era original vuelve marcada «Copia restaurada: solo metadatos», sin cuerpo ni archivos. Si la ficha destino no está en la copia, el correo compartido se omite y el intento queda registrado en la auditoría de seguridad; no se crea una copia huérfana.
+- **Vaciado del taller:** se lleva también los correos compartidos. Sus adjuntos y `.eml` dejan de estar citados y la limpieza nocturna del almacén los retira a la papelera, donde esperan su plazo antes de borrarse. El registro de auditoría de seguridad no se toca.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Base:** [`SPEC-0017`](specs/0017-buzon-de-correo-zimbra.md) y [`SPEC-0018`](specs/0018-copias-compartidas-de-correo.md).
 
-**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y **0018 aprobada el 2026-11-21 por el usuario**, con lo que la puerta de F5 está abierta. F5 en curso: cerrados el esquema `mailShares`, la capacidad `createIncidentFromMail` y las políticas puras; en marcha la acción de compartir, la sección en fichas y las descargas.
+**Estado:** plan en ejecución; 0017 aprobada (F1/F2 cerradas y F3/F4 implementadas con cabeceras, vista, cuerpo, visor, adjuntos y caché; queda la validación real contra Hermes) y **0018 aprobada el 2026-11-21 por el usuario**. F5 y F6 cerradas y F7 cerrada (backup solo de metadatos, restauración como resumen con omisión auditada, reset con limpieza diferida, documentación en manuales y specs, y hardening con suite completa y `security:check` en verde). Queda F8: pilotaje con buzones reales, ensayo de rollback y revisión visual.
 
 **Objetivo:** implantar el buzón personal de solo lectura y, después, las copias de correo compartidas con el expediente, sin duplicar la caché del buzón ni abrir accesos laterales a terceros.
 
@@ -388,6 +388,8 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 ---
 
 ### Fase 7 — 0018: backup, reset, documentación y hardening
+
+**Estado:** cerrada (2026-11-21). Backup y restauración de `mailShares` solo con metadatos y omisión auditada; reset con `purgeForReset`; documentación en los dos manuales y en 0011/0016/0018; `tsc`, lint, build, suite completa y `npm run security:check` en verde. El runbook de rollback vive en F8 y su ensayo queda como puerta de esa fase.
 
 **Objetivo:** dejar la funcionalidad operable, reversible y documentada.
 
