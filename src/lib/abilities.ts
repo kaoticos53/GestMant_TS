@@ -251,11 +251,6 @@ export function asRequest(request: Record<string, unknown>) {
   return subject("Request", request);
 }
 
-/** La cuenta de correo propia, marcada para la interfaz (`<Can>`). */
-export function asMailbox(account: Record<string, unknown>) {
-  return subject("Mailbox", account);
-}
-
 /** La orden de compra, marcada como tal para la interfaz (`<Can>`). */
 export function asPurchaseOrder(order: Record<string, unknown>) {
   return subject("PurchaseOrder", order);

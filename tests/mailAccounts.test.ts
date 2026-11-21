@@ -341,6 +341,41 @@ describe("cuenta de correo — backend aislado", () => {
     ).toEqual(["Sent"]);
   });
 
+  test("cambiar de dirección borra las carpetas y la caché de la cuenta anterior", async () => {
+    const { first, t } = await setup();
+    await first.mutation(api.mailAccounts.save, draft);
+    stubConnection();
+    await first.action(api.mailAccounts.testConnection, {});
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("mailAccounts")
+        .withIndex("by_user")
+        .first();
+      if (!row) throw new Error("falta la cuenta");
+      await ctx.db.patch(row._id, {
+        cacheBytes: 1234,
+        lastSyncAt: Date.now(),
+        lastSyncError: "Inbox",
+      });
+    });
+
+    await first.mutation(api.mailAccounts.save, {
+      ...draft,
+      email: "otra@rtva.es",
+    });
+
+    expect(await t.run((ctx) => ctx.db.query("mailFolders").collect())).toEqual(
+      [],
+    );
+    const row = await t.run((ctx) =>
+      ctx.db.query("mailAccounts").withIndex("by_user").first(),
+    );
+    expect(row?.cacheBytes).toBe(0);
+    expect(row?.lastSyncAt).toBeUndefined();
+    expect(row?.lastSyncError).toBeUndefined();
+    expect(row?.status).toBe("disconnected");
+  });
+
   test("desconectar borra credenciales y, si se pide, también las carpetas", async () => {
     const { first, t } = await setup();
     await first.mutation(api.mailAccounts.save, draft);

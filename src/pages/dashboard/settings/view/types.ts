@@ -30,7 +30,7 @@ export interface WorkshopSettingsPermissions {
   /** El correo del taller lo configura y lo prueba el administrador. */
   canManageMail?: boolean;
   /** «Mi buzón» lo ve quien tenga la capacidad personal de correo. */
-  canManageMailbox?: boolean;
+  canUseMailbox?: boolean;
   /** Capacidad para gestionar incidencias y verlas en la papelera. */
   canManageIncidents?: boolean;
   /** Capacidad para decidir peticiones y verlas en la papelera. */

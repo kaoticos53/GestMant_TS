@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -8,6 +7,7 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { decryptSecret, encryptSecret, secretHint } from "./_auth/secretCrypto";
@@ -18,7 +18,6 @@ import {
   clampCacheLimit,
   clampCacheRetention,
   normalizeMailAddress,
-  type MailAccountStatus,
 } from "../lib/mailClient/account";
 import { parseAuthResponse } from "../lib/mailClient/auth";
 import {
@@ -34,6 +33,8 @@ import {
 import type { MailFolder } from "../lib/mailClient/types";
 import { hasCapability, memberStatus } from "./permissions";
 
+const SOAP_ENDPOINT = `${MAIL_SERVER_URL}/service/soap`;
+
 const MAILBOX_DENY =
   "No tienes permisos para usar el buzón de correo. Revisa la configuración de tu rol con el administrador.";
 const MAILBOX_IDENTITY = identityNotice(
@@ -44,7 +45,7 @@ const MAILBOX_IDENTITY = identityNotice(
 /** La cuenta de la persona de la sesión; una fila por usuario. */
 async function readAccount(
   ctx: QueryCtx,
-  userId: Doc<"users">["_id"],
+  userId: Id<"users">,
 ): Promise<Doc<"mailAccounts"> | null> {
   return await ctx.db
     .query("mailAccounts")
@@ -62,18 +63,24 @@ function publicAccount(row: Doc<"mailAccounts">) {
     cacheLimitBytes: row.cacheLimitBytes,
     cacheRetentionDays: row.cacheRetentionDays,
     cacheBytes: row.cacheBytes,
-    cacheBodyBytes: row.cacheBodyBytes,
-    cacheAttachmentBytes: row.cacheAttachmentBytes,
     hasPassword: (row.password ?? "").trim() !== "",
     passwordHint: row.passwordHint ?? "",
-    hasToken: (row.authToken ?? "").trim() !== "",
-    tokenExpiresAt: row.tokenExpiresAt ?? null,
     lastSyncAt: row.lastSyncAt ?? null,
-    lastSyncOkAt: row.lastSyncOkAt ?? null,
     lastSyncError: row.lastSyncError ?? null,
-    createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/** Borra las carpetas locales de una cuenta. La usan editar, desconectar y borrar. */
+async function deleteFolders(
+  ctx: MutationCtx,
+  accountId: Id<"mailAccounts">,
+): Promise<void> {
+  const folders = await ctx.db
+    .query("mailFolders")
+    .withIndex("by_account", (q) => q.eq("accountId", accountId))
+    .collect();
+  for (const folder of folders) await ctx.db.delete(folder._id);
 }
 
 /** La persona del taller con capacidad de buzón, o el aviso que corresponda. */
@@ -108,7 +115,6 @@ const folderValidator = v.object({
 const saveArgs = {
   email: v.string(),
   password: v.optional(v.string()),
-  clearPassword: v.optional(v.boolean()),
   enabled: v.boolean(),
   cacheLimitBytes: v.number(),
   cacheRetentionDays: v.number(),
@@ -137,14 +143,10 @@ export const save = mutation({
 
       const existing = await readAccount(ctx, actor._id);
       const incomingPassword = (args.password ?? "").trim();
-      const clearPassword = args.clearPassword === true;
       let encryptedPassword = existing?.password;
       let passwordHint = existing?.passwordHint;
 
-      if (clearPassword) {
-        encryptedPassword = undefined;
-        passwordHint = undefined;
-      } else if (incomingPassword !== "") {
+      if (incomingPassword !== "") {
         if (incomingPassword.length > 512) {
           throw new ConvexError(
             "La contraseña de aplicación es demasiado larga.",
@@ -158,27 +160,30 @@ export const save = mutation({
         );
       }
 
-      if (
-        !clearPassword &&
-        (encryptedPassword ?? "").trim() === "" &&
-        !existing
-      ) {
-        throw new ConvexError(
-          "La contraseña de aplicación es obligatoria para configurar el buzón.",
-        );
-      }
-
       const now = Date.now();
+      const emailChanged = existing !== null && existing.email !== email;
       const credentialsChanged =
-        email !== existing?.email ||
-        incomingPassword !== "" ||
-        clearPassword ||
-        existing === null;
-      const status: MailAccountStatus = credentialsChanged
-        ? "disconnected"
-        : (existing.status as MailAccountStatus);
+        existing === null || emailChanged || incomingPassword !== "";
+      const status =
+        existing === null || credentialsChanged
+          ? "disconnected"
+          : existing.status;
       const tokenFields = credentialsChanged
-        ? { authToken: undefined, tokenExpiresAt: undefined }
+        ? {
+            authToken: undefined,
+            tokenExpiresAt: undefined,
+            lastSyncError: undefined,
+          }
+        : {};
+      const mailboxResetFields = emailChanged
+        ? {
+            cacheBytes: 0,
+            cacheBodyBytes: 0,
+            cacheAttachmentBytes: 0,
+            lastSyncAt: undefined,
+            lastSyncOkAt: undefined,
+            syncLeaseUntil: undefined,
+          }
         : {};
 
       const record = {
@@ -193,11 +198,13 @@ export const save = mutation({
           ? { password: undefined, passwordHint: undefined }
           : { password: encryptedPassword, passwordHint }),
         ...tokenFields,
+        ...mailboxResetFields,
       };
 
       let accountId: Id<"mailAccounts">;
       if (existing) {
         await ctx.db.patch(existing._id, record);
+        if (emailChanged) await deleteFolders(ctx, existing._id);
         accountId = existing._id;
       } else {
         accountId = await ctx.db.insert("mailAccounts", {
@@ -219,6 +226,7 @@ export const save = mutation({
           accountId,
           hasPassword: encryptedPassword !== undefined,
           status,
+          emailChanged,
         },
       });
 
@@ -272,17 +280,7 @@ export const folders = query({
 export const connectionContext = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) {
-      throw new ConvexError("Debes iniciar sesión para usar tu buzón.");
-    }
-    const user = await ctx.db.get(userId);
-    if (!user || user.active === false || user.isAnonymous === true) {
-      throw new ConvexError("Esta cuenta no puede usar el buzón.");
-    }
-    if (!(await hasCapability(ctx, user, "viewMailbox"))) {
-      throw new ConvexError(MAILBOX_DENY);
-    }
+    const user = await requireMailboxMember(ctx);
     const row = await readAccount(ctx, user._id);
     if (!row) {
       throw new ConvexError("Todavía no has configurado tu buzón.");
@@ -295,7 +293,6 @@ export const connectionContext = internalQuery({
     return {
       accountId: row._id,
       email: row.email,
-      serverUrl: row.serverUrl,
       password: row.password ?? "",
     };
   },
@@ -349,7 +346,6 @@ export const recordConnected = internalMutation({
         await ctx.db.insert("mailFolders", record);
       }
     }
-    return { folderCount: args.folders.length };
   },
 });
 
@@ -381,13 +377,19 @@ function failureLabel(status: number, fault: MailFault | null): string {
   return `Error HTTP ${status}`;
 }
 
-function isCredentialFailure(status: number, fault: MailFault | null): boolean {
-  const classification = classifyHttpFailure({ status, fault });
-  return classification.requiresCredentials;
+class MailConnectionError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly fault: MailFault | null,
+  ) {
+    super(message);
+    this.name = "MailConnectionError";
+  }
 }
 
-async function postSoap(url: string, body: string): Promise<string> {
-  const response = await fetch(url, {
+async function postSoap(body: string): Promise<string> {
+  const response = await fetch(SOAP_ENDPOINT, {
     method: "POST",
     headers: { "content-type": "text/xml; charset=utf-8" },
     body,
@@ -400,15 +402,35 @@ async function postSoap(url: string, body: string): Promise<string> {
     fault = null;
   }
   if (fault !== null || !response.ok) {
-    const error = new Error(failureLabel(response.status, fault)) as Error & {
-      fault?: MailFault | null;
-      httpStatus?: number;
-    };
-    error.fault = fault;
-    error.httpStatus = response.status;
-    throw error;
+    throw new MailConnectionError(
+      failureLabel(response.status, fault),
+      response.status,
+      fault,
+    );
   }
   return text;
+}
+
+/** Autentica y descubre carpetas; no persiste nada. */
+async function probeMailbox(
+  email: string,
+  password: string,
+): Promise<{
+  authToken: string;
+  lifetimeMs: number;
+  folders: MailFolder[];
+}> {
+  const auth = parseAuthResponse(
+    await postSoap(buildAuthRequest({ account: email, password })),
+  );
+  const folders = parseMailFolders(
+    await postSoap(buildGetFolderRequest({ authToken: auth.authToken })),
+  );
+  return {
+    authToken: auth.authToken,
+    lifetimeMs: auth.lifetimeMs,
+    folders,
+  };
 }
 
 /**
@@ -429,31 +451,22 @@ export const testConnection = action({
       );
     }
 
-    let authToken: string;
-    let tokenLifetimeMs: number;
-    let folders: MailFolder[];
+    let probe: Awaited<ReturnType<typeof probeMailbox>>;
     try {
-      const authXml = await postSoap(
-        `${context.serverUrl}/service/soap`,
-        buildAuthRequest({ account: context.email, password }),
-      );
-      const auth = parseAuthResponse(authXml);
-      authToken = auth.authToken;
-      tokenLifetimeMs = auth.lifetimeMs;
-
-      const foldersXml = await postSoap(
-        `${context.serverUrl}/service/soap`,
-        buildGetFolderRequest({ authToken }),
-      );
-      folders = parseMailFolders(foldersXml);
+      probe = await probeMailbox(context.email, password);
     } catch (error) {
-      const failure = error as Error & {
-        fault?: MailFault | null;
-        httpStatus?: number;
-      };
-      const status = failure.httpStatus ?? 0;
-      const fault = failure.fault ?? null;
-      const credentialFailure = isCredentialFailure(status, fault);
+      const failure =
+        error instanceof MailConnectionError
+          ? error
+          : new MailConnectionError(
+              error instanceof Error ? error.message : "Error de conexión",
+              0,
+              null,
+            );
+      const credentialFailure = classifyHttpFailure({
+        status: failure.status,
+        fault: failure.fault,
+      }).requiresCredentials;
       await ctx.runMutation(internal.mailAccounts.recordFailure, {
         accountId: context.accountId,
         status: credentialFailure ? "reauthRequired" : "error",
@@ -466,20 +479,16 @@ export const testConnection = action({
       );
     }
 
-    const encryptedToken = await encryptSecret(authToken);
-    const result = await ctx.runMutation(
-      internal.mailAccounts.recordConnected,
-      {
-        accountId: context.accountId,
-        authToken: encryptedToken,
-        tokenExpiresAt: Date.now() + tokenLifetimeMs,
-        folders,
-      },
-    );
+    await ctx.runMutation(internal.mailAccounts.recordConnected, {
+      accountId: context.accountId,
+      authToken: await encryptSecret(probe.authToken),
+      tokenExpiresAt: Date.now() + probe.lifetimeMs,
+      folders: probe.folders,
+    });
     return {
       ok: true as const,
       email: context.email,
-      folderCount: result.folderCount,
+      folderCount: probe.folders.length,
     };
   },
 });
@@ -498,13 +507,7 @@ export const disconnect = mutation({
       const row = await readAccount(ctx, actor._id);
       if (!row) return true;
 
-      const folders = await ctx.db
-        .query("mailFolders")
-        .withIndex("by_account", (q) => q.eq("accountId", row._id))
-        .collect();
-      if (args.deleteCache) {
-        for (const folder of folders) await ctx.db.delete(folder._id);
-      }
+      if (args.deleteCache) await deleteFolders(ctx, row._id);
 
       await ctx.db.patch(row._id, {
         status: "disconnected",
@@ -513,6 +516,9 @@ export const disconnect = mutation({
         authToken: undefined,
         tokenExpiresAt: undefined,
         lastSyncError: undefined,
+        lastSyncAt: undefined,
+        lastSyncOkAt: undefined,
+        syncLeaseUntil: undefined,
         ...(args.deleteCache
           ? { cacheBytes: 0, cacheBodyBytes: 0, cacheAttachmentBytes: 0 }
           : {}),
@@ -543,11 +549,7 @@ export const remove = mutation({
       const row = await readAccount(ctx, actor._id);
       if (!row) return true;
 
-      const folders = await ctx.db
-        .query("mailFolders")
-        .withIndex("by_account", (q) => q.eq("accountId", row._id))
-        .collect();
-      for (const folder of folders) await ctx.db.delete(folder._id);
+      await deleteFolders(ctx, row._id);
       await ctx.db.delete(row._id);
       await logSecurityEvent(ctx, {
         actorId: actor._id,

@@ -24,7 +24,7 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 | `src/lib/permissions.ts`                                                            | Cambio        | Capacidad `viewMailbox` y defaults por rol.                                      |
 | `src/lib/abilities.ts`                                                              | Cambio        | Sujeto `Mailbox` con propiedad por `userId`.                                     |
 | `src/pages/dashboard/settings/MailboxCard.tsx`                                      | Nuevo         | Formulario de «Mi buzón», prueba, estado, caché y borrado.                       |
-| `src/pages/dashboard/settings/view/*`                                               | Cambio        | Pestaña `mailbox` y permiso `canManageMailbox`.                                  |
+| `src/pages/dashboard/settings/view/*`                                               | Cambio        | Pestaña `mailbox` y permiso `canUseMailbox`.                                     |
 | `src/pages/dashboard/WorkshopSettingsView.tsx`                                      | Cambio        | Propaga la nueva pestaña.                                                        |
 | `src/pages/dashboard/components/content/router/DashboardTabRenderer.tsx`            | Cambio        | Pasa `viewMailbox` no invitado a Ajustes.                                        |
 | `src/pages/dashboard/constants/navConfig.ts`                                        | Cambio        | Ajustes visible también con `viewMailbox`.                                       |
@@ -38,7 +38,7 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 ## 3. Decisiones Técnicas y de Diseño
 
 - **Servidor fijo:** `MAIL_SERVER_URL = https://hermes.rtva.es`; la API no acepta `serverUrl` ni `userId` del cliente.
-- **Cifrado:** contraseña y token con `secretCrypto` (AES-GCM). La vista pública expone solo `hasPassword`, pista de últimos cuatro y `hasToken`; nunca el secreto.
+- **Cifrado:** contraseña y token con `secretCrypto` (AES-GCM). La vista pública expone solo `hasPassword` y la pista de los últimos cuatro; nunca el secreto ni el token.
 - **Aislamiento:** una fila por usuario, búsqueda por `by_user`; el administrador solo gestiona su propia cuenta. La regla CASL `Mailbox` también limita por `userId`.
 - **Prueba de conexión:** `AuthRequest` + `GetFolderRequest` en una acción; solo se guardan carpetas `isMail`. `AUTH_FAILED` deja `reauthRequired` y borra token.
 - **Estado:** guardar credenciales deja `disconnected`; la prueba exitosa deja `connected`. El token usa `lifetime` real del `AuthResponse`.
@@ -51,10 +51,10 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 ## 4. Estado de Verificación
 
 - **TDD:** tests escritos antes de los módulos; rojo confirmado por `account.ts`/`auth.ts` ausentes.
-- **Tests de cuenta:** ✅ 12/12.
+- **Tests de cuenta:** ✅ 13/13.
 - **Habilidades:** ✅ 13/13.
 - **Ajustes y navegación:** ✅ 13/13 helpers + 8/8 vista.
-- **Conjunto relacionado:** ✅ 190/190 en la pasada amplia.
+- **Conjunto relacionado:** ✅ 191/191 en la pasada amplia.
 - **TypeScript:** ✅ `npx tsc --noEmit`.
 - **Lint:** ✅ 0 errores; 19 warnings preexistentes.
 - **Arquitectura y seguridad:** ✅ incluidas en la pasada amplia.
@@ -62,7 +62,20 @@ Cerrar F2 de `SPEC-0017`: alta y edición de la cuenta propia de Zimbra, cifrado
 
 ---
 
-## 5. Deuda Técnica y Siguiente Agente
+## 5. Revisión posterior de F2 (2026-11-21)
+
+- **Menos API:** fuera `clearPassword` (desconectar ya borra credenciales), `hasToken`, `tokenExpiresAt`, `createdAt`, `lastSyncOkAt` y el desglose de caché no usado por la UI. `save` ya no mantiene una rama para limpiar la contraseña.
+- **Una sola puerta:** `connectionContext` reutiliza `requireMailboxMember`; la acción usa el `MAIL_SERVER_URL` fijo y no el `serverUrl` guardado.
+- **Errores SOAP:** `MailConnectionError` sustituye el `Error` con propiedades inyectadas; `probeMailbox` separa protocolo de persistencia y solo después se registra la conexión.
+- **Cambio de cuenta:** al cambiar la dirección se borran carpetas, caché, token, último sincronizado y error; antes quedaban datos de la cuenta anterior.
+- **Permisos:** `canManageMailbox` pasa a `canUseMailbox`. Quien solo tiene `viewMailbox` ve únicamente «Mi buzón», sin Catálogos ni Modelos.
+- **UI:** `MailboxCard` ya no resetea un formulario que se remonta por `key=updatedAt`; la vista pública se limita a los campos usados.
+- **Código muerto:** eliminados `asMailbox`, `isMailAccountStatus` y `MailAccountStatus` al no tener consumidores.
+- **Verificación:** 191/191 tests relacionados, `security:check` 62/62, `tsc` limpio, lint 0 errores/19 warnings preexistentes y Prettier correcto.
+
+---
+
+## 6. Deuda Técnica y Siguiente Agente
 
 - [ ] F3: `mailHeaders`, sincronización inicial/incremental y vista de lista.
 - [ ] Añadir el módulo «Correo» (`NavId`, `MODULE_META`, `TAB_ACCESS_POLICY`, renderer) cuando exista la lista; ahora solo está la pestaña de Ajustes.

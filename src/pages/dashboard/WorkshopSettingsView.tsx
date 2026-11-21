@@ -25,7 +25,7 @@ export function WorkshopSettingsView(props: WorkshopSettingsViewProps) {
     canManageArchive,
     canPurgeUploads,
     canManageMail,
-    canManageMailbox,
+    canUseMailbox,
     canManageData,
   } = props;
   // La lista de pestañas se decide con seis casillas: se pasan sueltas para que
@@ -39,7 +39,7 @@ export function WorkshopSettingsView(props: WorkshopSettingsViewProps) {
         canManageArchive,
         canPurgeUploads,
         canManageMail,
-        canManageMailbox,
+        canUseMailbox,
         canManageData,
       }),
     [
@@ -48,7 +48,7 @@ export function WorkshopSettingsView(props: WorkshopSettingsViewProps) {
       canManageArchive,
       canPurgeUploads,
       canManageMail,
-      canManageMailbox,
+      canUseMailbox,
       canManageData,
     ],
   );

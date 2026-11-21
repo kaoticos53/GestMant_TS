@@ -41,18 +41,30 @@ export function getAvailableTabs(
     canManageArchive = false,
     canPurgeUploads = false,
     canManageMail = false,
-    canManageMailbox = false,
+    canUseMailbox = false,
     canManageData = false,
   } = permissions;
 
-  const list: WorkshopTabItem[] = [
-    {
-      id: "catalogs",
-      label: "Catálogos y autocompletado",
-      icon: FolderTree,
-    },
-    { id: "models", label: "Modelos de equipos", icon: Layers },
-  ];
+  // Un técnico con solo «Mi buzón» no debe ver Catálogos ni Modelos: esas
+  // pestañas son de quien configura el taller, no del correo personal.
+  const hasWorkshopSettings =
+    canManageAlert ||
+    canManageAudit ||
+    canManageArchive ||
+    canPurgeUploads ||
+    canManageMail ||
+    canManageData;
+  const list: WorkshopTabItem[] = [];
+  if (hasWorkshopSettings || !canUseMailbox) {
+    list.push(
+      {
+        id: "catalogs",
+        label: "Catálogos y autocompletado",
+        icon: FolderTree,
+      },
+      { id: "models", label: "Modelos de equipos", icon: Layers },
+    );
+  }
 
   if (canManageAlert || canManageAudit) {
     list.push({ id: "alerts", label: "Avisos", icon: Bell });
@@ -63,7 +75,7 @@ export function getAvailableTabs(
   if (canManageMail) {
     list.push({ id: "mail", label: "Correo", icon: Mail });
   }
-  if (canManageMailbox) {
+  if (canUseMailbox) {
     list.push({ id: "mailbox", label: "Mi buzón", icon: Mail });
   }
   if (canManageData) {

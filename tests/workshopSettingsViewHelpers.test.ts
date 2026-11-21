@@ -35,9 +35,9 @@ describe("workshopSettingsView helpers", () => {
       expect(tabs.some((t) => t.id === "mail")).toBe(true);
     });
 
-    it("agrega 'mailbox' si puede usar su buzón personal", () => {
-      const tabs = getAvailableTabs({ canManageMailbox: true });
-      expect(tabs.some((t) => t.id === "mailbox")).toBe(true);
+    it("con solo «Mi buzón» no enseña las pestañas de administración", () => {
+      const tabs = getAvailableTabs({ canUseMailbox: true });
+      expect(tabs.map((t) => t.id)).toEqual(["mailbox"]);
     });
 
     it("agrega 'data' si puede gestionar datos del taller", () => {
@@ -52,7 +52,7 @@ describe("workshopSettingsView helpers", () => {
         canManageArchive: true,
         canPurgeUploads: true,
         canManageMail: true,
-        canManageMailbox: true,
+        canUseMailbox: true,
         canManageData: true,
       });
       expect(tabs.map((t) => t.id)).toEqual([

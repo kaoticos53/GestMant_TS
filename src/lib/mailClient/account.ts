@@ -18,21 +18,6 @@ export const MAIL_CACHE_DEFAULT_RETENTION_DAYS = 30;
 export const MAIL_CACHE_MIN_RETENTION_DAYS = 7;
 export const MAIL_CACHE_MAX_RETENTION_DAYS = 365;
 
-export type MailAccountStatus =
-  "disconnected" | "connected" | "reauthRequired" | "error";
-
-/** El estado que puede venir de la base de datos. */
-export function isMailAccountStatus(
-  value: unknown,
-): value is MailAccountStatus {
-  return (
-    value === "disconnected" ||
-    value === "connected" ||
-    value === "reauthRequired" ||
-    value === "error"
-  );
-}
-
 /**
  * Un buzón de Zimbra es una dirección completa; el servidor rechaza el usuario
  * suelto. Se normaliza a minúsculas porque el resto del taller ya lo hace así.

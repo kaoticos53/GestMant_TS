@@ -2,5 +2,5 @@
 
 Ninguna tarea en curso.
 
-F2 de correo está cerrado y documentado en
+La revisión de F2 de correo está documentada en
 `.context/sessions/2026-11-21-correo-f2-cuenta-carpetas.md`.

@@ -190,7 +190,6 @@ function MailboxEditor({
     setBusy(true);
     try {
       await remove({});
-      setForm(EMPTY_FORM);
       toast.success("Cuenta del buzón borrada");
     } catch (error) {
       toast.error(getErrorMessage(error));

@@ -129,7 +129,7 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
           canPurgeUploads={true}
           canManageData={true}
           canManageMail={true}
-          canManageMailbox={true}
+          canUseMailbox={true}
         />,
       );
     });
@@ -210,7 +210,7 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
   it("abre «Mi buzón» con su tarjeta cuando la capacidad está concedida", async () => {
     await act(async () => {
       root.render(
-        <WorkshopSettingsView canManageMailbox={true} defaultTab="mailbox" />,
+        <WorkshopSettingsView canUseMailbox={true} defaultTab="mailbox" />,
       );
     });
     await settle();
@@ -218,6 +218,11 @@ describe("WorkshopSettingsView — navegación por pestañas", () => {
     expect(
       container.querySelector("[data-testid='card-mailbox']"),
     ).not.toBeNull();
+    // Las pestañas de administración no se cuelan con el correo personal.
+    expect(container.querySelector("[data-testid='card-catalogs']")).toBeNull();
+    expect(
+      container.querySelector("[data-testid='card-equipment-models']"),
+    ).toBeNull();
   });
 
   it("abre la pestaña de modelos de equipos con su tarjeta", async () => {

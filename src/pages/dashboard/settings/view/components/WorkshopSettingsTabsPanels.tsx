@@ -22,7 +22,7 @@ export function WorkshopSettingsTabsPanels({
   canPurgeUploads = false,
   canManageData = false,
   canManageMail = false,
-  canManageMailbox = false,
+  canUseMailbox = false,
   hasManageIncidents,
   hasDecideRequests,
 }: WorkshopSettingsTabsPanelsProps) {
@@ -79,7 +79,7 @@ export function WorkshopSettingsTabsPanels({
         </TabsContent>
       )}
 
-      {canManageMailbox && (
+      {canUseMailbox && (
         <TabsContent
           value="mailbox"
           className="space-y-5 focus-visible:outline-none"
