@@ -130,6 +130,18 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
+/**
+ * Cada cuánto se pregunta por una compilación nueva mientras la pestaña sigue
+ * abierta.
+ *
+ * El navegador solo busca un service worker nuevo al navegar —y al navegar la
+ * página ya se recarga, así que el aviso llega tarde— y, como mucho, una vez al
+ * día. Sin esta comprobación, una pestaña abierta toda la mañana no se enteraba
+ * de que había versión nueva: era justo el caso que el aviso tenía que cubrir.
+ * Un `sw.js` de 7 KB por minuto, que además se sirve sin caché.
+ */
+const UPDATE_CHECK_MS = 60_000;
+
 // El service worker lo genera `vite-plugin-pwa` al compilar (ver
 // `vite.config.ts`); aquí solo se registra. La compilación nueva se queda
 // esperando —`prompt`, sin `skipWaiting`— y se avisa con el número de build de
@@ -139,6 +151,19 @@ if (import.meta.env.PROD) {
     immediate: true,
     onNeedRefresh() {
       offerUpdate(() => void updateServiceWorker(true));
+    },
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      setInterval(() => {
+        void registration.update();
+      }, UPDATE_CHECK_MS);
+      // Volver a la pestaña es el otro momento en que importa: un portátil que
+      // despierta de la suspensión tiene la compilación de ayer en memoria.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          void registration.update();
+        }
+      });
     },
   });
 }

@@ -13,9 +13,14 @@ import { useSyncExternalStore } from "react";
  * nadie depure una interfaz vieja creyendo que es la última, y no recarga hasta
  * que alguien pulsa «Recargar».
  *
- * Va arriba —a la izquierda en escritorio— y no abajo a la derecha, que es donde
- * sonner apila sus avisos: compartir esquina dejaría el «Recargar» debajo de un
- * toast en cuanto saliera uno. Arriba es la única zona que sonner no usa.
+ * Va abajo y a la izquierda en escritorio, no a la derecha: esa esquina es donde
+ * sonner apila sus avisos y el «Recargar» quedaría debajo de un toast. En móvil
+ * ocupa el ancho de abajo, y mientras está visible el `Toaster` sube sus avisos
+ * con `mobileOffset` (ver `components/ui/sonner.tsx`), así que tampoco se pisan.
+ *
+ * Arriba no cabe: en móvil comparte sitio con la cabecera del sitio y con el
+ * aviso de dirección de la API, y tapar un error de configuración con un «hay
+ * versión nueva» sería al revés de lo que hace falta.
  */
 export function PwaUpdateBanner() {
   const ready = useSyncExternalStore(
@@ -28,7 +33,7 @@ export function PwaUpdateBanner() {
   return (
     <div
       role="status"
-      className="fixed inset-x-3 top-3 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border border-border bg-background p-3 shadow-lg sm:inset-x-auto sm:top-4 sm:left-4"
+      className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-md items-center gap-3 rounded-lg border border-border bg-background p-3 shadow-lg sm:inset-x-auto sm:bottom-4 sm:left-4"
     >
       <div className="min-w-0 flex-1 text-xs leading-5">
         <p className="font-medium text-foreground">Hay una versión nueva</p>

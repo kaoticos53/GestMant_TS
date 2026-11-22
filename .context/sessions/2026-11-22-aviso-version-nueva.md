@@ -108,3 +108,79 @@ viva, sin `aria-label` que tape el texto) y el número de build en el contenido.
 coinciden —raro: uno es de despliegue y el otro de configuración rota— el aviso
 de versión se pinta encima porque va después en el DOM. Se acepta a cambio de no
 perder pulsaciones bajo un toast.
+
+> Ese compromiso quedó **revocado** en la sección 7: en un navegador de verdad
+> el aviso de arriba era además inalcanzable en móvil.
+
+---
+
+## 7. Ciclo de actualización probado en el navegador (2026-11-22)
+
+Prueba real, con `dist/` servido por `vite preview` en `http://127.0.0.1:4173`
+y recompilando sobre el mismo origen (`npm run build` sella un build nuevo).
+Backend Convex caído (`127.0.0.1:3210`), así que la portada muestra
+`ApiAddressNotice`.
+
+### 7.1 Lo que fallaba: una pestaña abierta nunca se enteraba
+
+Con `registerType: "prompt"` el aviso solo sale si alguien llama a
+`registration.update()`. El navegador lo hace al navegar —y al navegar la
+página ya se recarga, así que el aviso sobra— y la especificación deja la
+comprobación periódica en manos de la aplicación. Comprobado en la pestaña
+real: con una build nueva en el servidor, `installing`, `waiting` y aviso
+seguían en `false` indefinidamente. El registro y el store funcionaban: un
+`await registration.update()` manual hacía aparecer `waiting` y el aviso con el
+texto correcto («Esta pestaña sirve la b130»).
+
+**Arreglo (`src/main.tsx`):** `onRegisteredSW` programa `registration.update()`
+cada 60 s y en cada `visibilitychange` a `visible` (portátil que despierta de la
+suspensión). Un `sw.js` de 7 KB por minuto, servido con `Cache-Control:
+no-cache`.
+
+### 7.2 Lo que fallaba: arriba el aviso no se podía pulsar en móvil
+
+Medido en la pestaña real a 390×844: el aviso (`fixed inset-x-3 top-3`, ancho
+350, alto 66) y el `ApiAddressNotice` (`fixed`, ancho 350, alto 255) ocupaban
+exactamente el mismo rectángulo, y la cabecera del sitio (h-16) también pisa esa
+zona. Los clics de puntero real sobre «Recargar» **no navegaban**: el hit-test
+caía en el alert de API, no en el botón. Con `element.click()` programático sí
+funcionaba, que es la trampa de verificar esto solo en jsdom.
+
+**Arreglo:** abajo en vez de arriba, con sonner apartándose en móvil.
+
+```
+PwaUpdateBanner   fixed inset-x-3 bottom-3 z-50 … sm:inset-x-auto sm:bottom-4 sm:left-4
+components/ui/sonner.tsx   mobileOffset={updateReady ? { bottom: 92 } : undefined}
+```
+
+En escritorio el aviso va abajo a la izquierda y los toasts siguen abajo a la
+derecha. En móvil el aviso ocupa el ancho de abajo y, mientras está visible, los
+toasts suben 92 px (aviso: 12 de margen + 66 de alto → 14 px de aire). Medido en
+la pestaña: `banner {y:766, h:66}`, `apiNotice null`, `elementFromPoint` en el
+centro del aviso devuelve el aviso, y el clic real navega.
+
+### 7.3 Ciclo completo verificado (builds b130 → b138)
+
+| Paso | Resultado |
+|---|---|
+| Primera carga con `dist/` en 4173 | build b130 en pantalla, SW `activated`, `controlled:false`; tras recargar, `controlled:true` |
+| Recompilar (b131) con la pestaña abierta | ❌ sin arreglo: `installing/waiting/aviso:false` — no se enteraba |
+| `registration.update()` manual | ✅ `waiting:true` y aviso con «Esta pestaña sirve la b130» |
+| «Recargar» (clic real) | ✅ navega y la pestaña queda en la build nueva, `waiting:false`, sin aviso |
+| Bucle de 60 s sin tocar nada (b132 → b133) | ✅ el aviso sale solo |
+| «Luego» | ✅ aviso fuera, `waiting:true` intacto, misma build en pantalla |
+| Cerrar la pestaña y abrir otra | ✅ entra la compilación pendiente (b133), `controlled:true`, sin aviso |
+| Código final (b137 → b138) | ✅ aviso tras 60 s sin interacción y «Recargar» real lleva a b138 |
+
+### 7.4 Verificación
+
+- `npx tsc --noEmit` ✅ · `npx eslint` ✅ 0 errores (los 2 avisos de Fast
+  Refresh de `main.tsx` son anteriores)
+- `tests/pwaUpdateBanner.test.tsx` ✅ 6/6: se suma un caso que monta el `Toaster`
+  real con un toast y comprueba que pasa de `--mobile-offset` por defecto a
+  `--mobile-offset-bottom: 92px` mientras el aviso está abierto.
+- Suite completa ✅ 2873 pruebas, 272 archivos; `security:check` ✅.
+- `npm run build` ✅ (b138, precache 106 entradas).
+
+**Sigue en pie la deuda** de guardar el descarte de «Luego»; probado que la
+compilación entra en la siguiente apertura, que es lo prometido.
