@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Brain, Database, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Brain, Database, Mail, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,12 @@ export function AiMemoryCard() {
   const stats = useQuery(api.aiMemory.memoryStats, {});
   const facts = useQuery(api.aiMemory.listFacts, {});
   const rebuildWorkshop = useMutation(api.aiMemory.rebuildWorkshopIndex);
+  const rebuildMailbox = useMutation(api.aiMemory.rebuildMyMailboxIndex);
   const saveFact = useMutation(api.aiMemory.saveFact);
   const deleteFact = useMutation(api.aiMemory.deleteFact);
 
   const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildingMail, setRebuildingMail] = useState(false);
   const [title, setTitle] = useState("");
   const [factText, setFactText] = useState("");
   const [savingFact, setSavingFact] = useState(false);
@@ -42,6 +44,20 @@ export function AiMemoryCard() {
       toast.error(getErrorMessage(error));
     } finally {
       setRebuilding(false);
+    }
+  };
+
+  const handleRebuildMailbox = async () => {
+    setRebuildingMail(true);
+    try {
+      const res = await rebuildMailbox({});
+      toast.success(
+        `Correos indexados en tu memoria privada: ${res.indexed} mensajes.`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setRebuildingMail(false);
     }
   };
 
@@ -82,17 +98,32 @@ export function AiMemoryCard() {
           </CardDescription>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={rebuilding}
-          onClick={() => void handleRebuild()}
-        >
-          <RefreshCw className={`size-3.5 ${rebuilding ? "animate-spin" : ""}`} />
-          {rebuilding ? "Reindexando..." : "Reindexar memoria"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={rebuildingMail}
+            onClick={() => void handleRebuildMailbox()}
+          >
+            <Mail className="size-3.5" />
+            {rebuildingMail ? "Indexando correos..." : "Indexar mis correos"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={rebuilding}
+            onClick={() => void handleRebuild()}
+          >
+            <RefreshCw
+              className={`size-3.5 ${rebuilding ? "animate-spin" : ""}`}
+            />
+            {rebuilding ? "Indexando..." : "Indexar todo el taller"}
+          </Button>
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-5">

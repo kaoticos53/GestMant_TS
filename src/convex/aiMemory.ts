@@ -8,9 +8,13 @@ import {
 } from "./_generated/server";
 import {
   formatEquipmentChunk,
+  formatEquipmentMovementChunk,
   formatIncidentChunk,
   formatMailChunk,
   formatPartChunk,
+  formatPurchaseOrderChunk,
+  formatRequestChunk,
+  formatStockMovementChunk,
   rankMemoryChunks,
   reciprocalRankFusion,
   type AiMemoryModule,
@@ -164,6 +168,74 @@ export const rebuildWorkshopIndex = mutation({
         tags: [manual.type, manual.brand ?? ""].filter(Boolean),
         updatedAt: now,
       });
+      count += 1;
+    }
+
+    const requests = await ctx.db.query("partRequests").collect();
+    for (const req of requests) {
+      if (req.deletedAt !== undefined || req.archivedAt !== undefined) continue;
+      const draft = formatRequestChunk({
+        id: req._id,
+        reference: req.reference,
+        status: req.status,
+        priority: req.priority,
+        requesterName: req.requesterName,
+        equipment: req.equipment,
+        linesSummary: req.lines.map((l) => `${l.quantity}x ${l.name}`).join(", "),
+      });
+      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
+      count += 1;
+    }
+
+    const orders = await ctx.db.query("purchaseOrders").collect();
+    for (const po of orders) {
+      const draft = formatPurchaseOrderChunk({
+        id: po._id,
+        reference: po.reference,
+        status: po.status,
+        supplier: po.supplier,
+        linesSummary: po.lines.map((l) => `${l.quantity}x ${l.name}`).join(", "),
+      });
+      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
+      count += 1;
+    }
+
+    const stockMovs = await ctx.db
+      .query("stockMovements")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200);
+    for (const mov of stockMovs) {
+      const draft = formatStockMovementChunk({
+        id: mov._id,
+        partCode: mov.partCode,
+        partName: mov.partName,
+        kind: mov.kind,
+        delta: mov.delta,
+        actorName: mov.actorName,
+        reason: mov.reason,
+      });
+      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
+      count += 1;
+    }
+
+    const eqMovs = await ctx.db
+      .query("equipmentMovements")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200);
+    for (const mov of eqMovs) {
+      const draft = formatEquipmentMovementChunk({
+        id: mov._id,
+        equipmentCode: mov.equipmentCode,
+        equipmentName: mov.equipmentName,
+        kind: mov.kind,
+        fromLocation: mov.fromLocation,
+        toLocation: mov.toLocation,
+        actorName: mov.actorName,
+        note: mov.note,
+      });
+      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
       count += 1;
     }
 

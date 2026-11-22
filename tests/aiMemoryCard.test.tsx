@@ -38,15 +38,17 @@ describe("AiMemoryCard (Fase 4)", () => {
 
   it("muestra estadísticas, hechos guardados y permite reindexar", async () => {
     const mockRebuild = vi.fn().mockResolvedValue({ indexed: 18 });
+    const mockRebuildMail = vi.fn().mockResolvedValue({ indexed: 5 });
     const mockSaveFact = vi.fn().mockResolvedValue("f1");
     const mockDeleteFact = vi.fn().mockResolvedValue(undefined);
 
     let mutIdx = 0;
     mockUseMutation.mockImplementation(() => {
       mutIdx += 1;
-      const mod = mutIdx % 3;
+      const mod = mutIdx % 4;
       if (mod === 1) return mockRebuild;
-      if (mod === 2) return mockSaveFact;
+      if (mod === 2) return mockRebuildMail;
+      if (mod === 3) return mockSaveFact;
       return mockDeleteFact;
     });
 
@@ -80,7 +82,7 @@ describe("AiMemoryCard (Fase 4)", () => {
     expect(text).toContain("Compresor GA-15");
 
     const rebuildBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Reindexar memoria"),
+      (b) => b.textContent?.includes("Indexar todo el taller"),
     );
     await act(async () => {
       rebuildBtn?.click();

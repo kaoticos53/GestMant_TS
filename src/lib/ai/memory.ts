@@ -160,6 +160,106 @@ export function formatMailChunk(mail: {
   };
 }
 
+export function formatRequestChunk(req: {
+  id: string;
+  reference: string;
+  status: string;
+  priority: string;
+  requesterName: string;
+  equipment?: string;
+  linesSummary?: string;
+}): MemoryChunkDraft {
+  const detail = [
+    `[${req.reference} | ${req.status} | ${req.priority}]`,
+    req.requesterName,
+    req.equipment ? `Equipo:${req.equipment}` : "",
+    cleanText(req.linesSummary, 120),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    scope: "shared",
+    module: "requests",
+    entityId: req.id,
+    reference: req.reference,
+    title: req.equipment || req.requesterName || req.reference,
+    compactText: detail,
+    tags: [req.status, req.priority],
+  };
+}
+
+export function formatPurchaseOrderChunk(po: {
+  id: string;
+  reference: string;
+  status: string;
+  supplier: string;
+  linesSummary?: string;
+}): MemoryChunkDraft {
+  const detail = [
+    `[${po.reference} | ${po.status}]`,
+    `Prov:${po.supplier}`,
+    cleanText(po.linesSummary, 120),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    scope: "shared",
+    module: "purchasing",
+    entityId: po.id,
+    reference: po.reference,
+    title: `${po.reference} (${po.supplier})`,
+    compactText: detail,
+    tags: [po.status, po.supplier],
+  };
+}
+
+export function formatStockMovementChunk(mov: {
+  id: string;
+  partCode: string;
+  partName: string;
+  kind: string;
+  delta: number;
+  actorName: string;
+  reason?: string;
+}): MemoryChunkDraft {
+  const signed = mov.delta > 0 ? `+${mov.delta}` : String(mov.delta);
+  return {
+    scope: "shared",
+    module: "movements",
+    entityId: mov.id,
+    reference: mov.partCode,
+    title: `${mov.partCode} ${mov.partName}`,
+    compactText: `[Mov. stock | ${mov.kind}] ${mov.partCode} ${mov.partName} (${signed}) por ${mov.actorName}${mov.reason ? ` · ${cleanText(mov.reason, 80)}` : ""}`,
+    tags: ["stock", mov.kind],
+  };
+}
+
+export function formatEquipmentMovementChunk(mov: {
+  id: string;
+  equipmentCode?: string;
+  equipmentName: string;
+  kind: string;
+  fromLocation?: string;
+  toLocation?: string;
+  actorName: string;
+  note?: string;
+}): MemoryChunkDraft {
+  const code = mov.equipmentCode || mov.id;
+  const route =
+    mov.fromLocation || mov.toLocation
+      ? `${mov.fromLocation ?? "—"} → ${mov.toLocation ?? "—"}`
+      : "";
+  return {
+    scope: "shared",
+    module: "movements",
+    entityId: mov.id,
+    reference: code,
+    title: mov.equipmentName,
+    compactText: `[Mov. equipo | ${mov.kind}] ${code} ${mov.equipmentName}${route ? ` (${route})` : ""} por ${mov.actorName}${mov.note ? ` · ${cleanText(mov.note, 80)}` : ""}`,
+    tags: ["equipment", mov.kind],
+  };
+}
+
 const SYNONYM_GROUPS: readonly (readonly string[])[] = [
   ["averia", "fallo", "roto", "error", "incidencia", "problema"],
   ["fuga", "perdida", "escape", "goteo"],
