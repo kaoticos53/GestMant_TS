@@ -1540,6 +1540,18 @@ const schema = defineSchema({
     lastOpenedAt: v.optional(v.number()),
     cachedBytes: v.optional(v.number()),
     deletedRemoteAt: v.optional(v.number()),
+    tags: v.optional(v.array(v.string())),
+    tagSource: v.optional(
+      v.union(
+        v.literal("rule"),
+        v.literal("ai_headers"),
+        v.literal("ai_body"),
+        v.literal("manual"),
+      ),
+    ),
+    tagConfidence: v.optional(v.number()),
+    tagReason: v.optional(v.string()),
+    taggedAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
     .index("by_user_folder_date", ["userId", "folderRemoteId", "date"])
@@ -1563,6 +1575,36 @@ const schema = defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_user_message", ["userId", "accountId", "messageId"]),
+
+  // Reglas rápidas de autoetiquetado definidas por cada usuario para su buzón.
+  mailTagRules: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    enabled: v.boolean(),
+    priority: v.number(),
+    matchMode: v.union(v.literal("all"), v.literal("any")),
+    conditions: v.array(
+      v.object({
+        field: v.union(
+          v.literal("from_any"),
+          v.literal("from_address"),
+          v.literal("subject"),
+          v.literal("subject_or_snippet"),
+          v.literal("has_attachments"),
+        ),
+        operator: v.union(
+          v.literal("contains"),
+          v.literal("domain_is"),
+          v.literal("is_true"),
+          v.literal("is_false"),
+        ),
+        value: v.string(),
+      }),
+    ),
+    tags: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   // Copias de correo compartidas con el expediente (SPEC-0018). No son caché:
   // no cuentan en `mailAccounts.cacheBytes`, no las toca el LRU ni «Vaciar

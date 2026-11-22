@@ -19,6 +19,7 @@ export const list = query({
   args: {
     folderRemoteId: v.string(),
     search: v.optional(v.string()),
+    tag: v.optional(v.string()),
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
@@ -36,12 +37,15 @@ export const list = query({
       )
       .collect();
     const visible = rows.filter((row) => row.deletedRemoteAt === undefined);
+    const byTag = args.tag
+      ? visible.filter((row) => row.tags?.includes(args.tag as string))
+      : visible;
 
     const term = normalized(args.search?.trim() ?? "");
     const matched =
       term === ""
-        ? visible
-        : visible.filter(
+        ? byTag
+        : byTag.filter(
             (row) =>
               normalized(row.subject).includes(term) ||
               normalized(row.fromName).includes(term) ||
@@ -77,6 +81,11 @@ export const list = query({
         bodyState: row.bodyState,
         cachedAt: row.cachedAt ?? null,
         lastOpenedAt: row.lastOpenedAt ?? null,
+        tags: row.tags ?? [],
+        tagSource: row.tagSource ?? null,
+        tagConfidence: row.tagConfidence ?? null,
+        tagReason: row.tagReason ?? null,
+        taggedAt: row.taggedAt ?? null,
       })),
       total: matched.length,
       unread: matched.filter((row) => row.flags.includes("u")).length,

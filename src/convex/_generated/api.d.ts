@@ -59,6 +59,7 @@ import type * as mailLog from "../mailLog.js";
 import type * as mailSettings from "../mailSettings.js";
 import type * as mailShares from "../mailShares.js";
 import type * as mailSync from "../mailSync.js";
+import type * as mailTagging from "../mailTagging.js";
 import type * as maintenance from "../maintenance.js";
 import type * as manuals from "../manuals.js";
 import type * as members from "../members.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   mailSettings: typeof mailSettings;
   mailShares: typeof mailShares;
   mailSync: typeof mailSync;
+  mailTagging: typeof mailTagging;
   maintenance: typeof maintenance;
   manuals: typeof manuals;
   members: typeof members;
