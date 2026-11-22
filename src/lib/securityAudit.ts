@@ -55,6 +55,21 @@ export interface SnapshotPruneMetadata {
   chunks: number;
 }
 
+type ParsedSecurityMetadata = Record<string, unknown> | unknown[];
+
+/** Lee el JSON guardado como cadena; null si es texto plano o un valor suelto. */
+function parseSecurityMetadata(metadata?: string): ParsedSecurityMetadata | null {
+  if (!metadata) return null;
+  try {
+    const parsed: unknown = JSON.parse(metadata);
+    return parsed !== null && typeof parsed === "object"
+      ? (parsed as ParsedSecurityMetadata)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Lee la traza de `workshop_backup_prune` sin depender de la época en que se
  * escribió. Las filas anteriores al cambio de nombre guardaban `batches` y
@@ -64,17 +79,14 @@ export interface SnapshotPruneMetadata {
 export function readSnapshotPruneMetadata(
   metadata?: string,
 ): SnapshotPruneMetadata | null {
-  if (!metadata) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(metadata) as unknown;
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return null;
-  }
-  const value = parsed as Record<string, unknown>;
+  const parsed = parseSecurityMetadata(metadata);
+  if (!parsed || Array.isArray(parsed)) return null;
+  return normalizeSnapshotPruneMetadata(parsed);
+}
+
+function normalizeSnapshotPruneMetadata(
+  value: Record<string, unknown>,
+): SnapshotPruneMetadata {
   const version =
     typeof value.metadataVersion === "number" ? value.metadataVersion : 0;
   const rawPhotos = Array.isArray(value.photos)
@@ -106,39 +118,37 @@ export function formatSecurityMetadata(metadata?: string): string {
   if (!metadata) return "—";
   const trimmed = metadata.trim();
   if (trimmed === "") return "—";
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (
-      parsed !== null &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed)
-    ) {
-      const value = parsed as Record<string, unknown>;
-      const prune = readSnapshotPruneMetadata(trimmed);
-      if (
-        prune &&
-        (Array.isArray(value.photos) || Array.isArray(value.batches))
-      ) {
-        const photos =
-          prune.photos.length > 0 ? prune.photos.join(", ") : "ninguna";
-        const kept = prune.keptBatch ? ` · conservada: ${prune.keptBatch}` : "";
-        return `fotos: ${photos} · documentos: ${prune.chunks}${kept}`;
-      }
-      const parts = Object.entries(parsed as Record<string, unknown>)
-        .filter(
-          ([key, value]) =>
-            key !== "metadataVersion" && value !== undefined && value !== null,
-        )
-        .map(
-          ([key, value]) =>
-            `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`,
-        );
-      return parts.length > 0 ? parts.join(" · ") : "—";
-    }
-  } catch {
-    // Texto no JSON: se muestra tal cual.
+  const parsed = parseSecurityMetadata(trimmed);
+  if (!parsed || Array.isArray(parsed)) return trimmed;
+  if (Array.isArray(parsed.photos) || Array.isArray(parsed.batches)) {
+    const prune = normalizeSnapshotPruneMetadata(parsed);
+    const photos =
+      prune.photos.length > 0 ? prune.photos.join(", ") : "ninguna";
+    const kept = prune.keptBatch ? ` · conservada: ${prune.keptBatch}` : "";
+    return `fotos: ${photos} · documentos: ${prune.chunks}${kept}`;
   }
-  return trimmed;
+  const parts = Object.entries(parsed)
+    .filter(
+      ([key, value]) =>
+        key !== "metadataVersion" && value !== undefined && value !== null,
+    )
+    .map(
+      ([key, value]) =>
+        `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`,
+    );
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+/**
+ * Prepara `metadata` para el panel de detalle: si guarda un objeto o una lista
+ * en JSON, lo devuelve formateado para leerlo de un vistazo; si es texto plano
+ * o JSON inválido, lo deja tal cual. No se usa `JSON.stringify` directo porque
+ * la columna guarda el JSON como cadena y así se vería entrecomillado y escapado.
+ */
+export function formatSecurityMetadataJson(metadata?: string): string {
+  const parsed = parseSecurityMetadata(metadata);
+  if (parsed) return JSON.stringify(parsed, null, 2);
+  return metadata?.trim() || "{}";
 }
 
 /** Construye cabecera y filas para exportar trazas de seguridad a CSV. */

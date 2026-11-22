@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { toCsv } from "../src/lib/export";
 import {
   formatSecurityMetadata,
+  formatSecurityMetadataJson,
   readSnapshotPruneMetadata,
   securityActionLabel,
   securityAuditCsvTable,
@@ -24,6 +25,16 @@ describe("utilidades puras de auditoría de seguridad", () => {
       ),
     ).toBe("previousRole: technician · newRole: manager");
     expect(formatSecurityMetadata("detalle plano")).toBe("detalle plano");
+  });
+
+  test("el detalle formatea el JSON guardado como cadena sin escaparlo", () => {
+    expect(
+      formatSecurityMetadataJson(
+        JSON.stringify({ metadataVersion: 1, photos: [], chunks: 100 }),
+      ),
+    ).toBe('{\n  "metadataVersion": 1,\n  "photos": [],\n  "chunks": 100\n}');
+    expect(formatSecurityMetadataJson("detalle plano")).toBe("detalle plano");
+    expect(formatSecurityMetadataJson(undefined)).toBe("{}");
   });
 
   test("lee metadatos de limpieza antiguos y nuevos con la misma forma", () => {

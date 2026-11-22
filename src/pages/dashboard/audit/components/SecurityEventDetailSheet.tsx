@@ -8,6 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  formatSecurityMetadataJson,
   securityActionLabel,
   type SecurityAuditEntry,
 } from "@/lib/securityAudit";
@@ -60,7 +61,7 @@ export function SecurityEventDetailSheet({
                 Metadatos del evento
               </h3>
               <pre className="max-h-[50vh] overflow-auto rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-                {JSON.stringify(entry.metadata ?? {}, null, 2)}
+                {formatSecurityMetadataJson(entry.metadata)}
               </pre>
             </section>
           </>

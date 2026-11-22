@@ -103,7 +103,10 @@ describe("Compras y Auditoría — Paneles laterales (Fase 4)", () => {
             target: "user:u_1",
             actorEmail: "admin@taller.es",
             at: Date.now(),
-            metadata: { from: "technician", to: "manager" },
+            metadata: JSON.stringify({
+              from: "technician",
+              to: "manager",
+            }),
           }}
           onClose={vi.fn()}
         />,

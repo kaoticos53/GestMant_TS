@@ -135,7 +135,7 @@ export function SecurityAuditPanel() {
                           {entry.target}
                         </span>
                       </div>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="break-words text-xs text-muted-foreground">
                         {formatSecurityMetadata(entry.metadata)}
                       </p>
                     </div>
