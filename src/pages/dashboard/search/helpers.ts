@@ -178,3 +178,49 @@ export function filterSearchGroups({
 
   return result.filter((group) => group.hits.length > 0);
 }
+
+/** Convierte la respuesta pre-filtrada del backend en grupos con icono para el desplegable. */
+export function buildSearchGroupsFromResponse(
+  response: {
+    incidents: SearchHit[];
+    requests: SearchHit[];
+    archived: SearchHit[];
+    parts: SearchHit[];
+    equipment: SearchHit[];
+  } | null | undefined,
+): SearchGroup[] {
+  if (!response) return [];
+  const groups: SearchGroup[] = [
+    {
+      kind: "incident",
+      label: "Incidencias",
+      icon: Siren,
+      hits: response.incidents,
+    },
+    {
+      kind: "request",
+      label: "Peticiones",
+      icon: ClipboardList,
+      hits: response.requests,
+    },
+    {
+      kind: "archive",
+      label: "Archivo · solo lectura",
+      icon: Archive,
+      hits: response.archived,
+    },
+    {
+      kind: "part",
+      label: "Repuestos",
+      icon: Boxes,
+      hits: response.parts,
+    },
+    {
+      kind: "equipment",
+      label: "Equipos",
+      icon: Cpu,
+      hits: response.equipment,
+    },
+  ];
+  return groups.filter((group) => group.hits.length > 0);
+}

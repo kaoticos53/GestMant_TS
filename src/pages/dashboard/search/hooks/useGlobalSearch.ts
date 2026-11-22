@@ -2,48 +2,36 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { GlobalSearchProps, SearchHit } from "../types";
-import { filterSearchGroups } from "../helpers";
+import { buildSearchGroupsFromResponse } from "../helpers";
 
 export function useGlobalSearch({
-  canSearchCatalog = false,
   onSelect,
 }: Pick<GlobalSearchProps, "canSearchCatalog" | "onSelect">) {
   const [engaged, setEngaged] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
-
-  const consultaIncidencias = useQuery(
-    api.incidents.list,
-    engaged ? { includeArchived: true } : "skip",
-  );
-  const consultaPeticiones = useQuery(
-    api.partRequests.list,
-    engaged ? { includeArchived: true } : "skip",
-  );
-  const consultaRepuestos = useQuery(
-    api.spareParts.list,
-    engaged && canSearchCatalog ? {} : "skip",
-  );
-  const consultaEquipos = useQuery(
-    api.equipment.list,
-    engaged && canSearchCatalog ? {} : "skip",
-  );
-
-  const incidents = useMemo(
-    () => consultaIncidencias ?? [],
-    [consultaIncidencias],
-  );
-  const requests = useMemo(
-    () => consultaPeticiones ?? [],
-    [consultaPeticiones],
-  );
-  const parts = useMemo(() => consultaRepuestos ?? [], [consultaRepuestos]);
-  const equipment = useMemo(() => consultaEquipos ?? [], [consultaEquipos]);
-
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setDebouncedQuery("");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(trimmed);
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const response = useQuery(
+    api.search.global,
+    engaged && debouncedQuery ? { query: debouncedQuery } : "skip",
+  );
 
   // ⌘/Ctrl + K lleva el foco al buscador desde cualquier pantalla
   useEffect(() => {
@@ -75,16 +63,8 @@ export function useGlobalSearch({
   }, []);
 
   const groups = useMemo(
-    () =>
-      filterSearchGroups({
-        query,
-        incidents,
-        requests,
-        parts,
-        equipment,
-        canSearchCatalog,
-      }),
-    [query, incidents, requests, parts, equipment, canSearchCatalog],
+    () => buildSearchGroupsFromResponse(debouncedQuery ? response : null),
+    [debouncedQuery, response],
   );
 
   const flatHits = useMemo(
