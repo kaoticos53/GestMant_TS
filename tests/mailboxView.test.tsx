@@ -421,6 +421,80 @@ describe("MailboxView", () => {
     ).not.toBeNull();
   });
 
+  it("guarda el adjunto traído de _storage en vez de abrir su URL", async () => {
+    // La URL del adjunto vive en la API: si el visor se la pone a un <a download>
+    // cross-origin, el navegador abre el .eml en la pestaña y se lleva por delante
+    // el buzón. El camino bueno pasa por el helper: se trae el contenido y se
+    // descarga como blob desde el origen de la app.
+    const open = vi.fn().mockResolvedValue({
+      cached: false,
+      text: "Cuerpo con un adjunto.",
+      textTruncated: false,
+      html: null,
+      htmlTruncated: false,
+      bodyBytes: 22,
+      attachments: [
+        { id: "att-1", filename: "Parte: revisión/2026.eml", size: 2048 },
+      ],
+    });
+    const download = vi.fn().mockResolvedValue({
+      url: "https://storage.example/api/storage/eml-uno",
+      filename: null,
+    });
+    setupQueries({ actions: { open, download } });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(["contenido"], { type: "message/rfc822" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    let received: Blob | null = null;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((value) => {
+      received = value as Blob;
+      return "blob:adjunto";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const append = vi.spyOn(document.body, "append");
+
+    try {
+      await act(async () => {
+        root.render(<MailboxView onOpenSettings={vi.fn()} />);
+        await settle();
+      });
+      const firstRow = container.querySelector<HTMLElement>(
+        'li[role="button"]',
+      );
+      await act(async () => {
+        firstRow?.click();
+        await settle();
+      });
+
+      const save = container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Descargar Parte: revisión/2026.eml"]',
+      );
+      expect(save, "tiene que estar el botón del adjunto").not.toBeNull();
+      await act(async () => {
+        save?.click();
+        await settle();
+      });
+
+      expect(download).toHaveBeenCalledWith({ attachmentId: "att-1" });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://storage.example/api/storage/eml-uno",
+      );
+      const anchor = append.mock.calls.at(-1)?.[0] as HTMLAnchorElement;
+      expect(anchor.href).toBe("blob:adjunto");
+      expect(anchor.download).toBe("Parte_ revisión_2026.eml");
+      expect(anchor.target).toBe("_blank");
+      expect(received?.type).toBe("application/octet-stream");
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("avisa cuando las credenciales necesitan reautenticación", async () => {
     setupQueries({
       account: { ...ACCOUNT, status: "reauthRequired" },

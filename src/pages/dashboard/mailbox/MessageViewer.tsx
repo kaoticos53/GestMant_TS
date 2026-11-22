@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { downloadFileFromUrl } from "@/lib/downloadFile";
 import { cn } from "@/lib/utils";
 import {
   formatDateTime,
@@ -90,13 +91,13 @@ export function MessageViewer({
     setDownloading(attachment.id);
     try {
       const result = await downloadAttachment({ attachmentId: attachment.id });
-      const link = document.createElement("a");
-      link.href = result.url;
-      link.download = result.filename ?? attachmentName(attachment);
-      link.rel = "noopener noreferrer";
-      document.body.append(link);
-      link.click();
-      link.remove();
+      // La URL del adjunto vive en la API: un <a download> directo abriría el
+      // .eml en la pestaña y se llevaría por delante el buzón. El helper lo
+      // trae, lo envuelve como binario y lo guarda desde el origen de la app.
+      await downloadFileFromUrl(
+        result.url,
+        result.filename ?? attachmentName(attachment),
+      );
     } catch (reason) {
       toast.error(getErrorMessage(reason));
     } finally {

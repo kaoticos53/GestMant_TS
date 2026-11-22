@@ -32,5 +32,10 @@ largo parta antes de la cruz de 44 px y no quede bajo su zona de pulsación; en
 escritorio y en las cabeceras con relleno propio no cambia nada. Handover en
 `.context/sessions/2026-11-22-cabecera-dialogo-cruz-44.md`.
 
+El visor del buzón también descarga sus adjuntos con `downloadFileFromUrl`: ya
+no monta un ancla `download` contra la URL cross-origin de `_storage`, que era
+lo que abría el `.eml` en la pestaña. Handover en
+`.context/sessions/2026-11-22-descarga-adjuntos-buzon.md`.
+
 Lo siguiente es F8: pilotaje con buzones reales, validación contra Hermes y
 ensayo de rollback.
