@@ -83,8 +83,7 @@ function SheetContent({
         {children}
         {/* El aspa vive en la cabecera, sobre el contenido que se desplaza; el
             pie tiene su propio «Cerrar» fijo. Mide 44×44 para el dedo y centra
-            el chip de 24 px donde estaba (6 + 22 = 16 + 12, su centro), con
-            «Cerrar» como nombre accesible. */}
+            el chip de 24 px donde estaba, con «Cerrar» como nombre accesible. */}
         <SheetPrimitive.Close className="ring-offset-background focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none">
           <span className="inline-flex size-6 items-center justify-center rounded-md bg-secondary">
             <XIcon className="size-4" />
