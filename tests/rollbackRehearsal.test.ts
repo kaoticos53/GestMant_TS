@@ -161,7 +161,7 @@ async function ageSnapshot(t: TestBackend) {
  * no se llega a recuperar.
  */
 async function crashMidRestore(t: TestBackend) {
-  const { admin } = await seedWorkshop(t);
+  const { admin, adminId } = await seedWorkshop(t);
   const exported = await admin.action(api.workshopBackup.exportBackup, {});
 
   await admin.mutation(api.spareParts.create, {
@@ -187,7 +187,7 @@ async function crashMidRestore(t: TestBackend) {
     backupFaults.simulateCrash = false;
   }
 
-  return { admin, exported, beforeRestore };
+  return { admin, adminId, exported, beforeRestore };
 }
 
 describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () => {
@@ -494,6 +494,49 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(
       await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
     ).toHaveLength(0);
+  });
+
+  test("recupera con otro administrador si el que guardó la foto está inactivo", async () => {
+    const t = backend();
+    const crash = await crashMidRestore(t);
+    const { adminId, beforeRestore } = crash;
+
+    // Un segundo administrador activo y el dueño de la foto, desactivado.
+    const otherAdminId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", {
+        name: "Otra administradora",
+        email: "otra@taller.es",
+        role: "admin",
+        active: true,
+      });
+      await ctx.db.patch(adminId, { active: false });
+      return id;
+    });
+
+    // La foto no pierde a su dueño.
+    const chunks = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.every((row) => row.savedBy === adminId)).toBe(true);
+
+    await ageSnapshot(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: true });
+    expect(await tableCounts(t)).toEqual(beforeRestore);
+
+    // La auditoría conserva quién recuperó y quién había guardado la foto.
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const recovery = audit.find(
+      (row) => row.action === "workshop_backup_recover",
+    );
+    expect(recovery?.actorId).toBe(otherAdminId);
+    expect(JSON.parse(recovery?.metadata ?? "{}")).toMatchObject({
+      snapshotSavedBy: adminId,
+    });
   });
 
   test("una foto de varios trozos se recupera entera", async () => {

@@ -375,6 +375,37 @@ export const pendingRestoreSnapshot = internalQuery({
   },
 });
 
+/**
+ * Quién ejecuta la recuperación de una foto: su dueño si sigue siendo un
+ * administrador activo y, si no —cuenta desactivada o borrada—, cualquier otro
+ * administrador activo. `savedBy` no se toca: es la traza de quién la guardó.
+ */
+export const resolveSnapshotAdmin = internalQuery({
+  args: { savedBy: v.id("users") },
+  handler: async (ctx, args) => {
+    const saved = await ctx.db.get(args.savedBy);
+    if (
+      saved &&
+      saved.active !== false &&
+      saved.isAnonymous !== true &&
+      saved.role === ROLES.ADMIN
+    ) {
+      return args.savedBy;
+    }
+    const fallback = await ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", ROLES.ADMIN))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("active"), false),
+          q.neq(q.field("isAnonymous"), true),
+        ),
+      )
+      .first();
+    return fallback?._id ?? null;
+  },
+});
+
 /** Un trozo de la foto, o `null` cuando ya no hay más. */
 export const readSnapshotChunk = internalQuery({
   args: { batch: v.string(), seq: v.number() },
@@ -419,6 +450,33 @@ export const logAudit = internalMutation({
           : "workshop_backup_restore",
       target: "system:backup",
       metadata: { totalRecords: args.totalRecords },
+    });
+  },
+});
+
+/**
+ * Deja constancia de una restauración recuperada: quién la ejecutó y quién
+ * había guardado la foto, que desaparece al retirarla. Así la traza del dueño
+ * de la foto sobrevive a la recuperación.
+ */
+export const logRecovery = internalMutation({
+  args: {
+    userId: v.id("users"),
+    savedBy: v.id("users"),
+    totalRecords: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await assertAdminUser(ctx, args.userId);
+    const saved = await ctx.db.get(args.savedBy);
+    await logSecurityEvent(ctx, {
+      actorId: args.userId,
+      action: "workshop_backup_recover",
+      target: "system:backup",
+      metadata: {
+        totalRecords: args.totalRecords,
+        snapshotSavedBy: args.savedBy,
+        snapshotSavedByEmail: saved?.email ?? null,
+      },
     });
   },
 });
@@ -571,10 +629,10 @@ async function applySnapshot(
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
   batch?: string,
-): Promise<void> {
+): Promise<number> {
   const beat = batch === undefined ? undefined : snapshotHeartbeat(ctx, userId, batch);
   await clearWorkshop(ctx, userId, beat);
-  await walkChunks(
+  const written = await walkChunks(
     userId,
     tables,
     (args) => ctx.runMutation(internal.workshopBackup.insertSnapshotBatch, args),
@@ -586,6 +644,7 @@ async function applySnapshot(
       batch,
     });
   }
+  return written;
 }
 
 /**
@@ -672,18 +731,24 @@ async function loadSnapshot(
   return parsed.tables;
 }
 
-/** Recupera la foto pendiente y la retira. */
+/** Recupera la foto pendiente, la retira y deja la traza de quién la guardó. */
 async function recoverSnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   pending: PendingSnapshot,
-): Promise<void> {
-  await applySnapshot(
+): Promise<number> {
+  const restored = await applySnapshot(
     ctx,
     userId,
     await loadSnapshot(ctx, pending),
     pending.batch,
   );
+  await ctx.runMutation(internal.workshopBackup.logRecovery, {
+    userId,
+    savedBy: pending.savedBy,
+    totalRecords: restored,
+  });
+  return restored;
 }
 
 /** Exporta una copia completa en JSON de todas las tablas operativas del taller. */
@@ -877,14 +942,26 @@ export const recoverInterruptedRestore = internalAction({
     if (pending === null || Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
       return { recovered: false };
     }
+    // La cuenta que guardó la foto puede haberse desactivado o borrado: la
+    // recuperación la ejecuta cualquier administrador activo. `savedBy` se
+    // queda en la foto y pasa a la auditoría al retirarla.
+    const actor = await ctx.runQuery(
+      internal.workshopBackup.resolveSnapshotAdmin,
+      { savedBy: pending.savedBy },
+    );
+    if (actor === null) {
+      throw new ConvexError(
+        "No hay ningún administrador activo que pueda recuperar la restauración interrumpida.",
+      );
+    }
     if (!pending.complete) {
       await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
-        userId: pending.savedBy,
+        userId: actor,
         batch: pending.batch,
       });
       return { recovered: false };
     }
-    await recoverSnapshot(ctx, pending.savedBy, pending);
+    await recoverSnapshot(ctx, actor, pending);
     return { recovered: true };
   },
 });

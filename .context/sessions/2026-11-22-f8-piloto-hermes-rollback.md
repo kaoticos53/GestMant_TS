@@ -427,6 +427,9 @@ bloquearía todas las restauraciones siguientes. La foto de varios trozos tiene
 su propia prueba: baja el tamaño a 200 caracteres (`backupFaults.snapshotChunkChars`,
 `null` en producción), comprueba que la foto queda en varios trozos y que la
 recuperación recompone el taller entero —recuentos y el contenido de la foto—.
+Otra prueba desactiva a la cuenta que guardó la foto y comprueba que recupera
+otro administrador activo, que la foto conserva a su dueño y que la auditoría
+registra las dos trazas.
 
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 
@@ -460,10 +463,12 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
   anterior: se pierde una restauración que había terminado. Es el lado seguro
   —taller coherente— y el usuario ya habrá visto un fallo, pero la copia hay que
   volver a lanzarla.
-- La recuperación del cron reescribe con la cuenta que guardó la foto
-  (`savedBy`). Si esa cuenta se hubiera desactivado o borrado, la pasada falla y
-  el taller sigue a medias; la siguiente restauración de otro administrador lo
-  arregla.
+- La recuperación usa la cuenta que guardó la foto si sigue siendo un
+  administrador activo; si se desactivó o se borró, la completa cualquiera de
+  los administradores activos. `savedBy` no se sustituye y, al retirar la foto,
+  pasa a la auditoría (`workshop_backup_recover`) junto a quién ejecutó la
+  recuperación. Si no queda ningún administrador activo, la pasada falla hasta
+  que se active uno: sin administrador no hay recuperación posible.
 - La foto añade escrituras: se serializa el taller entero y se guarda en trozos
   antes de vaciar. Es el precio de sobrevivir a la muerte del proceso; en los
   volúmenes medidos cae dentro del segundo que ya costaba la vuelta atrás.
