@@ -765,12 +765,44 @@ async function loadSnapshot(
   return parsed.tables;
 }
 
-/** Recupera la foto pendiente, la retira y deja la traza de quién la guardó. */
-async function recoverSnapshot(
+/**
+ * Resuelve una foto pendiente que ya no late: el latido se comprueba antes, en
+ * quien llama, y mientras llega la restauración sigue viva y no se toca. Sin
+ * latido hay tres estados:
+ * - la foto no está sellada: la acción murió escribiéndola y el taller no llegó
+ *   a vaciarse; se retira sin tocar nada.
+ * - la foto está aplicada (`appliedAt`): la copia ya está entera; se retira sin
+ *   deshacer una restauración terminada.
+ * - la foto está completa pero no aplicada: la copia se cortó a mitad; se
+ *   reescribe el estado anterior.
+ * En los dos últimos casos queda la traza de quién guardó la foto. Devuelve si
+ * hubo que reescribir el estado anterior, que es lo que distingue `recovered`.
+ */
+async function resolvePendingSnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   pending: PendingSnapshot,
-): Promise<number> {
+): Promise<boolean> {
+  if (!pending.complete) {
+    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
+      userId,
+      batch: pending.batch,
+    });
+    return false;
+  }
+  if (pending.applied) {
+    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
+      userId,
+      batch: pending.batch,
+    });
+    await ctx.runMutation(internal.workshopBackup.logRecovery, {
+      userId,
+      savedBy: pending.savedBy,
+      totalRecords: pending.appliedRecords,
+      applied: true,
+    });
+    return false;
+  }
   const restored = await applySnapshot(
     ctx,
     userId,
@@ -783,34 +815,7 @@ async function recoverSnapshot(
     totalRecords: restored,
     applied: false,
   });
-  return restored;
-}
-
-/**
- * Cierra una foto pendiente. Si la copia ya estaba insertada —la acción murió
- * entre el último lote y retirar la foto—, solo la retira: deshacerla devolvería
- * el taller al estado anterior y perdería una restauración terminada. Si no,
- * reescribe el estado que guarda la foto.
- */
-async function settlePendingSnapshot(
-  ctx: ActionCtx,
-  userId: Id<"users">,
-  pending: PendingSnapshot,
-): Promise<void> {
-  if (pending.applied) {
-    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
-      userId,
-      batch: pending.batch,
-    });
-    await ctx.runMutation(internal.workshopBackup.logRecovery, {
-      userId,
-      savedBy: pending.savedBy,
-      totalRecords: pending.appliedRecords,
-      applied: true,
-    });
-    return;
-  }
-  await recoverSnapshot(ctx, userId, pending);
+  return true;
 }
 
 /** Exporta una copia completa en JSON de todas las tablas operativas del taller. */
@@ -907,15 +912,9 @@ export const restoreBackup = action({
           "Hay una restauración en marcha. Espera a que termine antes de lanzar otra.",
         );
       }
-      if (pending.complete) {
-        await settlePendingSnapshot(ctx, userId, pending);
-      } else {
-        // Murió mientras guardaba la foto: el taller no llegó a vaciarse.
-        await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
-          userId,
-          batch: pending.batch,
-        });
-      }
+      // Sin latido: la foto es de una acción muerta. `resolvePendingSnapshot`
+      // distingue si está sin sellar, aplicada o cortada a mitad.
+      await resolvePendingSnapshot(ctx, userId, pending);
     }
 
     // 2. Comprobar la copia entera antes de vaciar nada: recorre el mismo camino
@@ -949,7 +948,9 @@ export const restoreBackup = action({
         beat,
       );
       // La copia está entera: si la acción muere antes de retirar la foto, la
-      // recuperación sabrá que no tiene que deshacerla.
+      // recuperación sabrá que no tiene que deshacerla. La marca va en su propia
+      // mutación; entre el último lote y ella queda una ventana de una mutación,
+      // el precio de no meter la foto en el camino caliente de la inserción.
       await ctx.runMutation(internal.workshopBackup.markSnapshotApplied, {
         userId,
         batch,
@@ -1005,9 +1006,9 @@ export const restoreBackup = action({
 /**
  * Recupera una restauración que quedó a medias porque su acción murió (el
  * backend se cayó entre el vaciado y el último lote). La lanza el cron cada
- * minuto: si la foto dejó de latir, la acción ya no está viva y se reescribe el
- * estado anterior; si sigue latiendo, no se toca. Una foto sin sellar es de una
- * escritura cortada y se descarta sin tocar el taller.
+ * minuto: si la foto sigue latiendo, no se toca; sin latido, se resuelve según
+ * su estado: sin sellar se descarta, aplicada solo se retira y cortada a mitad
+ * se revierte al estado anterior.
  */
 export const recoverInterruptedRestore = internalAction({
   args: {},
@@ -1031,15 +1032,6 @@ export const recoverInterruptedRestore = internalAction({
         "No hay ningún administrador activo que pueda recuperar la restauración interrumpida.",
       );
     }
-    if (!pending.complete) {
-      await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
-        userId: actor,
-        batch: pending.batch,
-      });
-      return { recovered: false };
-    }
-    const rewrote = !pending.applied;
-    await settlePendingSnapshot(ctx, actor, pending);
-    return { recovered: rewrote };
+    return { recovered: await resolvePendingSnapshot(ctx, actor, pending) };
   },
 });

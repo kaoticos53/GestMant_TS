@@ -155,15 +155,10 @@ async function ageSnapshot(t: TestBackend) {
   });
 }
 
-/**
- * Deja una restauración cortada como la dejaría un backend que muere: la copia
- * se queda a medio insertar y la foto del estado anterior, guardada en la base,
- * no se llega a recuperar.
- */
-async function crashMidRestore(t: TestBackend) {
+/** Siembra un taller, lo exporta y deja una deriva posterior a la copia. */
+async function driftedWorkshop(t: TestBackend) {
   const { admin, adminId } = await seedWorkshop(t);
   const exported = await admin.action(api.workshopBackup.exportBackup, {});
-
   await admin.mutation(api.spareParts.create, {
     code: "EXTRA-999",
     name: "Llegó después de la copia",
@@ -172,22 +167,29 @@ async function crashMidRestore(t: TestBackend) {
     stock: 7,
     minStock: 0,
   });
-  const beforeRestore = await tableCounts(t);
+  return { admin, adminId, exported, beforeRestore: await tableCounts(t) };
+}
 
+/**
+ * Deja una restauración cortada como la dejaría un backend que muere: la copia
+ * se queda a medio insertar y la foto del estado anterior, guardada en la base,
+ * no se llega a recuperar.
+ */
+async function crashMidRestore(t: TestBackend) {
+  const seeded = await driftedWorkshop(t);
   backupFaults.failOnTable = "mailShares";
   backupFaults.simulateCrash = true;
   try {
     await expect(
-      admin.action(api.workshopBackup.restoreBackup, {
-        rawJson: exported.rawJson,
+      seeded.admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: seeded.exported.rawJson,
       }),
     ).rejects.toThrow();
   } finally {
     backupFaults.failOnTable = null;
     backupFaults.simulateCrash = false;
   }
-
-  return { admin, adminId, exported, beforeRestore };
+  return seeded;
 }
 
 /**
@@ -195,30 +197,18 @@ async function crashMidRestore(t: TestBackend) {
  * un backend que muere justo después del último lote.
  */
 async function crashAfterInsert(t: TestBackend) {
-  const { admin, adminId } = await seedWorkshop(t);
-  const exported = await admin.action(api.workshopBackup.exportBackup, {});
-
-  await admin.mutation(api.spareParts.create, {
-    code: "EXTRA-999",
-    name: "Llegó después de la copia",
-    category: "Electrónica",
-    unit: "ud",
-    stock: 7,
-    minStock: 0,
-  });
-
+  const seeded = await driftedWorkshop(t);
   backupFaults.simulateCrashAfterInsert = true;
   try {
     await expect(
-      admin.action(api.workshopBackup.restoreBackup, {
-        rawJson: exported.rawJson,
+      seeded.admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: seeded.exported.rawJson,
       }),
     ).rejects.toThrow(/después de insertar/);
   } finally {
     backupFaults.simulateCrashAfterInsert = false;
   }
-
-  return { admin, adminId, exported };
+  return seeded;
 }
 
 describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () => {
@@ -589,7 +579,6 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     const chunks = await t.run((ctx) =>
       ctx.db.query("workshopRestoreSnapshots").collect(),
     );
-    expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.some((row) => row.appliedAt !== undefined)).toBe(true);
 
     // Pasado el margen, la pasada retira la foto sin tocar el taller.

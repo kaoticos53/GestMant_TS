@@ -431,11 +431,15 @@ Otra prueba desactiva a la cuenta que guardó la foto y comprueba que recupera
 otro administrador activo, que la foto conserva a su dueño y que la auditoría
 registra las dos trazas.
 
-La foto guarda además `appliedAt` cuando la copia ya está insertada entera. Una
-tercera prueba corta la acción justo después del último lote y antes de retirar
-la foto: la pasada ve la marca, retira la foto sin tocar el taller —que se queda
-con la copia, no con el estado anterior— y lo deja en la auditoría con
-`snapshotApplied: true`.
+La foto guarda además `appliedAt` cuando la copia ya está insertada entera. Con
+la foto sin latido, la recuperación resuelve tres estados en un solo sitio
+(`resolvePendingSnapshot`, compartido por la pasada y la siguiente
+restauración): **sin sellar** —murió escribiendo la foto, se descarta—,
+**aplicada** —la copia está entera, solo se retira— y **completa sin aplicar**
+—se cortó a mitad, se reescribe el estado anterior—. Las dos últimas dejan en la
+auditoría quién guardó la foto y, en la aplicada, `snapshotApplied: true`. La
+prueba corta justo después del último lote y comprueba que el taller se queda
+con la copia.
 
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 
@@ -467,8 +471,11 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 - Si el backend muere **después** de insertar toda la copia y **antes** de
   retirar la foto, la foto queda marcada como aplicada (`appliedAt`) y la pasada
   solo la retira: no deshace una restauración terminada. Queda una ventana
-  mínima entre el último lote y esa marca —una mutación—; si la muerte cae justo
-  ahí, la recuperación aún revierte a un taller coherente y la copia hay que
+  mínima entre el último lote y esa marca —una mutación—. Se valoró cerrarla
+  marcando dentro del último lote, pero obligaría a pasar la foto por
+  `insertTableBatch` (args y rama nuevos en el camino caliente) o a verificar
+  los datos después; no compensa para una ventana de una mutación. Si la muerte
+  cae ahí, la recuperación revierte a un taller coherente y la copia hay que
   volver a lanzarla.
 - La recuperación usa la cuenta que guardó la foto si sigue siendo un
   administrador activo; si se desactivó o se borró, la completa cualquiera de
