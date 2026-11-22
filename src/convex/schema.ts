@@ -1498,6 +1498,7 @@ const schema = defineSchema({
     lastSyncAt: v.optional(v.number()),
     lastError: v.optional(v.string()),
     sortOrder: v.number(),
+    hidden: v.optional(v.boolean()),
   })
     .index("by_account", ["accountId"])
     .index("by_account_remote", ["accountId", "remoteId"])

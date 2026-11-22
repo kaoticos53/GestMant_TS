@@ -19,15 +19,13 @@ import {
   getErrorMessage,
 } from "@/lib/workshop";
 import { useAction, useMutation, useQuery } from "convex/react";
-import {
-  CheckCircle2,
-  FolderTree,
-  Inbox,
-  Mail,
-  ShieldAlert,
-} from "lucide-react";
+import { CheckCircle2, Mail, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  MailboxFoldersCard,
+  type MailboxFolderItem,
+} from "./mailbox/MailboxFoldersCard";
 
 const MIB = 1024 * 1024;
 
@@ -73,7 +71,7 @@ const EMPTY_FORM: MailboxForm = {
 type MailboxAccount = NonNullable<
   (typeof api.mailAccounts.account)["_returnType"]
 >;
-type MailboxFolder = (typeof api.mailAccounts.folders)["_returnType"][number];
+type MailboxFolder = MailboxFolderItem;
 
 function formFromAccount(account: MailboxAccount | null): MailboxForm {
   if (account === null) return EMPTY_FORM;
@@ -92,7 +90,7 @@ function formFromAccount(account: MailboxAccount | null): MailboxForm {
  */
 export function MailboxCard() {
   const account = useQuery(api.mailAccounts.account);
-  const folders = useQuery(api.mailAccounts.folders);
+  const folders = useQuery(api.mailAccounts.folders, { includeHidden: true });
 
   if (account === undefined) {
     return (
@@ -401,38 +399,7 @@ function MailboxEditor({
 
       {account && (
         <>
-          <div className="mt-4 grid gap-3 rounded-lg border border-border/60 px-3 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-sm font-medium">
-                <FolderTree className="size-4" /> Carpetas de correo
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {folders === undefined
-                  ? "Cargando..."
-                  : `${folders.length} ${
-                      folders.length === 1 ? "carpeta" : "carpetas"
-                    }`}
-              </p>
-            </div>
-            {folders !== undefined && folders.length > 0 && (
-              <ul className="flex flex-wrap gap-1.5">
-                {folders.map((folder) => (
-                  <li
-                    key={folder.remoteId}
-                    className="flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2 py-1 text-xs"
-                  >
-                    <Inbox className="size-3.5" />
-                    {folder.name}
-                    {folder.unread > 0 && (
-                      <span className="font-semibold text-signal">
-                        {folder.unread}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <MailboxFoldersCard folders={folders} />
 
           <div className="mt-4 grid gap-2 rounded-lg border border-border/60 px-3 py-3">
             <p className="text-sm font-medium">Caché local</p>

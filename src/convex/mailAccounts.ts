@@ -266,17 +266,18 @@ export const account = query({
 
 /** Carpetas de correo de la cuenta propia, ya filtradas por `isMail`. */
 export const folders = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { includeHidden: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
     const user = await requireMailboxMember(ctx);
     const row = await readAccount(ctx, user._id);
     if (!row) return [];
+    const includeHidden = args.includeHidden === true;
     const folders = await ctx.db
       .query("mailFolders")
       .withIndex("by_account", (q) => q.eq("accountId", row._id))
       .collect();
     return folders
-      .filter((folder) => folder.isMail)
+      .filter((folder) => folder.isMail && (includeHidden || !folder.hidden))
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((folder) => ({
         remoteId: folder.remoteId,
@@ -288,7 +289,73 @@ export const folders = query({
         unread: folder.unread,
         total: folder.total,
         size: folder.size,
+        sortOrder: folder.sortOrder,
+        hidden: Boolean(folder.hidden),
       }));
+  },
+});
+
+export const setFolderVisibility = mutation({
+  args: {
+    remoteId: v.string(),
+    hidden: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMailboxMember(ctx);
+    const account = await readAccount(ctx, user._id);
+    if (!account) {
+      throw new ConvexError("Todavía no has configurado tu buzón.");
+    }
+    const folder = await ctx.db
+      .query("mailFolders")
+      .withIndex("by_account_remote", (q) =>
+        q.eq("accountId", account._id).eq("remoteId", args.remoteId),
+      )
+      .first();
+    if (!folder) {
+      throw new ConvexError("La carpeta seleccionada no existe.");
+    }
+    await ctx.db.patch(folder._id, { hidden: args.hidden });
+  },
+});
+
+export const reorderFolders = mutation({
+  args: {
+    orderedRemoteIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMailboxMember(ctx);
+    const account = await readAccount(ctx, user._id);
+    if (!account) {
+      throw new ConvexError("Todavía no has configurado tu buzón.");
+    }
+    const allFolders = await ctx.db
+      .query("mailFolders")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .collect();
+    const byRemoteId = new Map(allFolders.map((f) => [f.remoteId, f]));
+    const seen = new Set<string>();
+    const ordered: typeof allFolders = [];
+
+    for (const remoteId of args.orderedRemoteIds) {
+      if (seen.has(remoteId)) continue;
+      const match = byRemoteId.get(remoteId);
+      if (match) {
+        seen.add(remoteId);
+        ordered.push(match);
+      }
+    }
+    const remaining = allFolders
+      .filter((f) => !seen.has(f.remoteId))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    ordered.push(...remaining);
+
+    for (let i = 0; i < ordered.length; i += 1) {
+      const folder = ordered[i];
+      if (folder.sortOrder !== i) {
+        await ctx.db.patch(folder._id, { sortOrder: i });
+      }
+    }
   },
 });
 
@@ -378,8 +445,9 @@ export const recordConnected = internalMutation({
         unread: folder.unread,
         total: folder.total,
         size: folder.size,
-        sortOrder: folder.sortOrder,
+        sortOrder: existing ? existing.sortOrder : folder.sortOrder,
         syncEnabled: existing?.syncEnabled ?? true,
+        hidden: existing?.hidden,
       };
       if (existing) {
         await ctx.db.patch(existing._id, record);

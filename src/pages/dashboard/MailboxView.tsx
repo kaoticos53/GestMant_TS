@@ -78,7 +78,7 @@ export function MailboxView({
   onOpenSettings: () => void;
 }) {
   const account = useQuery(api.mailAccounts.account);
-  const folders = useQuery(api.mailAccounts.folders);
+  const folders = useQuery(api.mailAccounts.folders, {});
   const syncNow = useAction(api.mailSync.syncNow);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
