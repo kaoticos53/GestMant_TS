@@ -1665,6 +1665,11 @@ const schema = defineSchema({
     // Solo cuando están todos los trozos: una foto a medio escribir se
     // descarta, no se intenta recuperar.
     complete: v.optional(v.boolean()),
+    // Integridad de la foto sellada: cuántos trozos hay y la suma de
+    // verificación del JSON completo. La recuperación no lee a ciegas ni confía
+    // en un taller reconstruido a medias.
+    chunkCount: v.optional(v.number()),
+    checksum: v.optional(v.string()),
     // La copia ya está escrita entera; el taller no quedó a medias aunque la
     // foto siga aquí porque la acción murió antes de retirarla.
     appliedAt: v.optional(v.number()),

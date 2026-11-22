@@ -38,6 +38,27 @@ const SNAPSHOT_STALE_MS = 30_000;
 /** Cada cuánto late una restauración en marcha mientras la foto está en juego. */
 const SNAPSHOT_HEARTBEAT_MS = 5_000;
 
+/**
+ * Techo de la lectura de una foto: ni un número de trozos absurdo ni un JSON
+ * mayor que la memoria razonable de la acción. Una foto que no quepa no se lee
+ * a medias: se declara inservible y se descarta con traza.
+ */
+const MAX_SNAPSHOT_CHUNKS = 2_000;
+const MAX_SNAPSHOT_CHARS = 64 * 1024 * 1024;
+
+/** La foto está sellada pero no se puede reconstruir con garantías. */
+class UnusableSnapshotError extends Error {}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 const NO_SESSION_MSG =
   "Debes iniciar sesión con una cuenta activa para gestionar copias de seguridad.";
 const NO_ADMIN_MSG =
@@ -314,19 +335,30 @@ export const saveSnapshotChunk = internalMutation({
   },
 });
 
-/** Sella la foto: están todos sus trozos y la restauración puede empezar. */
+/**
+ * Sella la foto: están todos sus trozos y la restauración puede empezar. En la
+ * cabecera quedan el número de trozos y la suma de verificación del JSON.
+ */
 export const sealSnapshot = internalMutation({
-  args: { userId: v.id("users"), batch: v.string() },
+  args: {
+    userId: v.id("users"),
+    batch: v.string(),
+    chunkCount: v.number(),
+    checksum: v.string(),
+  },
   handler: async (ctx, args) => {
     await assertAdminUser(ctx, args.userId);
     const head = await ctx.db
       .query("workshopRestoreSnapshots")
-      .withIndex("by_batch", (q) =>
-        q.eq("batch", args.batch).eq("seq", 0),
-      )
+      .withIndex("by_batch", (q) => q.eq("batch", args.batch).eq("seq", 0))
       .unique();
     if (!head) return false;
-    await ctx.db.patch(head._id, { complete: true, aliveAt: Date.now() });
+    await ctx.db.patch(head._id, {
+      complete: true,
+      chunkCount: args.chunkCount,
+      checksum: args.checksum,
+      aliveAt: Date.now(),
+    });
     return true;
   },
 });
@@ -338,9 +370,7 @@ export const touchRestoreSnapshot = internalMutation({
     await assertAdminUser(ctx, args.userId);
     const head = await ctx.db
       .query("workshopRestoreSnapshots")
-      .withIndex("by_batch", (q) =>
-        q.eq("batch", args.batch).eq("seq", 0),
-      )
+      .withIndex("by_batch", (q) => q.eq("batch", args.batch).eq("seq", 0))
       .unique();
     if (!head) return false;
     await ctx.db.patch(head._id, { aliveAt: Date.now() });
@@ -362,9 +392,7 @@ export const markSnapshotApplied = internalMutation({
     await assertAdminUser(ctx, args.userId);
     const head = await ctx.db
       .query("workshopRestoreSnapshots")
-      .withIndex("by_batch", (q) =>
-        q.eq("batch", args.batch).eq("seq", 0),
-      )
+      .withIndex("by_batch", (q) => q.eq("batch", args.batch).eq("seq", 0))
       .unique();
     if (!head) return false;
     await ctx.db.patch(head._id, {
@@ -387,9 +415,7 @@ export const pendingRestoreSnapshot = internalQuery({
     if (!last) return null;
     const head = await ctx.db
       .query("workshopRestoreSnapshots")
-      .withIndex("by_batch", (q) =>
-        q.eq("batch", last.batch).eq("seq", 0),
-      )
+      .withIndex("by_batch", (q) => q.eq("batch", last.batch).eq("seq", 0))
       .unique();
     if (!head) return null;
     return {
@@ -398,6 +424,8 @@ export const pendingRestoreSnapshot = internalQuery({
       savedAt: head.savedAt,
       aliveAt: head.aliveAt ?? head.savedAt,
       complete: head.complete === true,
+      chunkCount: head.chunkCount ?? 0,
+      checksum: head.checksum ?? null,
       applied: head.appliedAt !== undefined,
       appliedRecords: head.appliedRecords ?? 0,
     };
@@ -446,6 +474,43 @@ export const readSnapshotChunk = internalQuery({
       )
       .unique();
     return row?.payload ?? null;
+  },
+});
+
+/**
+ * Retira una foto inservible y deja la traza en la misma mutación: o quedan las
+ * dos cosas —foto fuera y descarte auditado— o no queda ninguna.
+ */
+export const discardSnapshot = internalMutation({
+  args: {
+    userId: v.id("users"),
+    batch: v.string(),
+    savedBy: v.id("users"),
+    reason: v.string(),
+    chunkCount: v.optional(v.number()),
+    checksum: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<number> => {
+    await assertAdminUser(ctx, args.userId);
+    const rows = await ctx.db
+      .query("workshopRestoreSnapshots")
+      .withIndex("by_batch", (q) => q.eq("batch", args.batch))
+      .collect();
+    for (const row of rows) await ctx.db.delete(row._id);
+    const saved = await ctx.db.get(args.savedBy);
+    await logSecurityEvent(ctx, {
+      actorId: args.userId,
+      action: "workshop_backup_discard",
+      target: "system:backup",
+      metadata: {
+        reason: args.reason,
+        snapshotSavedBy: args.savedBy,
+        snapshotSavedByEmail: saved?.email ?? null,
+        snapshotChunks: args.chunkCount ?? null,
+        snapshotChecksum: args.checksum ?? null,
+      },
+    });
+    return rows.length;
   },
 });
 
@@ -612,6 +677,8 @@ type PendingSnapshot = {
   savedAt: number;
   aliveAt: number;
   complete: boolean;
+  chunkCount: number;
+  checksum: string | null;
   applied: boolean;
   appliedRecords: number;
 };
@@ -683,7 +750,8 @@ async function applySnapshot(
   const written = await walkChunks(
     userId,
     tables,
-    (args) => ctx.runMutation(internal.workshopBackup.insertSnapshotBatch, args),
+    (args) =>
+      ctx.runMutation(internal.workshopBackup.insertSnapshotBatch, args),
     beat,
   );
   if (batch !== undefined) {
@@ -700,8 +768,7 @@ async function applySnapshot(
  * suite baja el tamaño para probar una foto de varios trozos sin sembrar un
  * taller enorme; en producción manda la constante.
  */
-function snapshotChunks(tables: WorkshopBackupPayload["tables"]): string[] {
-  const raw = JSON.stringify({ tables });
+function snapshotChunks(raw: string): string[] {
   const size = backupFaults.snapshotChunkChars ?? SNAPSHOT_CHUNK_CHARS;
   const chunks: string[] = [];
   for (let i = 0; i < raw.length; i += size) {
@@ -725,8 +792,11 @@ async function saveSnapshot(
 ): Promise<void> {
   const savedAt = Date.now();
   const beat = snapshotHeartbeat(ctx, userId, batch, leaseToken);
+  const raw = JSON.stringify({ tables });
+  const chunks = snapshotChunks(raw);
+  const checksum = await sha256Hex(raw);
   try {
-    for (const [seq, payload] of snapshotChunks(tables).entries()) {
+    for (const [seq, payload] of chunks.entries()) {
       await ctx.runMutation(internal.workshopBackup.saveSnapshotChunk, {
         userId,
         batch,
@@ -739,10 +809,12 @@ async function saveSnapshot(
     // Sin este sello la foto no está entera: si la acción muere a mitad de la
     // escritura, la recuperación la descarta en vez de intentar leerla. Si no
     // se puede sellar, no se empieza a vaciar sin red.
-    const sealed = await ctx.runMutation(
-      internal.workshopBackup.sealSnapshot,
-      { userId, batch },
-    );
+    const sealed = await ctx.runMutation(internal.workshopBackup.sealSnapshot, {
+      userId,
+      batch,
+      chunkCount: chunks.length,
+      checksum,
+    });
     if (!sealed) {
       throw new ConvexError(
         "La foto del taller no se pudo sellar; no se ha restaurado nada.",
@@ -764,24 +836,81 @@ async function saveSnapshot(
   }
 }
 
-/** Reconstruye las tablas de una foto guardada. */
+/**
+ * Reconstruye las tablas de una foto guardada, pero solo si cuadra con la
+ * cabecera: número de trozos esperado, tamaño acotado y suma de verificación.
+ * Un fallo esperable se marca como `UnusableSnapshotError` para que la foto se
+ * descarte con traza en vez de dejar el taller bloqueado.
+ */
 async function loadSnapshot(
   ctx: ActionCtx,
   pending: PendingSnapshot,
 ): Promise<WorkshopBackupPayload["tables"]> {
+  if (pending.chunkCount === 0 && pending.checksum === null) {
+    throw new UnusableSnapshotError(
+      "La foto no guarda su cabecera de integridad.",
+    );
+  }
+  if (
+    !Number.isInteger(pending.chunkCount) ||
+    pending.chunkCount < 1 ||
+    pending.chunkCount > MAX_SNAPSHOT_CHUNKS
+  ) {
+    throw new UnusableSnapshotError(
+      "La foto declara un número de trozos fuera de los límites.",
+    );
+  }
+  if (pending.checksum === null) {
+    throw new UnusableSnapshotError(
+      "La foto no guarda su suma de verificación.",
+    );
+  }
+
   const chunks: string[] = [];
-  for (let seq = 0; ; seq += 1) {
+  let totalChars = 0;
+  for (let seq = 0; seq < pending.chunkCount; seq += 1) {
     const payload = await ctx.runQuery(
       internal.workshopBackup.readSnapshotChunk,
       { batch: pending.batch, seq },
     );
-    if (payload === null) break;
+    if (payload === null) {
+      throw new UnusableSnapshotError(
+        `Falta el trozo ${seq + 1} de ${pending.chunkCount}.`,
+      );
+    }
+    totalChars += payload.length;
+    if (totalChars > MAX_SNAPSHOT_CHARS) {
+      throw new UnusableSnapshotError(
+        "La foto supera el tamaño máximo que se puede leer.",
+      );
+    }
     chunks.push(payload);
   }
-  const parsed = JSON.parse(chunks.join("")) as {
-    tables: WorkshopBackupPayload["tables"];
-  };
-  return parsed.tables;
+  const raw = chunks.join("");
+  if ((await sha256Hex(raw)) !== pending.checksum) {
+    throw new UnusableSnapshotError(
+      "La foto no coincide con su suma de verificación.",
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new UnusableSnapshotError("La foto no contiene un JSON válido.");
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    typeof (parsed as { tables?: unknown }).tables !== "object" ||
+    (parsed as { tables?: unknown }).tables === null
+  ) {
+    throw new UnusableSnapshotError(
+      "La foto no tiene una tabla de datos válida.",
+    );
+  }
+  return (parsed as { tables: WorkshopBackupPayload["tables"] }).tables;
 }
 
 /**
@@ -804,9 +933,13 @@ async function resolvePendingSnapshot(
   leaseToken: string,
 ): Promise<boolean> {
   if (!pending.complete) {
-    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
+    await ctx.runMutation(internal.workshopBackup.discardSnapshot, {
       userId,
       batch: pending.batch,
+      savedBy: pending.savedBy,
+      reason: "La foto quedó sin sellar antes de vaciar el taller.",
+      chunkCount: pending.chunkCount,
+      checksum: pending.checksum ?? undefined,
     });
     return false;
   }
@@ -823,10 +956,27 @@ async function resolvePendingSnapshot(
     });
     return false;
   }
+
+  let tables: WorkshopBackupPayload["tables"];
+  try {
+    tables = await loadSnapshot(ctx, pending);
+  } catch (error) {
+    if (!(error instanceof UnusableSnapshotError)) throw error;
+    await ctx.runMutation(internal.workshopBackup.discardSnapshot, {
+      userId,
+      batch: pending.batch,
+      savedBy: pending.savedBy,
+      reason: error.message,
+      chunkCount: pending.chunkCount,
+      checksum: pending.checksum ?? undefined,
+    });
+    return false;
+  }
+
   const restored = await applySnapshot(
     ctx,
     userId,
-    await loadSnapshot(ctx, pending),
+    tables,
     pending.batch,
     leaseToken,
   );

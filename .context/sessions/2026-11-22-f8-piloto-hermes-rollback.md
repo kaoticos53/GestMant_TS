@@ -457,6 +457,18 @@ sentidos, escrituras bloqueadas y liberadas, caducidad de una reserva
 abandonada, liberación tras una restauración rechazada y pasada detenida
 mientras hay reserva.
 
+**Integridad de la foto.** Al sellar, la cabecera guarda `chunkCount` y la suma
+SHA-256 del JSON completo. `loadSnapshot` lee exactamente esos trozos —hasta
+2 000 y 64 MB—, exige que no falte ninguno y compara el hash antes de parsear;
+un fallo esperable se convierte en `UnusableSnapshotError`. La foto inservible
+se retira y se audita en la misma mutación (`workshop_backup_discard`, con
+motivo, `snapshotSavedBy` y los datos de cabecera): o quedan foto fuera y traza,
+o no queda ninguna. Una foto sin sellar también deja ese descarte; antes se
+retiraba en silencio. Las fotos anteriores a esta cabecera no se pueden
+verificar y se descartan auditadas. `tests/rollbackRehearsal.test.ts` sube a
+**17 pruebas**: suma manipulada, trozo que falta, número de trozos imposible y
+la cabecera correcta en la foto de varios trozos.
+
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 
 - Restauración normal con la foto persistida: **1 196 ms**, 880 filas
@@ -505,6 +517,11 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
   los datos después; no compensa para una ventana de una mutación. Si la muerte
   cae ahí, la recuperación revierte a un taller coherente y la copia hay que
   volver a lanzarla.
+- La suma de verificación detecta corrupción o trozos cambiados, no autentica
+  la foto: quien pueda escribir en `workshopRestoreSnapshots` puede recalcularla.
+  Una foto anterior a la cabecera de integridad se descarta auditada en vez de
+  recuperarse sin verificar, y la lectura tiene techo (2 000 trozos / 64 MB):
+  una foto mayor se considera inservible.
 - La reserva cierra las escrituras que pasan por `secureMutation` —el trabajo
   operativo: equipos, repuestos, incidencias, peticiones, compras, mantenimiento,
   manuales y mensajes—; las mutaciones de ajustes y caché que no usan esa puerta

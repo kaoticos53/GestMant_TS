@@ -84,6 +84,12 @@ escrituras del taller pasan por `secureMutation` y se rechazan mientras dura.
 `tests/rollbackRehearsal.test.ts` sube a 14 pruebas (solape, bloqueo, caducidad
 y liberación). Handover §8.3/§8.4.
 
+**Integridad de la foto (2026-11-22):** la cabecera sella `chunkCount` y
+SHA-256; la lectura se acota a 2 000 trozos / 64 MB; una foto sin sellar o
+inservible se retira y se audita (`workshop_backup_discard`) en la misma
+mutación. `tests/rollbackRehearsal.test.ts` sube a 17 pruebas. Handover
+§8.3/§8.4.
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

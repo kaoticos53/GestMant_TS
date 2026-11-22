@@ -145,6 +145,17 @@ async function seedWorkshop(t: TestBackend) {
   return { admin, adminId, cameraId, monitorId, retiredDocId };
 }
 
+/** La última traza de descarte de una foto, para comprobar el motivo. */
+async function discardMetadata(
+  t: TestBackend,
+): Promise<Record<string, unknown>> {
+  const audit = await t.run((ctx) =>
+    ctx.db.query("securityAuditLog").collect(),
+  );
+  const row = audit.find((entry) => entry.action === "workshop_backup_discard");
+  return JSON.parse(row?.metadata ?? "{}") as Record<string, unknown>;
+}
+
 /** El latido deja de llegar: la acción que guardó la foto ya no está viva. */
 async function ageSnapshot(t: TestBackend) {
   await t.run(async (ctx) => {
@@ -515,6 +526,17 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(
       await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
     ).toHaveLength(0);
+
+    // El descarte de una foto sin sellar también queda en la auditoría.
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const discard = audit.find(
+      (row) => row.action === "workshop_backup_discard",
+    );
+    expect(JSON.parse(discard?.metadata ?? "{}")).toMatchObject({
+      reason: expect.stringContaining("sin sellar"),
+    });
   });
 
   test("recupera con otro administrador si el que guardó la foto está inactivo", async () => {
@@ -807,6 +829,93 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     });
   });
 
+  test("una foto cuya suma de verificación no cuadra se descarta con auditoría", async () => {
+    const t = backend();
+    const crash = await crashMidRestore(t);
+    await ageSnapshot(t);
+    const rows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    const head = rows.find((row) => row.seq === 0);
+    if (!head) throw new Error("La foto no tiene cabecera");
+    await t.run((ctx) => ctx.db.patch(head._id, { checksum: "0".repeat(64) }));
+
+    const afterCrash = await tableCounts(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+
+    // No se intenta reescribir con una foto que no cuadra: el taller se queda
+    // como estaba tras el corte y la foto se retira.
+    expect(await tableCounts(t)).toEqual(afterCrash);
+    expect(afterCrash).not.toEqual(crash.beforeRestore);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+    expect(await discardMetadata(t)).toMatchObject({
+      snapshotSavedBy: crash.adminId,
+      reason: expect.stringContaining("suma de verificación"),
+    });
+  });
+
+  test("una foto con un trozo que falta se descarta con auditoría", async () => {
+    const t = backend();
+    const crash = await (async () => {
+      backupFaults.snapshotChunkChars = 80;
+      try {
+        return await crashMidRestore(t);
+      } finally {
+        backupFaults.snapshotChunkChars = null;
+      }
+    })();
+    const rows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    const victim = rows.find((row) => row.seq === 1);
+    if (!victim) throw new Error("La foto no tiene un segundo trozo");
+    await t.run((ctx) => ctx.db.delete(victim._id));
+
+    await ageSnapshot(t);
+    const afterCrash = await tableCounts(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(await tableCounts(t)).toEqual(afterCrash);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+    expect(await discardMetadata(t)).toMatchObject({
+      snapshotSavedBy: crash.adminId,
+      reason: expect.stringContaining("Falta el trozo 2"),
+    });
+  });
+
+  test("una cabecera con un número de trozos imposible no se lee", async () => {
+    const t = backend();
+    const crash = await crashMidRestore(t);
+    await ageSnapshot(t);
+    const rows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    const head = rows.find((row) => row.seq === 0);
+    if (!head) throw new Error("La foto no tiene cabecera");
+    await t.run((ctx) => ctx.db.patch(head._id, { chunkCount: 100_000_000 }));
+
+    const afterCrash = await tableCounts(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(await tableCounts(t)).toEqual(afterCrash);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+    expect(await discardMetadata(t)).toMatchObject({
+      snapshotSavedBy: crash.adminId,
+      reason: expect.stringContaining("número de trozos fuera de los límites"),
+    });
+  });
+
   test("una foto de varios trozos se recupera entera", async () => {
     const t = backend();
     // Bajar el trozo es determinista y barato: sembrar filas hasta pasar los
@@ -821,11 +930,15 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       }
     })();
 
-    // La foto quedó guardada en varios trozos y la recuperación la recompone.
+    // La foto quedó guardada en varios trozos, con su número y su suma de
+    // verificación en la cabecera; la recuperación la recompone.
     const chunks = await t.run((ctx) =>
       ctx.db.query("workshopRestoreSnapshots").collect(),
     );
     expect(chunks.length).toBeGreaterThan(1);
+    const head = chunks.find((row) => row.seq === 0);
+    expect(head?.chunkCount).toBe(chunks.length);
+    expect(head?.checksum).toMatch(/^[0-9a-f]{64}$/);
 
     await ageSnapshot(t);
     expect(
