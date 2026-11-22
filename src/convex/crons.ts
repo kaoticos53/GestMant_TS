@@ -192,15 +192,15 @@ crons.interval(
 
 /**
  * Restauraciones interrumpidas: si el backend murió entre el vaciado y el
- * último lote, la foto del taller quedó guardada en la base. Diez minutos
- * después de guardarla ya no puede haber una restauración viva, así que se
- * reescribe el estado anterior y el taller deja de estar a medias. Mientras la
- * foto sea reciente, la pasada no toca nada: sería pisar una restauración en
- * curso.
+ * último lote, la foto del taller quedó guardada en la base. Mientras la foto
+ * late, la restauración sigue viva y la pasada no la toca; cuando el latido
+ * deja de llegar, se reescribe el estado anterior y el taller deja de estar a
+ * medias. Pasa cada minuto para que la espera no se note, pero el latido es
+ * quien decide, no el reloj.
  */
 crons.interval(
   "recuperar una restauracion interrumpida",
-  { minutes: 10 },
+  { minutes: 1 },
   internal.workshopBackup.recoverInterruptedRestore,
   {},
 );

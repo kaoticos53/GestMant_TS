@@ -67,9 +67,11 @@ real (`backupFaults`), y contra Docker la restauración de 880 filas pasa de
 
 La foto previa ya no se queda en memoria: se guarda en
 `workshopRestoreSnapshots` —en trozos, antes de vaciar— y se recupera aunque la
-acción muera. La recoge un cron cada diez minutos (`recoverInterruptedRestore`) o
-la siguiente restauración, que primero devuelve el taller a como estaba y luego
-aplica la copia; una foto reciente se trata como restauración viva y no se pisa.
+acción muera. Mientras restaura, la acción late cada cinco segundos; la pasada
+(`recoverInterruptedRestore`, cada minuto) o la siguiente restauración solo
+actúan si el latido lleva más de treinta segundos parado, así que una foto
+antigua que sigue latiendo no se pisa. La foto se sella al escribir el último
+trozo: una foto sin sellar se descarta sin tocar el taller.
 `tests/rollbackRehearsal.test.ts` simula la muerte del backend
 (`backupFaults.simulateCrash`) y comprueba las dos vías. Handover §8.3/§8.4.
 

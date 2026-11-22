@@ -145,12 +145,12 @@ async function seedWorkshop(t: TestBackend) {
   return { admin, adminId, cameraId, monitorId, retiredDocId };
 }
 
-/** La foto deja de ser reciente: ya no puede ser de una restauración viva. */
+/** El latido deja de llegar: la acción que guardó la foto ya no está viva. */
 async function ageSnapshot(t: TestBackend) {
   await t.run(async (ctx) => {
     const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
     for (const row of rows) {
-      await ctx.db.patch(row._id, { savedAt: Date.now() - 11 * 60 * 1000 });
+      await ctx.db.patch(row._id, { aliveAt: Date.now() - 11 * 60 * 1000 });
     }
   });
 }
@@ -389,7 +389,21 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     );
     expect(early).toEqual({ recovered: false });
 
-    // Pasado el margen, la pasada reescribe el estado anterior y retira la foto.
+    // El latido manda, no la antigüedad de la foto: aunque se guardara hace
+    // mucho, si sigue latiendo puede ser una restauración viva.
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+      for (const row of rows) {
+        await ctx.db.patch(row._id, {
+          savedAt: Date.now() - 11 * 60 * 1000,
+        });
+      }
+    });
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+
+    // Sin latido, la pasada reescribe el estado anterior y retira la foto.
     await ageSnapshot(t);
     const late = await t.action(
       internal.workshopBackup.recoverInterruptedRestore,
@@ -453,6 +467,33 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(beforeRestore.spareParts).toBe(
       (exported.summary.tableCounts.spareParts ?? 0) + 1,
     );
+  });
+
+  test("una foto sin sellar de una acción muerta se descarta sin tocar el taller", async () => {
+    const t = backend();
+    const { adminId } = await seedWorkshop(t);
+    const before = await tableCounts(t);
+
+    // El backend murió mientras guardaba los trozos: la foto no llegó a
+    // sellarse y el taller ni siquiera se había empezado a vaciar.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("workshopRestoreSnapshots", {
+        batch: "cortada-al-guardar",
+        seq: 0,
+        payload: '{"tables":{"spareParts":[',
+        savedBy: adminId,
+        savedAt: Date.now() - 60_000,
+        aliveAt: Date.now() - 60_000,
+      });
+    });
+
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(await tableCounts(t)).toEqual(before);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
   });
 
   test("una foto de varios trozos se recupera entera", async () => {

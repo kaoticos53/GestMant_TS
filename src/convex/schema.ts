@@ -1659,6 +1659,12 @@ const schema = defineSchema({
     // Con esta cuenta se reescribe el estado si la acción que la guardó murió.
     savedBy: v.id("users"),
     savedAt: v.number(),
+    // Último latido de la restauración: mientras llega, la acción sigue viva
+    // aunque la foto se guardara hace rato. Sin latido, se da por muerta.
+    aliveAt: v.optional(v.number()),
+    // Solo cuando están todos los trozos: una foto a medio escribir se
+    // descarta, no se intenta recuperar.
+    complete: v.optional(v.boolean()),
   })
     .index("by_batch", ["batch", "seq"])
     .index("by_savedAt", ["savedAt"]),

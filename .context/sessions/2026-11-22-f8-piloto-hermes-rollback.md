@@ -394,19 +394,33 @@ la foto se escribe en `workshopRestoreSnapshots` —en trozos de 200 000
 caracteres, porque un taller grande no cabe en un documento— **antes** de vaciar,
 y se retira al terminar la restauración. Quedan dos recogedores:
 
-1. **La pasada de recuperación**, un cron cada diez minutos
-   (`recoverInterruptedRestore`): si la foto tiene más de diez minutos, la acción
-   que la guardó ya no puede estar viva y el estado anterior se reescribe. Una
-   foto reciente no se toca, por si es una restauración en curso.
-2. **La siguiente restauración**: al empezar, si hay foto pendiente y es vieja,
-   devuelve el taller a como estaba antes de validar y aplicar la copia nueva; si
-   es reciente, rechaza con «Hay una restauración en marcha» en vez de pisarla.
+1. **La pasada de recuperación**, un cron cada minuto
+   (`recoverInterruptedRestore`): la foto late cada cinco segundos mientras la
+   restauración avanza, y la pasada solo actúa si el latido lleva más de treinta
+   segundos parado. No espera a un plazo fijo desde que se guardó: una foto
+   antigua que sigue latiendo es una restauración viva.
+2. **La siguiente restauración**: al empezar, si hay foto pendiente sin latido
+   reciente, devuelve el taller a como estaba antes de validar y aplicar la copia
+   nueva; si sigue latiendo, rechaza con «Hay una restauración en marcha» en vez
+   de pisarla.
+
+La foto se **sella** al terminar de escribir todos sus trozos. Si la acción
+muere a mitad de la escritura, la pasada descarta esa foto —incompleta, y con el
+taller todavía sin vaciar— en vez de intentar leerla; sin el sello, una foto a
+medias bloquearía todas las restauraciones siguientes.
+
+Ensayo real contra Docker con el mismo corte: la restauración se cortó con
+**244 filas** y **3 trozos** de foto. La pasada ejecutada al instante devolvió
+`recovered: false` —el latido seguía vivo— y, **35 segundos después**, sin
+latido, `recovered: true`: **880 filas** y la tabla de fotos vacía. No hizo falta
+bajar ningún umbral esta vez; el reloj ya no decide solo.
 
 `tests/rollbackRehearsal.test.ts` lo prueba simulando la muerte
 (`backupFaults.simulateCrash`, que corta la acción sin recuperar): comprueba que
 el taller queda a medias y con foto guardada, que la pasada no la toca mientras
-es reciente, que tras el margen devuelve recuentos y contenido —`EXTRA-999`, la
-copia de correo con cuerpo, adjuntos y `.eml`— y que la siguiente restauración
+late —aunque la foto se guardara hace mucho—, que al parar el latido devuelve
+recuentos y contenido —`EXTRA-999`, la copia de correo con cuerpo, adjuntos y
+`.eml`— y que la siguiente restauración
 recupera primero y aplica después. Si la escritura de la foto se corta, se
 retira el trozo a medias antes de devolver el error: una foto incompleta
 bloquearía todas las restauraciones siguientes. La foto de varios trozos tiene
@@ -423,21 +437,24 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
   (`failOnTable: "incidents"` + `simulateCrash: true`, revertido después a
   `null`/`false`). La acción se cortó a los **900 ms** con el taller a medias
   (**244 filas**) y los 3 trozos de la foto en la tabla. La pasada de
-  recuperación —con el umbral bajado a 0 para no esperar los diez minutos—
-  devolvió `recovered: true`: **880 filas**, `spareParts` 43, `incidents` 123,
-  `CON-ALCO2` en 12 y la tabla de fotos vacía. El umbral volvió a 10 minutos en
-  el despliegue final.
+  recuperación —con el umbral bajado a 0 para no esperar el margen— devolvió
+  `recovered: true`: **880 filas**, `spareParts` 43, `incidents` 123,
+  `CON-ALCO2` en 12 y la tabla de fotos vacía. El umbral volvió a su valor en el
+  despliegue final.
 - `users` y `securityAuditLog` no se volvieron a contar aquí; la restauración no
   los toca (§8.2) y la comprobación previa escribe y revierte dentro de sus
   propias mutaciones.
 
 ### 8.4 Riesgos que siguen
 
-- La recuperación de una restauración cortada necesita que la foto lleve más de
-  diez minutos sin vida: ese es el margen para no pisar una restauración en
-  curso. Un taller enorme que tardara más que eso en restaurarse podría verse
-  recuperado por la pasada mientras sigue trabajando; con los volúmenes medidos
-  (§8.5, 15 s para 7 806 filas) queda muy lejos, pero conviene saberlo.
+- El latido caduca a los 30 segundos sin noticias, y se manda entre lote y
+  lote (también en cada pasada del vaciado y al guardar los trozos), así que un
+  lote lento no lo deja vencer. Aun así, un parón del backend de más de 30 s en
+  mitad de una operación podría hacer que la pasada la creyera muerta; los lotes
+  están acotados y con los volúmenes medidos (§8.5, 15 s para 7 806 filas) el
+  margen sobra, pero es el supuesto que queda.
+- El latido depende del reloj del backend. Una deriva grande entre procesos
+  (improbable en un solo deployment) podría adelantar o retrasar la recuperación.
 - Si el backend muere **después** de insertar toda la copia y **antes** de
   retirar la foto, la siguiente recuperación devuelve el taller al estado
   anterior: se pierde una restauración que había terminado. Es el lado seguro
