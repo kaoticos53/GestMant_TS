@@ -21,7 +21,7 @@ jobs:
       - run: npm ci
 
       - name: Comprobación de tipos (TypeScript)
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Auditoría de dependencias (SCA)
         run: npm audit --audit-level=high

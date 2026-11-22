@@ -472,7 +472,7 @@ tests/mailSharesBackup.test.ts
 
 | Fase                     | Contenido                                                                     | Cierre                                             |
 | ------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------- |
-| 1. Esquema y permisos    | `mailShares`, índices, `createIncidentFromMail`, helpers de audiencia.        | `npx tsc --noEmit`, test de esquema y permisos.    |
+| 1. Esquema y permisos    | `mailShares`, índices, `createIncidentFromMail`, helpers de audiencia.        | `npm run typecheck`, test de esquema y permisos.    |
 | 2. Compartir y ver       | Acción `share`, creación de incidencia, sección en fichas, visor y descargas. | Test de aislamiento y visibilidad.                 |
 | 3. Retención y huérfanas | Enganches en papeleras, borrado de equipos/manuales, cron de huérfanas.       | Test de restauración, purga y plazo.               |
 | 4. Backup y reset        | `mailShares` en backup, sanitización, restauración como resumen, reset.       | Test de backup y storage cleanup.                  |
@@ -565,7 +565,7 @@ Equivalencia con el plan: fases 1–2 = F5, fase 3 = F6, fases 4–5 = F7; F8 es
 | Backup/reset           | CA-010, CA-012         | `tests/mailSharesBackup.test.ts`, `tests/workshopBackup.test.ts`, `tests/workshopReset.test.ts` |
 | Reglas del repositorio | —                      | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts`                                         |
 
-Comandos de cierre por fase: `npx tsc --noEmit`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
+Comandos de cierre por fase: `npm run typecheck`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
 
 ---
 

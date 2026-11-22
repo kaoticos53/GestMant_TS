@@ -3,7 +3,7 @@
 Consulta siempre [AGENTS.md](file:///d:/Users/ricardo/Documents/GitHub/GestMant_TS/AGENTS.md) y la carpeta [.context/](file:///d:/Users/ricardo/Documents/GitHub/GestMant_TS/.context/) para las directrices arquitectónicas, reglas de estilo y comandos.
 
 ## Comandos Principales
-- Tipado: `npx tsc --noEmit`
+- Tipado: `npm run typecheck` (`tsc -b --noEmit` + tsconfig de Convex)
 - Tests: `npx vitest run`
 - Arquitectura: `npx vitest run tests/arquitectura.test.ts`
 - Test individual: `npx vitest run <ruta_test>`

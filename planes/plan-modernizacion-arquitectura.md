@@ -133,7 +133,7 @@ Ejecutar la suite completa de verificación en el siguiente orden:
 
 ```bash
 # 1. Verificación estricta de tipos de TypeScript
-npx tsc --noEmit
+npm run typecheck
 
 # 2. Análisis estático y reglas de linting
 npm run lint

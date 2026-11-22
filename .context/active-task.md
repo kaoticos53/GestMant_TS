@@ -147,3 +147,10 @@ cliente que solo conoce v1/v2 rechace las copias nuevas en vez de restaurarlas
 sin sus archivos. La app nueva sigue leyendo y migrando v1 y v2, incluida una v2
 con bloque `files`. Handover en
 `.context/sessions/2026-11-22-formato-copia-v3.md`.
+
+**Comprobación de tipos real (2026-11-22):** `npx tsc --noEmit` no comprobaba
+nada por el `tsconfig.json` de referencias. `npm run typecheck` usa `tsc -b
+--noEmit` y el `tsconfig` de Convex; la build y la CI usan ese comando. Se
+verificó con errores temporales en la app y en Convex (ambos exit 2, TS2322) y
+el árbol quedó limpio. Handover en
+`.context/sessions/2026-11-22-typecheck-real.md`.

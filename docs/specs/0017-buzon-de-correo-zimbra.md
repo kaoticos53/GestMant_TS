@@ -519,7 +519,7 @@ Total orientativo: **8–11 sesiones de trabajo**; F1/F2 están cerradas y F3/F4
 | Baja de usuario en el cron                                     | `tests/mailSync.test.ts`                                                                                                                 | ✅ F3 backend  |
 | Reglas del repositorio                                         | `tests/arquitectura.test.ts`, `tests/seguridad.test.ts`                                                                                  | ✅             |
 
-Comandos de cierre por fase: `npx tsc --noEmit`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
+Comandos de cierre por fase: `npm run typecheck`, `npx vitest run <tests tocados>` y, al final, `npm run security:check`.
 
 ---
 

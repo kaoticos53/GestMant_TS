@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node scripts/local-dev.mjs",
     "dev": "node scripts/update-version.mjs && vite",
-    "build": "node scripts/update-version.mjs --increment && tsc -b && vite build",
+    "build": "node scripts/update-version.mjs --increment && npm run typecheck && vite build",
+    "typecheck": "tsc -b --noEmit && tsc -p src/convex/tsconfig.json --noEmit",
     "version:sync": "node scripts/update-version.mjs",
     "version:bump": "node scripts/update-version.mjs --increment",
     "test": "vitest run",

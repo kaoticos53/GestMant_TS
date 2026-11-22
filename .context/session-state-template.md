@@ -35,7 +35,7 @@ Esta plantilla debe ser utilizada por cualquier agente o desarrollador al conclu
 
 ## 4. Estado de Verificación y Testing
 
-- **TypeScript (`npx tsc --noEmit`):** ✅ Sin errores / ❌ Falló (explicar motivo)
+- **TypeScript (`npm run typecheck`):** ✅ Sin errores / ❌ Falló (explicar motivo)
 - **Suite de Tests (`npx vitest run`):** ✅ X tests pasando / ❌ Falló
 - **Test de Arquitectura (`npx vitest run tests/arquitectura.test.ts`):** ✅ Pasó
 - **Pruebas Manuales / UI:** [Descripción de lo verificado visualmente si aplica]

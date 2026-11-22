@@ -181,7 +181,7 @@ Al finalizar cada una de las fases, se debe certificar la integridad del sistema
 
 ```bash
 # 1. Comprobación de tipos
-npx tsc --noEmit
+npm run typecheck
 
 # 2. Análisis estático
 npm run lint

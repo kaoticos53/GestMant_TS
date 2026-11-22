@@ -42,7 +42,7 @@ Ejecuta siempre los comandos desde la raíz del proyecto (`d:\Users\ricardo\Docu
 
 | Propósito | Comando exacto |
 |---|---|
-| **Verificación de Tipos** | `npx tsc --noEmit` |
+| **Verificación de Tipos** | `npm run typecheck` (`tsc -b --noEmit` + `tsc -p src/convex/tsconfig.json --noEmit`) |
 | **Suite de Tests Completa** | `npx vitest run` |
 | **Test de Arquitectura** | `npx vitest run tests/arquitectura.test.ts` |
 | **Test de Seguridad (AppSec)** | `npx vitest run tests/seguridad.test.ts` |
@@ -52,6 +52,8 @@ Ejecuta siempre los comandos desde la raíz del proyecto (`d:\Users\ricardo\Docu
 | **Servidor de Desarrollo** | `npm run dev` |
 | **Codegen de Convex** | `npx convex codegen` |
 | **Compilación de Producción** | `npm run build` |
+
+> Los handovers anteriores a 2026-11-22 pueden citar `npx tsc --noEmit`: son registro histórico, no instrucciones vigentes. La comprobación actual es `npm run typecheck`.
 
 > ⚠️ **Nota de Entorno:** Los tests unitarios y de arquitectura se ejecutan en memoria de forma instantánea. No ejecutes scripts de conexión externa (`nas-shell.ps1`) salvo que estés diagnosticando conectividad física del servidor NAS de almacenamiento.
 
@@ -78,7 +80,7 @@ Antes de modificar código, cada agente debe seguir rigurosamente este ciclo de 
 - Respeta la estructura de carpetas: si una vista crece (`dialogs/`, `components/`, `types.ts`, `helpers.ts`), modularízala como se ha hecho en `src/pages/dashboard/equipment/` y `src/pages/dashboard/requests/`.
 
 ### Paso 4: Validación Automática
-- Ejecuta `npx tsc --noEmit` para verificar que TypeScript no tiene errores.
+- Ejecuta `npm run typecheck` para verificar la app y Convex. No uses `npx tsc --noEmit` a secas: el `tsconfig.json` raíz solo referencia proyectos y ese comando no comprueba nada.
 - Ejecuta el test específico del módulo: `npx vitest run <ruta-del-test>`.
 - Ejecuta el test de arquitectura: `npx vitest run tests/arquitectura.test.ts`.
 - Ejecuta el test de seguridad: `npx vitest run tests/seguridad.test.ts`.

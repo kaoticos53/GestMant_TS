@@ -65,7 +65,7 @@ Resumen de gobernanza transversal (detallado en `SPEC-0002` y `SPEC-0013`):
 
 ## 6. Requisitos No Funcionales
 
-- **RNF-001 (Tipado estricto):** `npx tsc --noEmit` y `npx tsc -p src/convex/tsconfig.json --noEmit` deben pasar con `0` errores.
+- **RNF-001 (Tipado estricto):** `npm run typecheck` debe pasar con `0` errores; ejecuta `tsc -b --noEmit` para la app y `tsc -p src/convex/tsconfig.json --noEmit` para Convex.
 - **RNF-002 (Linting):** `npm run lint` (`eslint .`) debe pasar con `0` errores.
 - **RNF-003 (Suite en memoria):** Los tests unitarios y de integración con `convex-test` se ejecutan en memoria sin requerir Docker ni red.
 

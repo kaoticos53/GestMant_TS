@@ -21,7 +21,7 @@
    - Reemplazar los bloques duplicados en `AttachmentGroup.tsx`, `NotOpenedNotice.tsx`, `NoFileNotice.tsx`, `DocumentLink.tsx`, `TrackingPendingParts.tsx` y `RequestLinesCard.tsx`.
 
 ### Criterios de verificación
-- `npx tsc --noEmit` y `npm run lint` sin errores.
+- `npm run typecheck` y `npm run lint` sin errores.
 - Tests de `workshop`, `purchasing`, `roles`, `attachmentGroup`, `documentLink` y `arquitectura.test.ts` en verde.
 - Comprobación visual de contraste en tema claro y oscuro.
 
@@ -87,7 +87,7 @@
    - Añadir `aria-live="polite"` al contador de resultados en `TablePagination.tsx`.
 
 ### Criterios de verificación
-- `npx tsc -p src/convex/tsconfig.json --noEmit && npx tsc --noEmit`
+- `npm run typecheck`
 - `npm run lint` (0 errores)
 - `npx vitest run` (suite completa en verde)
 - `npm run build` (compilación de producción sin errores)

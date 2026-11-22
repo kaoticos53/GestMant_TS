@@ -78,7 +78,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 - **TDD:** cada incremento empieza por un test de contrato. En F1 se escriben primero `tests/mailClient.test.ts` y `tests/mailCache.test.ts` contra fixtures; después se implementa y se refactoriza con los tests en verde.
 - **Clean:** `src/lib/mailClient/` no conoce React, Convex, `fetch` ni la base de datos. Construye y parsea SOAP, normaliza DTOs y decide la política de caché; las acciones de Convex orquestan I/O y la UI consume datos ya normalizados.
 - **DDD:** el vocabulario del dominio es `MailFolder`, `MailHeader`, `SyncCursor`, `MessageDownload` y `CacheBudget`. Los tipos de Convex no entran en el núcleo.
-- **Cierre:** tests del incremento, `npx tsc --noEmit` y `tests/arquitectura.test.ts`; seguridad cuando se toque backend o UI.
+- **Cierre:** tests del incremento, `npm run typecheck` y `tests/arquitectura.test.ts`; seguridad cuando se toque backend o UI.
 
 ### Fase 0 — Aprobación, preparación y fixtures
 
@@ -138,7 +138,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 **Puerta de salida**
 
 - `tests/mailClient.test.ts` y `tests/mailCache.test.ts` en verde.
-- `npx tsc --noEmit` sin errores.
+- `npm run typecheck` sin errores.
 - `tests/arquitectura.test.ts` en verde.
 - Cero llamadas a red en los tests.
 
@@ -179,7 +179,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 - Alta y prueba contra el servidor real en local, o con fixtures si F0 no ha podido validar conectividad; en ese caso la prueba real es la puerta de F3 y no se simula.
 - Dos usuarios aislados; el segundo no puede leer credenciales ni carpetas del primero.
 - `CA-001` y `CA-012` de 0017 verificados.
-- `npx tsc --noEmit` y tests de cuenta en verde.
+- `npm run typecheck` y tests de cuenta en verde.
 
 ---
 
@@ -222,7 +222,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 - Segunda pasada sin duplicados.
 - Cron saltando cuentas de usuarios `active === false`, sin tocar `mailAccounts`.
 - Conexión real validada si F2 se cerró con fixtures; token inválido reinicia sin perder datos.
-- `npx tsc --noEmit` y tests de sincronización en verde.
+- `npm run typecheck` y tests de sincronización en verde.
 
 ---
 
@@ -433,7 +433,7 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 - `CA-010` de 0018.
 - Backup restaurado en local: una copia `original` vuelve como `summary`.
 - `securityAuditLog` intacto tras reset.
-- `npm run security:check`, `npx tsc --noEmit`, `npm run lint` y `npm run build` sin errores.
+- `npm run security:check`, `npm run typecheck`, `npm run lint` y `npm run build` sin errores.
 - Suite completa en verde.
 - Sin secretos ni datos reales en fixtures.
 
@@ -540,7 +540,7 @@ F0 Aprobación
 ### Comandos de cierre
 
 ```bash
-npx tsc --noEmit
+npm run typecheck
 npx vitest run <tests de la fase>
 npm run lint
 npm run build
@@ -631,7 +631,7 @@ En cada fase se ejecutan los tres primeros; el build y la suite completa se rese
 La implantación se considera terminada cuando:
 
 1. 0017 cumple `CA-001` a `CA-015` y 0018 cumple `CA-001` a `CA-012`.
-2. `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm run security:check` y la suite completa pasan.
+2. `npm run typecheck`, `npm run lint`, `npm run build`, `npm run security:check` y la suite completa pasan.
 3. Dos usuarios reales están aislados; el administrador no puede leer ni configurar el buzón de otra persona.
 4. Se ha probado con un buzón real la sincronización, apertura, adjuntos, «Vaciar caché» y compartición con incidencia, petición, equipo, manual y compra.
 5. Se ha probado la retención: restaurar conserva la copia, purgar el destino la purga, equipo/manual borrado deja huérfana 7 días y no hay reattach.
