@@ -465,6 +465,57 @@ const setRolePermissionsArgs = {
   grants: v.record(v.string(), v.boolean()),
 };
 
+async function applyRolePermissionChange(
+  ctx: MutationCtx,
+  actor: Doc<"users">,
+  args: { role: string; grants: Record<string, boolean> },
+) {
+  if (args.role === ROLES.ADMIN) {
+    throw new ConvexError(
+      "El administrador siempre tiene todos los permisos.",
+    );
+  }
+  if (!(await roleExists(ctx, args.role))) {
+    throw new ConvexError("Ese rol ya no existe.");
+  }
+  const unknown = Object.keys(args.grants).filter(
+    (key) => !isKnownCapability(key),
+  );
+  if (unknown.length > 0) {
+    throw new ConvexError(`Capacidad desconocida: ${unknown.join(", ")}.`);
+  }
+
+  const grants = effectiveGrants(args.role, args.grants);
+  const now = Date.now();
+  const existing = await getRoleRow(ctx, args.role);
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      grants,
+      updatedAt: now,
+      updatedBy: actor._id,
+    });
+  } else {
+    // Un rol del sistema sin fila: se materializa con sus datos de código.
+    const fallback = fallbackLabel(args.role);
+    await ctx.db.insert("roles", {
+      key: args.role,
+      label: fallback.label,
+      description: fallback.description,
+      kind: "system",
+      grants,
+      createdAt: now,
+      updatedAt: now,
+      updatedBy: actor._id,
+    });
+  }
+  await logSecurityEvent(ctx, {
+    actorId: actor._id,
+    action: "role_permissions_change",
+    target: `role:${args.role}`,
+    metadata: { role: args.role },
+  });
+}
+
 export const setRolePermissions = mutation({
   args: setRolePermissionsArgs,
   handler: secureMutation(
@@ -475,51 +526,31 @@ export const setRolePermissions = mutation({
     },
     setRolePermissionsArgs,
     async (ctx, args, actor) => {
-      if (args.role === ROLES.ADMIN) {
-        throw new ConvexError(
-          "El administrador siempre tiene todos los permisos.",
-        );
-      }
-      if (!(await roleExists(ctx, args.role))) {
-        throw new ConvexError("Ese rol ya no existe.");
-      }
-      const unknown = Object.keys(args.grants).filter(
-        (key) => !isKnownCapability(key),
-      );
-      if (unknown.length > 0) {
-        throw new ConvexError(`Capacidad desconocida: ${unknown.join(", ")}.`);
-      }
-
-      const grants = effectiveGrants(args.role, args.grants);
-      const now = Date.now();
-      const existing = await getRoleRow(ctx, args.role);
-      if (existing) {
-        await ctx.db.patch(existing._id, {
-          grants,
-          updatedAt: now,
-          updatedBy: actor._id,
-        });
-      } else {
-        // Un rol del sistema sin fila: se materializa con sus datos de código.
-        const fallback = fallbackLabel(args.role);
-        await ctx.db.insert("roles", {
-          key: args.role,
-          label: fallback.label,
-          description: fallback.description,
-          kind: "system",
-          grants,
-          createdAt: now,
-          updatedAt: now,
-          updatedBy: actor._id,
-        });
-      }
-      await logSecurityEvent(ctx, {
-        actorId: actor._id,
-        action: "role_permissions_change",
-        target: `role:${args.role}`,
-        metadata: { role: args.role },
-      });
+      await applyRolePermissionChange(ctx, actor, args);
       return true;
+    },
+  ),
+});
+
+const setManyRolePermissionsArgs = {
+  changes: v.array(v.object(setRolePermissionsArgs)),
+};
+
+/** Guarda los permisos de varios roles de forma atómica en una sola transacción. */
+export const setManyRolePermissions = mutation({
+  args: setManyRolePermissionsArgs,
+  handler: secureMutation(
+    {
+      capability: "configurePermissions",
+      identityMessage: PERMISSIONS_IDENTITY,
+      denyMessage: PERMISSIONS_DENY,
+    },
+    setManyRolePermissionsArgs,
+    async (ctx, args, actor) => {
+      for (const change of args.changes) {
+        await applyRolePermissionChange(ctx, actor, change);
+      }
+      return { updated: args.changes.length };
     },
   ),
 });

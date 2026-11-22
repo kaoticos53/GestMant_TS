@@ -19,6 +19,7 @@ import { useHumanChallenge } from "./useHumanChallenge";
 export function useReportIncidentState() {
   const { user, isAuthenticated } = useAuth();
   const report = useAction(api.incidents.report);
+  const reportBatch = useAction(api.incidents.reportBatch);
   const {
     useTurnstile,
     containerRef: challengeContainerRef,
@@ -109,21 +110,25 @@ export function useReportIncidentState() {
     void (async () => {
       if (online) {
         const drafts = await listOfflineDrafts();
-        for (const draft of drafts) {
+        if (drafts.length > 0) {
           try {
             const challenge = await resolveChallenge();
-            await report({
-              ...draft.payload,
-              clientDraftId: draft.id,
+            const batch = drafts.slice(0, 10);
+            const res = await reportBatch({
+              items: batch.map((draft) => ({
+                ...draft.payload,
+                clientDraftId: draft.id,
+              })),
               ...(challenge ? { challenge } : {}),
             });
-            await deleteOfflineDraft(draft.id);
+            for (const draftId of res.committedDraftIds) {
+              await deleteOfflineDraft(draftId);
+            }
+            if (res.errorMessage && active) {
+              setError(res.errorMessage);
+            }
           } catch (err) {
-            // Sin red otra vez —o el taller rechaza el aviso por ahora (el
-            // freno de dos avisos seguidos)—: se queda guardado y se
-            // reintenta en la próxima ocasión.
             if (active) setError(getErrorMessage(err));
-            break;
           }
         }
       }
@@ -134,7 +139,7 @@ export function useReportIncidentState() {
     return () => {
       active = false;
     };
-  }, [online, report, resolveChallenge]);
+  }, [online, reportBatch, resolveChallenge]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

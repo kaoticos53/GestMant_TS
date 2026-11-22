@@ -20,12 +20,14 @@ export type { RoleInfo, DialogState };
  */
 export function PermissionsView() {
   const roles = useQuery(api.permissions.listRoles);
-  const setRolePermissions = useMutation(api.permissions.setRolePermissions);
+  const setManyRolePermissions = useMutation(
+    api.permissions.setManyRolePermissions,
+  );
   const deleteRole = useMutation(api.permissions.deleteRole);
 
   const matrix = usePermissionsMatrix({
     roles,
-    setRolePermissions,
+    setManyRolePermissions,
   });
 
   const roleMgmt = useRoleManagement({

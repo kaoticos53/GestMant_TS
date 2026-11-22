@@ -18,7 +18,9 @@ import type { RoleInfo } from "../types";
 
 export interface UsePermissionsMatrixOptions {
   roles: RoleInfo[] | undefined;
-  setRolePermissions: (args: { role: string; grants: Grants }) => Promise<unknown>;
+  setManyRolePermissions: (args: {
+    changes: Array<{ role: string; grants: Grants }>;
+  }) => Promise<unknown>;
 }
 
 export interface UsePermissionsMatrixReturn {
@@ -41,7 +43,7 @@ export interface UsePermissionsMatrixReturn {
  */
 export function usePermissionsMatrix({
   roles,
-  setRolePermissions,
+  setManyRolePermissions,
 }: UsePermissionsMatrixOptions): UsePermissionsMatrixReturn {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -84,11 +86,12 @@ export function usePermissionsMatrix({
 
     setSaving(true);
     try {
-      await Promise.all(
-        changes.map((change) =>
-          setRolePermissions({ role: change.key, grants: change.grants }),
-        ),
-      );
+      await setManyRolePermissions({
+        changes: changes.map((change) => ({
+          role: change.key,
+          grants: change.grants,
+        })),
+      });
       setDraft(null);
       toast.success("Permisos actualizados: ya se aplican a cada rol");
     } catch (error) {
@@ -96,7 +99,7 @@ export function usePermissionsMatrix({
     } finally {
       setSaving(false);
     }
-  }, [draft, saved, setRolePermissions]);
+  }, [draft, saved, setManyRolePermissions]);
 
   const removeRoleFromDraft = useCallback((roleKey: string) => {
     setDraft((prev) => (prev === null ? null : dropRole(prev, roleKey)));

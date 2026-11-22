@@ -133,6 +133,67 @@ export const report = action({
   },
 });
 
+const MAX_PUBLIC_REPORT_BATCH = 10;
+
+/** Envía un lote de borradores offline validando el reto anti-bot una sola vez. */
+export const reportBatch = action({
+  args: {
+    items: v.array(v.object(reportPayloadArgs)),
+    challenge: v.optional(humanChallengeValidator),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    committedDraftIds: string[];
+    results: Array<{ reference: string; code: string }>;
+    errorMessage?: string;
+  }> => {
+    if (args.items.length === 0) {
+      return { committedDraftIds: [], results: [] };
+    }
+    if (args.items.length > MAX_PUBLIC_REPORT_BATCH) {
+      throw new ConvexError(
+        `No se pueden enviar más de ${MAX_PUBLIC_REPORT_BATCH} incidencias en un solo lote.`,
+      );
+    }
+
+    const { authenticated } = await verifyHumanChallenge(ctx, args.challenge);
+    const committedDraftIds: string[] = [];
+    const results: Array<{ reference: string; code: string }> = [];
+
+    for (const item of args.items) {
+      try {
+        const res = await ctx.runMutation(internal.incidents.commitReport, {
+          reporterName: item.reporterName,
+          reporterRole: item.reporterRole,
+          reporterEmail: item.reporterEmail,
+          location: item.location,
+          equipmentKind: item.equipmentKind,
+          model: item.model,
+          serialNumber: item.serialNumber,
+          description: item.description,
+          reportedAt: item.reportedAt,
+          clientDraftId: item.clientDraftId,
+          website: item.website,
+          isAuthenticatedMember: authenticated,
+        });
+        results.push(res);
+        if (item.clientDraftId) committedDraftIds.push(item.clientDraftId);
+      } catch (err) {
+        return {
+          committedDraftIds,
+          results,
+          errorMessage:
+            err instanceof Error ? err.message : "No se pudo enviar el lote.",
+        };
+      }
+    }
+
+    return { committedDraftIds, results };
+  },
+});
+
 /**
  * Cola de incidencias (más recientes primero). Requiere sesión. Por defecto
  * deja fuera lo archivado: el archivo se consulta aparte.
