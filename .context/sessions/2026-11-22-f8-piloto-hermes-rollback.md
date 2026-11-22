@@ -409,7 +409,10 @@ es reciente, que tras el margen devuelve recuentos y contenido —`EXTRA-999`, l
 copia de correo con cuerpo, adjuntos y `.eml`— y que la siguiente restauración
 recupera primero y aplica después. Si la escritura de la foto se corta, se
 retira el trozo a medias antes de devolver el error: una foto incompleta
-bloquearía todas las restauraciones siguientes.
+bloquearía todas las restauraciones siguientes. La foto de varios trozos tiene
+su propia prueba: baja el tamaño a 200 caracteres (`backupFaults.snapshotChunkChars`,
+`null` en producción), comprueba que los trozos comparten tanda y que la
+recuperación recompone el taller entero, contenido incluido.
 
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 

@@ -454,4 +454,44 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       (exported.summary.tableCounts.spareParts ?? 0) + 1,
     );
   });
+
+  test("una foto de varios trozos se recupera entera", async () => {
+    const t = backend();
+    // El trozo se baja solo para la prueba: con 200 000 caracteres este taller
+    // cabe en uno, y aquí hace falta que la foto se reparta de verdad.
+    backupFaults.snapshotChunkChars = 200;
+    let crash: Awaited<ReturnType<typeof crashMidRestore>>;
+    try {
+      crash = await crashMidRestore(t);
+    } finally {
+      backupFaults.snapshotChunkChars = null;
+    }
+    const { admin, beforeRestore } = crash;
+
+    // La foto quedó guardada en varios trozos de la misma tanda.
+    const chunks = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(new Set(chunks.map((row) => row.batch)).size).toBe(1);
+
+    await ageSnapshot(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: true });
+
+    // Se recompone trozo a trozo: recuentos y contenido como estaban.
+    expect(await tableCounts(t)).toEqual(beforeRestore);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+    const parts = await admin.query(api.spareParts.list, {});
+    expect(parts.map((part) => part.code).sort()).toEqual([
+      "BK-001",
+      "EXTRA-999",
+    ]);
+    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
+    expect(shares[0]?.attachments).toHaveLength(1);
+  });
 });

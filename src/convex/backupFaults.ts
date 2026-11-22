@@ -9,7 +9,13 @@ export const backupFaults: {
   failOnTable: string | null;
   /** Corta la acción sin dejar que recupere, como si el backend hubiera muerto. */
   simulateCrash: boolean;
+  /**
+   * Tamaño de trozo de la foto previa. La suite lo baja para probar una foto de
+   * varios trozos; en producción se queda en `null` (200 000 caracteres).
+   */
+  snapshotChunkChars: number | null;
 } = {
   failOnTable: null,
   simulateCrash: false,
+  snapshotChunkChars: null,
 };

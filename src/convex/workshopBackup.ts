@@ -501,12 +501,17 @@ async function applySnapshot(
   }
 }
 
-/** Trocea la foto del taller en documentos por debajo del límite de Convex. */
+/**
+ * Trocea la foto del taller en documentos por debajo del límite de Convex. La
+ * suite baja el tamaño para probar una foto de varios trozos sin sembrar un
+ * taller enorme; en producción manda la constante.
+ */
 function snapshotChunks(tables: WorkshopBackupPayload["tables"]): string[] {
   const raw = JSON.stringify({ tables });
+  const size = backupFaults.snapshotChunkChars ?? SNAPSHOT_CHUNK_CHARS;
   const chunks: string[] = [];
-  for (let i = 0; i < raw.length; i += SNAPSHOT_CHUNK_CHARS) {
-    chunks.push(raw.slice(i, i + SNAPSHOT_CHUNK_CHARS));
+  for (let i = 0; i < raw.length; i += size) {
+    chunks.push(raw.slice(i, i + size));
   }
   return chunks;
 }
