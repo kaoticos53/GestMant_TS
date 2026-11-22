@@ -45,6 +45,7 @@ const DEFAULT_TASK_PARAMS: Record<AiTaskId, AiTaskParamConfig> = {
   label_scanner: { temperature: 0.1, maxTokens: 1600 },
   incident_qa: { temperature: 0.1, maxTokens: 900 },
   workshop_chat: { temperature: 0.2, maxTokens: 1200 },
+  mail_triage: { temperature: 0.1, maxTokens: 1200 },
 };
 
 function envApiKey(): string {
@@ -76,6 +77,8 @@ function normalizedTaskParams(
       row?.taskParams?.incident_qa ?? DEFAULT_TASK_PARAMS.incident_qa,
     workshop_chat:
       row?.taskParams?.workshop_chat ?? DEFAULT_TASK_PARAMS.workshop_chat,
+    mail_triage:
+      row?.taskParams?.mail_triage ?? DEFAULT_TASK_PARAMS.mail_triage,
   };
 }
 
@@ -206,6 +209,7 @@ export const save = mutation({
         label_scanner: taskParamValidator,
         incident_qa: taskParamValidator,
         workshop_chat: taskParamValidator,
+        mail_triage: v.optional(taskParamValidator),
       }),
     ),
   },

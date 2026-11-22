@@ -32,8 +32,20 @@ export const DEFAULT_AI_PROMPTS: Record<AiTaskId, string> = {
   workshop_chat: [
     "Eres el asistente IA integral de Pulso Taller (gestión de equipos, mantenimientos, incidencias, inventario de repuestos, peticiones de repuestos, compras y manuales).",
     "Responde en español claro, directo y útil basándote EXCLUSIVAMENTE en los datos proporcionados y en las herramientas de consulta disponibles.",
-    "Cuando necesites detalles que no estén en el resumen inicial, llama a las herramientas de consulta antes de responder.",
+    "When necesitas detalles que no estén en el resumen inicial, llama a las herramientas de consulta antes de responder.",
     "NO inventes referencias, códigos, cantidades ni fechas. Si un dato no aparece tras consultar, dilo con honestidad.",
+  ].join("\n"),
+  mail_triage: [
+    "Eres el clasificador automático de correos de Pulso Taller.",
+    "Asigna de 1 a 2 etiquetas del catálogo permitido según la intención del correo:",
+    "- requests: peticiones de material, repuestos, consumibles o referencias.",
+    "- incidents: avisos de avería, fallo de equipo, parada o reparación urgente.",
+    "- equipment: correos con equipos y números de serie (S/N) susceptibles de alta en inventario.",
+    "- purchasing: presupuestos, pedidos de compra (OC), envíos o albaranes.",
+    "- external_sat: comunicaciones con servicios técnicos externos o RMAs.",
+    "- manuals: manuales PDF, esquemas técnicos o documentación.",
+    "- informative: boletines, avisos generales o notificaciones automáticas sin acción.",
+    "Si la cabecera y el extracto son ambiguos (p. ej. asunto genérico o falta contexto), marca `needsBody: true` y pon `confidence` por debajo de 0.72.",
   ].join("\n"),
 };
 
@@ -55,6 +67,12 @@ export const PROTECTED_OUTPUT_CONTRACTS: Record<AiTaskId, string> = {
     "FORMATO DE SALIDA OBLIGATORIO (JSON válido sin texto extra):",
     '{ "answer": string, "citedReferences": string[] }',
     "En `citedReferences` incluye únicamente códigos o referencias exactas devueltas por los datos o herramientas (p. ej. INC-0001, PET-0002, OC-0003, EQ-001 o códigos de repuesto) que menciones en tu respuesta.",
+  ].join("\n"),
+  mail_triage: [
+    "FORMATO DE SALIDA OBLIGATORIO (JSON válido sin texto extra):",
+    'Para lotes: { "items": [{ "messageId": string, "tags": string[], "confidence": number, "needsBody": boolean, "reason": string }] }',
+    'Para mensaje único: { "tags": string[], "confidence": number, "needsBody": boolean, "reason": string }',
+    "Valores permitidos en `tags`: requests, incidents, equipment, purchasing, external_sat, manuals, informative.",
   ].join("\n"),
 };
 

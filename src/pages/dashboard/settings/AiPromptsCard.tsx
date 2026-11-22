@@ -28,12 +28,14 @@ const TASK_META: Array<{ id: AiTaskId; label: string }> = [
   { id: "workshop_chat", label: "Chat global" },
   { id: "incident_qa", label: "Asistente de incidencias" },
   { id: "label_scanner", label: "Escáner de etiquetas" },
+  { id: "mail_triage", label: "Autoetiquetado de correo" },
 ];
 
 const DEFAULT_PARAMS: Record<AiTaskId, AiTaskParamConfig> = {
   label_scanner: { temperature: 0.1, maxTokens: 1600 },
   incident_qa: { temperature: 0.1, maxTokens: 900 },
   workshop_chat: { temperature: 0.2, maxTokens: 1200 },
+  mail_triage: { temperature: 0.1, maxTokens: 1200 },
 };
 
 export function AiPromptsCard() {

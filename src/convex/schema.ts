@@ -1330,6 +1330,13 @@ const schema = defineSchema({
           maxTokens: v.number(),
           customPrompt: v.optional(v.string()),
         }),
+        mail_triage: v.optional(
+          v.object({
+            temperature: v.number(),
+            maxTokens: v.number(),
+            customPrompt: v.optional(v.string()),
+          }),
+        ),
       }),
     ),
   }).index("by_key", ["key"]),

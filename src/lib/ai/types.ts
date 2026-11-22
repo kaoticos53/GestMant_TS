@@ -6,7 +6,11 @@ export type AiConfidence = "high" | "medium" | "low";
 
 export type AiKeySource = "guardada" | "entorno" | "ninguna";
 
-export type AiTaskId = "label_scanner" | "incident_qa" | "workshop_chat";
+export type AiTaskId =
+  | "label_scanner"
+  | "incident_qa"
+  | "workshop_chat"
+  | "mail_triage";
 
 export type AiToolModule =
   | "equipment"
