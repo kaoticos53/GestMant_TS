@@ -55,6 +55,7 @@ Cerrar el punto 8 del backlog de copias: **avisar a los administradores cuando l
 ## Corrección posterior — recuento por lotes (2026-11-22)
 
 - El aviso contaba `pruned.rows`, que son los documentos o trozos de la foto, no las fotos. Una foto partida en tres trozos se anunciaba como «3 fotos huérfanas».
-- `notifyRecoveryIntervention` recibe ahora `prunedBatches` y la pasada le pasa `pruned.batches`. La auditoría conserva `rows` y `batches` para diagnóstico.
-- Prueba añadida en `tests/backupSnapshotCleanup.test.ts`: una foto anterior con tres documentos deja el aviso en «1 foto huérfana», mientras `workshop_backup_prune` sigue registrando `rows: 3`.
+- `pruneOrphanSnapshots` devuelve `{ photos, chunks }`: `photos` cuenta lotes y `chunks` cuenta documentos. `notifyRecoveryIntervention` recibe solo `prunedPhotos`; la pasada le pasa `pruned.photos`.
+- La auditoría `workshop_backup_prune` guarda `photos` (lista de lotes) y `chunks` (número de documentos), sin campos ambiguos.
+- Prueba añadida en `tests/backupSnapshotCleanup.test.ts`: una foto anterior con tres documentos deja el aviso exacto en «1 foto huérfana», mientras la auditoría registra `photos: ["foto-en-trozos"]` y `chunks: 3`.
 - Verificación: `tsc`, Prettier y ESLint correctos; suite completa con **2 912 pruebas pasando**, 69 omitidas.

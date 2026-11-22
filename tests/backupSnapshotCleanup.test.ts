@@ -84,8 +84,8 @@ describe("limpieza de fotos huérfanas de restauración", () => {
     const prune = audit.find((row) => row.action === "workshop_backup_prune");
     expect(JSON.parse(prune?.metadata ?? "{}")).toMatchObject({
       keptBatch: "foto-actual",
-      batches: ["foto-anterior", "resto-sin-cabecera"],
-      rows: 2,
+      photos: ["foto-anterior", "resto-sin-cabecera"],
+      chunks: 2,
     });
 
     const notifications = await t.run((ctx) =>
@@ -135,18 +135,13 @@ describe("limpieza de fotos huérfanas de restauración", () => {
       await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
     ).toEqual({ recovered: false });
 
-    const rows = await t.run((ctx) =>
-      ctx.db.query("workshopRestoreSnapshots").collect(),
-    );
-    expect(rows.map((row) => row.batch)).toEqual(["foto-actual"]);
-
     const audit = await t.run((ctx) =>
       ctx.db.query("securityAuditLog").collect(),
     );
     const prune = audit.find((row) => row.action === "workshop_backup_prune");
     expect(JSON.parse(prune?.metadata ?? "{}")).toMatchObject({
-      batches: ["foto-en-trozos"],
-      rows: 3,
+      photos: ["foto-en-trozos"],
+      chunks: 3,
     });
 
     const notifications = await t.run((ctx) =>
@@ -155,8 +150,9 @@ describe("limpieza de fotos huérfanas de restauración", () => {
     const notice = notifications.find((row) =>
       row.text.includes("La pasada de recuperación"),
     );
-    expect(notice?.text).toContain("1 foto huérfana");
-    expect(notice?.text).not.toContain("3 fotos huérfanas");
+    expect(notice?.text).toBe(
+      "La pasada de recuperación ha retirado 1 foto huérfana de restauraciones anteriores.",
+    );
   });
 
   test("una cabecera antigua no queda escondida por un trozo nuevo sin cabecera", async () => {

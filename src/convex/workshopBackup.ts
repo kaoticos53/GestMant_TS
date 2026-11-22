@@ -750,29 +750,31 @@ export const pruneOrphanSnapshots = internalMutation({
   handler: async (ctx, args) => {
     if (args.userId !== undefined) await assertAdminUser(ctx, args.userId);
     const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
-    const removedBatches = new Set<string>();
-    let removedRows = 0;
+    const removedPhotos = new Set<string>();
+    let removedChunks = 0;
     for (const row of rows) {
       if (args.keepBatch !== undefined && row.batch === args.keepBatch) {
         continue;
       }
       await ctx.db.delete(row._id);
-      removedBatches.add(row.batch);
-      removedRows += 1;
+      removedPhotos.add(row.batch);
+      removedChunks += 1;
     }
-    if (removedRows > 0) {
+    if (removedChunks > 0) {
       await logSecurityEvent(ctx, {
         actorId: args.userId ?? null,
         action: "workshop_backup_prune",
         target: "system:backup",
         metadata: {
           keptBatch: args.keepBatch ?? null,
-          batches: [...removedBatches].sort(),
-          rows: removedRows,
+          photos: [...removedPhotos].sort(),
+          chunks: removedChunks,
         },
       });
     }
-    return { batches: removedBatches.size, rows: removedRows };
+    // `photos` son lotes; `chunks`, los documentos que los componen. No se
+    // mezclan: el aviso usa `photos` y la auditoría guarda ambos por separado.
+    return { photos: removedPhotos.size, chunks: removedChunks };
   },
 });
 
@@ -789,7 +791,7 @@ export const notifyRecoveryIntervention = internalMutation({
       v.literal("cleared"),
       v.literal("recovered"),
     ),
-    prunedBatches: v.number(),
+    prunedPhotos: v.number(),
   },
   handler: async (ctx, args) => {
     const parts: string[] = [];
@@ -804,11 +806,11 @@ export const notifyRecoveryIntervention = internalMutation({
     }
     // Una foto puede estar partida en varios documentos (`seq`): el aviso
     // cuenta fotos, no trozos, para no inflar el número.
-    if (args.prunedBatches > 0) {
+    if (args.prunedPhotos > 0) {
       parts.push(
-        args.prunedBatches === 1
+        args.prunedPhotos === 1
           ? "ha retirado 1 foto huérfana de restauraciones anteriores"
-          : `ha retirado ${args.prunedBatches} fotos huérfanas de restauraciones anteriores`,
+          : `ha retirado ${args.prunedPhotos} fotos huérfanas de restauraciones anteriores`,
       );
     }
     if (parts.length === 0) return false;
@@ -1965,10 +1967,10 @@ export const recoverInterruptedRestore = internalAction({
         internal.workshopBackup.pruneOrphanSnapshots,
         {},
       );
-      if (pruned.batches > 0) {
+      if (pruned.photos > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedBatches: pruned.batches },
+          { action: "kept" as const, prunedPhotos: pruned.photos },
         );
       }
       return { recovered: false };
@@ -1980,10 +1982,10 @@ export const recoverInterruptedRestore = internalAction({
         internal.workshopBackup.pruneOrphanSnapshots,
         { keepBatch: pending.batch },
       );
-      if (pruned.batches > 0) {
+      if (pruned.photos > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedBatches: pruned.batches },
+          { action: "kept" as const, prunedPhotos: pruned.photos },
         );
       }
       return { recovered: false };
@@ -2042,10 +2044,10 @@ export const recoverInterruptedRestore = internalAction({
             current?.batch === pending.batch ? current.batch : undefined,
         },
       );
-      if (resolution.action !== "kept" || pruned.batches > 0) {
+      if (resolution.action !== "kept" || pruned.photos > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: resolution.action, prunedBatches: pruned.batches },
+          { action: resolution.action, prunedPhotos: pruned.photos },
         );
       }
       return { recovered: resolution.recovered };
