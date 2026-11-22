@@ -154,9 +154,14 @@ export default defineConfig({
      *
      * El service worker no se escribe a mano: Workbox lo compone al compilar con
      * la lista de archivos de esta compilación —los nombres llevan hash—, así que
-     * una versión nueva no puede servir los trozos de la anterior. `autoUpdate`
-     * activa `skipWaiting` y `clientsClaim`: al desplegar, la pestaña que se
-     * quede abierta carga la versión nueva sin que nadie borre la caché a mano.
+     * una versión nueva no puede servir los trozos de la anterior.
+     *
+     * `prompt` y no `autoUpdate`: la compilación nueva se descarga y se queda
+     * esperando, con `skipWaiting` y `clientsClaim` apagados, hasta que alguien
+     * pulsa «Recargar» en el aviso (`components/PwaUpdateBanner`), que enseña el
+     * número de build de la pestaña. Recargar por detrás a media tarea perdía lo
+     * escrito y, sobre todo, dejaba depurar una interfaz que no cambiaba porque
+     * el navegador servía otra compilación sin decirlo.
      *
      * Se precachea el armazón (HTML, CSS, JS, iconos) para que la aplicación abra
      * sin red. Lo que se consulta a demanda —las fichas, los manuales en PDF— se
@@ -165,7 +170,7 @@ export default defineConfig({
      * que `CacheFirst` los sirve del dispositivo y solo los pide una vez.
      */
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       // El manifiesto ya está escrito a mano en `public/`: el plugin solo tiene
       // que copiarlo y no inventarse otro.
       manifest: false,
@@ -174,6 +179,10 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest,woff2}"],
         navigateFallback: "/index.html",
         cleanupOutdatedCaches: true,
+        // Nada entra en vigor sin que la pestaña recargue: es lo que permite
+        // enseñar el aviso en vez de cambiar la aplicación por debajo.
+        skipWaiting: false,
+        clientsClaim: false,
         runtimeCaching: [
           {
             // Manuales, partes y fotos: mismo camino en el almacenamiento del

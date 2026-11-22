@@ -37,5 +37,9 @@ no monta un ancla `download` contra la URL cross-origin de `_storage`, que era
 lo que abría el `.eml` en la pestaña. Handover en
 `.context/sessions/2026-11-22-descarga-adjuntos-buzon.md`.
 
+La PWA ya no se recarga sola: con `registerType: "prompt"` la compilación nueva
+espera y el aviso dice qué build sirve la pestaña, para no depurar una interfaz
+vieja. Handover en `.context/sessions/2026-11-22-aviso-version-nueva.md`.
+
 Lo siguiente es F8: pilotaje con buzones reales, validación contra Hermes y
 ensayo de rollback.

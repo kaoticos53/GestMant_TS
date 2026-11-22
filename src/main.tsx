@@ -1,5 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { ApiAddressNotice } from "@/components/ApiAddressNotice";
+import { PwaUpdateBanner } from "@/components/PwaUpdateBanner";
+import { offerUpdate } from "@/lib/pwaUpdate";
 import { RequireAuth } from "@/components/RequireAuth";
 import { ModuleErrorBoundary } from "@/components/ModuleErrorBoundary";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -122,14 +124,21 @@ createRoot(document.getElementById("root")!).render(
           </Suspense>
         </BrowserRouter>
         <Toaster />
+        <PwaUpdateBanner />
       </ConvexAuthProvider>
     </ModuleErrorBoundary>
   </StrictMode>,
 );
 
 // El service worker lo genera `vite-plugin-pwa` al compilar (ver
-// `vite.config.ts`); aquí solo se le pide que se registre. Con `autoUpdate`, la
-// próxima carga ya trae la versión nueva: no hay caché vieja que borrar a mano.
+// `vite.config.ts`); aquí solo se registra. La compilación nueva se queda
+// esperando —`prompt`, sin `skipWaiting`— y se avisa con el número de build de
+// la pestaña: recarga quien pulsa «Recargar», no la aplicación por detrás.
 if (import.meta.env.PROD) {
-  void registerSW({ immediate: true });
+  const updateServiceWorker = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      offerUpdate(() => void updateServiceWorker(true));
+    },
+  });
 }
