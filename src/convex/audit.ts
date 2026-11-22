@@ -3,6 +3,7 @@ import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
+import { SECURITY_METADATA_VERSION } from "../lib/securityAudit";
 import { notifyUsers } from "./notify";
 import { ROLES } from "./schema";
 
@@ -26,7 +27,10 @@ export async function logSecurityEvent(
     args.metadata === undefined
       ? undefined
       : typeof args.metadata === "object"
-        ? JSON.stringify(args.metadata)
+        ? JSON.stringify({
+            metadataVersion: SECURITY_METADATA_VERSION,
+            ...args.metadata,
+          })
         : String(args.metadata);
 
   let actorEmail = args.actorEmail;

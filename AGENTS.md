@@ -1,6 +1,6 @@
 # Guía de Gobernanza y Guardrails para Agentes de IA (`AGENTS.md`)
 **Proyecto:** Pulso Taller (`GestMant_TS`) — Sistema de Gestión de Mantenimiento  
-**Stack Principal:** React 19, TypeScript 5.7, Vite 7, Tailwind CSS v4, Convex 1.46 (`@convex-dev/auth`), Radix UI, Vitest 5.
+**Stack Principal:** React 19, TypeScript 5.9, Vite 7, Tailwind CSS v4, Convex 1.46 (`@convex-dev/auth`), Radix UI, Vitest 5.
 
 ---
 
@@ -38,7 +38,7 @@ El código de este sistema gestiona operaciones reales de mantenimiento industri
 
 ## 3. Tooling y Comandos Clave
 
-Ejecuta siempre los comandos desde la raíz del proyecto (`d:\Users\ricardo\Documents\GitHub\GestMant_TS`):
+Ejecuta siempre los comandos desde la raíz del proyecto:
 
 | Propósito | Comando exacto |
 |---|---|
@@ -46,7 +46,7 @@ Ejecuta siempre los comandos desde la raíz del proyecto (`d:\Users\ricardo\Docu
 | **Suite de Tests Completa** | `npx vitest run` |
 | **Test de Arquitectura** | `npx vitest run tests/arquitectura.test.ts` |
 | **Test de Seguridad (AppSec)** | `npx vitest run tests/seguridad.test.ts` |
-| **Ejecutar Test Individual** | `npx vitest run src/pages/dashboard/equipment/equipment.test.ts` |
+| **Ejecutar Test Individual** | `npx vitest run <ruta-del-test>` |
 | **Linting** | `npm run lint` |
 | **Formateo de Código** | `npm run format` |
 | **Servidor de Desarrollo** | `npm run dev` |

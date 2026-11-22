@@ -1,0 +1,22 @@
+{
+  "format": "pulso-taller-backup",
+  "version": 2,
+  "exportedAt": 1700000001000,
+  "exportedBy": "admin@taller.es",
+  "tables": {
+    "spareParts": [
+      {
+        "_id": "part-legacy-1",
+        "code": "RP-001",
+        "name": "Junta tórica",
+        "stock": 4
+      }
+    ]
+  },
+  "manifest": {
+    "totalRecords": 1,
+    "tableCounts": {
+      "spareParts": 1
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "format": "pulso-taller-backup",
+  "version": 3,
+  "exportedAt": 1700000004000,
+  "exportedBy": "admin@taller.es",
+  "tables": {
+    "equipment": [
+      {
+        "_id": "equipment-tampered-1",
+        "code": "EQ-002",
+        "name": "Bomba"
+      }
+    ]
+  },
+  "manifest": {
+    "totalRecords": 2,
+    "tableCounts": {
+      "equipment": 1
+    }
+  }
+}

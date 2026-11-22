@@ -154,3 +154,12 @@ nada por el `tsconfig.json` de referencias. `npm run typecheck` usa `tsc -b
 verificó con errores temporales en la app y en Convex (ambos exit 2, TS2322) y
 el árbol quedó limpio. Handover en
 `.context/sessions/2026-11-22-typecheck-real.md`.
+
+**Seguimiento de copias y auditoría (2026-11-22):** las copias v1/v2/v3 tienen
+fixtures congeladas; la limpieza de fotos huérfanas va por páginas de 100
+documentos y devuelve `hasMore`; los metadatos nuevos llevan
+`metadataVersion` y la traza de limpieza se lee con `batches`/`rows` o
+`photos`/`chunks`; un fallo de la pasada deja
+`workshop_backup_recovery_failure` y avisa con enfriamiento; y una prueba de
+gobernanza impide volver al typecheck incompleto. Handover en
+`.context/sessions/2026-11-22-seguimiento-copias-auditoria.md`.

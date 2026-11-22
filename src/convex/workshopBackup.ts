@@ -59,6 +59,13 @@ const SNAPSHOT_PROGRESS_MS = 1_000;
 const MAX_SNAPSHOT_CHUNKS = 2_000;
 const MAX_SNAPSHOT_CHARS = 64 * 1024 * 1024;
 
+/** Documentos que retira una pasada de limpieza; el resto espera a la siguiente. */
+const SNAPSHOT_PRUNE_PAGE = 100;
+const SNAPSHOT_PRUNE_MAX_PAGE = 500;
+
+/** Un fallo repetido no debe inundar la campana: se avisa una vez cada 6 h. */
+const RECOVERY_FAILURE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
 /** La foto está sellada pero no se puede reconstruir con garantías. */
 class UnusableSnapshotError extends Error {}
 
@@ -746,13 +753,28 @@ export const pruneOrphanSnapshots = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     keepBatch: v.optional(v.string()),
+    /** Tope de documentos para esta pasada; útil para probar la paginación. */
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (args.userId !== undefined) await assertAdminUser(ctx, args.userId);
-    const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+    const requested = Math.floor(args.limit ?? SNAPSHOT_PRUNE_PAGE);
+    const limit = Math.min(
+      SNAPSHOT_PRUNE_MAX_PAGE,
+      Math.max(1, Number.isFinite(requested) ? requested : SNAPSHOT_PRUNE_PAGE),
+    );
+    // Se recorre de la foto más antigua a la más reciente. Así la foto que se
+    // conserva —normalmente la última— no bloquea las páginas antiguas, y cada
+    // pasada avanza sin volver a leer lo que ya retiró.
+    const rows = await ctx.db
+      .query("workshopRestoreSnapshots")
+      .withIndex("by_savedAt")
+      .order("asc")
+      .take(limit + 1);
     const removedPhotos = new Set<string>();
     let removedChunks = 0;
     for (const row of rows) {
+      if (removedChunks >= limit) break;
       if (args.keepBatch !== undefined && row.batch === args.keepBatch) {
         continue;
       }
@@ -766,15 +788,21 @@ export const pruneOrphanSnapshots = internalMutation({
         action: "workshop_backup_prune",
         target: "system:backup",
         metadata: {
+          metadataVersion: 2,
           keptBatch: args.keepBatch ?? null,
           photos: [...removedPhotos].sort(),
           chunks: removedChunks,
+          hasMore: rows.length > limit && removedChunks > 0,
         },
       });
     }
     // `photos` son lotes; `chunks`, los documentos que los componen. No se
     // mezclan: el aviso usa `photos` y la auditoría guarda ambos por separado.
-    return { photos: removedPhotos.size, chunks: removedChunks };
+    return {
+      photos: removedPhotos.size,
+      chunks: removedChunks,
+      hasMore: rows.length > limit && removedChunks > 0,
+    };
   },
 });
 
@@ -818,6 +846,39 @@ export const notifyRecoveryIntervention = internalMutation({
       message: `La pasada de recuperación ${parts.join(" y ")}.`,
     });
     return true;
+  },
+});
+
+/**
+ * Deja rastro de una pasada que no pudo terminar y avisa a los administradores.
+ * La auditoría guarda el mensaje acotado; la campana usa un aviso genérico y un
+ * enfriamiento, para que un fallo que se repite cada minuto no la inunde.
+ */
+export const recordRecoveryFailure = internalMutation({
+  args: {
+    message: v.string(),
+    pendingBatch: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const message =
+      args.message.trim().slice(0, 500) || "Error desconocido al recuperar.";
+    // La notificación no puede impedir que quede la traza: si falla, el
+    // diagnóstico sigue estando en la auditoría.
+    await notifySecurityAlert(ctx, {
+      message:
+        "La pasada de recuperación ha fallado y no ha podido completarse. Revisa la auditoría de seguridad.",
+      cooldownAction: "workshop_backup_recovery_failure",
+      cooldownMs: RECOVERY_FAILURE_COOLDOWN_MS,
+    }).catch(() => undefined);
+    await logSecurityEvent(ctx, {
+      actorId: null,
+      action: "workshop_backup_recovery_failure",
+      target: "system:backup",
+      metadata: {
+        error: message,
+        pendingBatch: args.pendingBatch ?? null,
+      },
+    });
   },
 });
 
@@ -1959,104 +2020,119 @@ export const undoRestore = action({
 export const recoverInterruptedRestore = internalAction({
   args: {},
   handler: async (ctx): Promise<{ recovered: boolean }> => {
-    const pending = await ctx.runQuery(
-      internal.workshopBackup.pendingRestoreSnapshot,
-      {},
-    );
-    if (pending === null) {
-      const pruned = await ctx.runMutation(
-        internal.workshopBackup.pruneOrphanSnapshots,
-        {},
-      );
-      if (pruned.photos > 0) {
-        await ctx.runMutation(
-          internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedPhotos: pruned.photos },
-        );
-      }
-      return { recovered: false };
-    }
-    if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
-      // La foto actual puede ser de una restauración viva: no se toca, pero las
-      // anteriores ya no pueden aplicarse y se retiran igualmente.
-      const pruned = await ctx.runMutation(
-        internal.workshopBackup.pruneOrphanSnapshots,
-        { keepBatch: pending.batch },
-      );
-      if (pruned.photos > 0) {
-        await ctx.runMutation(
-          internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedPhotos: pruned.photos },
-        );
-      }
-      return { recovered: false };
-    }
-    // La cuenta que guardó la foto puede haberse desactivado o borrado: la
-    // recuperación la ejecuta cualquier administrador activo. `savedBy` se
-    // queda en la foto y pasa a la auditoría al retirarla.
-    const actor = await ctx.runQuery(
-      internal.workshopBackup.resolveSnapshotAdmin,
-      { savedBy: pending.savedBy },
-    );
-    if (actor === null) {
-      throw new ConvexError(
-        "No hay ningún administrador activo que pueda recuperar la restauración interrumpida.",
-      );
-    }
-    // La recuperación también reescribe el taller: toma la misma reserva y deja
-    // las escrituras bloqueadas mientras dura. Si otra operación sigue viva, no
-    // la pisa; la siguiente pasada lo intentará.
-    let leaseToken: string;
+    let pendingBatch: string | undefined;
     try {
-      leaseToken = await ctx.runMutation(
-        internal.workshopMaintenance.acquireMaintenanceLease,
-        { userId: actor, kind: "restore" as const, batch: pending.batch },
-      );
-    } catch (error) {
-      if (error instanceof ConvexError) return { recovered: false };
-      throw error;
-    }
-    const maintenance = {
-      userId: actor,
-      kind: "restore" as const,
-      token: leaseToken,
-    };
-    try {
-      const resolution = await resolvePendingSnapshot(
-        ctx,
-        actor,
-        pending,
-        leaseToken,
-      );
-      // Si la foto se conserva (ventana de deshacer), se queda ella sola; si se
-      // resolvió o se descartó, no queda ninguna que preserve. En los dos casos
-      // los lotes anteriores son huérfanos.
-      const current = await ctx.runQuery(
+      const pending = await ctx.runQuery(
         internal.workshopBackup.pendingRestoreSnapshot,
         {},
       );
-      const pruned = await ctx.runMutation(
-        internal.workshopBackup.pruneOrphanSnapshots,
-        {
-          // Si la foto resuelta era la última y se descartó, `current` puede ser
-          // una anterior: esa tampoco se aplica, porque la última era la única
-          // que correspondía al estado que se estaba restaurando.
-          keepBatch:
-            current?.batch === pending.batch ? current.batch : undefined,
-        },
+      if (pending === null) {
+        const pruned = await ctx.runMutation(
+          internal.workshopBackup.pruneOrphanSnapshots,
+          {},
+        );
+        if (pruned.photos > 0) {
+          await ctx.runMutation(
+            internal.workshopBackup.notifyRecoveryIntervention,
+            { action: "kept" as const, prunedPhotos: pruned.photos },
+          );
+        }
+        return { recovered: false };
+      }
+      pendingBatch = pending.batch;
+      if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
+        // La foto actual puede ser de una restauración viva: no se toca, pero las
+        // anteriores ya no pueden aplicarse y se retiran igualmente.
+        const pruned = await ctx.runMutation(
+          internal.workshopBackup.pruneOrphanSnapshots,
+          { keepBatch: pending.batch },
+        );
+        if (pruned.photos > 0) {
+          await ctx.runMutation(
+            internal.workshopBackup.notifyRecoveryIntervention,
+            { action: "kept" as const, prunedPhotos: pruned.photos },
+          );
+        }
+        return { recovered: false };
+      }
+      // La cuenta que guardó la foto puede haberse desactivado o borrado: la
+      // recuperación la ejecuta cualquier administrador activo. `savedBy` se
+      // queda en la foto y pasa a la auditoría al retirarla.
+      const actor = await ctx.runQuery(
+        internal.workshopBackup.resolveSnapshotAdmin,
+        { savedBy: pending.savedBy },
       );
-      if (resolution.action !== "kept" || pruned.photos > 0) {
-        await ctx.runMutation(
-          internal.workshopBackup.notifyRecoveryIntervention,
-          { action: resolution.action, prunedPhotos: pruned.photos },
+      if (actor === null) {
+        throw new ConvexError(
+          "No hay ningún administrador activo que pueda recuperar la restauración interrumpida.",
         );
       }
-      return { recovered: resolution.recovered };
-    } finally {
-      await ctx.runMutation(
-        internal.workshopMaintenance.releaseMaintenanceLease,
-        maintenance,
-      );
+      // La recuperación también reescribe el taller: toma la misma reserva y deja
+      // las escrituras bloqueadas mientras dura. Si otra operación sigue viva, no
+      // la pisa; la siguiente pasada lo intentará.
+      let leaseToken: string;
+      try {
+        leaseToken = await ctx.runMutation(
+          internal.workshopMaintenance.acquireMaintenanceLease,
+          { userId: actor, kind: "restore" as const, batch: pending.batch },
+        );
+      } catch (error) {
+        if (error instanceof ConvexError) return { recovered: false };
+        throw error;
+      }
+      const maintenance = {
+        userId: actor,
+        kind: "restore" as const,
+        token: leaseToken,
+      };
+      try {
+        const resolution = await resolvePendingSnapshot(
+          ctx,
+          actor,
+          pending,
+          leaseToken,
+        );
+        // Si la foto se conserva (ventana de deshacer), se queda ella sola; si se
+        // resolvió o se descartó, no queda ninguna que preserve. En los dos casos
+        // los lotes anteriores son huérfanos.
+        const current = await ctx.runQuery(
+          internal.workshopBackup.pendingRestoreSnapshot,
+          {},
+        );
+        const pruned = await ctx.runMutation(
+          internal.workshopBackup.pruneOrphanSnapshots,
+          {
+            // Si la foto resuelta era la última y se descartó, `current` puede ser
+            // una anterior: esa tampoco se aplica, porque la última era la única
+            // que correspondía al estado que se estaba restaurando.
+            keepBatch:
+              current?.batch === pending.batch ? current.batch : undefined,
+          },
+        );
+        if (resolution.action !== "kept" || pruned.photos > 0) {
+          await ctx.runMutation(
+            internal.workshopBackup.notifyRecoveryIntervention,
+            { action: resolution.action, prunedPhotos: pruned.photos },
+          );
+        }
+        return { recovered: resolution.recovered };
+      } finally {
+        await ctx.runMutation(
+          internal.workshopMaintenance.releaseMaintenanceLease,
+          maintenance,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // El fallo no puede tapar el error original: si la propia traza falla,
+      // la pasada sigue propagando lo que de verdad ocurrió.
+      await ctx
+        .runMutation(internal.workshopBackup.recordRecoveryFailure, {
+          message,
+          ...(pendingBatch === undefined ? {} : { pendingBatch }),
+        })
+        .catch(() => undefined);
+      throw error;
     }
   },
 });

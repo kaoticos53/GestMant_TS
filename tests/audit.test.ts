@@ -60,7 +60,11 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     expect(entry?.action).toBe("role_change");
     expect(entry?.target).toBe(`user:${userId}`);
     expect(entry?.metadata).toBe(
-      JSON.stringify({ from: "technician", to: "manager" }),
+      JSON.stringify({
+        metadataVersion: 1,
+        from: "technician",
+        to: "manager",
+      }),
     );
     expect(typeof entry?.at).toBe("number");
   });
@@ -218,6 +222,7 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     expect(log.actorId).toBe(adminId);
     expect(log.target).toBe(`user:${targetUserId}`);
     expect(JSON.parse(log.metadata ?? "{}")).toEqual({
+      metadataVersion: 1,
       previousRole: "technician",
       newRole: "manager",
       targetEmail: "pepe@taller.es",
@@ -258,6 +263,7 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
     expect(logs[0].actorId).toBe(adminId);
     expect(logs[0].target).toBe(`user:${targetUserId}`);
     expect(JSON.parse(logs[0].metadata ?? "{}")).toEqual({
+      metadataVersion: 1,
       active: false,
       targetEmail: "carlos@taller.es",
       targetName: "Carlos Baja",
@@ -296,10 +302,11 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
   });
 
   test("permissions, mailSettings y alertas tempranas registran eventos y notifican a administradores", async () => {
-    const { t, userId: adminId, authed } = await setup(
-      "admin",
-      "admin1@taller.es",
-    );
+    const {
+      t,
+      userId: adminId,
+      authed,
+    } = await setup("admin", "admin1@taller.es");
     const secondAdminId = await t.run((ctx) =>
       ctx.db.insert("users", {
         name: "Segundo Admin",

@@ -1,0 +1,31 @@
+{
+  "format": "pulso-taller-backup",
+  "version": 2,
+  "exportedAt": 1700000002000,
+  "exportedBy": "admin@taller.es",
+  "tables": {
+    "manuals": [
+      {
+        "_id": "manual-legacy-1",
+        "title": "Manual de la cámara",
+        "storageId": "storage-legacy-1"
+      }
+    ]
+  },
+  "files": [
+    {
+      "storageId": "storage-legacy-1",
+      "contentType": "text/plain",
+      "size": 5,
+      "data": "aGVsbG8="
+    }
+  ],
+  "manifest": {
+    "totalRecords": 1,
+    "tableCounts": {
+      "manuals": 1
+    },
+    "fileCount": 1,
+    "fileBytes": 5
+  }
+}

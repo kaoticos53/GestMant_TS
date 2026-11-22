@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { toCsv } from "../src/lib/export";
 import {
   formatSecurityMetadata,
+  readSnapshotPruneMetadata,
   securityActionLabel,
   securityAuditCsvTable,
 } from "../src/lib/securityAudit";
@@ -25,13 +26,58 @@ describe("utilidades puras de auditoría de seguridad", () => {
     expect(formatSecurityMetadata("detalle plano")).toBe("detalle plano");
   });
 
+  test("lee metadatos de limpieza antiguos y nuevos con la misma forma", () => {
+    expect(
+      readSnapshotPruneMetadata(
+        JSON.stringify({ keptBatch: "b", batches: ["vieja"], rows: 3 }),
+      ),
+    ).toEqual({
+      version: 1,
+      keptBatch: "b",
+      photos: ["vieja"],
+      chunks: 3,
+      hasMore: false,
+    });
+    expect(
+      readSnapshotPruneMetadata(
+        JSON.stringify({
+          metadataVersion: 2,
+          keptBatch: null,
+          photos: ["nueva"],
+          chunks: 4,
+          hasMore: true,
+        }),
+      ),
+    ).toEqual({
+      version: 2,
+      keptBatch: null,
+      photos: ["nueva"],
+      chunks: 4,
+      hasMore: true,
+    });
+    expect(readSnapshotPruneMetadata("no-json")).toBeNull();
+  });
+
+  test("la versión del sobre no ensucia el resumen legible", () => {
+    expect(
+      formatSecurityMetadata(
+        JSON.stringify({ metadataVersion: 2, photos: ["foto"], chunks: 2 }),
+      ),
+    ).toBe("fotos: foto · documentos: 2");
+    expect(
+      formatSecurityMetadata(
+        JSON.stringify({ batches: ["vieja"], rows: 3, hasMore: true }),
+      ),
+    ).toBe("fotos: vieja · documentos: 3 · quedan más");
+  });
+
   test("securityAuditCsvTable genera CSV neutralizando fórmulas CWE-1236", () => {
     const { header, rows } = securityAuditCsvTable([
       {
         _id: "log1",
         action: "role_change",
         actorEmail: "admin@taller.es",
-        target: "=HYPERLINK(\"http://evil\")",
+        target: '=HYPERLINK("http://evil")',
         metadata: JSON.stringify({ newRole: "admin" }),
         at: Date.UTC(2026, 10, 10, 12, 0),
       },
@@ -43,4 +89,3 @@ describe("utilidades puras de auditoría de seguridad", () => {
     expect(csv).toContain("'=HYPERLINK");
   });
 });
-

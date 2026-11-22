@@ -1,0 +1,31 @@
+{
+  "format": "pulso-taller-backup",
+  "version": 3,
+  "exportedAt": 1700000003000,
+  "exportedBy": "admin@taller.es",
+  "tables": {
+    "incidents": [
+      {
+        "_id": "incident-current-1",
+        "reference": "INC-0001",
+        "description": "Foto: /api/storage/storage-current-1"
+      }
+    ]
+  },
+  "files": [
+    {
+      "storageId": "storage-current-1",
+      "contentType": "image/png",
+      "size": 5,
+      "data": "bXVuZG8="
+    }
+  ],
+  "manifest": {
+    "totalRecords": 1,
+    "tableCounts": {
+      "incidents": 1
+    },
+    "fileCount": 1,
+    "fileBytes": 5
+  }
+}

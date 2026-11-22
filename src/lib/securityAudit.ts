@@ -6,6 +6,9 @@
 import type { CsvCell } from "./export";
 import { formatDateTime } from "./workshop";
 
+/** Versión del sobre de metadatos que escriben los eventos nuevos. */
+export const SECURITY_METADATA_VERSION = 1 as const;
+
 export interface SecurityAuditEntry {
   _id: string;
   actorId?: string;
@@ -28,6 +31,8 @@ export const SECURITY_ACTION_LABELS: Record<string, string> = {
   workshop_reset: "Vaciado del taller",
   global_rate_limit_reached: "Umbral global anti-abuso",
   unauthorized_access: "Acceso no autorizado",
+  workshop_backup_prune: "Limpieza de fotos de restauración",
+  workshop_backup_recovery_failure: "Fallo de la pasada de recuperación",
 };
 
 export const SECURITY_ACTION_OPTIONS: { value: string; label: string }[] =
@@ -39,6 +44,63 @@ export const SECURITY_ACTION_OPTIONS: { value: string; label: string }[] =
 /** Etiqueta legible en español de una acción de seguridad. */
 export function securityActionLabel(action: string): string {
   return SECURITY_ACTION_LABELS[action] ?? action;
+}
+
+/** Forma normalizada de la traza que deja la limpieza de fotos huérfanas. */
+export interface SnapshotPruneMetadata {
+  /** 1 = `batches`/`rows`; 2 = `photos`/`chunks` explícitos. */
+  version: number;
+  keptBatch: string | null;
+  photos: string[];
+  chunks: number;
+  hasMore: boolean;
+}
+
+/**
+ * Lee la traza de `workshop_backup_prune` sin depender de la época en que se
+ * escribió. Las filas anteriores al cambio de nombre guardaban `batches` y
+ * `rows`; las nuevas guardan `photos`, `chunks` y `metadataVersion`. La versión
+ * ausente se interpreta como 1, que es la forma histórica.
+ */
+export function readSnapshotPruneMetadata(
+  metadata?: string,
+): SnapshotPruneMetadata | null {
+  if (!metadata) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata) as unknown;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const value = parsed as Record<string, unknown>;
+  const version =
+    typeof value.metadataVersion === "number" ? value.metadataVersion : 1;
+  const rawPhotos = Array.isArray(value.photos)
+    ? value.photos
+    : Array.isArray(value.batches)
+      ? value.batches
+      : [];
+  const photos = rawPhotos.filter(
+    (photo): photo is string => typeof photo === "string",
+  );
+  const chunks =
+    typeof value.chunks === "number"
+      ? value.chunks
+      : typeof value.rows === "number"
+        ? value.rows
+        : 0;
+  const keptBatch =
+    typeof value.keptBatch === "string" ? value.keptBatch : null;
+  return {
+    version,
+    keptBatch,
+    photos,
+    chunks,
+    hasMore: value.hasMore === true,
+  };
 }
 
 /** Resume `metadata` JSON en pares legibles (`clave: valor`) sin lanzar si es texto plano. */
@@ -53,10 +115,24 @@ export function formatSecurityMetadata(metadata?: string): string {
       typeof parsed === "object" &&
       !Array.isArray(parsed)
     ) {
+      const value = parsed as Record<string, unknown>;
+      const prune = readSnapshotPruneMetadata(trimmed);
+      if (
+        prune &&
+        (Array.isArray(value.photos) || Array.isArray(value.batches))
+      ) {
+        const photos =
+          prune.photos.length > 0 ? prune.photos.join(", ") : "ninguna";
+        return `fotos: ${photos} · documentos: ${prune.chunks}${prune.hasMore ? " · quedan más" : ""}`;
+      }
       const parts = Object.entries(parsed as Record<string, unknown>)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([key, value]) =>
-          `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`,
+        .filter(
+          ([key, value]) =>
+            key !== "metadataVersion" && value !== undefined && value !== null,
+        )
+        .map(
+          ([key, value]) =>
+            `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`,
         );
       return parts.length > 0 ? parts.join(" · ") : "—";
     }
@@ -67,9 +143,10 @@ export function formatSecurityMetadata(metadata?: string): string {
 }
 
 /** Construye cabecera y filas para exportar trazas de seguridad a CSV. */
-export function securityAuditCsvTable(
-  entries: readonly SecurityAuditEntry[],
-): { header: string[]; rows: CsvCell[][] } {
+export function securityAuditCsvTable(entries: readonly SecurityAuditEntry[]): {
+  header: string[];
+  rows: CsvCell[][];
+} {
   const header = ["Fecha", "Acción", "Actor", "Objetivo", "Detalles"];
   const rows: CsvCell[][] = entries.map((entry) => [
     formatDateTime(entry.at),
@@ -80,4 +157,3 @@ export function securityAuditCsvTable(
   ]);
   return { header, rows };
 }
-

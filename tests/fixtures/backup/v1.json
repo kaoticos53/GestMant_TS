@@ -1,0 +1,16 @@
+{
+  "format": "pulso-taller-backup",
+  "version": 1,
+  "exportedAt": 1700000000000,
+  "exportedBy": "admin@taller.es",
+  "tables": {
+    "equipment": [
+      {
+        "_id": "equipment-legacy-1",
+        "code": "EQ-001",
+        "name": "Cámara de taller",
+        "status": "active"
+      }
+    ]
+  }
+}

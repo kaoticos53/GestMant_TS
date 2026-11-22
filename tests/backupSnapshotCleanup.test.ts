@@ -213,4 +213,111 @@ describe("limpieza de fotos huérfanas de restauración", () => {
       await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
     ).toHaveLength(0);
   });
+
+  test("retira las fotos huérfanas por páginas acotadas sin tocar la actual", async () => {
+    const { t, adminId } = await setup();
+    const now = Date.now();
+
+    await insertHead(t, adminId, "foto-actual", now, {
+      appliedAt: now - 60_000,
+      appliedRecords: 0,
+      undoUntil: now + 60_000,
+    });
+    for (let index = 0; index < 5; index += 1) {
+      for (const seq of [0, 1]) {
+        await t.run((ctx) =>
+          ctx.db.insert("workshopRestoreSnapshots", {
+            batch: `foto-antigua-${index}`,
+            seq,
+            payload: '{"tables":{}}',
+            savedBy: adminId,
+            savedAt: now - 10_000 - index * 100,
+            aliveAt: now - 10_000 - index * 100,
+          }),
+        );
+      }
+    }
+
+    let pages = 0;
+    let removed = 0;
+    let hasMore = true;
+    while (hasMore && pages < 20) {
+      const page = await t.mutation(
+        internal.workshopBackup.pruneOrphanSnapshots,
+        { keepBatch: "foto-actual", limit: 2 },
+      );
+      removed += page.chunks;
+      hasMore = page.hasMore;
+      pages += 1;
+    }
+
+    expect(pages).toBeGreaterThan(1);
+    expect(removed).toBe(10);
+    const rows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(rows.map((row) => row.batch)).toEqual(["foto-actual"]);
+  });
+
+  test("avisa una sola vez aunque el fallo de recuperación se repita", async () => {
+    const { t } = await setup();
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await t.mutation(internal.workshopBackup.recordRecoveryFailure, {
+        message: "fallo de prueba",
+      });
+    }
+
+    const audit = await t.run((ctx) =>
+      ctx.db
+        .query("securityAuditLog")
+        .withIndex("by_action", (q) =>
+          q.eq("action", "workshop_backup_recovery_failure"),
+        )
+        .collect(),
+    );
+    expect(audit).toHaveLength(2);
+    expect(JSON.parse(audit[0]?.metadata ?? "{}")).toMatchObject({
+      metadataVersion: 1,
+      error: "fallo de prueba",
+    });
+
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    expect(
+      notifications.filter((row) =>
+        row.text.includes("La pasada de recuperación ha fallado"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  test("un error de la pasada deja traza de recuperación fallida", async () => {
+    const { t, adminId } = await setup();
+    const now = Date.now();
+    await t.run((ctx) => ctx.db.patch(adminId, { active: false }));
+    await insertHead(t, adminId, "foto-sin-admin", now - 120_000, {
+      appliedAt: now - 60_000,
+      appliedRecords: 0,
+      undoUntil: now + 60_000,
+    });
+
+    await expect(
+      t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).rejects.toThrow(/administrador activo/);
+
+    const audit = await t.run((ctx) =>
+      ctx.db
+        .query("securityAuditLog")
+        .withIndex("by_action", (q) =>
+          q.eq("action", "workshop_backup_recovery_failure"),
+        )
+        .first(),
+    );
+    expect(audit).not.toBeNull();
+    expect(JSON.parse(audit?.metadata ?? "{}")).toMatchObject({
+      error: expect.stringContaining("administrador activo"),
+      pendingBatch: "foto-sin-admin",
+    });
+  });
 });
