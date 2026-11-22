@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
 import type { TableNames } from "../src/convex/_generated/dataModel";
 import { backupFaults } from "../src/convex/backupFaults";
 import { BACKUP_TABLES, type BackupTableName } from "../src/lib/backup";
@@ -143,6 +143,51 @@ async function seedWorkshop(t: TestBackend) {
   });
 
   return { admin, adminId, cameraId, monitorId, retiredDocId };
+}
+
+/** La foto deja de ser reciente: ya no puede ser de una restauración viva. */
+async function ageSnapshot(t: TestBackend) {
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+    for (const row of rows) {
+      await ctx.db.patch(row._id, { savedAt: Date.now() - 11 * 60 * 1000 });
+    }
+  });
+}
+
+/**
+ * Deja una restauración cortada como la dejaría un backend que muere: la copia
+ * se queda a medio insertar y la foto del estado anterior, guardada en la base,
+ * no se llega a recuperar.
+ */
+async function crashMidRestore(t: TestBackend) {
+  const { admin } = await seedWorkshop(t);
+  const exported = await admin.action(api.workshopBackup.exportBackup, {});
+
+  await admin.mutation(api.spareParts.create, {
+    code: "EXTRA-999",
+    name: "Llegó después de la copia",
+    category: "Electrónica",
+    unit: "ud",
+    stock: 7,
+    minStock: 0,
+  });
+  const beforeRestore = await tableCounts(t);
+
+  backupFaults.failOnTable = "mailShares";
+  backupFaults.simulateCrash = true;
+  try {
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: exported.rawJson,
+      }),
+    ).rejects.toThrow();
+  } finally {
+    backupFaults.failOnTable = null;
+    backupFaults.simulateCrash = false;
+  }
+
+  return { admin, exported, beforeRestore };
 }
 
 describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () => {
@@ -322,5 +367,91 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
     expect(shares[0]?.attachments).toHaveLength(1);
     expect(shares[0]?.emlStorageId).toBeDefined();
+  });
+
+  test("una restauración interrumpida deja su foto y la pasada de recuperación la aplica", async () => {
+    const t = backend();
+    const { admin, beforeRestore } = await crashMidRestore(t);
+
+    // El backend murió con la copia a medio poner, pero la foto del estado
+    // anterior quedó guardada en la base antes de vaciar.
+    expect(await tableCounts(t)).not.toEqual(beforeRestore);
+    const snapshotRows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(snapshotRows.length).toBeGreaterThan(0);
+
+    // Mientras la foto es reciente, la pasada no toca nada: podría ser una
+    // restauración viva.
+    const early = await t.action(
+      internal.workshopBackup.recoverInterruptedRestore,
+      {},
+    );
+    expect(early).toEqual({ recovered: false });
+
+    // Pasado el margen, la pasada reescribe el estado anterior y retira la foto.
+    await ageSnapshot(t);
+    const late = await t.action(
+      internal.workshopBackup.recoverInterruptedRestore,
+      {},
+    );
+    expect(late).toEqual({ recovered: true });
+
+    expect(await tableCounts(t)).toEqual(beforeRestore);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+
+    // El contenido también es el de antes: lo que llegó tras la copia sigue ahí
+    // y la copia de correo conserva cuerpo, adjuntos y `.eml`.
+    const parts = await admin.query(api.spareParts.list, {});
+    expect(parts.map((part) => part.code).sort()).toEqual([
+      "BK-001",
+      "EXTRA-999",
+    ]);
+    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(shares).toHaveLength(1);
+    expect(shares[0]?.mode).toBe("original");
+    expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
+    expect(shares[0]?.attachments).toHaveLength(1);
+    expect(shares[0]?.emlStorageId).toBeDefined();
+  });
+
+  test("la siguiente restauración recupera antes la foto de la anterior", async () => {
+    const t = backend();
+    const { admin, exported, beforeRestore } = await crashMidRestore(t);
+
+    // Sin esperar el margen no se pisa una restauración que puede seguir viva.
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: exported.rawJson,
+      }),
+    ).rejects.toThrow(/restauración en marcha/);
+
+    // Pasado el margen, la nueva restauración devuelve primero el taller a como
+    // estaba y después aplica su copia.
+    await ageSnapshot(t);
+    const restored = await admin.action(api.workshopBackup.restoreBackup, {
+      rawJson: exported.rawJson,
+    });
+    expect(restored.restoredRecords).toBe(exported.summary.totalRecords);
+
+    const after = await tableCounts(t);
+    for (const table of BACKUP_TABLES) {
+      expect(after[table], `recuento de ${table}`).toBe(
+        exported.summary.tableCounts[table] ?? 0,
+      );
+    }
+    const parts = await admin.query(api.spareParts.list, {});
+    expect(parts.map((part) => part.code)).toEqual(["BK-001"]);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+
+    // La recuperación previa no dejó el taller a medias: el estado anterior
+    // existía antes de aplicar la copia.
+    expect(beforeRestore.spareParts).toBe(
+      (exported.summary.tableCounts.spareParts ?? 0) + 1,
+    );
   });
 });

@@ -65,6 +65,14 @@ prueba `tests/rollbackRehearsal.test.ts` inyectando un fallo en la inserción
 real (`backupFaults`), y contra Docker la restauración de 880 filas pasa de
 ~1,51 s a 1,66 s por la lectura extra. Handover §8.3/§8.4.
 
+La foto previa ya no se queda en memoria: se guarda en
+`workshopRestoreSnapshots` —en trozos, antes de vaciar— y se recupera aunque la
+acción muera. La recoge un cron cada diez minutos (`recoverInterruptedRestore`) o
+la siguiente restauración, que primero devuelve el taller a como estaba y luego
+aplica la copia; una foto reciente se trata como restauración viva y no se pisa.
+`tests/rollbackRehearsal.test.ts` simula la muerte del backend
+(`backupFaults.simulateCrash`) y comprueba las dos vías. Handover §8.3/§8.4.
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

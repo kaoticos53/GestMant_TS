@@ -83,6 +83,9 @@ const RESET_TABLES: TableNames[] = [
   // El flag de «muestra cargada» vive aquí: si no se va, volver a cargar datos
   // de ejemplo no haría nada.
   "appSettings",
+  // La foto de una restauración cortada no es trabajo del taller: si se vacía a
+  // mano, no tiene que volver sola después.
+  "workshopRestoreSnapshots",
 ];
 
 const NO_PERMISSION_MESSAGE =

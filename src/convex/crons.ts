@@ -191,6 +191,21 @@ crons.interval(
 );
 
 /**
+ * Restauraciones interrumpidas: si el backend murió entre el vaciado y el
+ * último lote, la foto del taller quedó guardada en la base. Diez minutos
+ * después de guardarla ya no puede haber una restauración viva, así que se
+ * reescribe el estado anterior y el taller deja de estar a medias. Mientras la
+ * foto sea reciente, la pasada no toca nada: sería pisar una restauración en
+ * curso.
+ */
+crons.interval(
+  "recuperar una restauracion interrumpida",
+  { minutes: 10 },
+  internal.workshopBackup.recoverInterruptedRestore,
+  {},
+);
+
+/**
  * Sincronización de los buzones personales: una pasada por hora en el minuto
  * 20. Solo mira cuentas encendidas de usuarios activos, salta las sincronizadas
  * hace menos de 50 minutos y programa una acción por cuenta, espaciada 2 s,

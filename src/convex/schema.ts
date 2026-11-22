@@ -1645,6 +1645,23 @@ const schema = defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_user_message", ["userId", "accountId", "messageId"]),
+
+  // La foto del taller que se guarda antes de vaciarlo para restaurar una copia.
+  // Si la restauración se corta —el backend muere entre el vaciado y el último
+  // lote—, es lo único que permite devolver el taller a como estaba: la recoge
+  // la pasada de recuperación o la siguiente restauración. Va en trozos porque
+  // un taller grande no cabe en un solo documento; todos los trozos de una
+  // misma foto comparten `batch`.
+  workshopRestoreSnapshots: defineTable({
+    batch: v.string(),
+    seq: v.number(),
+    payload: v.string(),
+    // Con esta cuenta se reescribe el estado si la acción que la guardó murió.
+    savedBy: v.id("users"),
+    savedAt: v.number(),
+  })
+    .index("by_batch", ["batch", "seq"])
+    .index("by_savedAt", ["savedAt"]),
 });
 
 export default schema;

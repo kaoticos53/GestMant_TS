@@ -386,18 +386,67 @@ Medido contra el mismo deployment de Docker, dos vueltas:
   **1,66 s** (export 112 ms, `differing: []` en las 29 tablas, la deriva de
   prueba desaparece). La foto añade una lectura completa; dentro de la fórmula
   de la pantalla cae en el redondeo.
+
+**La foto ya vive en la base (misma tarde).** La recuperación anterior solo
+funcionaba si la acción llegaba a ver el fallo; si el backend moría entre el
+vaciado y el último lote, el `catch` no corría y el taller quedaba a medias. Ahora
+la foto se escribe en `workshopRestoreSnapshots` —en trozos de 200 000
+caracteres, porque un taller grande no cabe en un documento— **antes** de vaciar,
+y se retira al terminar la restauración. Quedan dos recogedores:
+
+1. **La pasada de recuperación**, un cron cada diez minutos
+   (`recoverInterruptedRestore`): si la foto tiene más de diez minutos, la acción
+   que la guardó ya no puede estar viva y el estado anterior se reescribe. Una
+   foto reciente no se toca, por si es una restauración en curso.
+2. **La siguiente restauración**: al empezar, si hay foto pendiente y es vieja,
+   devuelve el taller a como estaba antes de validar y aplicar la copia nueva; si
+   es reciente, rechaza con «Hay una restauración en marcha» en vez de pisarla.
+
+`tests/rollbackRehearsal.test.ts` lo prueba simulando la muerte
+(`backupFaults.simulateCrash`, que corta la acción sin recuperar): comprueba que
+el taller queda a medias y con foto guardada, que la pasada no la toca mientras
+es reciente, que tras el margen devuelve recuentos y contenido —`EXTRA-999`, la
+copia de correo con cuerpo, adjuntos y `.eml`— y que la siguiente restauración
+recupera primero y aplica después. Si la escritura de la foto se corta, se
+retira el trozo a medias antes de devolver el error: una foto incompleta
+bloquearía todas las restauraciones siguientes.
+
+Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
+
+- Restauración normal con la foto persistida: **1 196 ms**, 880 filas
+  restauradas; al terminar, `workshopRestoreSnapshots` queda vacía. La foto
+  compacta cupo en **3 trozos** de 200 000 caracteres.
+- Restauración cortada: se desplegó a propósito el punto de ruptura
+  (`failOnTable: "incidents"` + `simulateCrash: true`, revertido después a
+  `null`/`false`). La acción se cortó a los **900 ms** con el taller a medias
+  (**244 filas**) y los 3 trozos de la foto en la tabla. La pasada de
+  recuperación —con el umbral bajado a 0 para no esperar los diez minutos—
+  devolvió `recovered: true`: **880 filas**, `spareParts` 43, `incidents` 123,
+  `CON-ALCO2` en 12 y la tabla de fotos vacía. El umbral volvió a 10 minutos en
+  el despliegue final.
 - `users` y `securityAuditLog` no se volvieron a contar aquí; la restauración no
   los toca (§8.2) y la comprobación previa escribe y revierte dentro de sus
   propias mutaciones.
 
 ### 8.4 Riesgos que siguen
 
-- ⚠️ **La recuperación corre dentro de la acción.** Cubre un fallo que la acción
-  ve —una inserción rechazada, un límite, un error del backend—, que es el caso
-  del ensayo. No cubre que el proceso muera entre el vaciado y el último lote:
-  entonces el `catch` no llega a ejecutarse y el estado previo se pierde con la
-  acción. Para eso habría que dejar la foto guardada en la base y recuperarla al
-  arrancar. Mientras tanto: copia a mano antes de restaurar en producción.
+- La recuperación de una restauración cortada necesita que la foto lleve más de
+  diez minutos sin vida: ese es el margen para no pisar una restauración en
+  curso. Un taller enorme que tardara más que eso en restaurarse podría verse
+  recuperado por la pasada mientras sigue trabajando; con los volúmenes medidos
+  (§8.5, 15 s para 7 806 filas) queda muy lejos, pero conviene saberlo.
+- Si el backend muere **después** de insertar toda la copia y **antes** de
+  retirar la foto, la siguiente recuperación devuelve el taller al estado
+  anterior: se pierde una restauración que había terminado. Es el lado seguro
+  —taller coherente— y el usuario ya habrá visto un fallo, pero la copia hay que
+  volver a lanzarla.
+- La recuperación del cron reescribe con la cuenta que guardó la foto
+  (`savedBy`). Si esa cuenta se hubiera desactivado o borrado, la pasada falla y
+  el taller sigue a medias; la siguiente restauración de otro administrador lo
+  arregla.
+- La foto añade escrituras: se serializa el taller entero y se guarda en trozos
+  antes de vaciar. Es el precio de sobrevivir a la muerte del proceso; en los
+  volúmenes medidos cae dentro del segundo que ya costaba la vuelta atrás.
 - La vuelta atrás reescribe con identificadores nuevos y sin el `_creationTime`
   original (Convex no lo admite al insertar): el contenido y las relaciones
   quedan, los ids y las fechas de creación no. Es el mismo precio que paga una
