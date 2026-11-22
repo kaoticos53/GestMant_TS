@@ -26,6 +26,7 @@ import {
   MailboxFoldersCard,
   type MailboxFolderItem,
 } from "./mailbox/MailboxFoldersCard";
+import { MailboxTagRulesCard } from "./mailbox/MailboxTagRulesCard";
 
 const MIB = 1024 * 1024;
 
@@ -400,6 +401,7 @@ function MailboxEditor({
       {account && (
         <>
           <MailboxFoldersCard folders={folders} />
+          <MailboxTagRulesCard />
 
           <div className="mt-4 grid gap-2 rounded-lg border border-border/60 px-3 py-3">
             <p className="text-sm font-medium">Caché local</p>
