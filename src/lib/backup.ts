@@ -221,7 +221,7 @@ const SINGLE_REF_FIELDS: Record<string, readonly string[]> = {
   equipment: ["modelId"],
   incidents: ["equipmentId"],
   incidentDocuments: ["incidentId"],
-  incidentDocumentLog: ["incidentId", "documentId"],
+  incidentDocumentLog: ["incidentId"],
   partRequests: ["equipmentId", "incidentId"],
   requestDecisions: ["requestId"],
   purchaseRequests: ["partRequestId", "sparePartId"],
@@ -235,22 +235,6 @@ const SINGLE_REF_FIELDS: Record<string, readonly string[]> = {
 
 const ARRAY_REF_FIELDS: Record<string, readonly string[]> = {
   spareParts: ["compatibleWith", "compatibleModels"],
-};
-
-/**
- * Referencias que pueden apuntar a una fila que ya no existe y que, por eso, se
- * conservan tal cual cuando no se pueden remapear.
- *
- * Es el caso del rastro de documentos: `incidentDocumentLog` guarda el cambio
- * de un adjunto ya retirado, y esa es la única constancia de que existió. Al
- * restaurar, el documento no vuelve (no está en la copia) y la fila del rastro
- * se quedaba sin `documentId`, que el esquema exige: la restauración se caía a
- * mitad, con las tablas ya vaciadas. Los identificadores de Convex no se
- * reutilizan, así que conservar el antiguo deja la referencia donde estaba: en
- * un documento que ya no está.
- */
-const DANGLING_REF_FIELDS: Record<string, readonly string[]> = {
-  incidentDocumentLog: ["documentId"],
 };
 
 /**
@@ -268,14 +252,22 @@ export function remapBackupDocument(
     clone[key] = value;
   }
 
-  const dangling = DANGLING_REF_FIELDS[table] ?? [];
+  // El rastro de un adjunto retirado apunta a un documento que no viaja en la
+  // copia y que el esquema exige: se conserva el id histórico —los ids de Convex
+  // no se reutilizan, así que sigue apuntando a nada— en vez de borrarlo. Si el
+  // documento vuelve, se remapea como cualquier otra referencia.
+  if (table === "incidentDocumentLog" && typeof clone.documentId === "string") {
+    const mapped = idMap.get(clone.documentId);
+    if (mapped !== undefined) clone.documentId = mapped;
+  }
+
   for (const field of SINGLE_REF_FIELDS[table] ?? []) {
     const oldVal = clone[field];
     if (typeof oldVal === "string") {
       const mapped = idMap.get(oldVal);
       if (mapped !== undefined) {
         clone[field] = mapped;
-      } else if (!dangling.includes(field)) {
+      } else {
         delete clone[field];
       }
     }

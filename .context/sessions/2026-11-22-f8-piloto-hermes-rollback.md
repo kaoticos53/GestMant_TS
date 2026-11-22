@@ -285,12 +285,16 @@ y **borraba el campo**, que el esquema exige. El fallo llegaba con las tablas ya
 vaciadas: el taller quedó a medias (peticiones y movimientos a 0) hasta volver a
 sembrarlo. En memoria no salía porque el ensayo no tenía ningún adjunto retirado.
 
-**Arreglo (`src/lib/backup.ts`):** `DANGLING_REF_FIELDS` marca las referencias
-que pueden quedarse huérfanas; `incidentDocumentLog.documentId` se conserva con
-su valor histórico cuando no hay remapeo (los identificadores de Convex no se
-reutilizan, así que sigue apuntando a lo que apuntaba: a nada).
-`tests/rollbackRehearsal.test.ts` siembra ahora ese adjunto retirado y comprueba
-que vuelve el rastro con su `documentId` (7 filas en memoria, antes 6).
+**Arreglo (`src/lib/backup.ts`):** `incidentDocumentLog.documentId` sale del
+remapeo genérico: si el documento vuelve en la copia se remapea, y si no, se
+conserva el id histórico (los identificadores de Convex no se reutilizan, así
+que sigue apuntando a lo que apuntaba: a nada). Es la salida más limpia de las
+tres: omitir la fila perdería el único rastro de que el adjunto existió y
+descuadraría el recuento de `incidentDocumentLog` respecto a la copia; sanearla
+no es posible, porque el esquema exige el campo y un id inventado apuntaría a
+otro documento. `tests/rollbackRehearsal.test.ts` siembra ese adjunto retirado y
+comprueba que el rastro vuelve con su `documentId` de origen (7 filas en
+memoria, antes 6).
 
 ### 8.2 Recuentos por tabla, contra el backend de Docker
 

@@ -71,7 +71,7 @@ async function seedWorkshop(t: TestBackend) {
     compatibleWith: [cameraId],
   });
 
-  await t.run(async (ctx) => {
+  const retiredDocId = await t.run(async (ctx) => {
     const incidentId = await ctx.db.insert("incidents", {
       reference: "INC-0001",
       reporterName: "Proveedor",
@@ -138,15 +138,16 @@ async function seedWorkshop(t: TestBackend) {
       at: 1_795_179_963_000,
     });
     await ctx.db.delete(retiredDocId);
+    return retiredDocId;
   });
 
-  return { admin, adminId, cameraId, monitorId };
+  return { admin, adminId, cameraId, monitorId, retiredDocId };
 }
 
 describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () => {
   test("restaura la copia y deja los recuentos por tabla iguales a los exportados", async () => {
     const t = backend();
-    const { admin } = await seedWorkshop(t);
+    const { admin, retiredDocId } = await seedWorkshop(t);
 
     // 1. La copia, con los mismos handlers que usa la pantalla de Ajustes.
     const exported = await admin.action(api.workshopBackup.exportBackup, {});
@@ -187,9 +188,7 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       before: beforeRestore[table],
       drifted: drifted[table],
       after: afterRestore[table],
-    })).filter(
-      (row) => row.backup > 0 || row.drifted > 0 || row.after > 0,
-    );
+    })).filter((row) => row.backup > 0 || row.drifted > 0 || row.after > 0);
     console.log(
       [
         "",
@@ -234,19 +233,12 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(shares[0]?.emlStorageId).toBeUndefined();
     expect(shares[0]?.destinationReference).toBe("INC-0001");
 
-    // 7. El rastro de un adjunto retirado vuelve entero: se conserva el
-    //    `documentId` histórico aunque el documento no esté en la copia, en vez
-    //    de dejar la fila sin la referencia que el esquema exige.
-    const documentLog = await t.run((ctx) =>
+    // 7. El rastro de un adjunto retirado vuelve con su `documentId` histórico:
+    //    el documento no viaja en la copia y el esquema exige el campo.
+    const [logEntry] = await t.run((ctx) =>
       ctx.db.query("incidentDocumentLog").collect(),
     );
-    expect(documentLog).toHaveLength(1);
-    expect(documentLog[0]?.action).toBe("removed");
-    expect(documentLog[0]?.documentId).toBeDefined();
-    const documents = await t.run((ctx) =>
-      ctx.db.query("incidentDocuments").collect(),
-    );
-    expect(documents).toHaveLength(0);
+    expect(logEntry?.documentId).toBe(retiredDocId);
 
     // 8. La auditoría no entra en el vaciado: sigue con su historia.
     const audit = await t.run((ctx) =>
