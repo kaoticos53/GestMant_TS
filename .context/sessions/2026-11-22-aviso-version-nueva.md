@@ -72,3 +72,39 @@ interfaz que no cambia porque el navegador sirve otra compilación.
 - ⚠️ **Riesgo conocido:** en una pestaña abierta mucho tiempo, la primera
   comprobación de actualización la hace el registro al cargar; el aviso no
   aparece hasta que el navegador descarga el `sw.js` nuevo.
+
+---
+
+## 6. Ajuste posterior — colocación del aviso (2026-11-22)
+
+El aviso nació abajo a la derecha (`bottom-3 … sm:right-4`), que es exactamente
+donde sonner apila sus toasts (el `Toaster` de `main.tsx` no fija `position`, así
+que usa su valor por defecto `bottom-right`). En cuanto saliera un aviso —un
+«Deshacer», un error de descarga— el toast tapaba el botón «Recargar».
+
+**Decisión:** subirlo arriba, a la izquierda en escritorio y a todo el ancho en
+móvil:
+
+```
+fixed inset-x-3 top-3 z-50 … sm:inset-x-auto sm:top-4 sm:left-4
+```
+
+Arriba es la única zona que sonner no ocupa. Se conserva `role="status"` (región
+viva, sin `aria-label` que tape el texto) y el número de build en el contenido.
+
+**Comprobado en el bundle** (`npm run build`, exit 0, 7,05 s):
+
+- `dist/assets/index-9rbKESLb.js` contiene el aviso con
+  `fixed inset-x-3 top-3 … sm:top-4 sm:left-4`, `role:"status"` y el texto
+  «Esta pestaña sirve la b» interpolado con el build.
+- El mismo chunk trae el `Toaster` de sonner con su posición por defecto
+  `"bottom-right"`: las dos piezas ya no comparten esquina.
+- `tests/pwaUpdateBanner.test.tsx` gana una prueba que impide volver a la
+  esquina de sonner (`sm:left-4` presente; `sm:right-4` y `bottom-3` ausentes):
+  5/5 en verde.
+
+**Compromiso conocido:** en móvil el aviso queda arriba, igual que
+`ApiAddressNotice` (que solo aparece cuando la API pública no responde). Si
+coinciden —raro: uno es de despliegue y el otro de configuración rota— el aviso
+de versión se pinta encima porque va después en el DOM. Se acepta a cambio de no
+perder pulsaciones bajo un toast.

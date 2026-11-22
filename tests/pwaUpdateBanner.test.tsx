@@ -58,6 +58,26 @@ describe("PwaUpdateBanner", () => {
     expect(text).toContain(`Esta pestaña sirve la b${BUILD_NUMBER}`);
   });
 
+  it("no comparte esquina con los avisos de sonner", async () => {
+    // Sonner apila abajo a la derecha; el aviso de versión va arriba a la
+    // izquierda, donde no puede quedar debajo de un toast.
+    await act(async () => {
+      root.render(<PwaUpdateBanner />);
+      await settle();
+    });
+    await act(async () => {
+      offerUpdate(vi.fn());
+      await settle();
+    });
+
+    const banner = container.querySelector('[role="status"]');
+    expect(banner).not.toBeNull();
+    const classes = banner?.getAttribute("class") ?? "";
+    expect(classes).toContain("sm:left-4");
+    expect(classes).not.toContain("sm:right-4");
+    expect(classes).not.toContain("bottom-3");
+  });
+
   it("no recarga sola: solo cuando se pulsa «Recargar»", async () => {
     const apply = vi.fn();
     await act(async () => {
