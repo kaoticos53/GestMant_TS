@@ -9,11 +9,13 @@ import { settle } from "./settle";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { mockUseAction, mockToastSuccess, mockToastError } = vi.hoisted(() => ({
-  mockUseAction: vi.fn(),
-  mockToastSuccess: vi.fn(),
-  mockToastError: vi.fn(),
-}));
+const { mockUseAction, mockToastSuccess, mockToastError, mockProtectBackup } =
+  vi.hoisted(() => ({
+    mockUseAction: vi.fn(),
+    mockToastSuccess: vi.fn(),
+    mockToastError: vi.fn(),
+    mockProtectBackup: vi.fn(),
+  }));
 
 vi.mock("convex/react", () => ({
   useAction: mockUseAction,
@@ -23,7 +25,24 @@ vi.mock("sonner", () => ({
   toast: {
     success: mockToastSuccess,
     error: mockToastError,
+    info: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/backupFile", () => ({
+  MIN_BACKUP_PASSPHRASE: 10,
+  isProtectedBackup: (raw: string) => {
+    try {
+      return (
+        (JSON.parse(raw) as { format?: unknown } | null)?.format ===
+        "pulso-taller-backup-file"
+      );
+    } catch {
+      return false;
+    }
+  },
+  protectBackup: mockProtectBackup,
+  unlockBackup: vi.fn(),
 }));
 
 import { WorkshopBackupSection } from "@/pages/dashboard/settings/workshopData/components/WorkshopBackupSection";
@@ -47,6 +66,7 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
       tables: {
         equipment: [{ _id: "e1", name: "Cam", model: "M1" }],
       },
+      manifest: { totalRecords: 1, tableCounts: { equipment: 1 } },
     });
 
     exportMock = vi.fn().mockResolvedValue({
@@ -82,6 +102,8 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
 
     mockToastSuccess.mockClear();
     mockToastError.mockClear();
+    mockProtectBackup.mockReset();
+    mockProtectBackup.mockImplementation(async (raw: string) => raw);
   });
 
   afterEach(async () => {
@@ -92,14 +114,14 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     container.remove();
   });
 
-  it("permite descargar una copia completa en JSON", async () => {
+  it("cifra y descarga una copia con la frase indicada", async () => {
     await act(async () => {
       root.render(<WorkshopBackupSection />);
     });
     await settle();
 
     const exportBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Descargar copia (.json)"),
+      (b) => b.textContent?.includes("Descargar copia cifrada (.json)"),
     );
     expect(exportBtn).not.toBeUndefined();
 
@@ -108,7 +130,38 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     });
     await settle();
 
+    const passInput = document.body.querySelector<HTMLInputElement>(
+      "#export-backup-passphrase",
+    );
+    const repeatInput = document.body.querySelector<HTMLInputElement>(
+      "#export-backup-passphrase-repeat",
+    );
+    expect(passInput).not.toBeNull();
+    expect(repeatInput).not.toBeNull();
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      setter?.call(passInput, "frase-segura-123");
+      passInput?.dispatchEvent(new Event("input", { bubbles: true }));
+      setter?.call(repeatInput, "frase-segura-123");
+      repeatInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const confirmBtn = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((b) => b.textContent?.trim() === "Descargar copia cifrada");
+    await act(async () => {
+      confirmBtn?.click();
+    });
+    await settle();
+
     expect(exportMock).toHaveBeenCalledWith({});
+    expect(mockProtectBackup).toHaveBeenCalledWith(
+      expect.any(String),
+      "frase-segura-123",
+    );
     expect(mockToastSuccess).toHaveBeenCalled();
   });
 
@@ -126,6 +179,7 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
       tables: {
         equipment: [{ _id: "e1", name: "Cam", model: "M1" }],
       },
+      manifest: { totalRecords: 1, tableCounts: { equipment: 1 } },
     });
 
     const input =
@@ -195,6 +249,10 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
             _id: `e${i}`,
             name: "Cámara",
           })),
+        },
+        manifest: {
+          totalRecords: rows,
+          tableCounts: { equipment: rows },
         },
       });
 
@@ -272,6 +330,7 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
       tables: {
         equipment: [{ _id: "e1", name: "Cam", model: "M1" }],
       },
+      manifest: { totalRecords: 1, tableCounts: { equipment: 1 } },
     });
     const input =
       container.querySelector<HTMLInputElement>("input[type='file']");

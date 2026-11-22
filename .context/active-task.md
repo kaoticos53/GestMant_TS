@@ -97,3 +97,13 @@ restauración se ejecuta con `npx vitest run tests/rollbackRehearsal.test.ts`
 (recuentos por tabla comparados contra la copia). Falta lo que no depende del
 código: un deployment de banco de pruebas vivo, credenciales de Hermes y los dos
 técnicos del piloto.
+
+**Copias protegidas (2026-11-22):** la descarga deja de ser JSON plano. El
+archivo se comprime con gzip, se cifra con AES-GCM-256 y se firma con
+HMAC-SHA256 usando una frase de paso (PBKDF2, mínimo 10 caracteres) que no se
+guarda. La copia interior sube a v2 con manifiesto de recuentos; las copias v1
+se siguen leyendo y se migran en memoria. `exportBackup` valida la copia en seco
+con el mismo recorrido de la restauración antes de entregarla. La tarjeta pide
+la frase al exportar y al abrir un archivo protegido. Handover en
+`.context/sessions/2026-11-22-copias-cifradas-v2.md`. No se ha revisado la
+interfaz en navegador.

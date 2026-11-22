@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   BACKUP_FORMAT,
+  BACKUP_LEGACY_VERSION,
   BACKUP_TABLES,
   BACKUP_VERSION,
+  backupManifest,
   estimateRestoreSeconds,
   parseWorkshopBackup,
   remapBackupDocument,
@@ -11,26 +13,63 @@ import {
 
 describe("Backup y Restauración (Dominio puro)", () => {
   it("valida un archivo de backup correcto y calcula el resumen de registros", () => {
+    const tables = {
+      equipment: [{ _id: "eq_old_1", name: "Cámara", model: "HDC-3500" }],
+      spareParts: [
+        { _id: "sp_old_1", code: "AUD-01", name: "Cable", stock: 3 },
+        { _id: "sp_old_2", code: "AUD-02", name: "Conector", stock: 5 },
+      ],
+    };
     const raw = JSON.stringify({
       format: BACKUP_FORMAT,
       version: BACKUP_VERSION,
       exportedAt: 1_700_000_000_000,
       exportedBy: "admin@taller.es",
+      tables,
+      manifest: backupManifest(tables),
+    });
+
+    const parsed = parseWorkshopBackup(raw);
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.summary.totalRecords).toBe(3);
+    expect(parsed.summary.tableCounts.equipment).toBe(1);
+    expect(parsed.summary.tableCounts.spareParts).toBe(2);
+    expect(parsed.migratedFrom).toBeUndefined();
+  });
+
+  it("migra una copia v1 al formato actual", () => {
+    const raw = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_LEGACY_VERSION,
+      exportedAt: 1_700_000_000_000,
+      exportedBy: "admin@taller.es",
       tables: {
-        equipment: [{ _id: "eq_old_1", name: "Cámara", model: "HDC-3500" }],
-        spareParts: [
-          { _id: "sp_old_1", code: "AUD-01", name: "Cable", stock: 3 },
-          { _id: "sp_old_2", code: "AUD-02", name: "Conector", stock: 5 },
-        ],
+        equipment: [{ _id: "eq_old_1", name: "Cámara" }],
       },
     });
 
     const parsed = parseWorkshopBackup(raw);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.summary.totalRecords).toBe(3);
-    expect(parsed.summary.tableCounts.equipment).toBe(1);
-    expect(parsed.summary.tableCounts.spareParts).toBe(2);
+    expect(parsed.migratedFrom).toBe(1);
+    expect(parsed.backup.version).toBe(BACKUP_VERSION);
+    expect(parsed.backup.manifest.totalRecords).toBe(1);
+    expect(parsed.backup.tables.equipment).toHaveLength(1);
+  });
+
+  it("rechaza una copia v2 cuyo manifiesto no cuadra", () => {
+    const tables = { equipment: [{ _id: "e1", name: "Cámara" }] };
+    const raw = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: 1,
+      exportedBy: "admin@taller.es",
+      tables,
+      manifest: { totalRecords: 99, tableCounts: { equipment: 1 } },
+    });
+
+    expect(parseWorkshopBackup(raw).ok).toBe(false);
   });
 
   it("rechaza archivos inválidos, JSON corrupto o versión no soportada", () => {

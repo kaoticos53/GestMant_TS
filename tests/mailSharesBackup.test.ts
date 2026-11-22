@@ -207,6 +207,7 @@ describe("mailShares en el backup", () => {
           },
         ],
       },
+      manifest: { totalRecords: 1, tableCounts: { mailShares: 1 } },
     });
 
     const restored = await admin.action(api.workshopBackup.restoreBackup, {

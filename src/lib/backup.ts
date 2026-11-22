@@ -4,7 +4,9 @@
  */
 
 export const BACKUP_FORMAT = "pulso-taller-backup" as const;
-export const BACKUP_VERSION = 1 as const;
+export const BACKUP_VERSION = 2 as const;
+/** La primera versión que se sabe leer; se migra al formato actual al cargarla. */
+export const BACKUP_LEGACY_VERSION = 1 as const;
 export const RESTORE_CONFIRM_WORD = "RESTAURAR" as const;
 
 /**
@@ -83,12 +85,19 @@ export function restoreSizeLevel(records: number): RestoreSizeLevel {
   return "normal";
 }
 
+export interface BackupManifest {
+  totalRecords: number;
+  tableCounts: Partial<Record<BackupTableName, number>>;
+}
+
 export interface WorkshopBackupPayload {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
   exportedAt: number;
   exportedBy: string;
   tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>>;
+  /** Recuentos con los que se generó la copia; la restauración los comprueba. */
+  manifest: BackupManifest;
 }
 
 export interface BackupSummary {
@@ -98,10 +107,28 @@ export interface BackupSummary {
   tableCounts: Partial<Record<BackupTableName, number>>;
 }
 
-export function parseWorkshopBackup(
-  rawJson: string,
-):
-  | { ok: true; backup: WorkshopBackupPayload; summary: BackupSummary }
+/** Cuenta las filas de cada tabla conocida, en el orden canónico del backup. */
+export function backupManifest(
+  tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>>,
+): BackupManifest {
+  const tableCounts: Partial<Record<BackupTableName, number>> = {};
+  let totalRecords = 0;
+  for (const table of BACKUP_TABLES) {
+    const count = tables[table]?.length ?? 0;
+    tableCounts[table] = count;
+    totalRecords += count;
+  }
+  return { totalRecords, tableCounts };
+}
+
+export function parseWorkshopBackup(rawJson: string):
+  | {
+      ok: true;
+      backup: WorkshopBackupPayload;
+      summary: BackupSummary;
+      /** Presente cuando la copia venía en un formato anterior. */
+      migratedFrom?: number;
+    }
   | { ok: false; error: string } {
   let parsed: unknown;
   try {
@@ -122,10 +149,11 @@ export function parseWorkshopBackup(
         "El archivo no corresponde a una copia de seguridad de Pulso Taller.",
     };
   }
-  if (obj.version !== BACKUP_VERSION) {
+  const version = obj.version;
+  if (version !== BACKUP_VERSION && version !== BACKUP_LEGACY_VERSION) {
     return {
       ok: false,
-      error: `Versión de copia no soportada (${String(obj.version)}).`,
+      error: `Versión de copia no soportada (${String(version)}). Actualiza Pulso Taller para poder leerla.`,
     };
   }
   if (
@@ -167,10 +195,54 @@ export function parseWorkshopBackup(
     totalRecords += rows.length;
   }
 
+  if (version === BACKUP_VERSION) {
+    const declared = obj.manifest;
+    if (!declared || typeof declared !== "object" || Array.isArray(declared)) {
+      return {
+        ok: false,
+        error: "La copia no incluye el manifiesto de recuentos.",
+      };
+    }
+    const manifest = declared as Record<string, unknown>;
+    const declaredCounts = manifest.tableCounts;
+    if (
+      !declaredCounts ||
+      typeof declaredCounts !== "object" ||
+      Array.isArray(declaredCounts)
+    ) {
+      return {
+        ok: false,
+        error: "El manifiesto de la copia no contiene los recuentos por tabla.",
+      };
+    }
+    const counts = declaredCounts as Record<string, unknown>;
+    for (const table of BACKUP_TABLES) {
+      const expected = counts[table];
+      if (expected === undefined) continue;
+      if (
+        typeof expected !== "number" ||
+        expected !== (tableCounts[table] ?? 0)
+      ) {
+        return {
+          ok: false,
+          error: `El manifiesto declara un recuento distinto para «${table}»; la copia está incompleta o editada.`,
+        };
+      }
+    }
+    if (manifest.totalRecords !== totalRecords) {
+      return {
+        ok: false,
+        error:
+          "El total de registros del manifiesto no coincide con las tablas de la copia.",
+      };
+    }
+  }
+
   const exportedAt =
     typeof obj.exportedAt === "number" ? obj.exportedAt : Date.now();
   const exportedBy =
     typeof obj.exportedBy === "string" ? obj.exportedBy : "Desconocido";
+  const manifest = backupManifest(cleanTables);
 
   return {
     ok: true,
@@ -180,6 +252,7 @@ export function parseWorkshopBackup(
       exportedAt,
       exportedBy,
       tables: cleanTables,
+      manifest,
     },
     summary: {
       exportedAt,
@@ -187,6 +260,7 @@ export function parseWorkshopBackup(
       totalRecords,
       tableCounts,
     },
+    migratedFrom: version === BACKUP_LEGACY_VERSION ? version : undefined,
   };
 }
 

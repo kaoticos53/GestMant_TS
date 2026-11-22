@@ -19,6 +19,12 @@ import {
   type BackupSummary,
 } from "@/lib/backup";
 import {
+  MIN_BACKUP_PASSPHRASE,
+  isProtectedBackup,
+  protectBackup,
+  unlockBackup,
+} from "@/lib/backupFile";
+import {
   formatDateTime,
   formatFileSize,
   getErrorMessage,
@@ -44,6 +50,14 @@ export function WorkshopBackupSection() {
   );
   const [pendingBytes, setPendingBytes] = useState(0);
   const [confirmPhrase, setConfirmPhrase] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportPassphrase, setExportPassphrase] = useState("");
+  const [exportRepeat, setExportRepeat] = useState("");
+  const [protectedRaw, setProtectedRaw] = useState<string | null>(null);
+  const [protectedBytes, setProtectedBytes] = useState(0);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockPassphrase, setUnlockPassphrase] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
   const resetPending = () => {
     setPendingRawJson(null);
@@ -52,27 +66,62 @@ export function WorkshopBackupSection() {
     setConfirmPhrase("");
   };
 
-  const handleExport = async () => {
+  const closeExport = () => {
+    if (exporting) return;
+    setExportOpen(false);
+    setExportPassphrase("");
+    setExportRepeat("");
+  };
+
+  const closeUnlock = () => {
+    if (unlocking) return;
+    setUnlockOpen(false);
+    setProtectedRaw(null);
+    setProtectedBytes(0);
+    setUnlockPassphrase("");
+  };
+
+  const download = (raw: string, exportedAt: number) => {
+    const blob = new Blob([raw], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const dateStr = new Date(exportedAt).toISOString().slice(0, 10);
+    anchor.href = url;
+    anchor.download = `pulso-taller-backup-${dateStr}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportConfirm = async () => {
+    if (exporting) return;
+    if (exportPassphrase.length < MIN_BACKUP_PASSPHRASE) {
+      toast.error(
+        `La frase de la copia debe tener al menos ${MIN_BACKUP_PASSPHRASE} caracteres.`,
+      );
+      return;
+    }
+    if (exportPassphrase !== exportRepeat) {
+      toast.error("Las dos frases de la copia no coinciden.");
+      return;
+    }
     setExporting(true);
     try {
       const result = await exportBackup({});
-      const blob = new Blob([result.rawJson], {
-        type: "application/json;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      const dateStr = new Date(result.summary.exportedAt)
-        .toISOString()
-        .slice(0, 10);
-      anchor.href = url;
-      anchor.download = `pulso-taller-backup-${dateStr}.json`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      toast.success(
-        `Copia de seguridad descargada (${result.summary.totalRecords} registros)`,
+      const protectedText = await protectBackup(
+        result.rawJson,
+        exportPassphrase,
       );
+      download(protectedText, result.summary.exportedAt);
+      toast.success(
+        `Copia cifrada y comprimida descargada (${result.summary.totalRecords} registros)`,
+      );
+      setExportOpen(false);
+      setExportPassphrase("");
+      setExportRepeat("");
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -84,6 +133,14 @@ export function WorkshopBackupSection() {
     if (!file) return;
     try {
       const raw = await file.text();
+      resetPending();
+      if (isProtectedBackup(raw)) {
+        setProtectedRaw(raw);
+        setProtectedBytes(file.size);
+        setUnlockPassphrase("");
+        setUnlockOpen(true);
+        return;
+      }
       const parsed = parseWorkshopBackup(raw);
       if (!parsed.ok) {
         toast.error(parsed.error);
@@ -92,13 +149,47 @@ export function WorkshopBackupSection() {
       setPendingRawJson(raw);
       setPendingSummary(parsed.summary);
       setPendingBytes(file.size);
-      setConfirmPhrase("");
+      if (parsed.migratedFrom !== undefined) {
+        toast.info(
+          `Copia de la versión ${parsed.migratedFrom} adaptada al formato actual.`,
+        );
+      }
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (unlocking || !protectedRaw) return;
+    setUnlocking(true);
+    try {
+      const raw = await unlockBackup(protectedRaw, unlockPassphrase);
+      const parsed = parseWorkshopBackup(raw);
+      if (!parsed.ok) {
+        toast.error(parsed.error);
+        return;
+      }
+      setPendingRawJson(raw);
+      setPendingSummary(parsed.summary);
+      setPendingBytes(protectedBytes);
+      setConfirmPhrase("");
+      setUnlockOpen(false);
+      setProtectedRaw(null);
+      setProtectedBytes(0);
+      setUnlockPassphrase("");
+      if (parsed.migratedFrom !== undefined) {
+        toast.info(
+          `Copia de la versión ${parsed.migratedFrom} adaptada al formato actual.`,
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setUnlocking(false);
     }
   };
 
@@ -138,9 +229,9 @@ export function WorkshopBackupSection() {
           Copia de seguridad y restauración
         </h3>
         <p className="text-xs text-muted-foreground">
-          Descarga una copia completa en JSON de todas las tablas operativas del
-          taller o restaura desde un archivo anterior (sin alterar usuarios ni
-          el registro de seguridad).
+          Descarga una copia completa, comprimida y cifrada con una frase de
+          paso, o restaura desde un archivo anterior (sin alterar usuarios ni el
+          registro de seguridad). También se aceptan copias antiguas en JSON.
         </p>
       </div>
 
@@ -149,14 +240,10 @@ export function WorkshopBackupSection() {
           type="button"
           variant="outline"
           disabled={exporting || restoring}
-          onClick={() => void handleExport()}
+          onClick={() => setExportOpen(true)}
         >
-          {exporting ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Download className="mr-2 size-4" />
-          )}
-          Descargar copia (.json)
+          <Download className="mr-2 size-4" />
+          Descargar copia cifrada (.json)
         </Button>
 
         <input
@@ -176,6 +263,142 @@ export function WorkshopBackupSection() {
           Restaurar desde archivo...
         </Button>
       </div>
+
+      <Dialog
+        open={exportOpen}
+        onOpenChange={(open) => {
+          if (!open) closeExport();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Proteger la copia de seguridad</DialogTitle>
+            <DialogDescription>
+              La copia se comprimirá y cifrará con esta frase. No se guarda en
+              el taller: sin ella no se puede volver a restaurar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-xs">
+            <div className="space-y-1.5">
+              <Label htmlFor="export-backup-passphrase">
+                Frase de la copia
+              </Label>
+              <Input
+                id="export-backup-passphrase"
+                type="password"
+                autoComplete="new-password"
+                value={exportPassphrase}
+                onChange={(e) => setExportPassphrase(e.target.value)}
+                disabled={exporting}
+              />
+              <p className="text-muted-foreground">
+                Al menos {MIN_BACKUP_PASSPHRASE} caracteres. Guárdala en un
+                sitio seguro.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="export-backup-passphrase-repeat">
+                Repite la frase
+              </Label>
+              <Input
+                id="export-backup-passphrase-repeat"
+                type="password"
+                autoComplete="new-password"
+                value={exportRepeat}
+                onChange={(e) => setExportRepeat(e.target.value)}
+                disabled={exporting}
+              />
+              {exportRepeat.length > 0 && exportRepeat !== exportPassphrase && (
+                <p className="text-destructive">Las dos frases no coinciden.</p>
+              )}
+            </div>
+            {exporting && (
+              <InlineNotice tone="info">
+                <span>Validando y preparando la copia…</span>
+              </InlineNotice>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exporting}
+              onClick={closeExport}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                exporting ||
+                exportPassphrase.length < MIN_BACKUP_PASSPHRASE ||
+                exportPassphrase !== exportRepeat
+              }
+              onClick={() => void handleExportConfirm()}
+            >
+              {exporting && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Descargar copia cifrada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={unlockOpen}
+        onOpenChange={(open) => {
+          if (!open) closeUnlock();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Abrir copia protegida</DialogTitle>
+            <DialogDescription>
+              Escribe la frase con la que se cifró este archivo. Sin ella no se
+              puede leer ni restaurar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5 text-xs">
+            <Label htmlFor="unlock-backup-passphrase">Frase de la copia</Label>
+            <Input
+              id="unlock-backup-passphrase"
+              type="password"
+              autoComplete="current-password"
+              value={unlockPassphrase}
+              onChange={(e) => setUnlockPassphrase(e.target.value)}
+              disabled={unlocking}
+            />
+            {unlocking && (
+              <InlineNotice tone="info">
+                <span>Comprobando la firma y descifrando…</span>
+              </InlineNotice>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={unlocking}
+              onClick={closeUnlock}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                unlocking || unlockPassphrase.length < MIN_BACKUP_PASSPHRASE
+              }
+              onClick={() => void handleUnlock()}
+            >
+              {unlocking && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Abrir copia
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {pendingSummary && (
         <Dialog

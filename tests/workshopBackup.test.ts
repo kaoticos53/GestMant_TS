@@ -31,10 +31,12 @@ describe("Fase 2 TDD — workshopBackup (exportación y restauración completa)"
   test("solo el administrador puede exportar o restaurar backups", async () => {
     const { t, tech } = await setup();
 
-    await expect(t.action(api.workshopBackup.exportBackup, {})).rejects.toThrow();
-    await expect(tech.action(api.workshopBackup.exportBackup, {})).rejects.toThrow(
-      /administrador/i,
-    );
+    await expect(
+      t.action(api.workshopBackup.exportBackup, {}),
+    ).rejects.toThrow();
+    await expect(
+      tech.action(api.workshopBackup.exportBackup, {}),
+    ).rejects.toThrow(/administrador/i);
     await expect(
       tech.action(api.workshopBackup.restoreBackup, { rawJson: "{}" }),
     ).rejects.toThrow(/administrador/i);
@@ -62,6 +64,13 @@ describe("Fase 2 TDD — workshopBackup (exportación y restauración completa)"
     // Exportar backup completo
     const exported = await admin.action(api.workshopBackup.exportBackup, {});
     expect(exported.summary.totalRecords).toBeGreaterThanOrEqual(4);
+    const payload = JSON.parse(exported.rawJson) as {
+      version: number;
+      manifest: { totalRecords: number; tableCounts: Record<string, number> };
+    };
+    expect(payload.version).toBe(2);
+    expect(payload.manifest.totalRecords).toBe(exported.summary.totalRecords);
+    expect(payload.manifest.tableCounts.equipment).toBe(1);
 
     // Añadir un dato posterior que no estaba en el backup
     await admin.mutation(api.spareParts.create, {
@@ -87,7 +96,9 @@ describe("Fase 2 TDD — workshopBackup (exportación y restauración completa)"
     expect(partsAfter[0]?.compatibleWith).toEqual([eqAfter[0]?._id]);
 
     // securityAuditLog registró exportación y restauración sin borrarse
-    const logs = await t.run((ctx) => ctx.db.query("securityAuditLog").collect());
+    const logs = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
     const actions = logs.map((l) => l.action);
     expect(actions).toContain("workshop_backup_export");
     expect(actions).toContain("workshop_backup_restore");

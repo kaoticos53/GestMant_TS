@@ -5,6 +5,7 @@ import {
   BACKUP_TABLES,
   BACKUP_VERSION,
   backupMailShareRow,
+  backupManifest,
   parseWorkshopBackup,
   remapBackupDocument,
   restoreMailShareRow,
@@ -1010,6 +1011,19 @@ export const exportBackup = action({
       internal.workshopBackup.collectAllTables,
       { userId },
     );
+
+    // La copia se comprueba antes de entregarla, con el mismo camino que usará
+    // la restauración. Si una fila no se pudiera volver a insertar, es mejor
+    // saberlo ahora que cuando alguien intente restaurar el archivo.
+    try {
+      await walkBackup(ctx, userId, collected.tables, "check");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new ConvexError(
+        `La copia no se ha podido generar porque no se podría restaurar: ${detail}`,
+      );
+    }
+
     const exportedAt = Date.now();
     const payload = {
       format: BACKUP_FORMAT,
@@ -1017,6 +1031,7 @@ export const exportBackup = action({
       exportedAt,
       exportedBy: perm.actorName,
       tables: collected.tables,
+      manifest: backupManifest(collected.tables),
     };
 
     await ctx.runMutation(internal.workshopBackup.logAudit, {
