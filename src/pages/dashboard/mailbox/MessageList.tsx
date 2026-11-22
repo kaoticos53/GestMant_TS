@@ -4,7 +4,14 @@ import { Button } from "@/components/ui/button";
 import { useVirtualRows } from "@/hooks/use-virtual-rows";
 import { MAIL_TAG_META, type MailTagId } from "@/lib/mailClient/tagging";
 import { cn } from "@/lib/utils";
-import { Loader2, MailOpen, Paperclip, RefreshCw, SearchX } from "lucide-react";
+import {
+  Loader2,
+  MailOpen,
+  MessagesSquare,
+  Paperclip,
+  RefreshCw,
+  SearchX,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import { formatMailDate, isUnread, senderLabel } from "./helpers";
 import type { MailboxHeader } from "./types";
@@ -176,6 +183,16 @@ export function MessageList({
                   >
                     {header.subject || "(Sin asunto)"}
                   </p>
+                  {header.threadCount > 1 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-4 shrink-0 gap-1 px-1.5 text-[10px] tabular-nums"
+                      title={`Conversación con ${header.threadCount} mensajes`}
+                    >
+                      <MessagesSquare className="size-2.5" />
+                      {header.threadCount}
+                    </Badge>
+                  )}
                   {header.hasAttachments && (
                     <Paperclip
                       className="size-3.5 shrink-0 text-muted-foreground"

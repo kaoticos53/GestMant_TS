@@ -7,7 +7,7 @@ import {
   formatFileSize,
   getErrorMessage,
 } from "@/lib/workshop";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -15,6 +15,7 @@ import {
   FileText,
   Loader2,
   MailOpen,
+  MessagesSquare,
   Paperclip,
   RefreshCw,
   Share2,
@@ -49,11 +50,13 @@ function attachmentName(attachment: OpenedAttachment): string {
 export function MessageViewer({
   header,
   folderName,
+  onSelectMessage,
   onClose,
   onOpenSettings,
 }: {
   header: MailboxHeader;
   folderName: string;
+  onSelectMessage?: (header: MailboxHeader) => void;
   onClose: () => void;
   onOpenSettings: () => void;
 }) {
@@ -61,6 +64,15 @@ export function MessageViewer({
   const downloadAttachment = useAction(api.mailAttachments.download);
   const setMessageTags = useMutation(api.mailTagging.setMessageTags);
   const analyzeWithBody = useAction(api.mailTaggingActions.analyzeMessageWithBody);
+  const threadMessages = useQuery(
+    api.mailHeaders.listThread,
+    header.threadCount > 1 && header.conversationId
+      ? {
+          conversationId: header.conversationId,
+          folderRemoteId: header.folderRemoteId,
+        }
+      : "skip",
+  );
   const [opened, setOpened] = useState<OpenedMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +245,34 @@ export function MessageViewer({
           Reanalizar con cuerpo
         </Button>
       </div>
+
+      {threadMessages && threadMessages.length > 1 && onSelectMessage && (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 bg-muted/10 px-3 py-1.5 text-[11px]">
+          <span className="flex items-center gap-1 font-medium text-muted-foreground">
+            <MessagesSquare className="size-3" />
+            Conversación ({threadMessages.length}):
+          </span>
+          {threadMessages.map((msg) => {
+            const current = msg.messageId === header.messageId;
+            return (
+              <button
+                key={msg.messageId}
+                type="button"
+                onClick={() => onSelectMessage(msg)}
+                className={cn(
+                  "rounded border px-2 py-0.5 transition-colors",
+                  current
+                    ? "border-signal bg-signal/10 font-medium text-foreground"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {senderLabel(msg.fromName, msg.fromAddress)} ·{" "}
+                {formatDateTime(msg.date)}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <ShareMailDialog
         messageId={header.messageId}

@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import {
+  groupMailHeadersByConversation,
+  sortMailHeaders,
+} from "../lib/mailClient/listView";
 import { readAccount, requireMailboxMember } from "./mailAccounts";
 
 /** Texto comparable para la búsqueda local: sin acentos y en minúsculas. */
@@ -20,6 +24,16 @@ export const list = query({
     folderRemoteId: v.string(),
     search: v.optional(v.string()),
     tag: v.optional(v.string()),
+    sortBy: v.optional(
+      v.union(
+        v.literal("date"),
+        v.literal("sender"),
+        v.literal("subject"),
+        v.literal("attachments"),
+      ),
+    ),
+    sortDir: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
+    groupByConversation: v.optional(v.boolean()),
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
@@ -52,8 +66,14 @@ export const list = query({
               normalized(row.fromAddress).includes(term),
           );
 
-    matched.sort(
-      (a, b) => b.date - a.date || a.messageId.localeCompare(b.messageId),
+    const baseItems = args.groupByConversation
+      ? groupMailHeadersByConversation(matched)
+      : matched.map((row) => ({ ...row, threadCount: 1 }));
+
+    const sorted = sortMailHeaders(
+      baseItems,
+      args.sortBy ?? "date",
+      args.sortDir ?? "desc",
     );
 
     const limit =
@@ -66,7 +86,7 @@ export const list = query({
         : 0;
 
     return {
-      headers: matched.slice(offset, offset + limit).map((row) => ({
+      headers: sorted.slice(offset, offset + limit).map((row) => ({
         messageId: row.messageId,
         folderRemoteId: row.folderRemoteId,
         conversationId: row.conversationId ?? null,
@@ -86,9 +106,66 @@ export const list = query({
         tagConfidence: row.tagConfidence ?? null,
         tagReason: row.tagReason ?? null,
         taggedAt: row.taggedAt ?? null,
+        threadCount: row.threadCount,
       })),
-      total: matched.length,
-      unread: matched.filter((row) => row.flags.includes("u")).length,
+      total: sorted.length,
+      unread: sorted.filter((row) => row.flags.includes("u")).length,
     };
+  },
+});
+
+export const listThread = query({
+  args: {
+    conversationId: v.string(),
+    folderRemoteId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMailboxMember(ctx);
+    const account = await readAccount(ctx, user._id);
+    if (!account) return [];
+
+    const rows = args.folderRemoteId
+      ? await ctx.db
+          .query("mailHeaders")
+          .withIndex("by_user_folder_date", (q) =>
+            q
+              .eq("userId", user._id)
+              .eq("folderRemoteId", args.folderRemoteId!),
+          )
+          .collect()
+      : await ctx.db
+          .query("mailHeaders")
+          .withIndex("by_account", (q) => q.eq("accountId", account._id))
+          .collect();
+
+    return rows
+      .filter(
+        (r) =>
+          r.deletedRemoteAt === undefined &&
+          r.conversationId === args.conversationId,
+      )
+      .sort((a, b) => b.date - a.date)
+      .map((row) => ({
+        messageId: row.messageId,
+        folderRemoteId: row.folderRemoteId,
+        conversationId: row.conversationId ?? null,
+        subject: row.subject,
+        fromName: row.fromName,
+        fromAddress: row.fromAddress,
+        date: row.date,
+        size: row.size,
+        flags: row.flags,
+        hasAttachments: row.hasAttachments,
+        snippet: row.snippet,
+        bodyState: row.bodyState,
+        cachedAt: row.cachedAt ?? null,
+        lastOpenedAt: row.lastOpenedAt ?? null,
+        tags: row.tags ?? [],
+        tagSource: row.tagSource ?? null,
+        tagConfidence: row.tagConfidence ?? null,
+        tagReason: row.tagReason ?? null,
+        taggedAt: row.taggedAt ?? null,
+        threadCount: 1,
+      }));
   },
 });

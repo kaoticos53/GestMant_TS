@@ -1,7 +1,19 @@
 import { TablePagination } from "@/components/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/convex/_generated/api";
+import {
+  MAIL_SORT_LABELS,
+  type MailSortDirection,
+  type MailSortField,
+} from "@/lib/mailClient/listView";
 import {
   MAIL_TAG_IDS,
   MAIL_TAG_META,
@@ -15,6 +27,8 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   AlertTriangle,
   Archive,
+  ArrowDown,
+  ArrowUp,
   ChevronLeft,
   FileText,
   Folder,
@@ -22,6 +36,7 @@ import {
   Loader2,
   Mail,
   Mailbox,
+  MessagesSquare,
   RefreshCw,
   Search,
   Send,
@@ -91,6 +106,9 @@ export function MailboxView({
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<MailTagId | "all">("all");
+  const [sortBy, setSortBy] = useState<MailSortField>("date");
+  const [sortDir, setSortDir] = useState<MailSortDirection>("desc");
+  const [groupByConversation, setGroupByConversation] = useState(false);
   const [mobilePane, setMobilePane] = useState<MobilePane>("folders");
   const [selectedMessage, setSelectedMessage] = useState<MailboxHeader | null>(
     null,
@@ -108,7 +126,7 @@ export function MailboxView({
     folders?.[0] ??
     null;
   const activeFolderId = activeFolder?.remoteId ?? null;
-  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}|${tagFilter}`;
+  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}|${tagFilter}|${sortBy}|${sortDir}|${groupByConversation}`;
 
   // Al cambiar de carpeta o de búsqueda se vuelve a la primera página en el
   // mismo render. Así la consulta siguiente ya pide `offset: 0` y no llega a
@@ -126,6 +144,9 @@ export function MailboxView({
           folderRemoteId: activeFolderId,
           search: search.trim() || undefined,
           tag: tagFilter === "all" ? undefined : tagFilter,
+          sortBy,
+          sortDir,
+          groupByConversation,
           limit: MAILBOX_PAGE_SIZE,
           offset: (page - 1) * MAILBOX_PAGE_SIZE,
         }
@@ -302,7 +323,64 @@ export function MailboxView({
                             }`}
                     </p>
                   </div>
-                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
+                    <Select
+                      value={sortBy}
+                      onValueChange={(value) => setSortBy(value as MailSortField)}
+                    >
+                      <SelectTrigger
+                        className="h-9 w-[135px] text-xs"
+                        aria-label="Ordenar mensajes por"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(MAIL_SORT_LABELS) as MailSortField[]).map(
+                          (field) => (
+                            <SelectItem key={field} value={field}>
+                              {MAIL_SORT_LABELS[field]}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-9 shrink-0"
+                      aria-label={
+                        sortDir === "desc"
+                          ? "Cambiar a orden ascendente"
+                          : "Cambiar a orden descendente"
+                      }
+                      title={
+                        sortDir === "desc"
+                          ? "Orden descendente (clic para ascendente)"
+                          : "Orden ascendente (clic para descendente)"
+                      }
+                      onClick={() =>
+                        setSortDir((prev) => (prev === "desc" ? "asc" : "desc"))
+                      }
+                    >
+                      {sortDir === "desc" ? (
+                        <ArrowDown className="size-3.5" />
+                      ) : (
+                        <ArrowUp className="size-3.5" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={groupByConversation ? "secondary" : "outline"}
+                      size="sm"
+                      aria-pressed={groupByConversation}
+                      className="h-9 shrink-0 gap-1.5 text-xs"
+                      onClick={() => setGroupByConversation((prev) => !prev)}
+                      title="Agrupar o desagrupar mensajes por conversación"
+                    >
+                      <MessagesSquare className="size-3.5" />
+                      <span className="hidden md:inline">Conversaciones</span>
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -453,6 +531,7 @@ export function MailboxView({
               key={selectedMessage.messageId}
               header={selectedMessage}
               folderName={activeFolder?.name ?? "Correo"}
+              onSelectMessage={handleSelectMessage}
               onClose={handleCloseMessage}
               onOpenSettings={onOpenSettings}
             />
