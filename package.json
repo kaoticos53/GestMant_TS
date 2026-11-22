@@ -23,6 +23,7 @@
     "nas:check": "node scripts/nas-setup.mjs --check",
     "nas:doctor": "node scripts/nas-setup.mjs --doctor",
     "nas:backup": "node scripts/nas-backup.mjs",
+    "nas:pack": "node scripts/nas-pack.mjs",
     "convex:up": "docker compose -f docker/convex/docker-compose.yml up -d",
     "convex:down": "docker compose -f docker/convex/docker-compose.yml down",
     "convex:logs": "docker compose -f docker/convex/docker-compose.yml logs -f backend",

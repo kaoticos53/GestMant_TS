@@ -9,3 +9,5 @@ certs/
 
 node_modules
 dist
+dist-nas
+*.tar
