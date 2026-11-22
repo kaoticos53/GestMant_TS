@@ -441,6 +441,12 @@ Si falla cualquiera de los puntos 2–4, la fase 0 no se cierra y no se empieza 
 
 ### Fase 8 — Pilotaje y producción
 
+**Estado:** preparada (2026-11-22). El procedimiento del piloto con buzones reales,
+la tabla de validación contra Hermes y el runbook de rollback están en
+`.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`; el ensayo de
+restauración es `tests/rollbackRehearsal.test.ts`. Pendiente de ejecución: un
+deployment de banco de pruebas vivo, credenciales de Hermes y los dos técnicos.
+
 **Objetivo:** activar el correo con riesgo controlado y capacidad de marcha atrás.
 
 **Tareas**

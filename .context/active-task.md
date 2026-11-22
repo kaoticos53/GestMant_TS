@@ -41,5 +41,10 @@ La PWA ya no se recarga sola: con `registerType: "prompt"` la compilación nueva
 espera y el aviso dice qué build sirve la pestaña, para no depurar una interfaz
 vieja. Handover en `.context/sessions/2026-11-22-aviso-version-nueva.md`.
 
-Lo siguiente es F8: pilotaje con buzones reales, validación contra Hermes y
-ensayo de rollback.
+**F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
+tabla de validación contra Hermes y el runbook de rollback están en
+`.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de
+restauración se ejecuta con `npx vitest run tests/rollbackRehearsal.test.ts`
+(recuentos por tabla comparados contra la copia). Falta lo que no depende del
+código: un deployment de banco de pruebas vivo, credenciales de Hermes y los dos
+técnicos del piloto.
