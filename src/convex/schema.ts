@@ -1672,6 +1672,22 @@ const schema = defineSchema({
   })
     .index("by_batch", ["batch", "seq"])
     .index("by_savedAt", ["savedAt"]),
+
+  // La reserva del mantenimiento del taller: una sola fila. Restaurar, recuperar
+  // una restauración interrumpida y vaciar el taller la toman antes de tocar
+  // nada, para no solaparse; mientras está viva, las escrituras del taller se
+  // rechazan. Si la acción muere, deja de renovarse y caduca sola.
+  workshopMaintenance: defineTable({
+    key: v.literal("maintenance"),
+    kind: v.union(v.literal("restore"), v.literal("reset")),
+    ownerId: v.id("users"),
+    // Identifica esta operación concreta: el mismo administrador puede recuperar
+    // una foto de un intento anterior sin que el latido confunda las reservas.
+    token: v.string(),
+    batch: v.optional(v.string()),
+    acquiredAt: v.number(),
+    aliveAt: v.number(),
+  }).index("by_key", ["key"]),
 });
 
 export default schema;

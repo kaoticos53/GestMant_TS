@@ -604,6 +604,209 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     });
   });
 
+  test("restaurar y vaciar el taller no se solapan", async () => {
+    const t = backend();
+    const { admin, adminId } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+
+    // Una restauración viva bloquea el vaciado y otra restauración.
+    const restoreLease = {
+      userId: adminId,
+      kind: "restore" as const,
+      batch: "reserva-restaurar",
+    };
+    const restoreToken = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      restoreLease,
+    );
+    await expect(
+      admin.action(api.workshopReset.resetWorkshop, {}),
+    ).rejects.toThrow(/mantenimiento/);
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: exported.rawJson,
+      }),
+    ).rejects.toThrow(/mantenimiento/);
+
+    // El vaciado no llegó a borrar nada.
+    expect((await tableCounts(t)).spareParts).toBe(1);
+
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      userId: adminId,
+      kind: "restore",
+      token: restoreToken,
+    });
+
+    // Una reserva de vaciado también rechaza la restauración.
+    const resetLease = { userId: adminId, kind: "reset" as const };
+    const resetToken = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      resetLease,
+    );
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: exported.rawJson,
+      }),
+    ).rejects.toThrow(/mantenimiento/);
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      ...resetLease,
+      token: resetToken,
+    });
+
+    // Con la reserva suelta, el vaciado termina y la retira.
+    const reset = await admin.action(api.workshopReset.resetWorkshop, {});
+    expect(reset.deleted).toBeGreaterThan(0);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopMaintenance").collect()),
+    ).toHaveLength(0);
+  });
+
+  test("mientras se restaura, las escrituras del taller están bloqueadas", async () => {
+    const t = backend();
+    const { admin, adminId } = await seedWorkshop(t);
+    const before = await tableCounts(t);
+    const lease = {
+      userId: adminId,
+      kind: "restore" as const,
+      batch: "reserva-escrituras",
+    };
+    const token = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      lease,
+    );
+
+    await expect(
+      admin.mutation(api.spareParts.create, {
+        code: "BLOQ-001",
+        name: "No debería entrar",
+        category: "Electrónica",
+        unit: "ud",
+        stock: 1,
+        minStock: 0,
+      }),
+    ).rejects.toThrow(/mantenimiento/);
+    expect(await tableCounts(t)).toEqual(before);
+
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      userId: adminId,
+      kind: "restore",
+      token,
+    });
+    await admin.mutation(api.spareParts.create, {
+      code: "BLOQ-001",
+      name: "Ahora sí",
+      category: "Electrónica",
+      unit: "ud",
+      stock: 1,
+      minStock: 0,
+    });
+    expect((await tableCounts(t)).spareParts).toBe(before.spareParts + 1);
+  });
+
+  test("la pasada no recupera mientras otra operación tiene la reserva", async () => {
+    const t = backend();
+    const { adminId } = await seedWorkshop(t);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("workshopRestoreSnapshots", {
+        batch: "foto-sin-sellar-con-reserva",
+        seq: 0,
+        payload: '{"tables":{"spareParts":[',
+        savedBy: adminId,
+        savedAt: Date.now() - 60_000,
+        aliveAt: Date.now() - 60_000,
+      });
+    });
+
+    const lease = {
+      userId: adminId,
+      kind: "restore" as const,
+      batch: "reserva-recuperacion",
+    };
+    const token = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      lease,
+    );
+
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(1);
+
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      userId: adminId,
+      kind: "restore",
+      token,
+    });
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+  });
+
+  test("una reserva abandonada caduca y deja de bloquear", async () => {
+    const t = backend();
+    const { admin, adminId } = await seedWorkshop(t);
+    const lease = {
+      userId: adminId,
+      kind: "restore" as const,
+      batch: "reserva-abandonada",
+    };
+    await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      lease,
+    );
+
+    // La acción murió: la reserva deja de latir.
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("workshopMaintenance").collect();
+      for (const row of rows) {
+        await ctx.db.patch(row._id, { aliveAt: Date.now() - 31_000 });
+      }
+    });
+
+    await admin.mutation(api.spareParts.create, {
+      code: "LIBRE-001",
+      name: "El taller vuelve a admitir cambios",
+      category: "Electrónica",
+      unit: "ud",
+      stock: 1,
+      minStock: 0,
+    });
+    expect((await tableCounts(t)).spareParts).toBe(2);
+  });
+
+  test("una restauración rechazada libera la reserva", async () => {
+    const t = backend();
+    const { admin, adminId } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+    const payload = JSON.parse(exported.rawJson) as {
+      tables: Record<string, Array<Record<string, unknown>>>;
+    };
+    delete payload.tables.incidentDocumentLog?.[0]?.documentId;
+
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: JSON.stringify(payload),
+      }),
+    ).rejects.toThrow(/taller sigue como estaba/);
+
+    // Si la reserva se hubiera quedado, esta adquisición fallaría.
+    const lease = { userId: adminId, kind: "reset" as const };
+    const token = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      lease,
+    );
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      userId: adminId,
+      kind: "reset",
+      token,
+    });
+  });
+
   test("una foto de varios trozos se recupera entera", async () => {
     const t = backend();
     // Bajar el trozo es determinista y barato: sembrar filas hasta pasar los

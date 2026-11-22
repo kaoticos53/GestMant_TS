@@ -441,6 +441,22 @@ auditoría quién guardó la foto y, en la aplicada, `snapshotApplied: true`. La
 prueba corta justo después del último lote y comprueba que el taller se queda
 con la copia.
 
+**La reserva de mantenimiento (misma tarde).** Restaurar, recuperar y vaciar
+comparten una fila singleton (`workshopMaintenance`) con testigo aleatorio,
+dueño, tipo y caducidad de 30 s. Se toma antes de tocar nada, se renueva con el
+mismo latido de 5 s que la foto y se suelta en un `finally`; si la acción muere,
+caduca. Un vaciado concurrente ya no puede borrar la foto ni las tablas a
+mitad, y dos restauraciones no pasan de la comprobación a la vez. Mientras la
+reserva está viva, `secureMutation` rechaza las escrituras del taller con un
+aviso de mantenimiento: una Incidencia o una Petición de repuesto creada en ese
+hueco ya no se pierde. La pasada también toma la reserva antes de reescribir, y
+`resolvePendingSnapshot` recibe el testigo de la operación en curso para que
+recuperar una foto anterior no confunda la reserva con la de otro intento.
+`tests/rollbackRehearsal.test.ts` sube a **14 pruebas**: solape en ambos
+sentidos, escrituras bloqueadas y liberadas, caducidad de una reserva
+abandonada, liberación tras una restauración rechazada y pasada detenida
+mientras hay reserva.
+
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 
 - Restauración normal con la foto persistida: **1 196 ms**, 880 filas
@@ -489,6 +505,12 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
   los datos después; no compensa para una ventana de una mutación. Si la muerte
   cae ahí, la recuperación revierte a un taller coherente y la copia hay que
   volver a lanzarla.
+- La reserva cierra las escrituras que pasan por `secureMutation` —el trabajo
+  operativo: equipos, repuestos, incidencias, peticiones, compras, mantenimiento,
+  manuales y mensajes—; las mutaciones de ajustes y caché que no usan esa puerta
+  y la exportación no se bloquean. Una exportación lanzada a mitad de una
+  restauración puede leer un taller parcial; cubrirlo exigiría que esas
+  mutaciones y la exportación pasaran también por la reserva.
 - La recuperación usa la cuenta que guardó la foto si sigue siendo un
   administrador activo; si se desactivó o se borró, la completa cualquiera de
   los administradores activos. `savedBy` no se sustituye y, al retirar la foto,

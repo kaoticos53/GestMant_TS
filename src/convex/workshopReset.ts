@@ -205,23 +205,42 @@ export const resetWorkshop = action({
       );
     }
 
-    let deleted = 0;
-    let passes = 0;
-    for (; passes < MAX_PASSES;) {
-      const batch = await ctx.runMutation(internal.workshopReset.clearBatch, {
+    // El vaciado borra las mismas tablas que una restauración —y su foto—: toma
+    // la reserva antes de la primera tanda para no pisarla. Si otra operación
+    // está viva, falla sin borrar nada.
+    const leaseToken = await ctx.runMutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      { userId, kind: "reset" as const },
+    );
+    const maintenance = { userId, kind: "reset" as const, token: leaseToken };
+    try {
+      let deleted = 0;
+      let passes = 0;
+      for (; passes < MAX_PASSES;) {
+        const batch = await ctx.runMutation(internal.workshopReset.clearBatch, {
+          userId,
+        });
+        passes += 1;
+        deleted += batch;
+        await ctx.runMutation(
+          internal.workshopMaintenance.renewMaintenanceLease,
+          maintenance,
+        );
+        if (batch === 0) break;
+      }
+
+      await ctx.runMutation(internal.workshopReset.logResetAudit, {
         userId,
+        deleted,
+        passes,
       });
-      passes += 1;
-      deleted += batch;
-      if (batch === 0) break;
+
+      return { deleted, passes };
+    } finally {
+      await ctx.runMutation(
+        internal.workshopMaintenance.releaseMaintenanceLease,
+        maintenance,
+      );
     }
-
-    await ctx.runMutation(internal.workshopReset.logResetAudit, {
-      userId,
-      deleted,
-      passes,
-    });
-
-    return { deleted, passes };
   },
 });

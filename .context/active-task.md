@@ -78,6 +78,12 @@ Docker justo después del último lote dejó 3 trozos con `appliedAt`; la pasada
 devolvió `recovered: false`, la auditoría quedó con `snapshotApplied: true` y el
 taller con la copia. Handover §8.3/§8.4.
 
+**Reserva de mantenimiento (2026-11-22):** restaurar, recuperar y vaciar toman
+una fila singleton `workshopMaintenance` con caducidad de 30 s y testigo; las
+escrituras del taller pasan por `secureMutation` y se rechazan mientras dura.
+`tests/rollbackRehearsal.test.ts` sube a 14 pruebas (solape, bloqueo, caducidad
+y liberación). Handover §8.3/§8.4.
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

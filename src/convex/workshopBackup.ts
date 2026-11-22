@@ -625,15 +625,25 @@ function snapshotHeartbeat(
   ctx: ActionCtx,
   userId: Id<"users">,
   batch: string,
+  leaseToken: string,
 ): () => Promise<void> {
   let last = Date.now();
   return async () => {
     if (Date.now() - last < SNAPSHOT_HEARTBEAT_MS) return;
     last = Date.now();
-    await ctx.runMutation(
-      internal.workshopBackup.touchRestoreSnapshot,
-      { userId, batch },
-    );
+    // La foto y la reserva de mantenimiento laten juntas: si la acción muere,
+    // las dos caducan y el taller vuelve a admitir operaciones y escrituras. La
+    // reserva va primero: si ya no es nuestra, no se refresca la foto y la
+    // recuperación no espera de más.
+    await ctx.runMutation(internal.workshopMaintenance.renewMaintenanceLease, {
+      userId,
+      kind: "restore",
+      token: leaseToken,
+    });
+    await ctx.runMutation(internal.workshopBackup.touchRestoreSnapshot, {
+      userId,
+      batch,
+    });
   };
 }
 
@@ -662,9 +672,13 @@ async function applySnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
-  batch?: string,
+  batch: string | undefined,
+  leaseToken: string,
 ): Promise<number> {
-  const beat = batch === undefined ? undefined : snapshotHeartbeat(ctx, userId, batch);
+  const beat =
+    batch === undefined
+      ? undefined
+      : snapshotHeartbeat(ctx, userId, batch, leaseToken);
   await clearWorkshop(ctx, userId, beat);
   const written = await walkChunks(
     userId,
@@ -696,15 +710,21 @@ function snapshotChunks(tables: WorkshopBackupPayload["tables"]): string[] {
   return chunks;
 }
 
-/** Guarda la foto del taller en la base y devuelve su nombre. */
+/** Nombre de una foto nueva; la reserva de mantenimiento usa el mismo. */
+function newSnapshotBatch(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Guarda la foto del taller en la base. */
 async function saveSnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
-): Promise<string> {
-  const batch = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  batch: string,
+  leaseToken: string,
+): Promise<void> {
   const savedAt = Date.now();
-  const beat = snapshotHeartbeat(ctx, userId, batch);
+  const beat = snapshotHeartbeat(ctx, userId, batch, leaseToken);
   try {
     for (const [seq, payload] of snapshotChunks(tables).entries()) {
       await ctx.runMutation(internal.workshopBackup.saveSnapshotChunk, {
@@ -742,7 +762,6 @@ async function saveSnapshot(
     }
     throw error;
   }
-  return batch;
 }
 
 /** Reconstruye las tablas de una foto guardada. */
@@ -782,6 +801,7 @@ async function resolvePendingSnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   pending: PendingSnapshot,
+  leaseToken: string,
 ): Promise<boolean> {
   if (!pending.complete) {
     await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
@@ -808,6 +828,7 @@ async function resolvePendingSnapshot(
     userId,
     await loadSnapshot(ctx, pending),
     pending.batch,
+    leaseToken,
   );
   await ctx.runMutation(internal.workshopBackup.logRecovery, {
     userId,
@@ -898,108 +919,126 @@ export const restoreBackup = action({
       throw new ConvexError(parsed.error);
     }
 
-    // 1. Si la restauración anterior se quedó a medias, su foto seguirá en la
-    //    base: se devuelve el taller a como estaba antes de empezar otra. El
-    //    latido distingue una acción viva —que no se toca— de una muerta; una
-    //    foto sin sellar es de una escritura cortada y se descarta.
-    const pending = await ctx.runQuery(
-      internal.workshopBackup.pendingRestoreSnapshot,
-      {},
+    // 0. Tomar la reserva de mantenimiento antes de tocar nada. Sin ella, un
+    //    vaciado o otra restauración podrían entrar entre la comprobación y la
+    //    foto; mientras esté viva, `secureMutation` rechaza las escrituras del
+    //    taller. Se suelta al terminar —también si algo falla—; si la acción
+    //    muere, caduca sola.
+    const batch = newSnapshotBatch();
+    const leaseToken = await ctx.runMutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      { userId, kind: "restore" as const, batch },
     );
-    if (pending !== null) {
-      if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
+    const maintenance = { userId, kind: "restore" as const, token: leaseToken };
+    try {
+      // 1. Si la restauración anterior se quedó a medias, su foto seguirá en la
+      //    base: se devuelve el taller a como estaba antes de empezar otra. El
+      //    latido distingue una acción viva —que no se toca— de una muerta; una
+      //    foto sin sellar es de una escritura cortada y se descarta.
+      const pending = await ctx.runQuery(
+        internal.workshopBackup.pendingRestoreSnapshot,
+        {},
+      );
+      if (pending !== null) {
+        if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
+          throw new ConvexError(
+            "Hay una restauración en marcha. Espera a que termine antes de lanzar otra.",
+          );
+        }
+        // Sin latido: la foto es de una acción muerta. `resolvePendingSnapshot`
+        // distingue si está sin sellar, aplicada o cortada a mitad.
+        await resolvePendingSnapshot(ctx, userId, pending, leaseToken);
+      }
+
+      // 2. Comprobar la copia entera antes de vaciar nada: recorre el mismo camino
+      //    de inserción, pero cada lote se revierte. Una fila que el esquema
+      //    rechaza se descubre aquí, con el taller todavía intacto, y no a mitad
+      //    del vaciado.
+      await walkBackup(ctx, userId, parsed.backup.tables, "check");
+
+      // 3. Guardar en la base el estado actual, en trozos, antes de vaciar. Si el
+      //    backend muere a mitad —no solo si la acción llega a ver el fallo—, esta
+      //    foto es lo que permite devolver el taller a como estaba: la recoge la
+      //    pasada de recuperación o la siguiente restauración. Va después de la
+      //    comprobación, que no escribe nada.
+      const snapshot = await ctx.runQuery(
+        internal.workshopBackup.collectAllTables,
+        { userId, raw: true },
+      );
+      await saveSnapshot(ctx, userId, snapshot.tables, batch, leaseToken);
+      const beat = snapshotHeartbeat(ctx, userId, batch, leaseToken);
+
+      let restoredRecords: number;
+      try {
+        // 4. Vaciar e insertar en orden topológico remapeando oldId -> newId,
+        //    latiendo entre lote y lote para que la pasada sepa que sigue viva.
+        await clearWorkshop(ctx, userId, beat);
+        restoredRecords = await walkBackup(
+          ctx,
+          userId,
+          parsed.backup.tables,
+          "restore",
+          beat,
+        );
+        // La copia está entera: si la acción muere antes de retirar la foto, la
+        // recuperación sabrá que no tiene que deshacerla. La marca va en su propia
+        // mutación; entre el último lote y ella queda una ventana de una mutación,
+        // el precio de no meter la foto en el camino caliente de la inserción.
+        await ctx.runMutation(internal.workshopBackup.markSnapshotApplied, {
+          userId,
+          batch,
+          totalRecords: restoredRecords,
+        });
+      } catch (error) {
+        // Pruebas: como si el backend hubiera muerto antes de recuperar.
+        if (backupFaults.simulateCrash) throw error;
+        const detail = error instanceof Error ? error.message : String(error);
+        try {
+          await applySnapshot(ctx, userId, snapshot.tables, batch, leaseToken);
+        } catch (recoveryError) {
+          const recoveryDetail =
+            recoveryError instanceof Error
+              ? recoveryError.message
+              : String(recoveryError);
+          throw new ConvexError(
+            `La restauración falló a mitad y tampoco se pudo devolver el taller al estado anterior: ${recoveryDetail}. Fallo original: ${detail}`,
+          );
+        }
         throw new ConvexError(
-          "Hay una restauración en marcha. Espera a que termine antes de lanzar otra.",
+          `La restauración falló a mitad y se ha devuelto el taller al estado anterior: ${detail}`,
         );
       }
-      // Sin latido: la foto es de una acción muerta. `resolvePendingSnapshot`
-      // distingue si está sin sellar, aplicada o cortada a mitad.
-      await resolvePendingSnapshot(ctx, userId, pending);
-    }
 
-    // 2. Comprobar la copia entera antes de vaciar nada: recorre el mismo camino
-    //    de inserción, pero cada lote se revierte. Una fila que el esquema
-    //    rechaza se descubre aquí, con el taller todavía intacto, y no a mitad
-    //    del vaciado.
-    await walkBackup(ctx, userId, parsed.backup.tables, "check");
+      // Pruebas: como si el backend muriera con la copia entera puesta y la foto
+      // todavía sin retirar.
+      if (backupFaults.simulateCrashAfterInsert) {
+        throw new ConvexError(
+          "La restauración se ha cortado después de insertar la copia.",
+        );
+      }
 
-    // 3. Guardar en la base el estado actual, en trozos, antes de vaciar. Si el
-    //    backend muere a mitad —no solo si la acción llega a ver el fallo—, esta
-    //    foto es lo que permite devolver el taller a como estaba: la recoge la
-    //    pasada de recuperación o la siguiente restauración. Va después de la
-    //    comprobación, que no escribe nada.
-    const snapshot = await ctx.runQuery(
-      internal.workshopBackup.collectAllTables,
-      { userId, raw: true },
-    );
-    const batch = await saveSnapshot(ctx, userId, snapshot.tables);
-    const beat = snapshotHeartbeat(ctx, userId, batch);
-
-    let restoredRecords: number;
-    try {
-      // 4. Vaciar e insertar en orden topológico remapeando oldId -> newId,
-      //    latiendo entre lote y lote para que la pasada sepa que sigue viva.
-      await clearWorkshop(ctx, userId, beat);
-      restoredRecords = await walkBackup(
-        ctx,
-        userId,
-        parsed.backup.tables,
-        "restore",
-        beat,
-      );
-      // La copia está entera: si la acción muere antes de retirar la foto, la
-      // recuperación sabrá que no tiene que deshacerla. La marca va en su propia
-      // mutación; entre el último lote y ella queda una ventana de una mutación,
-      // el precio de no meter la foto en el camino caliente de la inserción.
-      await ctx.runMutation(internal.workshopBackup.markSnapshotApplied, {
+      // 5. La copia está puesta: la foto ya no hace falta.
+      await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
         userId,
         batch,
+      });
+
+      await ctx.runMutation(internal.workshopBackup.logAudit, {
+        userId,
+        kind: "restore",
         totalRecords: restoredRecords,
       });
-    } catch (error) {
-      // Pruebas: como si el backend hubiera muerto antes de recuperar.
-      if (backupFaults.simulateCrash) throw error;
-      const detail = error instanceof Error ? error.message : String(error);
-      try {
-        await applySnapshot(ctx, userId, snapshot.tables, batch);
-      } catch (recoveryError) {
-        const recoveryDetail =
-          recoveryError instanceof Error
-            ? recoveryError.message
-            : String(recoveryError);
-        throw new ConvexError(
-          `La restauración falló a mitad y tampoco se pudo devolver el taller al estado anterior: ${recoveryDetail}. Fallo original: ${detail}`,
-        );
-      }
-      throw new ConvexError(
-        `La restauración falló a mitad y se ha devuelto el taller al estado anterior: ${detail}`,
+
+      return {
+        restoredRecords,
+        exportedAt: parsed.backup.exportedAt,
+      };
+    } finally {
+      await ctx.runMutation(
+        internal.workshopMaintenance.releaseMaintenanceLease,
+        maintenance,
       );
     }
-
-    // Pruebas: como si el backend muriera con la copia entera puesta y la foto
-    // todavía sin retirar.
-    if (backupFaults.simulateCrashAfterInsert) {
-      throw new ConvexError(
-        "La restauración se ha cortado después de insertar la copia.",
-      );
-    }
-
-    // 5. La copia está puesta: la foto ya no hace falta.
-    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
-      userId,
-      batch,
-    });
-
-    await ctx.runMutation(internal.workshopBackup.logAudit, {
-      userId,
-      kind: "restore",
-      totalRecords: restoredRecords,
-    });
-
-    return {
-      restoredRecords,
-      exportedAt: parsed.backup.exportedAt,
-    };
   },
 });
 
@@ -1032,6 +1071,38 @@ export const recoverInterruptedRestore = internalAction({
         "No hay ningún administrador activo que pueda recuperar la restauración interrumpida.",
       );
     }
-    return { recovered: await resolvePendingSnapshot(ctx, actor, pending) };
+    // La recuperación también reescribe el taller: toma la misma reserva y deja
+    // las escrituras bloqueadas mientras dura. Si otra operación sigue viva, no
+    // la pisa; la siguiente pasada lo intentará.
+    let leaseToken: string;
+    try {
+      leaseToken = await ctx.runMutation(
+        internal.workshopMaintenance.acquireMaintenanceLease,
+        { userId: actor, kind: "restore" as const, batch: pending.batch },
+      );
+    } catch (error) {
+      if (error instanceof ConvexError) return { recovered: false };
+      throw error;
+    }
+    const maintenance = {
+      userId: actor,
+      kind: "restore" as const,
+      token: leaseToken,
+    };
+    try {
+      return {
+        recovered: await resolvePendingSnapshot(
+          ctx,
+          actor,
+          pending,
+          leaseToken,
+        ),
+      };
+    } finally {
+      await ctx.runMutation(
+        internal.workshopMaintenance.releaseMaintenanceLease,
+        maintenance,
+      );
+    }
   },
 });

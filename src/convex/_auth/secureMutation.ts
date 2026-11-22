@@ -4,11 +4,8 @@ import type { Doc } from "../_generated/dataModel";
 import type { Capability } from "../../lib/permissions";
 import type { MutationCtx } from "../_generated/server";
 import type { IdentityIssue } from "../permissions";
-import {
-  hasAnyCapability,
-  hasCapability,
-  memberStatus,
-} from "../permissions";
+import { assertWorkshopWritable } from "../workshopMaintenance";
+import { hasAnyCapability, hasCapability, memberStatus } from "../permissions";
 
 /**
  * La puerta que comparten las mutaciones del taller.
@@ -181,6 +178,11 @@ export function secureMutation<T extends PropertyValidators, R>(
         throw new ConvexError(denialMessage(config, actor, denial));
       }
     }
+
+    // Restaurar una copia vacía e inserta el taller por tandas. Una escritura
+    // normal en ese hueco se perdería o quedaría sobre datos mezclados, así que
+    // la reserva de mantenimiento también cierra esta puerta.
+    await assertWorkshopWritable(ctx);
 
     return await handler(ctx, args, actor);
   };
