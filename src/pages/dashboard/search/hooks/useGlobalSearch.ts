@@ -17,20 +17,20 @@ export function useGlobalSearch({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setDebouncedQuery("");
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setDebouncedQuery(trimmed);
-    }, 160);
+    const next = query.trim();
+    const timer = window.setTimeout(
+      () => {
+        setDebouncedQuery(next);
+      },
+      next ? 160 : 0,
+    );
     return () => window.clearTimeout(timer);
   }, [query]);
 
+  const effectiveQuery = query.trim() ? debouncedQuery : "";
   const response = useQuery(
     api.search.global,
-    engaged && debouncedQuery ? { query: debouncedQuery } : "skip",
+    engaged && effectiveQuery ? { query: effectiveQuery } : "skip",
   );
 
   // ⌘/Ctrl + K lleva el foco al buscador desde cualquier pantalla
@@ -63,8 +63,8 @@ export function useGlobalSearch({
   }, []);
 
   const groups = useMemo(
-    () => buildSearchGroupsFromResponse(debouncedQuery ? response : null),
-    [debouncedQuery, response],
+    () => buildSearchGroupsFromResponse(effectiveQuery ? response : null),
+    [effectiveQuery, response],
   );
 
   const flatHits = useMemo(
