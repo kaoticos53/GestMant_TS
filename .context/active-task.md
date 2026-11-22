@@ -126,3 +126,9 @@ citan las fichas —hasta 25 MB por archivo y 64 MB en total— y la restauraci�
 los repone con ids nuevos, remapeando también las imágenes incrustadas. Los
 adjuntos y el `.eml` de correos compartidos siguen fuera por diseño. Handover
 en `.context/sessions/2026-11-22-archivos-fotos-huerfanas.md`.
+
+**Aviso de la pasada (2026-11-22):** `recoverInterruptedRestore` avisa a todos
+los administradores activos cuando de verdad interviene: recupera el estado
+anterior, descarta una foto inservible, cierra una foto terminada o retira
+lotes huérfanos. No genera aviso en las pasadas sin intervención. Handover en
+`.context/sessions/2026-11-22-aviso-pasada-recuperacion.md`.

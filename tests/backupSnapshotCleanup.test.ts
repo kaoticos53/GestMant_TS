@@ -87,6 +87,17 @@ describe("limpieza de fotos huérfanas de restauración", () => {
       batches: ["foto-anterior", "resto-sin-cabecera"],
       rows: 2,
     });
+
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    expect(
+      notifications.some(
+        (row) =>
+          row.text.includes("La pasada de recuperación") &&
+          row.text.includes("2 fotos huérfanas"),
+      ),
+    ).toBe(true);
   });
 
   test("una cabecera antigua no queda escondida por un trozo nuevo sin cabecera", async () => {

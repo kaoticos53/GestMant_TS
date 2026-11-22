@@ -32,7 +32,7 @@ import {
   type ActionCtx,
   type MutationCtx,
 } from "./_generated/server";
-import { logSecurityEvent } from "./audit";
+import { logSecurityEvent, notifySecurityAlert } from "./audit";
 import { backupFaults } from "./backupFaults";
 import { activeMaintenanceLease } from "./workshopMaintenance";
 
@@ -776,6 +776,47 @@ export const pruneOrphanSnapshots = internalMutation({
   },
 });
 
+/**
+ * Avisa a los administradores de que la pasada automática ha tocado algo. No
+ * se manda un aviso por cada ejecución: solo cuando hay una recuperación, un
+ * descarte, el cierre de una foto o lotes huérfanos retirados.
+ */
+export const notifyRecoveryIntervention = internalMutation({
+  args: {
+    action: v.union(
+      v.literal("kept"),
+      v.literal("discarded"),
+      v.literal("cleared"),
+      v.literal("recovered"),
+    ),
+    prunedRows: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const parts: string[] = [];
+    if (args.action === "recovered") {
+      parts.push(
+        "ha devuelto el taller al estado anterior a una restauración interrumpida",
+      );
+    } else if (args.action === "cleared") {
+      parts.push("ha retirado la foto de una restauración terminada");
+    } else if (args.action === "discarded") {
+      parts.push("ha descartado una foto de restauración inservible");
+    }
+    if (args.prunedRows > 0) {
+      parts.push(
+        args.prunedRows === 1
+          ? "ha retirado 1 foto huérfana de restauraciones anteriores"
+          : `ha retirado ${args.prunedRows} fotos huérfanas de restauraciones anteriores`,
+      );
+    }
+    if (parts.length === 0) return false;
+    await notifySecurityAlert(ctx, {
+      message: `La pasada de recuperación ${parts.join(" y ")}.`,
+    });
+    return true;
+  },
+});
+
 export const logAudit = internalMutation({
   args: {
     userId: v.id("users"),
@@ -1299,14 +1340,20 @@ async function loadSnapshot(
  * - la foto está completa pero no aplicada: la copia se cortó a mitad; se
  *   reescribe el estado anterior.
  * En los dos últimos casos queda la traza de quién guardó la foto. Devuelve si
- * hubo que reescribir el estado anterior, que es lo que distingue `recovered`.
+ * hubo que reescribir el estado anterior (`recovered`) y qué hizo con la foto,
+ * que es lo que decide si la pasada debe avisar a los administradores.
  */
+type SnapshotResolution = {
+  recovered: boolean;
+  action: "kept" | "discarded" | "cleared" | "recovered";
+};
+
 async function resolvePendingSnapshot(
   ctx: ActionCtx,
   userId: Id<"users">,
   pending: PendingSnapshot,
   leaseToken: string,
-): Promise<boolean> {
+): Promise<SnapshotResolution> {
   if (!pending.complete) {
     await ctx.runMutation(internal.workshopBackup.discardSnapshot, {
       userId,
@@ -1316,13 +1363,13 @@ async function resolvePendingSnapshot(
       chunkCount: pending.chunkCount,
       checksum: pending.checksum ?? undefined,
     });
-    return false;
+    return { recovered: false, action: "discarded" };
   }
   if (pending.applied) {
     // La copia está puesta, pero la ventana de deshacer puede seguir abierta:
     // entonces la foto no se retira, se conserva como red de vuelta atrás.
     if (pending.undoUntil !== null && pending.undoUntil > Date.now()) {
-      return false;
+      return { recovered: false, action: "kept" };
     }
     await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
       userId,
@@ -1334,7 +1381,7 @@ async function resolvePendingSnapshot(
       totalRecords: pending.appliedRecords,
       applied: true,
     });
-    return false;
+    return { recovered: false, action: "cleared" };
   }
 
   let tables: WorkshopBackupPayload["tables"];
@@ -1350,7 +1397,7 @@ async function resolvePendingSnapshot(
       chunkCount: pending.chunkCount,
       checksum: pending.checksum ?? undefined,
     });
-    return false;
+    return { recovered: false, action: "discarded" };
   }
 
   const restored = await applySnapshot(
@@ -1366,7 +1413,7 @@ async function resolvePendingSnapshot(
     totalRecords: restored,
     applied: false,
   });
-  return true;
+  return { recovered: true, action: "recovered" };
 }
 
 /**
@@ -1912,15 +1959,31 @@ export const recoverInterruptedRestore = internalAction({
       {},
     );
     if (pending === null) {
-      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {});
+      const pruned = await ctx.runMutation(
+        internal.workshopBackup.pruneOrphanSnapshots,
+        {},
+      );
+      if (pruned.rows > 0) {
+        await ctx.runMutation(
+          internal.workshopBackup.notifyRecoveryIntervention,
+          { action: "kept" as const, prunedRows: pruned.rows },
+        );
+      }
       return { recovered: false };
     }
     if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
       // La foto actual puede ser de una restauración viva: no se toca, pero las
       // anteriores ya no pueden aplicarse y se retiran igualmente.
-      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
-        keepBatch: pending.batch,
-      });
+      const pruned = await ctx.runMutation(
+        internal.workshopBackup.pruneOrphanSnapshots,
+        { keepBatch: pending.batch },
+      );
+      if (pruned.rows > 0) {
+        await ctx.runMutation(
+          internal.workshopBackup.notifyRecoveryIntervention,
+          { action: "kept" as const, prunedRows: pruned.rows },
+        );
+      }
       return { recovered: false };
     }
     // La cuenta que guardó la foto puede haberse desactivado o borrado: la
@@ -1954,7 +2017,7 @@ export const recoverInterruptedRestore = internalAction({
       token: leaseToken,
     };
     try {
-      const recovered = await resolvePendingSnapshot(
+      const resolution = await resolvePendingSnapshot(
         ctx,
         actor,
         pending,
@@ -1967,13 +2030,23 @@ export const recoverInterruptedRestore = internalAction({
         internal.workshopBackup.pendingRestoreSnapshot,
         {},
       );
-      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
-        // Si la foto resuelta era la última y se descartó, `current` puede ser
-        // una anterior: esa tampoco se aplica, porque la última era la única
-        // que correspondía al estado que se estaba restaurando.
-        keepBatch: current?.batch === pending.batch ? current.batch : undefined,
-      });
-      return { recovered };
+      const pruned = await ctx.runMutation(
+        internal.workshopBackup.pruneOrphanSnapshots,
+        {
+          // Si la foto resuelta era la última y se descartó, `current` puede ser
+          // una anterior: esa tampoco se aplica, porque la última era la única
+          // que correspondía al estado que se estaba restaurando.
+          keepBatch:
+            current?.batch === pending.batch ? current.batch : undefined,
+        },
+      );
+      if (resolution.action !== "kept" || pruned.rows > 0) {
+        await ctx.runMutation(
+          internal.workshopBackup.notifyRecoveryIntervention,
+          { action: resolution.action, prunedRows: pruned.rows },
+        );
+      }
+      return { recovered: resolution.recovered };
     } finally {
       await ctx.runMutation(
         internal.workshopMaintenance.releaseMaintenanceLease,

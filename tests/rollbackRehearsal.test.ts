@@ -26,7 +26,16 @@ async function tableCounts(
     const counts = {} as Record<BackupTableName, number>;
     for (const table of BACKUP_TABLES) {
       const rows = await ctx.db.query(table as TableNames).collect();
-      counts[table] = rows.length;
+      // La pasada de recuperación avisa a los administradores con una fila
+      // nueva; ese aviso no forma parte del estado que se compara con la foto.
+      counts[table] =
+        table === "notifications"
+          ? rows.filter(
+              (row) =>
+                !("text" in row) ||
+                !row.text.includes("La pasada de recuperación"),
+            ).length
+          : rows.length;
     }
     return counts;
   });
@@ -430,6 +439,14 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       {},
     );
     expect(early).toEqual({ recovered: false });
+    const passNotices = async () =>
+      await t.run(async (ctx) => {
+        const rows = await ctx.db.query("notifications").collect();
+        return rows.filter((row) =>
+          row.text.includes("La pasada de recuperación"),
+        );
+      });
+    expect(await passNotices()).toHaveLength(0);
 
     // El latido manda, no la antigüedad de la foto: aunque se guardara hace
     // mucho, si sigue latiendo puede ser una restauración viva.
@@ -452,6 +469,7 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       {},
     );
     expect(late).toEqual({ recovered: true });
+    expect(await passNotices()).toHaveLength(1);
 
     expect(await tableCounts(t)).toEqual(beforeRestore);
     expect(
@@ -471,6 +489,19 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
     expect(shares[0]?.attachments).toHaveLength(1);
     expect(shares[0]?.emlStorageId).toBeDefined();
+
+    // La pasada avisa a los administradores de que ha intervenido, no solo deja
+    // la traza técnica en la auditoría.
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    expect(
+      notifications.some(
+        (row) =>
+          row.text.includes("La pasada de recuperación") &&
+          row.text.includes("estado anterior a una restauración interrumpida"),
+      ),
+    ).toBe(true);
   });
 
   test("la siguiente restauración recupera antes la foto de la anterior", async () => {

@@ -239,6 +239,7 @@ El Administrador tiene la responsabilidad máxima de la plataforma: gobierno de 
 2. **Restauración:** al restaurar el JSON, los archivos vuelven al almacén con identificadores nuevos y las fichas quedan apuntando a ellos. Cada correo vuelve enganchado a su ficha y como resumen, con la marca **«Copia restaurada: solo metadatos»**. Si la ficha destino no está en la copia, el correo se omite y queda registrado en auditoría; no se convierte en huérfano.
 3. **Vaciado del taller:** el reset borra también las copias compartidas. Sus archivos quedan para la limpieza nocturna del almacén y el registro de auditoría no se toca.
 4. **Papelera de huérfanas:** si se borra un equipo o un manual, sus correos compartidos esperan siete días en **Ajustes del taller → Almacenamiento → «Copias de correo huérfanas»**. Solo el administrador la ve; puede descargar lo que quede o pulsar **«Purgar ahora»**. No hay restauración: la ficha ya no existe.
+5. **Aviso de recuperación:** si una restauración se interrumpe y la pasada automática tiene que intervenir —devolver el taller al estado anterior, descartar una foto inservible o retirar fotos huérfanas—, todos los administradores activos reciben un aviso en la campana.
 
 ---
 
