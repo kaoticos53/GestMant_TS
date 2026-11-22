@@ -32,28 +32,25 @@ describe("utilidades puras de auditoría de seguridad", () => {
         JSON.stringify({ keptBatch: "b", batches: ["vieja"], rows: 3 }),
       ),
     ).toEqual({
-      version: 1,
+      version: 0,
       keptBatch: "b",
       photos: ["vieja"],
       chunks: 3,
-      hasMore: false,
     });
     expect(
       readSnapshotPruneMetadata(
         JSON.stringify({
-          metadataVersion: 2,
+          metadataVersion: 1,
           keptBatch: null,
           photos: ["nueva"],
           chunks: 4,
-          hasMore: true,
         }),
       ),
     ).toEqual({
-      version: 2,
+      version: 1,
       keptBatch: null,
       photos: ["nueva"],
       chunks: 4,
-      hasMore: true,
     });
     expect(readSnapshotPruneMetadata("no-json")).toBeNull();
   });
@@ -61,14 +58,17 @@ describe("utilidades puras de auditoría de seguridad", () => {
   test("la versión del sobre no ensucia el resumen legible", () => {
     expect(
       formatSecurityMetadata(
-        JSON.stringify({ metadataVersion: 2, photos: ["foto"], chunks: 2 }),
+        JSON.stringify({
+          metadataVersion: 1,
+          keptBatch: "actual",
+          photos: ["foto"],
+          chunks: 2,
+        }),
       ),
-    ).toBe("fotos: foto · documentos: 2");
+    ).toBe("fotos: foto · documentos: 2 · conservada: actual");
     expect(
-      formatSecurityMetadata(
-        JSON.stringify({ batches: ["vieja"], rows: 3, hasMore: true }),
-      ),
-    ).toBe("fotos: vieja · documentos: 3 · quedan más");
+      formatSecurityMetadata(JSON.stringify({ batches: ["vieja"], rows: 3 })),
+    ).toBe("fotos: vieja · documentos: 3");
   });
 
   test("securityAuditCsvTable genera CSV neutralizando fórmulas CWE-1236", () => {

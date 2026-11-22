@@ -61,7 +61,6 @@ const MAX_SNAPSHOT_CHARS = 64 * 1024 * 1024;
 
 /** Documentos que retira una pasada de limpieza; el resto espera a la siguiente. */
 const SNAPSHOT_PRUNE_PAGE = 100;
-const SNAPSHOT_PRUNE_MAX_PAGE = 500;
 
 /** Un fallo repetido no debe inundar la campana: se avisa una vez cada 6 h. */
 const RECOVERY_FAILURE_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -753,16 +752,9 @@ export const pruneOrphanSnapshots = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     keepBatch: v.optional(v.string()),
-    /** Tope de documentos para esta pasada; útil para probar la paginación. */
-    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (args.userId !== undefined) await assertAdminUser(ctx, args.userId);
-    const requested = Math.floor(args.limit ?? SNAPSHOT_PRUNE_PAGE);
-    const limit = Math.min(
-      SNAPSHOT_PRUNE_MAX_PAGE,
-      Math.max(1, Number.isFinite(requested) ? requested : SNAPSHOT_PRUNE_PAGE),
-    );
     // Se recorre de la foto más antigua a la más reciente. Así la foto que se
     // conserva —normalmente la última— no bloquea las páginas antiguas, y cada
     // pasada avanza sin volver a leer lo que ya retiró.
@@ -770,11 +762,10 @@ export const pruneOrphanSnapshots = internalMutation({
       .query("workshopRestoreSnapshots")
       .withIndex("by_savedAt")
       .order("asc")
-      .take(limit + 1);
+      .take(SNAPSHOT_PRUNE_PAGE);
     const touchedPhotos = new Set<string>();
     let removedChunks = 0;
     for (const row of rows) {
-      if (removedChunks >= limit) break;
       if (args.keepBatch !== undefined && row.batch === args.keepBatch) {
         continue;
       }
@@ -800,21 +791,15 @@ export const pruneOrphanSnapshots = internalMutation({
         action: "workshop_backup_prune",
         target: "system:backup",
         metadata: {
-          metadataVersion: 2,
           keptBatch: args.keepBatch ?? null,
           photos: [...removedPhotos].sort(),
           chunks: removedChunks,
-          hasMore: rows.length > limit && removedChunks > 0,
         },
       });
     }
     // `photos` son lotes; `chunks`, los documentos que los componen. No se
     // mezclan: el aviso usa `photos` y la auditoría guarda ambos por separado.
-    return {
-      photos: removedPhotos.size,
-      chunks: removedChunks,
-      hasMore: rows.length > limit && removedChunks > 0,
-    };
+    return { photos: removedPhotos.size, chunks: removedChunks };
   },
 });
 
@@ -874,8 +859,10 @@ export const recordRecoveryFailure = internalMutation({
   handler: async (ctx, args) => {
     const message =
       args.message.trim().slice(0, 500) || "Error desconocido al recuperar.";
-    // La notificación no puede impedir que quede la traza: si falla, el
-    // diagnóstico sigue estando en la auditoría.
+    // Se avisa antes de escribir la traza: el enfriamiento busca eventos
+    // anteriores y, si esta fila ya existiera, no avisaría nunca. La
+    // notificación no puede impedir que quede el diagnóstico: si falla, la
+    // auditoría se escribe igualmente.
     await notifySecurityAlert(ctx, {
       message:
         "La pasada de recuperación ha fallado y no ha podido completarse. Revisa la auditoría de seguridad.",

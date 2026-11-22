@@ -24,7 +24,7 @@ observabilidad de la pasada de recuperación y blindaje del comando de tipos.
 | `tests/fixtures/backup/v3-con-archivos.json` | Nuevo | Copia v3 actual con archivo. |
 | `tests/fixtures/backup/v3-manifiesto-incorrecto.json` | Nuevo | Copia editada que debe rechazarse. |
 | `tests/backupCompatibility.test.ts` | Nuevo | Lee las fixtures y comprueba migración, archivos y rechazo. |
-| `src/convex/workshopBackup.ts` | Modificado | Limpieza por páginas, `hasMore`, traza de fallo y aviso con enfriamiento. |
+| `src/convex/workshopBackup.ts` | Modificado | Limpieza por páginas fijas, traza de fallo y aviso con enfriamiento. |
 | `tests/backupSnapshotCleanup.test.ts` | Modificado | Cubre paginación, aviso único y traza de error real. |
 | `src/lib/securityAudit.ts` | Modificado | Versión de metadatos, lector de la limpieza y formato común antiguo/nuevo. |
 | `src/convex/audit.ts` | Modificado | Añade `metadataVersion` a los metadatos nuevos. |
@@ -41,8 +41,9 @@ observabilidad de la pasada de recuperación y blindaje del comando de tipos.
   cada prueba. v1 no lleva manifiesto; v2 y v3 sí. La v2 con archivos conserva
   sus bytes al migrar y la v3 editada se rechaza antes de restaurar.
 - **Paginación:** `pruneOrphanSnapshots` retira como máximo 100 documentos por
-  pasada (tope configurable de 500) empezando por la foto más antigua. Devuelve
-  `hasMore`; el cron siguiente continúa. La foto que se conserva no se toca.
+  pasada, empezando por la foto más antigua. El cron siguiente continúa. La foto
+  que se conserva no se toca. No hay tope configurable ni `hasMore`: no tenían
+  consumidor en producción.
   Una foto partida entre dos páginas solo se cuenta cuando la página retira su
   último documento; la página intermedia deja su evento de auditoría con los
   trozos retirados y sin foto cerrada, así que no hay aviso ni recuento doble.

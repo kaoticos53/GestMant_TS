@@ -157,7 +157,7 @@ el árbol quedó limpio. Handover en
 
 **Seguimiento de copias y auditoría (2026-11-22):** las copias v1/v2/v3 tienen
 fixtures congeladas; la limpieza de fotos huérfanas va por páginas de 100
-documentos y devuelve `hasMore`; una foto partida entre páginas se cuenta y se
+documentos; una foto partida entre páginas se cuenta y se
 avisa solo cuando la última página retira su último documento, aunque cada
 página conserve su traza; los metadatos nuevos llevan
 `metadataVersion` y la traza de limpieza se lee con `batches`/`rows` o

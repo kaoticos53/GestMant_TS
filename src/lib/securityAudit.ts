@@ -48,19 +48,18 @@ export function securityActionLabel(action: string): string {
 
 /** Forma normalizada de la traza que deja la limpieza de fotos huérfanas. */
 export interface SnapshotPruneMetadata {
-  /** 1 = `batches`/`rows`; 2 = `photos`/`chunks` explícitos. */
+  /** 0 = fila anterior al sobre versionado; 1 = `photos`/`chunks`. */
   version: number;
   keptBatch: string | null;
   photos: string[];
   chunks: number;
-  hasMore: boolean;
 }
 
 /**
  * Lee la traza de `workshop_backup_prune` sin depender de la época en que se
  * escribió. Las filas anteriores al cambio de nombre guardaban `batches` y
  * `rows`; las nuevas guardan `photos`, `chunks` y `metadataVersion`. La versión
- * ausente se interpreta como 1, que es la forma histórica.
+ * ausente se interpreta como 0, anterior al sobre versionado.
  */
 export function readSnapshotPruneMetadata(
   metadata?: string,
@@ -77,7 +76,7 @@ export function readSnapshotPruneMetadata(
   }
   const value = parsed as Record<string, unknown>;
   const version =
-    typeof value.metadataVersion === "number" ? value.metadataVersion : 1;
+    typeof value.metadataVersion === "number" ? value.metadataVersion : 0;
   const rawPhotos = Array.isArray(value.photos)
     ? value.photos
     : Array.isArray(value.batches)
@@ -99,7 +98,6 @@ export function readSnapshotPruneMetadata(
     keptBatch,
     photos,
     chunks,
-    hasMore: value.hasMore === true,
   };
 }
 
@@ -123,7 +121,8 @@ export function formatSecurityMetadata(metadata?: string): string {
       ) {
         const photos =
           prune.photos.length > 0 ? prune.photos.join(", ") : "ninguna";
-        return `fotos: ${photos} · documentos: ${prune.chunks}${prune.hasMore ? " · quedan más" : ""}`;
+        const kept = prune.keptBatch ? ` · conservada: ${prune.keptBatch}` : "";
+        return `fotos: ${photos} · documentos: ${prune.chunks}${kept}`;
       }
       const parts = Object.entries(parsed as Record<string, unknown>)
         .filter(

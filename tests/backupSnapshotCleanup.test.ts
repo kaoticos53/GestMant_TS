@@ -214,51 +214,6 @@ describe("limpieza de fotos huérfanas de restauración", () => {
     ).toHaveLength(0);
   });
 
-  test("retira las fotos huérfanas por páginas acotadas sin tocar la actual", async () => {
-    const { t, adminId } = await setup();
-    const now = Date.now();
-
-    await insertHead(t, adminId, "foto-actual", now, {
-      appliedAt: now - 60_000,
-      appliedRecords: 0,
-      undoUntil: now + 60_000,
-    });
-    for (let index = 0; index < 5; index += 1) {
-      for (const seq of [0, 1]) {
-        await t.run((ctx) =>
-          ctx.db.insert("workshopRestoreSnapshots", {
-            batch: `foto-antigua-${index}`,
-            seq,
-            payload: '{"tables":{}}',
-            savedBy: adminId,
-            savedAt: now - 10_000 - index * 100,
-            aliveAt: now - 10_000 - index * 100,
-          }),
-        );
-      }
-    }
-
-    let pages = 0;
-    let removed = 0;
-    let hasMore = true;
-    while (hasMore && pages < 20) {
-      const page = await t.mutation(
-        internal.workshopBackup.pruneOrphanSnapshots,
-        { keepBatch: "foto-actual", limit: 2 },
-      );
-      removed += page.chunks;
-      hasMore = page.hasMore;
-      pages += 1;
-    }
-
-    expect(pages).toBeGreaterThan(1);
-    expect(removed).toBe(10);
-    const rows = await t.run((ctx) =>
-      ctx.db.query("workshopRestoreSnapshots").collect(),
-    );
-    expect(rows.map((row) => row.batch)).toEqual(["foto-actual"]);
-  });
-
   test("una foto partida entre páginas se cuenta y se avisa una sola vez", async () => {
     const { t, adminId } = await setup();
     const now = Date.now();
