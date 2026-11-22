@@ -172,4 +172,63 @@ describe("mailTaggingActions — motor híbrido 2 etapas (Fase 3)", () => {
     expect(byMsg.get("m-3")?.tagSource).toBe("ai_body");
     expect(byMsg.get("m-3")?.tags).toEqual(["equipment"]);
   });
+
+  test("no falla con OperationError si la apiKey guardada no se puede descifrar y usa fallback o error legible", async () => {
+    delete process.env.DEEPSEEK_API_KEY;
+    const t = backend();
+    const { userId } = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        name: "Admin",
+        email: "admin2@taller.es",
+        role: "admin",
+        active: true,
+      });
+      await ctx.db.insert("aiSettings", {
+        key: "default",
+        enabled: true,
+        baseUrl: "https://api.deepseek.com",
+        visionModel: "deepseek-chat",
+        chatModel: "deepseek-chat",
+        apiKey: "enc:v1:invalidiv:invalidcipher",
+        updatedAt: 1,
+      });
+      const accountId = await ctx.db.insert("mailAccounts", {
+        userId,
+        email: "taller2@empresa.es",
+        serverUrl: "https://mail.empresa.es",
+        status: "connected",
+        enabled: true,
+        cacheLimitBytes: 50 * 1024 * 1024,
+        cacheRetentionDays: 30,
+        cacheBytes: 0,
+        cacheBodyBytes: 0,
+        cacheAttachmentBytes: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("mailHeaders", {
+        userId,
+        accountId,
+        folderRemoteId: "2",
+        messageId: "m-x",
+        subject: "Consulta",
+        fromName: "User",
+        fromAddress: "user@taller.es",
+        date: 100,
+        size: 100,
+        flags: "u",
+        hasAttachments: false,
+        snippet: "Hola",
+        bodyState: "none",
+      });
+      return { userId };
+    });
+
+    const asUser = t.withIdentity({ subject: `${userId}|s-2` });
+    await expect(
+      asUser.action(api.mailTaggingActions.autoTagFolder, {
+        folderRemoteId: "2",
+      }),
+    ).rejects.toThrow(/no se puede descifrar/i);
+  });
 });

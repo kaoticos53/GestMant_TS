@@ -151,7 +151,15 @@ export const resolved = internalQuery({
   handler: async (ctx) => {
     const row = await readRow(ctx);
     const storedRaw = (row?.apiKey ?? "").trim();
-    const decrypted = storedRaw !== "" ? await decryptSecret(storedRaw) : "";
+    let decrypted = "";
+    let decryptionFailed = false;
+    if (storedRaw !== "") {
+      try {
+        decrypted = await decryptSecret(storedRaw);
+      } catch {
+        decryptionFailed = true;
+      }
+    }
     const apiKey = decrypted !== "" ? decrypted : envApiKey();
     return {
       enabled: row?.enabled ?? false,
@@ -159,6 +167,7 @@ export const resolved = internalQuery({
       visionModel: row?.visionModel ?? DEFAULT_DEEPSEEK_VISION_MODEL,
       chatModel: row?.chatModel ?? DEFAULT_DEEPSEEK_CHAT_MODEL,
       apiKey,
+      decryptionFailed,
       tasks: normalizedTasks(row),
       rateLimitPerHour: row?.rateLimitPerHour ?? AI_MAX_CALLS_PER_USER_HOUR,
       allowedRoles: row?.allowedRoles ?? [],

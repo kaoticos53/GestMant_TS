@@ -152,7 +152,9 @@ export const autoTagFolder = action({
       if (!aiConfig.enabled || aiConfig.apiKey.trim() === "") {
         if (itemsToSave.length === 0) {
           throw new ConvexError(
-            "Activa y configura DeepSeek en Ajustes → IA para clasificar los correos que no coinciden con reglas rápidas.",
+            aiConfig.decryptionFailed
+              ? "La clave API de DeepSeek guardada no se puede descifrar con la clave actual del servidor. Vuelve a guardarla en Ajustes → IA."
+              : "Activa y configura DeepSeek en Ajustes → IA para clasificar los correos que no coinciden con reglas rápidas.",
           );
         }
       } else {
@@ -273,7 +275,9 @@ export const analyzeMessageWithBody = action({
     const aiConfig = await ctx.runQuery(internal.aiSettings.resolved, {});
     if (!aiConfig.enabled || aiConfig.apiKey.trim() === "") {
       throw new ConvexError(
-        "Activa y configura DeepSeek en Ajustes → IA para analizar el mensaje.",
+        aiConfig.decryptionFailed
+          ? "La clave API de DeepSeek guardada no se puede descifrar con la clave actual del servidor. Vuelve a guardarla en Ajustes → IA."
+          : "Activa y configura DeepSeek en Ajustes → IA para analizar el mensaje.",
       );
     }
 
