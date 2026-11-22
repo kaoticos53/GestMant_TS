@@ -80,9 +80,9 @@ function DialogContent({
             data-slot="dialog-close"
             // 44×44 de blanco táctil sin mover la cruz: 8 + 22 centra igual que
             // 12 + 18, así que el icono queda donde estaba y el dedo acierta.
-            className="ring-offset-background focus-visible:ring-ring absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:bg-accent hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="ring-offset-background focus-visible:ring-ring absolute top-2 right-2 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:bg-accent hover:opacity-100 focus-visible:ring-[3px] focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none"
           >
-            <XIcon />
+            <XIcon className="size-4" />
             <span className="sr-only">Cerrar</span>
           </DialogPrimitive.Close>
         )}
@@ -95,12 +95,9 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      // La cruz de cerrar mide 44 y vive entre 8 y 52 px del borde derecho; el
-      // contenido del diálogo deja 24, así que un título largo asomaba por
-      // debajo de su zona de pulsación. La cabecera reserva 32 px a cada lado
-      // en móvil (56 > 52): el título parte antes en vez de meterse bajo el
-      // dedo. Va por los dos lados para que el título centrado siga centrado y
-      // en escritorio no cambie nada.
+      // La cruz mide 44 y llega a 52 px del borde derecho; el contenido deja 24.
+      // La cabecera reserva 32 px por lado en móvil (56 > 52) para que un título
+      // largo parta antes, y simétrica para no descentrar los que ya estaban bien.
       className={cn(
         "flex flex-col gap-2 px-8 text-center sm:px-0 sm:text-left",
         className

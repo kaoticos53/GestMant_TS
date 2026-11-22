@@ -81,13 +81,10 @@ function SheetContent({
         {...props}
       >
         {children}
-        {/* El aspa de cerrar de todas las fichas: su nombre accesible va en
-            español, como el resto de la aplicación. */}
-        {/* El aspa se queda en la cabecera de la ficha (y por encima de ella):
-            al bajar desaparece con el contenido, y para cerrar está el botón
-            «Cerrar» del pie, que no se mueve. */}
-        {/* El botón mide 44×44 para el dedo; la cruz conserva su chip de 24 px
-            centrado donde estaba (6 + 22 = 16 + 12), así que la ficha no cambia. */}
+        {/* El aspa vive en la cabecera, sobre el contenido que se desplaza; el
+            pie tiene su propio «Cerrar» fijo. Mide 44×44 para el dedo y centra
+            el chip de 24 px donde estaba (6 + 22 = 16 + 12, su centro), con
+            «Cerrar» como nombre accesible. */}
         <SheetPrimitive.Close className="ring-offset-background focus-visible:ring-ring absolute top-1.5 right-1.5 z-30 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none">
           <span className="inline-flex size-6 items-center justify-center rounded-md bg-secondary">
             <XIcon className="size-4" />

@@ -22,6 +22,11 @@ Los cierres de diálogos y fichas pasaron a 44×44 con «Cerrar» como nombre
 accesible, sin mover la cruz. Handover en
 `.context/sessions/2026-11-21-cierre-dialogos-44.md`.
 
+Después se revisaron los dos primitivos: un solo comentario en el cierre de la
+ficha, el icono declara su `size-4` en vez de heredarlo de un selector `[&_svg]`
+y nada cambió de medida. Handover en
+`.context/sessions/2026-11-22-limpieza-primitivos-dialogo.md`.
+
 La cabecera de los diálogos reserva 32 px por lado en móvil, para que un título
 largo parta antes de la cruz de 44 px y no quede bajo su zona de pulsación; en
 escritorio y en las cabeceras con relleno propio no cambia nada. Handover en
