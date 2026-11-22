@@ -344,6 +344,7 @@ export const triageContext = internalQuery({
 export const applyTriageResults = internalMutation({
   args: {
     accountId: v.id("mailAccounts"),
+    allowOverrideManual: v.optional(v.boolean()),
     items: v.array(
       v.object({
         messageId: v.string(),
@@ -374,7 +375,8 @@ export const applyTriageResults = internalMutation({
             .eq("messageId", item.messageId),
         )
         .first();
-      if (!header || header.tagSource === "manual") continue;
+      if (!header || (header.tagSource === "manual" && !args.allowOverrideManual))
+        continue;
       await ctx.db.patch(header._id, {
         tags: sanitizeMailTags(item.tags),
         tagSource: item.tagSource,
