@@ -102,7 +102,7 @@ clave_de_administrador() {
 esperar_backend() {
   intento_espera=1
   while [ "$intento_espera" -le 60 ]; do
-    if wget -q -O /dev/null "${CONVEX_SELF_HOSTED_URL}/version" 2>/dev/null; then
+    if wget -T 5 -q -O /dev/null "${CONVEX_SELF_HOSTED_URL}/version" 2>/dev/null; then
       log "el backend responde: ${CONVEX_SELF_HOSTED_URL}"
       return 0
     fi
