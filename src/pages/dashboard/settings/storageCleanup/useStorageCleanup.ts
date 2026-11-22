@@ -1,26 +1,34 @@
 import { useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
+import { isActiveJobStatus } from "@/lib/backgroundJobs";
 import { getErrorMessage } from "@/lib/workshop";
-import { formatStorageCleanupResultToast } from "./helpers";
 import type { StorageCleanupRun } from "./types";
 
 export function useStorageCleanup() {
   const runs = useQuery(api.cleanupLog.lastRuns) as StorageCleanupRun[] | undefined;
-  // Acción y no mutación: cada pasada del almacén va en su propia transacción.
-  const runNow = useAction(api.storageCleanup.runNow);
-  const [running, setRunning] = useState(false);
+  const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
+  const startRunNow = useMutation(api.storageCleanup.startRunNow);
+  const [starting, setStarting] = useState(false);
+
+  const running =
+    starting ||
+    jobs.some((j) => j.type === "storage_cleanup" && isActiveJobStatus(j.status));
 
   const handleRunNow = async () => {
-    setRunning(true);
+    setStarting(true);
     try {
-      const result = await runNow();
-      toast.success(formatStorageCleanupResultToast(result));
+      const res = await startRunNow({});
+      toast.info(
+        res.reused
+          ? "Ya hay una limpieza de almacenamiento en curso."
+          : "Limpieza de almacenamiento iniciada en segundo plano.",
+      );
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setRunning(false);
+      setStarting(false);
     }
   };
 

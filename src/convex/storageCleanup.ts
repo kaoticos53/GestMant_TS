@@ -8,10 +8,13 @@ import { internal } from "./_generated/api";
 import type { Id, TableNames } from "./_generated/dataModel";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   type MutationCtx,
 } from "./_generated/server";
+import { createOrReuseJob } from "./backgroundJobs";
 import { cleanupActor, lastRun, recordCleanupRun } from "./cleanupLog";
 import { notifyUsers } from "./notify";
 import { coordinatorIds, requireCoordinator } from "./permissions";
@@ -497,5 +500,93 @@ export const runNow = action({
       runBy,
     });
     return { reportUploads, orphanFiles, trash };
+  },
+});
+
+/** Inicia la limpieza manual de almacenamiento en segundo plano. */
+export const startRunNow = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const actor = await requireCoordinator(
+      ctx,
+      "ejecutar la limpieza del almacén",
+    );
+    const runBy = cleanupActor(actor);
+    const { jobId, reused } = await createOrReuseJob(ctx, {
+      userId: actor._id,
+      type: "storage_cleanup",
+      title: "Limpieza de almacenamiento",
+      detail: "Analizando archivos huérfanos…",
+      dedupeKey: "storage_cleanup",
+    });
+    if (!reused) {
+      await ctx.scheduler.runAfter(0, internal.storageCleanup.runCleanupJob, {
+        jobId,
+        runBy,
+      });
+    }
+    return { jobId, reused };
+  },
+});
+
+/** Ejecuta las tres pasadas de limpieza en segundo plano y actualiza `backgroundJobs`. */
+export const runCleanupJob = internalAction({
+  args: { jobId: v.id("backgroundJobs"), runBy: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    const cancelled = await ctx.runQuery(internal.backgroundJobs.isCancelled, {
+      jobId: args.jobId,
+    });
+    if (cancelled) return;
+
+    await ctx.runMutation(internal.backgroundJobs.advanceProgress, {
+      jobId: args.jobId,
+      processed: 0,
+      total: 3,
+      detail: "Paso 1/3: limpiando imágenes sin usar del formulario…",
+    });
+
+    try {
+      const reportUploads = await ctx.runMutation(
+        internal.storageCleanup.runReportUploadsPass,
+        { runBy: args.runBy },
+      );
+      await ctx.runMutation(internal.backgroundJobs.advanceProgress, {
+        jobId: args.jobId,
+        processed: 1,
+        total: 3,
+        detail: "Paso 2/3: retirando archivos sin citar…",
+      });
+
+      const orphanFiles = await ctx.runMutation(
+        internal.storageCleanup.runOrphanFilesPass,
+        { runBy: args.runBy },
+      );
+      await ctx.runMutation(internal.backgroundJobs.advanceProgress, {
+        jobId: args.jobId,
+        processed: 2,
+        total: 3,
+        detail: "Paso 3/3: vaciando papelera caducada…",
+      });
+
+      const trash = await ctx.runMutation(internal.storageCleanup.runTrashPass, {
+        runBy: args.runBy,
+      });
+
+      const moved = reportUploads.files + orphanFiles.files;
+      await ctx.runMutation(internal.backgroundJobs.complete, {
+        jobId: args.jobId,
+        processed: 3,
+        total: 3,
+        detail: `${moved} a papelera, ${trash.files} purgado(s) de forma definitiva.`,
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.backgroundJobs.fail, {
+        jobId: args.jobId,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error al limpiar el almacenamiento.",
+      });
+    }
   },
 });
