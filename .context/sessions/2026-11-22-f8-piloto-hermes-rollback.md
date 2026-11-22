@@ -454,6 +454,18 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
   `recovered: true`: **880 filas**, `spareParts` 43, `incidents` 123,
   `CON-ALCO2` en 12 y la tabla de fotos vacía. El umbral volvió a su valor en el
   despliegue final.
+- Corte **después del último lote**: se desplegó `simulateCrashAfterInsert:
+  true` (revertido después). La acción insertó las 880 filas y se cortó antes
+  de retirar la foto; con eso la foto quedó en **3 trozos**, un solo `batch`,
+  `complete: 1` y `applied: 1`. Caducado el latido, la pasada devolvió
+  `recovered: false`: no revirtió nada, la tabla de fotos quedó vacía y el
+  taller siguió con la copia (**880 filas**, `spareParts` 43, la deriva
+  `CORTE-…` desaparecida). La auditoría dejó `workshop_backup_recover` con
+  `snapshotApplied: true`, `snapshotSavedBy` la administradora y
+  `totalRecords: 880`. Los puntos de ruptura volvieron a `false` y las funciones
+  temporales de inspección desaparecieron del deployment. El intento de activar
+  el fallo con una mutación no llegó a la acción —corre en otro isolate—, así
+  que se fijó en el código desplegado, como en el ensayo anterior.
 - `users` y `securityAuditLog` no se volvieron a contar aquí; la restauración no
   los toca (§8.2) y la comprobación previa escribe y revierte dentro de sus
   propias mutaciones.

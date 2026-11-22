@@ -73,7 +73,10 @@ actúan si el latido lleva más de treinta segundos parado, así que una foto
 antigua que sigue latiendo no se pisa. La foto se sella al escribir el último
 trozo: una foto sin sellar se descarta sin tocar el taller.
 `tests/rollbackRehearsal.test.ts` simula la muerte del backend
-(`backupFaults.simulateCrash`) y comprueba las dos vías. Handover §8.3/§8.4.
+(`backupFaults.simulateCrash`) y comprueba las dos vías. El corte ensayado en
+Docker justo después del último lote dejó 3 trozos con `appliedAt`; la pasada
+devolvió `recovered: false`, la auditoría quedó con `snapshotApplied: true` y el
+taller con la copia. Handover §8.3/§8.4.
 
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
