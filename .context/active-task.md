@@ -135,6 +135,13 @@ documentos que componen cada foto. No genera aviso en las pasadas sin
 intervención. Handover en
 `.context/sessions/2026-11-22-aviso-pasada-recuperacion.md`.
 
+El aviso se comprobó en la app local con una foto huérfana de tres documentos:
+la campana mostró «1 foto huérfana» sin cortes a 1280 y 390 px. Para desplegar
+el backend se corrigieron dos errores de tipos que `npx tsc --noEmit` no veía;
+la comprobación real es `npx tsc -b --noEmit` y
+`npx tsc -p src/convex/tsconfig.json --noEmit`. Capturas y detalle en el mismo
+handover.
+
 **Formato de copia v3 (2026-11-22):** el JSON interior sube a v3 para que un
 cliente que solo conoce v1/v2 rechace las copias nuevas en vez de restaurarlas
 sin sus archivos. La app nueva sigue leyendo y migrando v1 y v2, incluida una v2

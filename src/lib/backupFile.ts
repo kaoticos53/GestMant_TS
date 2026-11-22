@@ -22,6 +22,8 @@ const SALT_BYTES = 16;
 const IV_BYTES = 12;
 const SIGNING_DOMAIN = "pulso-taller-backup-file:v2:";
 
+type Bytes = Uint8Array<ArrayBuffer>;
+
 interface ProtectedBackupEnvelope {
   format: typeof BACKUP_FILE_FORMAT;
   version: typeof BACKUP_FILE_VERSION;
@@ -39,7 +41,7 @@ interface ProtectedBackupEnvelope {
 
 const encoder = new TextEncoder();
 
-function bytesToBase64(bytes: Uint8Array): string {
+function bytesToBase64(bytes: Bytes): string {
   let binary = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -48,7 +50,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function base64ToBytes(value: string): Uint8Array {
+function base64ToBytes(value: string): Bytes {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {
@@ -57,7 +59,7 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-async function gzip(value: string): Promise<Uint8Array> {
+async function gzip(value: string): Promise<Bytes> {
   if (typeof CompressionStream === "undefined") {
     throw new Error("Este navegador no puede comprimir la copia.");
   }
@@ -67,7 +69,7 @@ async function gzip(value: string): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-async function gunzip(bytes: Uint8Array): Promise<string> {
+async function gunzip(bytes: Bytes): Promise<string> {
   if (typeof DecompressionStream === "undefined") {
     throw new Error("Este navegador no puede descomprimir la copia.");
   }
@@ -79,7 +81,7 @@ async function gunzip(bytes: Uint8Array): Promise<string> {
 
 async function deriveKeys(
   passphrase: string,
-  salt: Uint8Array,
+  salt: Bytes,
   iterations: number,
 ): Promise<{ aes: CryptoKey; hmac: CryptoKey }> {
   const material = await crypto.subtle.importKey(
@@ -118,11 +120,7 @@ async function deriveKeys(
   return { aes, hmac };
 }
 
-function signedBytes(
-  salt: Uint8Array,
-  iv: Uint8Array,
-  payload: Uint8Array,
-): Uint8Array {
+function signedBytes(salt: Uint8Array, iv: Bytes, payload: Bytes): Bytes {
   const domain = encoder.encode(SIGNING_DOMAIN);
   const input = new Uint8Array(
     domain.length + salt.length + iv.length + payload.length,
@@ -275,7 +273,7 @@ export async function unlockBackup(
       "La frase no es correcta o el archivo está dañado. No se ha abierto la copia.",
     );
   }
-  let compressed: Uint8Array;
+  let compressed: Bytes;
   try {
     compressed = new Uint8Array(
       await crypto.subtle.decrypt({ name: "AES-GCM", iv }, aes, payload),

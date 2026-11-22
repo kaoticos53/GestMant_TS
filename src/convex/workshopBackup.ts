@@ -908,6 +908,7 @@ type BatchArgs = {
   table: BackupTableName;
   rowsJson: string;
   idMapJson: string;
+  storageIdMapJson: string;
 };
 
 /**

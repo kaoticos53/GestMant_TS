@@ -246,7 +246,7 @@ function decodedBase64Length(value: string): number | null {
 }
 
 /** Decodifica los bytes de un archivo de la copia; el parser ya los validó. */
-export function decodeBackupFile(data: string): Uint8Array {
+export function decodeBackupFile(data: string): Uint8Array<ArrayBuffer> {
   const binary = atob(data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) {

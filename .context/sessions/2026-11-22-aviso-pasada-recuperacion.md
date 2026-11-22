@@ -59,3 +59,14 @@ Cerrar el punto 8 del backlog de copias: **avisar a los administradores cuando l
 - La auditoría `workshop_backup_prune` guarda `photos` (lista de lotes) y `chunks` (número de documentos), sin campos ambiguos.
 - Prueba añadida en `tests/backupSnapshotCleanup.test.ts`: una foto anterior con tres documentos deja el aviso exacto en «1 foto huérfana», mientras la auditoría registra `photos: ["foto-en-trozos"]` y `chunks: 3`.
 - Verificación: `tsc`, Prettier y ESLint correctos; suite completa con **2 912 pruebas pasando**, 69 omitidas.
+
+---
+
+## Verificación visual de la campana (2026-11-22)
+
+- Se levantó la app con `npm start` y se sembró en el backend local una foto actual viva y una foto huérfana del mismo lote repartida en tres documentos (`seq` 0, 1 y 2).
+- `recoverInterruptedRestore` retiró los tres documentos y dejó una sola fila de aviso. La campana pasó de 3 a 4 sin leer y mostró el texto exacto: «La pasada de recuperación ha retirado 1 foto huérfana de restauraciones anteriores.», con «ahora mismo».
+- Revisado a 1280 px y a 390 px: el texto ocupa tres líneas, no se corta, no desborda el panel y el panel queda dentro del viewport. No hubo que corregir estilos.
+- Datos de prueba retirados: la foto actual se limpió con `clearSnapshot` y el aviso se quitó de `notifications`; la campana volvió a 3 sin leer.
+- Para que el observador pudiera desplegar se corrigieron dos errores de tipos que el `npx tsc --noEmit` raíz no veía por las referencias del proyecto: falta `storageIdMapJson` en `BatchArgs` y `Uint8Array<ArrayBuffer>` en `backup.ts`/`backupFile.ts`. Verificación real: `npx tsc -b --noEmit` y `npx tsc -p src/convex/tsconfig.json --noEmit`.
+- Capturas: `screenshot-campana.png` (escritorio) y `screenshot-campana-movil.png` (390 px).
