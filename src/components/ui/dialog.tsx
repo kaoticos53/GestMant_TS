@@ -95,7 +95,16 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      // La cruz de cerrar mide 44 y vive entre 8 y 52 px del borde derecho; el
+      // contenido del diálogo deja 24, así que un título largo asomaba por
+      // debajo de su zona de pulsación. La cabecera reserva 32 px a cada lado
+      // en móvil (56 > 52): el título parte antes en vez de meterse bajo el
+      // dedo. Va por los dos lados para que el título centrado siga centrado y
+      // en escritorio no cambie nada.
+      className={cn(
+        "flex flex-col gap-2 px-8 text-center sm:px-0 sm:text-left",
+        className
+      )}
       {...props}
     />
   )
