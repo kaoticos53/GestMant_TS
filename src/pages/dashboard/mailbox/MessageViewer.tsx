@@ -7,7 +7,7 @@ import {
   formatFileSize,
   getErrorMessage,
 } from "@/lib/workshop";
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -18,10 +18,16 @@ import {
   Paperclip,
   RefreshCw,
   Share2,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import {
+  MAIL_TAG_IDS,
+  MAIL_TAG_META,
+  type MailTagId,
+} from "@/lib/mailClient/tagging";
 import { HtmlFrame } from "./HtmlFrame";
 import { ShareMailDialog } from "./ShareMailDialog";
 import { senderLabel } from "./helpers";
@@ -53,6 +59,8 @@ export function MessageViewer({
 }) {
   const openMessage = useAction(api.mailBody.open);
   const downloadAttachment = useAction(api.mailAttachments.download);
+  const setMessageTags = useMutation(api.mailTagging.setMessageTags);
+  const analyzeWithBody = useAction(api.mailTaggingActions.analyzeMessageWithBody);
   const [opened, setOpened] = useState<OpenedMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +68,32 @@ export function MessageViewer({
   const [mode, setMode] = useState<ViewMode>("html");
   const [downloading, setDownloading] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [analyzingTags, setAnalyzingTags] = useState(false);
+
+  const currentTags = (header.tags ?? []) as MailTagId[];
+
+  const handleToggleTag = async (tagId: MailTagId) => {
+    const next = currentTags.includes(tagId)
+      ? currentTags.filter((t) => t !== tagId)
+      : [...currentTags, tagId].slice(0, 3);
+    try {
+      await setMessageTags({ messageId: header.messageId, tags: next });
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleAnalyzeWithBody = async () => {
+    setAnalyzingTags(true);
+    try {
+      const res = await analyzeWithBody({ messageId: header.messageId });
+      toast.success(`Etiquetado con cuerpo: ${res.reason}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setAnalyzingTags(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +187,52 @@ export function MessageViewer({
           <X className="size-4" />
         </Button>
       </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-muted/15 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {MAIL_TAG_IDS.map((tagId) => {
+            const meta = MAIL_TAG_META[tagId];
+            const active = currentTags.includes(tagId);
+            return (
+              <button
+                key={tagId}
+                type="button"
+                aria-pressed={active}
+                title={
+                  active && header.tagReason
+                    ? `${meta.label}: ${header.tagReason}`
+                    : meta.description
+                }
+                onClick={() => void handleToggleTag(tagId)}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  active
+                    ? meta.badgeClassName
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-[11px]"
+          disabled={analyzingTags}
+          onClick={() => void handleAnalyzeWithBody()}
+          title="Reanalizar el correo completo con DeepSeek"
+        >
+          {analyzingTags ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Sparkles className="size-3" />
+          )}
+          Reanalizar con cuerpo
+        </Button>
+      </div>
 
       <ShareMailDialog
         messageId={header.messageId}

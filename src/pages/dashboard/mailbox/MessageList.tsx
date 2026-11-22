@@ -1,6 +1,8 @@
 import { ListArea } from "@/components/ListArea";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useVirtualRows } from "@/hooks/use-virtual-rows";
+import { MAIL_TAG_META, type MailTagId } from "@/lib/mailClient/tagging";
 import { cn } from "@/lib/utils";
 import { Loader2, MailOpen, Paperclip, RefreshCw, SearchX } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -185,6 +187,24 @@ export function MessageList({
                   <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-muted-foreground">
                     {header.snippet}
                   </p>
+                )}
+                {header.tags && header.tags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {header.tags.map((tagId) => {
+                      const meta = MAIL_TAG_META[tagId as MailTagId];
+                      if (!meta) return null;
+                      return (
+                        <Badge
+                          key={tagId}
+                          variant="outline"
+                          title={header.tagReason ?? meta.description}
+                          className={cn("h-4 px-1.5 text-[10px]", meta.badgeClassName)}
+                        >
+                          {meta.label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
                 )}
                 {unread && <span className="sr-only">Sin leer</span>}
               </div>

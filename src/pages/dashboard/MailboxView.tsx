@@ -2,6 +2,11 @@ import { TablePagination } from "@/components/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/convex/_generated/api";
+import {
+  MAIL_TAG_IDS,
+  MAIL_TAG_META,
+  type MailTagId,
+} from "@/lib/mailClient/tagging";
 import { pageWindow } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import { formatDateTime, getErrorMessage } from "@/lib/workshop";
@@ -22,6 +27,7 @@ import {
   Send,
   Settings2,
   ShieldAlert,
+  Sparkles,
   Trash2,
   WifiOff,
 } from "lucide-react";
@@ -80,14 +86,17 @@ export function MailboxView({
   const account = useQuery(api.mailAccounts.account);
   const folders = useQuery(api.mailAccounts.folders, {});
   const syncNow = useAction(api.mailSync.syncNow);
+  const autoTagFolder = useAction(api.mailTaggingActions.autoTagFolder);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<MailTagId | "all">("all");
   const [mobilePane, setMobilePane] = useState<MobilePane>("folders");
   const [selectedMessage, setSelectedMessage] = useState<MailboxHeader | null>(
     null,
   );
   const [syncing, setSyncing] = useState(false);
+  const [tagging, setTagging] = useState(false);
   const [pageState, setPageState] = useState<PageState>({
     key: "",
     page: 1,
@@ -98,7 +107,7 @@ export function MailboxView({
     folders?.[0] ??
     null;
   const activeFolderId = activeFolder?.remoteId ?? null;
-  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}`;
+  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}|${tagFilter}`;
 
   // Al cambiar de carpeta o de búsqueda se vuelve a la primera página en el
   // mismo render. Así la consulta siguiente ya pide `offset: 0` y no llega a
@@ -115,6 +124,7 @@ export function MailboxView({
       ? {
           folderRemoteId: activeFolderId,
           search: search.trim() || undefined,
+          tag: tagFilter === "all" ? undefined : tagFilter,
           limit: MAILBOX_PAGE_SIZE,
           offset: (page - 1) * MAILBOX_PAGE_SIZE,
         }
@@ -151,6 +161,25 @@ export function MailboxView({
   const handleCloseMessage = () => {
     setSelectedMessage(null);
     setMobilePane("messages");
+  };
+
+  const handleAutoTag = async () => {
+    if (!activeFolderId) return;
+    setTagging(true);
+    try {
+      const res = await autoTagFolder({ folderRemoteId: activeFolderId });
+      if (res.processed === 0) {
+        toast.info("No hay mensajes pendientes de etiquetar en esta carpeta.");
+      } else {
+        toast.success(
+          `Etiquetados ${res.processed} mensajes (${res.byRule} por regla, ${res.byAiHeaders} por cabecera, ${res.byAiBody} con cuerpo).`,
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setTagging(false);
+    }
   };
 
   const handleSync = async () => {
@@ -257,7 +286,25 @@ export function MailboxView({
                     </p>
                   </div>
                   <div className="flex w-full items-center gap-2 sm:w-auto">
-                    <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 gap-1.5 text-xs"
+                      disabled={tagging}
+                      onClick={() => void handleAutoTag()}
+                      title="Clasificar correos sin etiqueta usando reglas rápidas y DeepSeek"
+                    >
+                      {tagging ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3.5" />
+                      )}
+                      <span className="hidden sm:inline">
+                        {tagging ? "Etiquetando..." : "Autoetiquetar"}
+                      </span>
+                    </Button>
+                    <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none">
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={search}
@@ -288,6 +335,43 @@ export function MailboxView({
                       </span>
                     </Button>
                   </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1 border-b border-border/60 bg-muted/15 px-3 py-1.5 sm:px-4">
+                  <button
+                    type="button"
+                    onClick={() => setTagFilter("all")}
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                      tagFilter === "all"
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Todas
+                  </button>
+                  {MAIL_TAG_IDS.map((tagId) => {
+                    const meta = MAIL_TAG_META[tagId];
+                    const active = tagFilter === tagId;
+                    return (
+                      <button
+                        key={tagId}
+                        type="button"
+                        onClick={() =>
+                          setTagFilter((prev) =>
+                            prev === tagId ? "all" : tagId,
+                          )
+                        }
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          active
+                            ? meta.badgeClassName
+                            : "border-border bg-background text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {meta.label}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <MailboxAlert
