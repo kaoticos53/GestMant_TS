@@ -41,15 +41,17 @@ describe("MailboxTagRulesCard (Fase 4)", () => {
     const mockToggle = vi.fn().mockResolvedValue(undefined);
     const mockDelete = vi.fn().mockResolvedValue(undefined);
     const mockReorder = vi.fn().mockResolvedValue(undefined);
+    const mockReapply = vi.fn().mockResolvedValue({ scanned: 10, updated: 3 });
 
     let mutIdx = 0;
     mockUseMutation.mockImplementation(() => {
       mutIdx += 1;
-      const mod = mutIdx % 4;
+      const mod = mutIdx % 5;
       if (mod === 1) return mockSave;
       if (mod === 2) return mockToggle;
       if (mod === 3) return mockDelete;
-      return mockReorder;
+      if (mod === 4) return mockReorder;
+      return mockReapply;
     });
 
     mockUseQuery.mockReturnValue([

@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Pencil,
   Plus,
+  RefreshCw,
   Sparkles,
   Tag,
   Trash2,
@@ -48,6 +49,7 @@ export function MailboxTagRulesCard() {
   const toggleRule = useMutation(api.mailTagging.toggleRule);
   const deleteRule = useMutation(api.mailTagging.deleteRule);
   const reorderRules = useMutation(api.mailTagging.reorderRules);
+  const reapplyRules = useMutation(api.mailTagging.reapplyRulesToAccount);
 
   const [editorState, setEditorState] = useState<{
     open: boolean;
@@ -92,6 +94,20 @@ export function MailboxTagRulesCard() {
     }
   };
 
+  const handleReapply = async () => {
+    setBusy(true);
+    try {
+      const res = await reapplyRules({});
+      toast.success(
+        `Reglas aplicadas: ${res.updated} mensajes actualizados de ${res.scanned} revisados.`,
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mt-4 grid gap-3 rounded-lg border border-border/60 px-3 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -104,16 +120,32 @@ export function MailboxTagRulesCard() {
             DeepSeek automáticamente.
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 gap-1.5 text-xs"
-          onClick={() => setEditorState({ open: true, rule: null })}
-        >
-          <Plus className="size-3.5" />
-          Nueva regla
-        </Button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {rules && rules.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => void handleReapply()}
+              title="Reevaluar correos existentes (no manuales) con las reglas activas"
+            >
+              <RefreshCw className="size-3.5" />
+              Reaplicar reglas
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setEditorState({ open: true, rule: null })}
+          >
+            <Plus className="size-3.5" />
+            Nueva regla
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">

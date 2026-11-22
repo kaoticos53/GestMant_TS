@@ -97,6 +97,7 @@ export function MailboxView({
   );
   const [syncing, setSyncing] = useState(false);
   const [tagging, setTagging] = useState(false);
+  const [taggingCount, setTaggingCount] = useState(0);
   const [pageState, setPageState] = useState<PageState>({
     key: "",
     page: 1,
@@ -166,19 +167,35 @@ export function MailboxView({
   const handleAutoTag = async () => {
     if (!activeFolderId) return;
     setTagging(true);
+    setTaggingCount(0);
+    let totalProcessed = 0;
+    let totalRule = 0;
+    let totalAiHeaders = 0;
+    let totalAiBody = 0;
     try {
-      const res = await autoTagFolder({ folderRemoteId: activeFolderId });
-      if (res.processed === 0) {
+      for (let round = 0; round < 20; round += 1) {
+        const res = await autoTagFolder({ folderRemoteId: activeFolderId });
+        totalProcessed += res.processed;
+        totalRule += res.byRule;
+        totalAiHeaders += res.byAiHeaders;
+        totalAiBody += res.byAiBody;
+        setTaggingCount(totalProcessed);
+        if (res.remainingAiPending <= 0 || res.processed === 0) {
+          break;
+        }
+      }
+      if (totalProcessed === 0) {
         toast.info("No hay mensajes pendientes de etiquetar en esta carpeta.");
       } else {
         toast.success(
-          `Etiquetados ${res.processed} mensajes (${res.byRule} por regla, ${res.byAiHeaders} por cabecera, ${res.byAiBody} con cuerpo).`,
+          `Etiquetados ${totalProcessed} mensajes (${totalRule} por regla, ${totalAiHeaders} por cabecera, ${totalAiBody} con cuerpo).`,
         );
       }
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
       setTagging(false);
+      setTaggingCount(0);
     }
   };
 
@@ -301,7 +318,11 @@ export function MailboxView({
                         <Sparkles className="size-3.5" />
                       )}
                       <span className="hidden sm:inline">
-                        {tagging ? "Etiquetando..." : "Autoetiquetar"}
+                        {tagging
+                          ? taggingCount > 0
+                            ? `Etiquetando (${taggingCount})...`
+                            : "Etiquetando..."
+                          : "Autoetiquetar"}
                       </span>
                     </Button>
                     <div className="relative min-w-0 flex-1 sm:w-56 sm:flex-none">

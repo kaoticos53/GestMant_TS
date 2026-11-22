@@ -158,6 +158,7 @@ describe("mailTaggingActions — motor híbrido 2 etapas (Fase 3)", () => {
       byRule: 1,
       byAiHeaders: 1,
       byAiBody: 1,
+      remainingAiPending: 0,
     });
     expect(mockCallDeepSeekJson).toHaveBeenCalledTimes(2);
 

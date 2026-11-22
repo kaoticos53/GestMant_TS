@@ -100,13 +100,20 @@ export const autoTagFolder = action({
     byRule: number;
     byAiHeaders: number;
     byAiBody: number;
+    remainingAiPending: number;
   }> => {
     const context = await ctx.runQuery(internal.mailTagging.triageContext, {
       folderRemoteId: args.folderRemoteId,
-      limit: args.limit ?? MAX_BATCH_HEADERS,
+      limit: args.limit ?? 500,
     });
     if (!context || context.candidates.length === 0) {
-      return { processed: 0, byRule: 0, byAiHeaders: 0, byAiBody: 0 };
+      return {
+        processed: 0,
+        byRule: 0,
+        byAiHeaders: 0,
+        byAiBody: 0,
+        remainingAiPending: 0,
+      };
     }
 
     const rules: MailTagRule[] = context.rules.map((r) => ({
@@ -146,6 +153,7 @@ export const autoTagFolder = action({
 
     let byAiHeaders = 0;
     let byAiBody = 0;
+    let remainingAiPending = 0;
 
     if (remainingForAi.length > 0) {
       const aiConfig = await ctx.runQuery(internal.aiSettings.resolved, {});
@@ -160,6 +168,7 @@ export const autoTagFolder = action({
       } else {
         const taskCfg = aiConfig.taskParams.mail_triage;
         const batch = remainingForAi.slice(0, MAX_BATCH_HEADERS);
+        remainingAiPending = Math.max(0, remainingForAi.length - batch.length);
         const validIds = new Set(batch.map((c) => c.messageId));
 
         // Etapa 1: DeepSeek por cabeceras en lote
@@ -229,7 +238,7 @@ export const autoTagFolder = action({
             }
           }
 
-          if (pred && pred.tags.length > 0) {
+          if (pred) {
             itemsToSave.push({
               messageId: candidate.messageId,
               tags: pred.tags,
@@ -237,7 +246,15 @@ export const autoTagFolder = action({
               tagConfidence: pred.confidence,
               tagReason: pred.reason,
             });
-            byAiHeaders += 1;
+            if (pred.tags.length > 0) byAiHeaders += 1;
+          } else {
+            itemsToSave.push({
+              messageId: candidate.messageId,
+              tags: [],
+              tagSource: "ai_headers",
+              tagConfidence: 0,
+              tagReason: "Sin etiqueta clara",
+            });
           }
         }
       }
@@ -256,6 +273,7 @@ export const autoTagFolder = action({
       byRule: itemsToSave.filter((i) => i.tagSource === "rule").length,
       byAiHeaders,
       byAiBody,
+      remainingAiPending,
     };
   },
 });

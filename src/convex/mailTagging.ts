@@ -6,6 +6,7 @@ import {
   query,
 } from "./_generated/server";
 import {
+  evaluateMailTagRules,
   ruleMatchesHeader,
   sanitizeMailTags,
   type MailTagRule,
@@ -299,10 +300,10 @@ export const triageContext = internalQuery({
       .filter((h) => {
         if (h.deletedRemoteAt !== undefined) return false;
         if (targetSet) return targetSet.has(h.messageId);
-        return h.tagSource !== "manual" && (!h.tags || h.tags.length === 0);
+        return h.tagSource !== "manual" && h.taggedAt === undefined;
       })
       .sort((a, b) => b.date - a.date)
-      .slice(0, Math.min(40, Math.max(1, args.limit ?? 20)));
+      .slice(0, Math.min(500, Math.max(1, args.limit ?? 500)));
 
     const cachedBodies: Record<string, string> = {};
     for (const header of candidates) {
@@ -387,5 +388,72 @@ export const applyTriageResults = internalMutation({
       updated += 1;
     }
     return updated;
+  },
+});
+
+/**
+ * Reaplica las reglas rápidas activas a todos los correos no manuales del buzón
+ * (útil tras crear o modificar una regla en Ajustes). Consume 0 tokens.
+ */
+export const reapplyRulesToAccount = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireMailboxMember(ctx);
+    const account = await readAccount(ctx, user._id);
+    if (!account) {
+      return { scanned: 0, updated: 0 };
+    }
+
+    const rules: MailTagRule[] = (
+      await ctx.db
+        .query("mailTagRules")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect()
+    )
+      .sort((a, b) => a.priority - b.priority)
+      .map((r) => ({
+        id: r._id,
+        name: r.name,
+        enabled: r.enabled,
+        priority: r.priority,
+        matchMode: r.matchMode,
+        conditions: r.conditions,
+        tags: r.tags as MailTagRule["tags"],
+      }));
+
+    const headers = await ctx.db
+      .query("mailHeaders")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .collect();
+
+    const now = Date.now();
+    let scanned = 0;
+    let updated = 0;
+    for (const h of headers) {
+      if (h.deletedRemoteAt !== undefined || h.tagSource === "manual") continue;
+      scanned += 1;
+      const match = evaluateMailTagRules(
+        {
+          messageId: h.messageId,
+          subject: h.subject,
+          fromName: h.fromName,
+          fromAddress: h.fromAddress,
+          snippet: h.snippet,
+          hasAttachments: h.hasAttachments,
+        },
+        rules,
+      );
+      if (match) {
+        await ctx.db.patch(h._id, {
+          tags: match.tags,
+          tagSource: "rule",
+          tagConfidence: 1,
+          tagReason: match.reason,
+          taggedAt: now,
+        });
+        updated += 1;
+      }
+    }
+    return { scanned, updated };
   },
 });
