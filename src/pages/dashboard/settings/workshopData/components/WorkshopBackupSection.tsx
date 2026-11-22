@@ -33,6 +33,9 @@ export function WorkshopBackupSection() {
   const restoreBackup = useAction(api.workshopBackup.restoreBackup);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // El botón ya se deshabilita al empezar, pero el pestillo evita que dos
+  // pulsaciones seguidas —antes de que React repinte— lancen dos restauraciones.
+  const restoreInFlight = useRef(false);
   const [exporting, setExporting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [pendingRawJson, setPendingRawJson] = useState<string | null>(null);
@@ -100,9 +103,11 @@ export function WorkshopBackupSection() {
   };
 
   const handleConfirmRestore = async () => {
+    if (restoreInFlight.current) return;
     if (!pendingRawJson || confirmPhrase.trim() !== RESTORE_CONFIRM_WORD) {
       return;
     }
+    restoreInFlight.current = true;
     setRestoring(true);
     try {
       const res = await restoreBackup({ rawJson: pendingRawJson });
@@ -113,6 +118,7 @@ export function WorkshopBackupSection() {
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
+      restoreInFlight.current = false;
       setRestoring(false);
     }
   };
@@ -201,7 +207,14 @@ export function WorkshopBackupSection() {
                 </p>
               </div>
 
-              {restoreLevel === "normal" ? (
+              {restoring ? (
+                <InlineNotice tone="info">
+                  <span>
+                    Restaurando la copia… No cierres la pestaña; puede tardar
+                    unos {restoreSeconds} s.
+                  </span>
+                </InlineNotice>
+              ) : restoreLevel === "normal" ? (
                 <p className="text-muted-foreground">
                   Restauración estimada: unos {restoreSeconds} s.
                 </p>

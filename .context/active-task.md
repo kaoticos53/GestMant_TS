@@ -54,7 +54,9 @@ con 3 465 filas, 0,35 s y 4,5 s. El aviso de la pantalla tiene sentido a partir
 de ~2,5–3 MB (unas 3 000 filas), no antes. Ya está en la pantalla: el diálogo de
 confirmación muestra tamaño y tiempo estimado (`estimateRestoreSeconds`), con
 aviso desde 3 000 filas y aviso reforzado desde 6 000, sin tocar la palabra
-`RESTAURAR` ni los nombres accesibles.
+`RESTAURAR` ni los nombres accesibles. Mientras restaura, el diálogo lo dice
+(«Restaurando la copia…»), deshabilita botón y campo, y un pestillo evita lanzar
+una segunda restauración desde otra pulsación.
 
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en

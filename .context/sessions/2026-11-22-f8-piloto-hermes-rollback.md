@@ -427,8 +427,12 @@ diálogo de confirmación enseña siempre el tamaño del archivo y el tiempo
 estimado; a partir de **3 000 filas (~2,9 MB, ~6 s)** aparece un aviso de «copia
 voluminosa» y a partir de **6 000 filas (~5,5 MB, ~12 s)** uno reforzado de
 «copia grande». Con la muestra normal (880 filas, 0,6 MB, ~1,5 s) solo sale la
-línea discreta. El taller de este deployment son 880 filas: el umbral está muy
-por encima de lo que hay hoy.
+línea discreta. Mientras la restauración dura, el aviso pasa a «Restaurando la
+copia… No cierres la pestaña», el botón y el campo quedan deshabilitados y un
+pestillo (`restoreInFlight`) impide lanzar una segunda; la palabra `RESTAURAR`
+no se borra, así que si falla se puede reintentar sin volver a escribirla. El
+taller de este deployment son 880 filas: el umbral está muy por encima de lo
+que hay hoy.
 
 El ensayo se hizo con un script temporal (borrado) y el taller quedó devuelto a
 la copia de partida: 880 filas, mismos recuentos tabla a tabla que §8.2 más

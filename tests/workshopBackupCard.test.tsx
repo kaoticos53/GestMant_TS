@@ -247,4 +247,95 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     expect(document.body.textContent).toContain("Copia grande");
     expect(document.body.textContent).toContain("unos 13 s o más");
   });
+
+  it("no lanza dos restauraciones y muestra el progreso mientras dura", async () => {
+    await act(async () => {
+      root.render(<WorkshopBackupSection />);
+    });
+    await settle();
+
+    let finishRestore:
+      | ((value: { restoredRecords: number; exportedAt: number }) => void)
+      | null = null;
+    restoreMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRestore = resolve;
+        }),
+    );
+
+    const validJson = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: 1_700_000_000_000,
+      exportedBy: "admin@taller.es",
+      tables: {
+        equipment: [{ _id: "e1", name: "Cam", model: "M1" }],
+      },
+    });
+    const input =
+      container.querySelector<HTMLInputElement>("input[type='file']");
+    const file = new File([validJson], "backup.json", {
+      type: "application/json",
+    });
+    Object.defineProperty(file, "text", {
+      value: async () => validJson,
+    });
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
+    await act(async () => {
+      input?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+
+    const confirmInput = document.body.querySelector<HTMLInputElement>(
+      "#restore-confirm-input",
+    );
+    await act(async () => {
+      if (confirmInput) {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(confirmInput, "RESTAURAR");
+        confirmInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    const restoreBtn = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((b) => b.textContent?.includes("Restaurar copia")) as
+      HTMLButtonElement | undefined;
+    expect(restoreBtn).not.toBeUndefined();
+
+    await act(async () => {
+      restoreBtn?.click();
+    });
+    await settle();
+
+    // Mientras dura: una sola llamada, botón deshabilitado, progreso a la vista
+    // y la palabra de confirmación intacta (si falla, se puede reintentar).
+    expect(restoreMock).toHaveBeenCalledTimes(1);
+    expect(restoreBtn?.disabled).toBe(true);
+    expect(document.body.textContent).toContain("Restaurando la copia");
+    expect(confirmInput?.value).toBe("RESTAURAR");
+    expect(confirmInput?.disabled).toBe(true);
+
+    await act(async () => {
+      restoreBtn?.click();
+    });
+    await settle();
+    expect(restoreMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      finishRestore?.({ restoredRecords: 1, exportedAt: 1_700_000_000_000 });
+    });
+    await settle();
+    expect(document.body.textContent).not.toContain(
+      "Confirmar restauración de copia",
+    );
+    expect(mockToastSuccess).toHaveBeenCalled();
+  });
 });
