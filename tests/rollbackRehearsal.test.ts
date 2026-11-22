@@ -248,4 +248,32 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(actions).toContain("workshop_backup_export");
     expect(actions).toContain("workshop_backup_restore");
   });
+
+  test("una copia que el esquema rechaza a mitad no toca el taller", async () => {
+    const t = backend();
+    const { admin } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+    const before = await tableCounts(t);
+
+    // La copia llega estropeada a mitad: al rastro de un adjunto retirado le
+    // falta `documentId`, que el esquema exige. Es el fallo que dejó el taller a
+    // medias cuando la restauración vaciaba antes de insertar.
+    const payload = JSON.parse(exported.rawJson) as {
+      tables: Record<string, Array<Record<string, unknown>>>;
+    };
+    delete payload.tables.incidentDocumentLog?.[0]?.documentId;
+
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: JSON.stringify(payload),
+      }),
+    ).rejects.toThrow(/taller sigue como estaba/);
+
+    // Nada se vació ni se reescribió: los recuentos son los de antes de
+    // intentarlo, y la copia de correo conserva su cuerpo y su modo original.
+    expect(await tableCounts(t)).toEqual(before);
+    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(shares[0]?.mode).toBe("original");
+    expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
+  });
 });

@@ -41,6 +41,13 @@ La PWA ya no se recarga sola: con `registerType: "prompt"` la compilación nueva
 espera y el aviso dice qué build sirve la pestaña, para no depurar una interfaz
 vieja. Handover en `.context/sessions/2026-11-22-aviso-version-nueva.md`.
 
+La restauración de copias ya no vacía el taller antes de saber si la copia vale:
+recorre la copia entera en seco —cada lote se inserta y se revierte— y solo
+después borra e inserta. Una copia que el esquema rechaza a mitad se detiene con
+el taller intacto (medido contra el backend de Docker: rechazo en 155 ms, 880
+filas antes y después, `CON-ALCO2` en 12). Handover en
+`.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md` (§8.3).
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

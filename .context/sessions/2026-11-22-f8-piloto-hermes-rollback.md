@@ -156,14 +156,19 @@ esta sesión: aquí no hay credenciales de Hermes ni cuentas reales.
 que usa la pantalla de Ajustes, no una copia de la lógica:
 
 1. Siembra un taller: 2 equipos, 1 repuesto con su movimiento de stock, 1
-   incidencia y 1 copia de correo `original` con cuerpo, adjunto y `.eml`.
+   incidencia, 1 copia de correo `original` con cuerpo, adjunto y `.eml`, y el
+   rastro de un adjunto retirado (una fila de `incidentDocumentLog` cuyo
+   documento ya no existe).
 2. Exporta con `workshopBackup.exportBackup` y guarda `summary.tableCounts`.
 3. Deja que el taller cambie: un repuesto nuevo y el stock del existente a 999.
 4. Restaura con `workshopBackup.restoreBackup` y vuelve a contar **todas** las
    tablas de `BACKUP_TABLES`.
 5. Compara recuento por recuento, comprueba que lo posterior a la copia
    desapareció, que la copia de correo vuelve como `summary` sin cuerpo,
-   adjuntos ni `.eml`, y que `securityAuditLog` conserva su historia.
+   adjuntos ni `.eml`, que el rastro del adjunto retirado vuelve con su
+   `documentId` histórico y que `securityAuditLog` conserva su historia.
+6. Repite con una copia estropeada a propósito (sin `documentId`): la
+   restauración se niega antes de vaciar y los recuentos siguen iguales.
 
 ### 5.2 Cómo se replica en un deployment de banco de pruebas (pendiente de ejecutar)
 
@@ -217,21 +222,22 @@ tabla                  copia  antes  deriva  después
 equipment                  2      2       2        2
 spareParts                 1      1       2        1
 incidents                  1      1       1        1
+incidentDocumentLog        1      1       1        1
 mailShares                 1      1       1        1
 stockMovements             1      1       2        1
-total filas de la copia: 6 · restauradas: 6 · 3 ms
+total filas de la copia: 7 · restauradas: 7 · 4 ms
 ```
 
-- Recuentos por tabla idénticos a la copia tras restaurar: **5 tablas, 6 filas**.
+- Recuentos por tabla idénticos a la copia tras restaurar: **6 tablas, 7 filas**.
 - Lo creado después de la copia desaparece (repuesto `EXTRA-999`) y el stock
   tocado (999) vuelve a 10.
 - Copia de correo restaurada como `summary`, con `backupRestored: true` y **sin**
   `bodyText`, `attachments` ni `emlStorageId`.
 - `securityAuditLog` conserva `workshop_backup_export` y
   `workshop_backup_restore` después del vaciado.
-- Restauración completa medida en **3 ms** para 6 filas: es el deployment en
+- Restauración completa medida en **2–4 ms** para 7 filas: es el deployment en
   memoria del test, **no** una cifra de producción. La medida de verdad, contra
-  el backend de Docker, está en §8 (879 filas, ~1,2 s).
+  el backend de Docker, está en §8 (880 filas; ~1,5 s con la comprobación previa).
 
 Estado de la validación automática en esta sesión: `npx tsc --noEmit` sin
 errores, `eslint` sin avisos en el ensayo, suite completa **2871 pruebas en 272
@@ -294,7 +300,8 @@ descuadraría el recuento de `incidentDocumentLog` respecto a la copia; sanearla
 no es posible, porque el esquema exige el campo y un id inventado apuntaría a
 otro documento. `tests/rollbackRehearsal.test.ts` siembra ese adjunto retirado y
 comprueba que el rastro vuelve con su `documentId` de origen (7 filas en
-memoria, antes 6).
+memoria, antes 6). La restauración, además, ya no puede llegar a ese estado:
+antes de vaciar comprueba la copia entera (§8.3).
 
 ### 8.2 Recuentos por tabla, contra el backend de Docker
 
@@ -334,16 +341,48 @@ copia 614,0 KB
   `workshop_backup_restore` (22 → 35).
 - **Cifra para el handover: ~1,2 s y 879 filas / 614 KB** en este equipo, contra
   el deployment de Docker en la misma máquina. Sustituye a los «3 ms / 6 filas»
-  en memoria, que solo valen para el test.
+  en memoria, que solo valen para el test. (Después se añadió la comprobación
+  previa: ~1,4–1,5 s, §8.3.)
 
-### 8.3 Riesgos que siguen
+### 8.3 Restauración a prueba de copias rotas (2026-11-22, misma tarde)
 
-- ⚠️ **Un fallo a mitad de la restauración deja el taller a medias.** Se vacía
-  primero y se inserta después, tanda a tanda y en mutaciones separadas (visto en
-  §8.1: el taller quedó sin peticiones ni movimientos). El arreglo quita la
-  causa conocida, pero no cambia el orden. Si se quiere blindar, hay que validar
-  la copia entera antes de vaciar nada, o dejar la copia actual a mano antes de
-  restaurar.
+`restoreBackup` recorre ahora la copia entera **en seco** antes de borrar nada:
+
+1. Cada lote pasa por el mismo código que lo inserta (`insertBackupRows`), pero
+   desde `checkTableBatch`, que lanza al final para que Convex revierta el lote
+   entero —también la traza `mail_share_restore_skip`—. Nada queda escrito.
+2. El remapeo del lote viaja en el error (`ConvexError.data`), que es la única
+   salida de una mutación deshecha; sin él, los lotes siguientes borrarían
+   referencias que sí existen en la copia.
+3. Solo si pasan las 29 tablas de la copia se vacía y se inserta. Si un lote
+   falla, el error llega con el detalle del esquema y el taller sigue como
+   estaba.
+
+Medido contra el mismo deployment de Docker, dos vueltas:
+
+- `differing: []` en las 29 tablas de `BACKUP_TABLES`; idénticos a la copia tras
+  restaurar las dos veces. Total **880 filas** (las de §8.2 más `publicStats`,
+  que allí no estaba en la tabla), 614 KB.
+- Export 135 ms / 48 ms · deriva 57 ms / 51 ms · **restauración 1409 ms /
+  1506 ms** (antes 1226 / 1223 ms): el recorrido en seco cuesta más o menos lo
+  mismo que la inserción.
+- Copia estropeada a propósito (se le quita `documentId` a una fila de
+  `incidentDocumentLog`): rechazada en **155 ms** con «La copia no se ha
+  restaurado y el taller sigue como estaba: …» y el detalle del esquema detrás.
+  Recuentos antes y después idénticos (880 filas) y `CON-ALCO2` sigue en 12. Ese
+  mismo fallo, en §8.1, dejó el taller vacío a medias.
+- `users` y `securityAuditLog` no se volvieron a contar aquí; la restauración no
+  los toca (§8.2) y la comprobación previa escribe y revierte dentro de sus
+  propias mutaciones.
+
+### 8.4 Riesgos que siguen
+
+- ⚠️ **Si la acción se corta a mitad de la inserción, no hay vuelta atrás.** La
+  comprobación previa cierra el caso de §8.1 —una copia que el esquema rechaza ya
+  no llega a vaciar nada—, pero si el proceso muere o el backend corta entre el
+  vaciado y el último lote, el taller queda a medias. Cerrarlo del todo pediría
+  guardar el estado previo y recuperarlo, o poder escribir la copia nueva junto a
+  la vieja. Mientras tanto: copia a mano antes de restaurar en producción.
 - `mailShares` **no se ha podido probar con datos reales** (0 filas: sin buzón
   sincronizado en este deployment). Su comportamiento está cubierto en memoria
   por el test, incluida la omisión con traza `mail_share_restore_skip`.
