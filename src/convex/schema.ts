@@ -1817,6 +1817,25 @@ const schema = defineSchema({
     createdBy: v.id("users"),
     createdAt: v.number(),
   }).index("by_active", ["active"]),
+
+  // Trabajos largos ejecutados en segundo plano mediante ctx.scheduler.
+  backgroundJobs: defineTable({
+    userId: v.id("users"),
+    type: v.string(),
+    title: v.string(),
+    status: v.string(),
+    processed: v.number(),
+    total: v.optional(v.number()),
+    detail: v.optional(v.string()),
+    error: v.optional(v.string()),
+    dedupeKey: v.optional(v.string()),
+    resultStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_user_updated", ["userId", "updatedAt"])
+    .index("by_dedupe", ["dedupeKey", "status"]),
 });
 
 export default schema;

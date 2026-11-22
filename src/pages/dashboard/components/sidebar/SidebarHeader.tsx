@@ -1,5 +1,6 @@
 import logo from "@/assets/logo.svg";
 import { WorkshopAiChatButton } from "@/components/ai/WorkshopAiChatButton";
+import { BackgroundJobsIndicator } from "@/components/jobs/BackgroundJobsIndicator";
 import { MessagesCenter } from "@/components/MessagesCenter";
 import { NotificationBell } from "@/components/NotificationBell";
 import type { SidebarHeaderProps } from "./types";
@@ -26,6 +27,7 @@ export function SidebarHeader({
       <div className="flex items-center gap-1.5">
         <NotificationBell onOpen={onOpenNotification} />
         <MessagesCenter canSend={canSendMessages} />
+        <BackgroundJobsIndicator />
         <WorkshopAiChatButton />
       </div>
     </div>

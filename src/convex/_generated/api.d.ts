@@ -9,6 +9,7 @@
  */
 
 import type * as _ai_client from "../_ai/client.js";
+import type * as _ai_embeddings from "../_ai/embeddings.js";
 import type * as _ai_workshopTools from "../_ai/workshopTools.js";
 import type * as _auth_secretCrypto from "../_auth/secretCrypto.js";
 import type * as _auth_secureMutation from "../_auth/secureMutation.js";
@@ -37,6 +38,7 @@ import type * as audit from "../audit.js";
 import type * as auditAlerts from "../auditAlerts.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
+import type * as backgroundJobs from "../backgroundJobs.js";
 import type * as backupFaults from "../backupFaults.js";
 import type * as catalogs from "../catalogs.js";
 import type * as cleanupLog from "../cleanupLog.js";
@@ -98,6 +100,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_ai/client": typeof _ai_client;
+  "_ai/embeddings": typeof _ai_embeddings;
   "_ai/workshopTools": typeof _ai_workshopTools;
   "_auth/secretCrypto": typeof _auth_secretCrypto;
   "_auth/secureMutation": typeof _auth_secureMutation;
@@ -126,6 +129,7 @@ declare const fullApi: ApiFromModules<{
   auditAlerts: typeof auditAlerts;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
+  backgroundJobs: typeof backgroundJobs;
   backupFaults: typeof backupFaults;
   catalogs: typeof catalogs;
   cleanupLog: typeof cleanupLog;

@@ -6,8 +6,11 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   type ActionCtx,
 } from "./_generated/server";
+import { createOrReuseJob } from "./backgroundJobs";
+import { readAccount, requireMailboxMember } from "./mailAccounts";
 import { decryptSecret, encryptSecret } from "./_auth/secretCrypto";
 import { MailSoapError, postSoap } from "./_mail/soap";
 import { parseAuthResponse } from "../lib/mailClient/auth";
@@ -567,5 +570,92 @@ export const syncDue = internalAction({
       if (index < accounts.length - 1) await sleep(CRON_GAP_MS);
     }
     return { attempted: accounts.length };
+  },
+});
+
+/** Inicia una sincronización manual de buzón en segundo plano. */
+export const startSyncNow = mutation({
+  args: { folderRemoteId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const user = await requireMailboxMember(ctx);
+    const account = await readAccount(ctx, user._id);
+    if (!account) {
+      throw new ConvexError(
+        "El buzón no está configurado. Revisa la cuenta en Ajustes.",
+      );
+    }
+    const { jobId, reused } = await createOrReuseJob(ctx, {
+      userId: user._id,
+      type: "mail_sync",
+      title: "Sincronización de correo",
+      detail: "Conectando con el servidor Zimbra…",
+      dedupeKey: `mail_sync:${user._id}:${args.folderRemoteId ?? "all"}`,
+    });
+    if (!reused) {
+      await ctx.scheduler.runAfter(0, internal.mailSync.runSyncJob, {
+        jobId,
+        accountId: account._id,
+        folderRemoteId: args.folderRemoteId,
+      });
+    }
+    return { jobId, reused };
+  },
+});
+
+/** Ejecuta la sincronización manual en segundo plano y actualiza `backgroundJobs`. */
+export const runSyncJob = internalAction({
+  args: {
+    jobId: v.id("backgroundJobs"),
+    accountId: v.id("mailAccounts"),
+    folderRemoteId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const cancelled = await ctx.runQuery(internal.backgroundJobs.isCancelled, {
+      jobId: args.jobId,
+    });
+    if (cancelled) return;
+
+    await ctx.runMutation(internal.backgroundJobs.advanceProgress, {
+      jobId: args.jobId,
+      processed: 0,
+      detail: "Sincronizando carpetas y cabeceras…",
+    });
+
+    try {
+      const context: SyncSession | null = await ctx.runQuery(
+        internal.mailSync.accountContext,
+        { accountId: args.accountId },
+      );
+      if (!context) {
+        await ctx.runMutation(internal.backgroundJobs.fail, {
+          jobId: args.jobId,
+          error: "El buzón no está listo para sincronizar.",
+        });
+        return;
+      }
+
+      const res = await syncMailbox(ctx, context, args.folderRemoteId);
+      if (!res.ok) {
+        await ctx.runMutation(internal.backgroundJobs.fail, {
+          jobId: args.jobId,
+          error: "Ya había una sincronización en curso para esta cuenta.",
+        });
+        return;
+      }
+
+      await ctx.runMutation(internal.backgroundJobs.complete, {
+        jobId: args.jobId,
+        processed: res.headers,
+        total: res.headers,
+        detail: `${res.folders} carpeta(s), ${res.headers} cabecera(s).`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Error al sincronizar el buzón.";
+      await ctx.runMutation(internal.backgroundJobs.fail, {
+        jobId: args.jobId,
+        error: message,
+      });
+    }
   },
 });

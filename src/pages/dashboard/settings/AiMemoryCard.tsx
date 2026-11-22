@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
+import { isActiveJobStatus } from "@/lib/backgroundJobs";
 import { getErrorMessage } from "@/lib/workshop";
 
 /**
@@ -22,42 +23,54 @@ import { getErrorMessage } from "@/lib/workshop";
 export function AiMemoryCard() {
   const stats = useQuery(api.aiMemory.memoryStats, {});
   const facts = useQuery(api.aiMemory.listFacts, {});
-  const rebuildWorkshop = useMutation(api.aiMemory.rebuildWorkshopIndex);
-  const rebuildMailbox = useMutation(api.aiMemory.rebuildMyMailboxIndex);
+  const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
+  const rebuildWorkshop = useMutation(api.aiMemory.startRebuildWorkshopIndex);
+  const rebuildMailbox = useMutation(api.aiMemory.startRebuildMyMailboxIndex);
   const saveFact = useMutation(api.aiMemory.saveFact);
   const deleteFact = useMutation(api.aiMemory.deleteFact);
 
-  const [rebuilding, setRebuilding] = useState(false);
-  const [rebuildingMail, setRebuildingMail] = useState(false);
+  const [startingWorkshop, setStartingWorkshop] = useState(false);
+  const [startingMail, setStartingMail] = useState(false);
   const [title, setTitle] = useState("");
   const [factText, setFactText] = useState("");
   const [savingFact, setSavingFact] = useState(false);
 
+  const rebuilding =
+    startingWorkshop ||
+    jobs.some((j) => j.type === "ai_memory_workshop" && isActiveJobStatus(j.status));
+  const rebuildingMail =
+    startingMail ||
+    jobs.some((j) => j.type === "ai_memory_mailbox" && isActiveJobStatus(j.status));
+
   const handleRebuild = async () => {
-    setRebuilding(true);
+    setStartingWorkshop(true);
     try {
       const res = await rebuildWorkshop({});
-      toast.success(
-        `Memoria del taller reindexada: ${res.indexed} fragmentos compactos.`,
+      toast.info(
+        res.reused
+          ? "Ya hay una indexación del taller en curso."
+          : "Indexación de memoria IA iniciada en segundo plano.",
       );
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setRebuilding(false);
+      setStartingWorkshop(false);
     }
   };
 
   const handleRebuildMailbox = async () => {
-    setRebuildingMail(true);
+    setStartingMail(true);
     try {
       const res = await rebuildMailbox({});
-      toast.success(
-        `Correos indexados en tu memoria privada: ${res.indexed} mensajes.`,
+      toast.info(
+        res.reused
+          ? "Ya hay una indexación de correos en curso."
+          : "Indexación de correos iniciada en segundo plano.",
       );
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setRebuildingMail(false);
+      setStartingMail(false);
     }
   };
 

@@ -37,8 +37,8 @@ describe("AiMemoryCard (Fase 4)", () => {
   });
 
   it("muestra estadísticas, hechos guardados y permite reindexar", async () => {
-    const mockRebuild = vi.fn().mockResolvedValue({ indexed: 18 });
-    const mockRebuildMail = vi.fn().mockResolvedValue({ indexed: 5 });
+    const mockRebuild = vi.fn().mockResolvedValue({ jobId: "j1", reused: false });
+    const mockRebuildMail = vi.fn().mockResolvedValue({ jobId: "j2", reused: false });
     const mockSaveFact = vi.fn().mockResolvedValue("f1");
     const mockDeleteFact = vi.fn().mockResolvedValue(undefined);
 
@@ -55,21 +55,26 @@ describe("AiMemoryCard (Fase 4)", () => {
     let qIdx = 0;
     mockUseQuery.mockImplementation(() => {
       qIdx += 1;
-      return qIdx % 2 === 1
-        ? {
-            totalChunks: 20,
-            workshopChunks: 15,
-            mailboxChunks: 5,
-            factsCount: 1,
-          }
-        : [
-            {
-              _id: "fact_1",
-              title: "Compresor GA-15",
-              fact: "Revisar junta cada 6 meses",
-              module: "incidents",
-            },
-          ];
+      const mod = qIdx % 3;
+      if (mod === 1) {
+        return {
+          totalChunks: 20,
+          workshopChunks: 15,
+          mailboxChunks: 5,
+          factsCount: 1,
+        };
+      }
+      if (mod === 2) {
+        return [
+          {
+            _id: "fact_1",
+            title: "Compresor GA-15",
+            fact: "Revisar junta cada 6 meses",
+            module: "incidents",
+          },
+        ];
+      }
+      return [];
     });
 
     await act(async () => {

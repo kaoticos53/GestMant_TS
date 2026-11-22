@@ -1,11 +1,15 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
+import { createOrReuseJob } from "./backgroundJobs";
+import { JOB_STATUS, isCancelledJobStatus } from "../lib/backgroundJobs";
 import {
   formatEquipmentChunk,
   formatEquipmentMovementChunk,
@@ -90,20 +94,17 @@ export const removeChunk = internalMutation({
   },
 });
 
-export const rebuildWorkshopIndex = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireAdmin(ctx, "reindexar la memoria de la IA");
-    const now = Date.now();
+async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
+  const now = Date.now();
 
-    const existing = await ctx.db.query("aiKnowledgeChunks").collect();
-    for (const chunk of existing) {
-      if (chunk.scope === "shared") {
-        await ctx.db.delete(chunk._id);
-      }
+  const existing = await ctx.db.query("aiKnowledgeChunks").collect();
+  for (const chunk of existing) {
+    if (chunk.scope === "shared") {
+      await ctx.db.delete(chunk._id);
     }
+  }
 
-    let count = 0;
+  let count = 0;
 
     const incidents = await ctx.db.query("incidents").collect();
     for (const inc of incidents) {
@@ -239,53 +240,183 @@ export const rebuildWorkshopIndex = mutation({
       count += 1;
     }
 
-    return { indexed: count };
+  return count;
+}
+
+export const rebuildWorkshopIndex = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx, "reindexar la memoria de la IA");
+    const indexed = await executeWorkshopRebuild(ctx);
+    return { indexed };
   },
 });
+
+/** Inicia la reindexación completa de la memoria IA del taller en segundo plano. */
+export const startRebuildWorkshopIndex = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireAdmin(ctx, "reindexar la memoria de la IA");
+    const { jobId, reused } = await createOrReuseJob(ctx, {
+      userId: user._id,
+      type: "ai_memory_workshop",
+      title: "Indexación de memoria IA",
+      detail: "Indexando módulos del taller…",
+      dedupeKey: "ai_memory_workshop",
+    });
+    if (!reused) {
+      await ctx.scheduler.runAfter(0, internal.aiMemory.runRebuildWorkshopJob, {
+        jobId,
+      });
+    }
+    return { jobId, reused };
+  },
+});
+
+export const runRebuildWorkshopJob = internalMutation({
+  args: { jobId: v.id("backgroundJobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || isCancelledJobStatus(job.status)) return;
+    try {
+      const now = Date.now();
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.RUNNING,
+        updatedAt: now,
+      });
+      const indexed = await executeWorkshopRebuild(ctx);
+      const doneAt = Date.now();
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.COMPLETED,
+        processed: indexed,
+        total: indexed,
+        detail: `${indexed} fragmentos compactos indexados.`,
+        updatedAt: doneAt,
+        finishedAt: doneAt,
+      });
+    } catch (error) {
+      const doneAt = Date.now();
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.FAILED,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error al reindexar la memoria del taller.",
+        updatedAt: doneAt,
+        finishedAt: doneAt,
+      });
+    }
+  },
+});
+
+async function executeMailboxRebuild(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<number> {
+  const account = await readAccount(ctx, userId);
+  if (!account) return 0;
+
+  const existing = await ctx.db
+    .query("aiKnowledgeChunks")
+    .withIndex("by_owner", (q) =>
+      q.eq("ownerUserId", userId).eq("module", "mailbox"),
+    )
+    .collect();
+  for (const chunk of existing) {
+    await ctx.db.delete(chunk._id);
+  }
+
+  const headers = await ctx.db
+    .query("mailHeaders")
+    .withIndex("by_account", (q) => q.eq("accountId", account._id))
+    .take(400);
+
+  const now = Date.now();
+  let indexed = 0;
+  for (const h of headers) {
+    if (h.deletedRemoteAt !== undefined) continue;
+    const draft = formatMailChunk({
+      messageId: h.messageId,
+      subject: h.subject,
+      fromName: h.fromName,
+      fromAddress: h.fromAddress,
+      snippet: h.snippet,
+      tags: h.tags,
+    });
+    await ctx.db.insert("aiKnowledgeChunks", {
+      ...draft,
+      ownerUserId: userId,
+      updatedAt: now,
+    });
+    indexed += 1;
+  }
+
+  return indexed;
+}
 
 export const rebuildMyMailboxIndex = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await requireMailboxMember(ctx);
-    const account = await readAccount(ctx, user._id);
-    if (!account) return { indexed: 0 };
-
-    const existing = await ctx.db
-      .query("aiKnowledgeChunks")
-      .withIndex("by_owner", (q) =>
-        q.eq("ownerUserId", user._id).eq("module", "mailbox"),
-      )
-      .collect();
-    for (const chunk of existing) {
-      await ctx.db.delete(chunk._id);
-    }
-
-    const headers = await ctx.db
-      .query("mailHeaders")
-      .withIndex("by_account", (q) => q.eq("accountId", account._id))
-      .take(400);
-
-    const now = Date.now();
-    let indexed = 0;
-    for (const h of headers) {
-      if (h.deletedRemoteAt !== undefined) continue;
-      const draft = formatMailChunk({
-        messageId: h.messageId,
-        subject: h.subject,
-        fromName: h.fromName,
-        fromAddress: h.fromAddress,
-        snippet: h.snippet,
-        tags: h.tags,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", {
-        ...draft,
-        ownerUserId: user._id,
-        updatedAt: now,
-      });
-      indexed += 1;
-    }
-
+    const indexed = await executeMailboxRebuild(ctx, user._id);
     return { indexed };
+  },
+});
+
+/** Inicia la indexación privada de correos en memoria IA en segundo plano. */
+export const startRebuildMyMailboxIndex = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireMailboxMember(ctx);
+    const { jobId, reused } = await createOrReuseJob(ctx, {
+      userId: user._id,
+      type: "ai_memory_mailbox",
+      title: "Indexación de correos en IA",
+      detail: "Indexando cabeceras del buzón…",
+      dedupeKey: `ai_memory_mailbox:${user._id}`,
+    });
+    if (!reused) {
+      await ctx.scheduler.runAfter(0, internal.aiMemory.runRebuildMailboxJob, {
+        jobId,
+        userId: user._id,
+      });
+    }
+    return { jobId, reused };
+  },
+});
+
+export const runRebuildMailboxJob = internalMutation({
+  args: { jobId: v.id("backgroundJobs"), userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || isCancelledJobStatus(job.status)) return;
+    try {
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.RUNNING,
+        updatedAt: Date.now(),
+      });
+      const indexed = await executeMailboxRebuild(ctx, args.userId);
+      const doneAt = Date.now();
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.COMPLETED,
+        processed: indexed,
+        total: indexed,
+        detail: `${indexed} correos indexados en tu memoria privada.`,
+        updatedAt: doneAt,
+        finishedAt: doneAt,
+      });
+    } catch (error) {
+      const doneAt = Date.now();
+      await ctx.db.patch(args.jobId, {
+        status: JOB_STATUS.FAILED,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error al indexar los correos.",
+        updatedAt: doneAt,
+        finishedAt: doneAt,
+      });
+    }
   },
 });
 

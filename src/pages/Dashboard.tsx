@@ -4,6 +4,7 @@ import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
 import { DashboardInactiveNotice } from "./dashboard/components/DashboardInactiveNotice";
 import { AbilityProvider } from "@/components/AbilityProvider";
+import { BackgroundJobsToastBridge } from "@/components/jobs/BackgroundJobsToastBridge";
 import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
 import { DashboardStats } from "./dashboard/components/DashboardStats";
 import { PageHeader } from "./dashboard/components/PageHeader";
@@ -99,6 +100,7 @@ export default function Dashboard() {
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
+          <BackgroundJobsToastBridge />
           <DashboardHeader
             sidebarCollapsed={sidebarCollapsed}
             toggleSidebar={toggleSidebar}

@@ -21,8 +21,9 @@ import {
 } from "@/lib/mailClient/tagging";
 import { pageWindow } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
+import { isActiveJobStatus } from "@/lib/backgroundJobs";
 import { formatDateTime, getErrorMessage } from "@/lib/workshop";
-import { useAction, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   AlertTriangle,
@@ -100,8 +101,9 @@ export function MailboxView({
 }) {
   const account = useQuery(api.mailAccounts.account);
   const folders = useQuery(api.mailAccounts.folders, {});
-  const syncNow = useAction(api.mailSync.syncNow);
-  const autoTagFolder = useAction(api.mailTaggingActions.autoTagFolder);
+  const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
+  const startSyncNow = useMutation(api.mailSync.startSyncNow);
+  const startAutoTagFolder = useMutation(api.mailTagging.startAutoTagFolder);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -113,9 +115,18 @@ export function MailboxView({
   const [selectedMessage, setSelectedMessage] = useState<MailboxHeader | null>(
     null,
   );
-  const [syncing, setSyncing] = useState(false);
-  const [tagging, setTagging] = useState(false);
-  const [taggingCount, setTaggingCount] = useState(0);
+  const [startingSync, setStartingSync] = useState(false);
+  const [startingTag, setStartingTag] = useState(false);
+
+  const activeSyncJob = jobs.find(
+    (j) => j.type === "mail_sync" && isActiveJobStatus(j.status),
+  );
+  const activeTagJob = jobs.find(
+    (j) => j.type === "mail_auto_tag" && isActiveJobStatus(j.status),
+  );
+  const syncing = startingSync || Boolean(activeSyncJob);
+  const tagging = startingTag || Boolean(activeTagJob);
+  const taggingCount = activeTagJob?.processed ?? 0;
   const [pageState, setPageState] = useState<PageState>({
     key: "",
     page: 1,
@@ -187,62 +198,34 @@ export function MailboxView({
 
   const handleAutoTag = async () => {
     if (!activeFolderId) return;
-    setTagging(true);
-    setTaggingCount(0);
-    let totalProcessed = 0;
-    let totalRule = 0;
-    let totalAiHeaders = 0;
-    let totalAiBody = 0;
+    setStartingTag(true);
     try {
-      for (let round = 0; round < 20; round += 1) {
-        const res = await autoTagFolder({ folderRemoteId: activeFolderId });
-        totalProcessed += res.processed;
-        totalRule += res.byRule;
-        totalAiHeaders += res.byAiHeaders;
-        totalAiBody += res.byAiBody;
-        setTaggingCount(totalProcessed);
-        if (res.remainingAiPending <= 0 || res.processed === 0) {
-          break;
-        }
-      }
-      if (totalProcessed === 0) {
-        toast.info("No hay mensajes pendientes de etiquetar en esta carpeta.");
-      } else {
-        toast.success(
-          `Etiquetados ${totalProcessed} mensajes (${totalRule} por regla, ${totalAiHeaders} por cabecera, ${totalAiBody} con cuerpo).`,
-        );
-      }
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setTagging(false);
-      setTaggingCount(0);
-    }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const result = await syncNow({});
-      if (!result.ok) {
-        toast.info(
-          result.reason === "busy"
-            ? "Ya hay una sincronización en curso. Espera a que termine."
-            : "El buzón no está listo para sincronizar. Revisa la cuenta en Ajustes.",
-        );
-        return;
-      }
-      toast.success(
-        `Buzón sincronizado: ${countLabel(
-          result.folders,
-          "carpeta",
-          "carpetas",
-        )} y ${countLabel(result.headers, "cabecera", "cabeceras")}.`,
+      const res = await startAutoTagFolder({ folderRemoteId: activeFolderId });
+      toast.info(
+        res.reused
+          ? "Ya hay un autoetiquetado en curso en segundo plano."
+          : "Autoetiquetado iniciado en segundo plano. Puedes cambiar de menú sin perder el progreso.",
       );
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
-      setSyncing(false);
+      setStartingTag(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setStartingSync(true);
+    try {
+      const res = await startSyncNow({});
+      toast.info(
+        res.reused
+          ? "Ya hay una sincronización en curso en segundo plano."
+          : "Sincronización iniciada en segundo plano.",
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setStartingSync(false);
     }
   };
 

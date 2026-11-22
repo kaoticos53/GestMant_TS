@@ -1,10 +1,12 @@
 import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
   mutation,
   query,
 } from "./_generated/server";
+import { createOrReuseJob } from "./backgroundJobs";
 import {
   evaluateMailTagRules,
   ruleMatchesHeader,
@@ -294,12 +296,16 @@ export const setMessageTags = mutation({
 
 export const triageContext = internalQuery({
   args: {
+    userId: v.optional(v.id("users")),
     folderRemoteId: v.optional(v.string()),
     messageIds: v.optional(v.array(v.string())),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requireMailboxMember(ctx);
+    const user = args.userId
+      ? await ctx.db.get(args.userId)
+      : await requireMailboxMember(ctx);
+    if (!user || user.active === false) return null;
     const account = await readAccount(ctx, user._id);
     if (!account) return null;
 
@@ -368,6 +374,55 @@ export const triageContext = internalQuery({
       })),
       cachedBodies,
     };
+  },
+});
+
+/** Inicia el autoetiquetado IA de una carpeta en segundo plano. */
+export const startAutoTagFolder = mutation({
+  args: { folderRemoteId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireMailboxMember(ctx);
+    const { jobId, reused } = await createOrReuseJob(ctx, {
+      userId: user._id,
+      type: "mail_auto_tag",
+      title: "Autoetiquetado IA de correo",
+      detail: "Preparando mensajes pendientes…",
+      dedupeKey: `mail_auto_tag:${user._id}:${args.folderRemoteId}`,
+    });
+    if (!reused) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.mailTaggingActions.runAutoTagBatch,
+        {
+          jobId,
+          userId: user._id,
+          folderRemoteId: args.folderRemoteId,
+          round: 0,
+          totalProcessed: 0,
+          totalRule: 0,
+          totalAiHeaders: 0,
+          totalAiBody: 0,
+        },
+      );
+    }
+    return { jobId, reused };
+  },
+});
+
+/** Cuentas de correo activas para la pasada automática de autoetiquetado. */
+export const activeAccountsForAutoTag = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const accounts = await ctx.db.query("mailAccounts").collect();
+    const eligible: Array<{ userId: typeof accounts[number]["userId"] }> = [];
+    for (const acc of accounts) {
+      if (!acc.enabled) continue;
+      const user = await ctx.db.get(acc.userId);
+      if (user && user.active !== false) {
+        eligible.push({ userId: acc.userId });
+      }
+    }
+    return eligible;
   },
 });
 

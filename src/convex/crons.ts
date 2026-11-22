@@ -218,4 +218,23 @@ crons.hourly(
   {},
 );
 
+/**
+ * Autoetiquetado silencioso de correo nuevo: cada 30 minutos clasifica cabeceras
+ * pendientes de cuentas activas cuando DeepSeek está habilitado.
+ */
+crons.interval(
+  "autoetiquetar correos nuevos",
+  { minutes: 30 },
+  internal.mailTaggingActions.autoTagPendingAccounts,
+  {},
+);
+
+/** Limpieza diaria de trabajos en segundo plano finalizados hace más de 7 días. */
+crons.daily(
+  "purgar trabajos en segundo plano",
+  { hourUTC: 6, minuteUTC: 20 },
+  internal.backgroundJobs.purgeOld,
+  {},
+);
+
 export default crons;
