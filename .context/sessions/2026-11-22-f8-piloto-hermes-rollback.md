@@ -411,20 +411,24 @@ misma copia**, así que el tiempo de restaurar incluye vaciar lo que ya había
   fijos. A 7,8 mil filas, 1 s.
 - **Restaurar** tiene dos costes lineales: la comprobación en seco más la
   inserción cuestan ~1,3–2,0 ms por fila de la copia, y el vaciado ~0,65 ms por
-  fila que ya hubiera. Regla práctica para la pantalla:
-  `segundos ≈ 1,5 + 0,002 × filas_de_la_copia + 0,0006 × filas_del_taller`.
+  fila que ya hubiera. La regla que se aplica en la pantalla, ajustada a esta
+  tabla, es `segundos ≈ máx(2; 0,002 × filas de la copia)`: esos 2 ms por fila
+  ya incluyen vaciar un taller del mismo tamaño; con muchos más datos habría
+  que sumar ~0,6 ms por fila de diferencia.
 - Con una copia pequeña sobre un taller grande manda el vaciado: volver a la
   copia de 880 filas sobre las 7 806 tardó **6,5 s**.
 - No se alcanzó ningún límite de tamaño: 7,13 MB de JSON salieron y entraron sin
   problema. Por encima de eso no se probó. Son cifras de este equipo (Windows,
   backend Docker en la misma máquina); en producción cambia el hardware.
 
-**Dónde avisar:** con la muestra normal (880 filas, 0,6 MB, ~1,5 s) no hace falta
-nada. El aviso tiene sentido a partir de **~2,5–3 MB (unas 2 500–3 500 filas)**,
-donde restaurar pasa de 3 s y se acerca a 5 s; conviene decir el tiempo estimado
-y que no se cierre la pestaña. A partir de **~5,5 MB (6 000 filas, 11 s)** el
-aviso debería ser bien visible. El taller de este deployment son 880 filas: el
-umbral está muy por encima de lo que hay hoy.
+**Dónde avisa la pantalla** (`WorkshopBackupSection`, con
+`estimateRestoreSeconds` y `restoreSizeLevel` en `src/lib/backup.ts`): el
+diálogo de confirmación enseña siempre el tamaño del archivo y el tiempo
+estimado; a partir de **3 000 filas (~2,9 MB, ~6 s)** aparece un aviso de «copia
+voluminosa» y a partir de **6 000 filas (~5,5 MB, ~12 s)** uno reforzado de
+«copia grande». Con la muestra normal (880 filas, 0,6 MB, ~1,5 s) solo sale la
+línea discreta. El taller de este deployment son 880 filas: el umbral está muy
+por encima de lo que hay hoy.
 
 El ensayo se hizo con un script temporal (borrado) y el taller quedó devuelto a
 la copia de partida: 880 filas, mismos recuentos tabla a tabla que §8.2 más

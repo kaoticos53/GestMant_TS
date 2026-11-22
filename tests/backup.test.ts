@@ -3,8 +3,10 @@ import {
   BACKUP_FORMAT,
   BACKUP_TABLES,
   BACKUP_VERSION,
+  estimateRestoreSeconds,
   parseWorkshopBackup,
   remapBackupDocument,
+  restoreSizeLevel,
 } from "@/lib/backup";
 
 describe("Backup y Restauración (Dominio puro)", () => {
@@ -34,8 +36,9 @@ describe("Backup y Restauración (Dominio puro)", () => {
   it("rechaza archivos inválidos, JSON corrupto o versión no soportada", () => {
     expect(parseWorkshopBackup("no es json").ok).toBe(false);
     expect(
-      parseWorkshopBackup(JSON.stringify({ format: "otro", version: 1, tables: {} }))
-        .ok,
+      parseWorkshopBackup(
+        JSON.stringify({ format: "otro", version: 1, tables: {} }),
+      ).ok,
     ).toBe(false);
     expect(
       parseWorkshopBackup(
@@ -86,5 +89,18 @@ describe("Backup y Restauración (Dominio puro)", () => {
 
     // securityAuditLog nunca está en BACKUP_TABLES
     expect(BACKUP_TABLES).not.toContain("securityAuditLog");
+  });
+
+  it("estima la restauración con el ritmo medido y avisa por tramos", () => {
+    expect(estimateRestoreSeconds(0)).toBe(2);
+    expect(estimateRestoreSeconds(880)).toBe(2);
+    expect(estimateRestoreSeconds(3_000)).toBe(6);
+    expect(estimateRestoreSeconds(6_000)).toBe(12);
+    expect(estimateRestoreSeconds(7_806)).toBe(16);
+
+    expect(restoreSizeLevel(2_999)).toBe("normal");
+    expect(restoreSizeLevel(3_000)).toBe("slow");
+    expect(restoreSizeLevel(5_999)).toBe("slow");
+    expect(restoreSizeLevel(6_000)).toBe("very-slow");
   });
 });

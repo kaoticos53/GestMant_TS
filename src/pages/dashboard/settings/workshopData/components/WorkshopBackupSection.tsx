@@ -1,3 +1,4 @@
+import { InlineNotice } from "@/components/InlineNotice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,10 +13,16 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import {
   RESTORE_CONFIRM_WORD,
+  estimateRestoreSeconds,
   parseWorkshopBackup,
+  restoreSizeLevel,
   type BackupSummary,
 } from "@/lib/backup";
-import { formatDateTime, getErrorMessage } from "@/lib/workshop";
+import {
+  formatDateTime,
+  formatFileSize,
+  getErrorMessage,
+} from "@/lib/workshop";
 import { useAction } from "convex/react";
 import { Download, Loader2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
@@ -32,7 +39,15 @@ export function WorkshopBackupSection() {
   const [pendingSummary, setPendingSummary] = useState<BackupSummary | null>(
     null,
   );
+  const [pendingBytes, setPendingBytes] = useState(0);
   const [confirmPhrase, setConfirmPhrase] = useState("");
+
+  const resetPending = () => {
+    setPendingRawJson(null);
+    setPendingSummary(null);
+    setPendingBytes(0);
+    setConfirmPhrase("");
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -73,6 +88,7 @@ export function WorkshopBackupSection() {
       }
       setPendingRawJson(raw);
       setPendingSummary(parsed.summary);
+      setPendingBytes(file.size);
       setConfirmPhrase("");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -93,9 +109,7 @@ export function WorkshopBackupSection() {
       toast.success(
         `Copia restaurada correctamente (${res.restoredRecords} registros)`,
       );
-      setPendingRawJson(null);
-      setPendingSummary(null);
-      setConfirmPhrase("");
+      resetPending();
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {
@@ -104,6 +118,12 @@ export function WorkshopBackupSection() {
   };
 
   const canConfirm = confirmPhrase.trim() === RESTORE_CONFIRM_WORD;
+  const restoreSeconds = pendingSummary
+    ? estimateRestoreSeconds(pendingSummary.totalRecords)
+    : 0;
+  const restoreLevel = pendingSummary
+    ? restoreSizeLevel(pendingSummary.totalRecords)
+    : "normal";
 
   return (
     <div className="mt-5 border-t border-border/70 pt-5">
@@ -113,8 +133,8 @@ export function WorkshopBackupSection() {
         </h3>
         <p className="text-xs text-muted-foreground">
           Descarga una copia completa en JSON de todas las tablas operativas del
-          taller o restaura desde un archivo anterior (sin alterar usuarios ni el
-          registro de seguridad).
+          taller o restaura desde un archivo anterior (sin alterar usuarios ni
+          el registro de seguridad).
         </p>
       </div>
 
@@ -156,9 +176,7 @@ export function WorkshopBackupSection() {
           open
           onOpenChange={(open) => {
             if (!open && !restoring) {
-              setPendingRawJson(null);
-              setPendingSummary(null);
-              setConfirmPhrase("");
+              resetPending();
             }
           }}
         >
@@ -175,12 +193,35 @@ export function WorkshopBackupSection() {
               <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
                 <p className="font-medium">
                   {pendingSummary.totalRecords} registros detectados
+                  {pendingBytes > 0 && ` · ${formatFileSize(pendingBytes)}`}
                 </p>
                 <p className="text-muted-foreground">
                   Exportada por {pendingSummary.exportedBy} el{" "}
                   {formatDateTime(pendingSummary.exportedAt)}
                 </p>
               </div>
+
+              {restoreLevel === "normal" ? (
+                <p className="text-muted-foreground">
+                  Restauración estimada: unos {restoreSeconds} s.
+                </p>
+              ) : (
+                <InlineNotice
+                  tone="warning"
+                  className={
+                    restoreLevel === "very-slow" ? "font-medium" : undefined
+                  }
+                >
+                  <span>
+                    {restoreLevel === "very-slow"
+                      ? "Copia grande"
+                      : "Copia voluminosa"}
+                    : restaurarla tardará unos {restoreSeconds} s
+                    {restoreLevel === "very-slow" ? " o más" : ""}. No cierres
+                    la pestaña hasta que termine.
+                  </span>
+                </InlineNotice>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="restore-confirm-input">
@@ -201,11 +242,7 @@ export function WorkshopBackupSection() {
                 type="button"
                 variant="outline"
                 disabled={restoring}
-                onClick={() => {
-                  setPendingRawJson(null);
-                  setPendingSummary(null);
-                  setConfirmPhrase("");
-                }}
+                onClick={resetPending}
               >
                 Cancelar
               </Button>

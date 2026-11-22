@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BACKUP_FORMAT, BACKUP_VERSION } from "@/lib/backup";
 import { settle } from "./settle";
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { mockUseAction, mockToastSuccess, mockToastError } = vi.hoisted(() => ({
   mockUseAction: vi.fn(),
@@ -96,8 +98,8 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     });
     await settle();
 
-    const exportBtn = Array.from(container.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Descargar copia (.json)"),
+    const exportBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Descargar copia (.json)"),
     );
     expect(exportBtn).not.toBeUndefined();
 
@@ -126,7 +128,8 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
       },
     });
 
-    const input = container.querySelector<HTMLInputElement>("input[type='file']");
+    const input =
+      container.querySelector<HTMLInputElement>("input[type='file']");
     expect(input).not.toBeNull();
     const file = new File([validJson], "backup.json", {
       type: "application/json",
@@ -161,9 +164,9 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
       }
     });
 
-    const restoreBtn = Array.from(document.body.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Restaurar copia"),
-    );
+    const restoreBtn = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((b) => b.textContent?.includes("Restaurar copia"));
     expect(restoreBtn).not.toBeUndefined();
 
     await act(async () => {
@@ -173,5 +176,75 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
 
     expect(restoreMock).toHaveBeenCalledWith({ rawJson: validJson });
     expect(mockToastSuccess).toHaveBeenCalled();
+  });
+
+  it("estima el tiempo de restauración y avisa cuando la copia es voluminosa o grande", async () => {
+    await act(async () => {
+      root.render(<WorkshopBackupSection />);
+    });
+    await settle();
+
+    const backupWith = (rows: number) =>
+      JSON.stringify({
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        exportedAt: 1_700_000_000_000,
+        exportedBy: "admin@taller.es",
+        tables: {
+          equipment: Array.from({ length: rows }, (_, i) => ({
+            _id: `e${i}`,
+            name: "Cámara",
+          })),
+        },
+      });
+
+    const selectFile = async (rows: number) => {
+      const raw = backupWith(rows);
+      const input =
+        container.querySelector<HTMLInputElement>("input[type='file']");
+      const file = new File([raw], "backup.json", {
+        type: "application/json",
+      });
+      Object.defineProperty(file, "text", {
+        value: async () => raw,
+      });
+      Object.defineProperty(input, "files", {
+        value: [file],
+        configurable: true,
+      });
+      await act(async () => {
+        input?.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await settle();
+    };
+
+    const cancel = async () => {
+      const button = Array.from(document.body.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Cancelar"),
+      );
+      await act(async () => {
+        button?.click();
+      });
+      await settle();
+    };
+
+    // Muestra normal: una estimación discreta, sin aviso.
+    await selectFile(1);
+    expect(document.body.textContent).toContain(
+      "Restauración estimada: unos 2 s",
+    );
+    expect(document.body.textContent).not.toContain("Copia voluminosa");
+    await cancel();
+
+    // A partir de 3 000 filas, aviso visible con el tiempo estimado.
+    await selectFile(3_500);
+    expect(document.body.textContent).toContain("Copia voluminosa");
+    expect(document.body.textContent).toContain("unos 7 s");
+    await cancel();
+
+    // A partir de 6 000, aviso reforzado.
+    await selectFile(6_500);
+    expect(document.body.textContent).toContain("Copia grande");
+    expect(document.body.textContent).toContain("unos 13 s o más");
   });
 });

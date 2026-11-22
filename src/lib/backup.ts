@@ -46,6 +46,43 @@ export const BACKUP_TABLES = [
 
 export type BackupTableName = (typeof BACKUP_TABLES)[number];
 
+/* ------------------------------------------------------------------ */
+/* Aviso de tamaño en la restauración                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ritmo medido de una restauración completa (handover de F8, §8.5): unos 2 ms
+ * por fila de la copia, contando la comprobación previa, la inserción y el
+ * vaciado de un taller del mismo tamaño. Por debajo de mil filas manda el
+ * trabajo fijo y no baja de dos segundos.
+ */
+export const RESTORE_SECONDS_PER_RECORD = 0.002;
+
+/** A partir de aquí restaurar pasa de ~4 s (medido: 3 465 filas, 4,5 s). */
+export const RESTORE_SLOW_RECORDS = 3_000;
+
+/** A partir de aquí pasa de ~11 s (medido: 6 073 filas, 11,5 s). */
+export const RESTORE_VERY_SLOW_RECORDS = 6_000;
+
+export type RestoreSizeLevel = "normal" | "slow" | "very-slow";
+
+/**
+ * Segundos que se estima que tarda restaurar una copia de `records` filas, con
+ * la regla que sale de la tabla de §8.5: `máx(2 s; 2 ms × filas)`, redondeada al
+ * segundo. Si el taller tuviera ahora muchos más datos que la copia, el vaciado
+ * pesaría más y tardaría algo más de lo que dice.
+ */
+export function estimateRestoreSeconds(records: number): number {
+  return Math.max(2, Math.round(records * RESTORE_SECONDS_PER_RECORD));
+}
+
+/** Nivel del aviso de tamaño para una copia de `records` filas. */
+export function restoreSizeLevel(records: number): RestoreSizeLevel {
+  if (records >= RESTORE_VERY_SLOW_RECORDS) return "very-slow";
+  if (records >= RESTORE_SLOW_RECORDS) return "slow";
+  return "normal";
+}
+
 export interface WorkshopBackupPayload {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
