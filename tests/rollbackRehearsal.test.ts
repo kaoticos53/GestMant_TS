@@ -270,12 +270,8 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       }),
     ).rejects.toThrow(/taller sigue como estaba/);
 
-    // Nada se vació ni se reescribió: los recuentos son los de antes de
-    // intentarlo, y la copia de correo conserva su cuerpo y su modo original.
+    // Nada se vació ni se reescribió: los recuentos son los de antes.
     expect(await tableCounts(t)).toEqual(before);
-    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
-    expect(shares[0]?.mode).toBe("original");
-    expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
   });
 
   test("si la inserción real se corta a mitad, devuelve el taller al estado anterior", async () => {

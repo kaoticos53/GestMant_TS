@@ -258,16 +258,13 @@ export const insertSnapshotBatch = internalMutation({
   },
 });
 
-/** Código con el que la comprobación previa se deshace a sí misma. */
-const CHECK_ROLLBACK = "workshop_backup_check_rollback";
-
 /**
  * Comprueba un lote como lo insertaría la restauración. Al final lanza para que
  * Convex revierta el lote entero —también la traza de una copia de correo
  * omitida—, así que no queda nada escrito: se descubre si el esquema acepta las
- * filas antes de vaciar el taller. El remapeo viaja en el error porque es la
- * única salida de una mutación deshecha, y los lotes siguientes lo necesitan
- * para no borrar referencias que sí existen en la copia.
+ * filas antes de vaciar el taller. El remapeo viaja en el error (`pairs`) porque
+ * es la única salida de una mutación deshecha, y los lotes siguientes lo
+ * necesitan para no borrar referencias que sí existen en la copia.
  */
 export const checkTableBatch = internalMutation({
   args: batchArgs,
@@ -281,7 +278,7 @@ export const checkTableBatch = internalMutation({
       rows,
       idMap,
     );
-    throw new ConvexError({ code: CHECK_ROLLBACK, pairs });
+    throw new ConvexError({ pairs });
   },
 });
 
@@ -308,37 +305,28 @@ export const logAudit = internalMutation({
 /** Filas por mutación: mismo tamaño para comprobar y para escribir. */
 const BACKUP_CHUNK_SIZE = 40;
 
-type CheckRollback = { code?: unknown; pairs?: unknown };
-
-/** Devuelve el remapeo del lote comprobado, o `null` si el error es real. */
-function readCheckRollback(error: unknown): InsertedPairs | null {
-  if (!(error instanceof ConvexError)) return null;
-  const data = error.data as CheckRollback | null;
-  if (!data || data.code !== CHECK_ROLLBACK || !Array.isArray(data.pairs)) {
-    return null;
-  }
-  return data.pairs as InsertedPairs;
-}
+type BatchArgs = {
+  userId: Id<"users">;
+  table: BackupTableName;
+  rowsJson: string;
+  idMapJson: string;
+};
 
 /**
  * Pasa un lote por la comprobación previa y devuelve su remapeo. La
- * comprobación siempre se deshace; si lo que llega no es esa revocación, el
- * esquema rechaza la copia y se avisa sin haber borrado nada.
+ * comprobación siempre se deshace lanzando el remapeo: si lo que llega no es
+ * eso, el esquema rechaza la copia y se avisa sin haber borrado nada.
  */
 async function checkBackupBatch(
   ctx: ActionCtx,
-  args: {
-    userId: Id<"users">;
-    table: BackupTableName;
-    rowsJson: string;
-    idMapJson: string;
-  },
+  args: BatchArgs,
 ): Promise<InsertedPairs> {
   try {
     await ctx.runMutation(internal.workshopBackup.checkTableBatch, args);
   } catch (error) {
-    const pairs = readCheckRollback(error);
-    if (pairs !== null) return pairs;
+    const data =
+      error instanceof ConvexError ? (error.data as { pairs?: unknown }) : null;
+    if (Array.isArray(data?.pairs)) return data.pairs as InsertedPairs;
     const detail = error instanceof Error ? error.message : String(error);
     throw new ConvexError(
       `La copia no se ha restaurado y el taller sigue como estaba: ${detail}`,
@@ -348,13 +336,6 @@ async function checkBackupBatch(
     "La comprobación de la copia no se ha deshecho; no se ha restaurado nada.",
   );
 }
-
-type BatchArgs = {
-  userId: Id<"users">;
-  table: BackupTableName;
-  rowsJson: string;
-  idMapJson: string;
-};
 
 /**
  * Recorre unas tablas —las de una copia o las del estado guardado— en el orden
