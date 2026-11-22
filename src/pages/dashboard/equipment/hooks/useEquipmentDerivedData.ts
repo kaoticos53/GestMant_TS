@@ -22,16 +22,26 @@ export function useEquipmentDerivedData({
   requests,
   maintenance = [],
 }: UseEquipmentDerivedDataOptions) {
-  // Mismo motivo que en el formulario: el respaldo, estable entre renders.
-  const catalogModelsQuery = useQuery(api.equipmentModels.list);
+  const remoteSummary = useQuery(api.equipment.relatedSummary, {
+    equipmentId: item._id,
+  });
+
+  // Respaldo estable mientras responde la consulta dedicada del backend.
+  const catalogModelsQuery = useQuery(
+    api.equipmentModels.list,
+    remoteSummary ? "skip" : {},
+  );
   const catalogModels = useMemo(
     () => catalogModelsQuery ?? [],
     [catalogModelsQuery],
   );
 
   const related = useMemo(
-    () => requests.filter((request) => requestMatchesEquipment(request, item)),
-    [requests, item],
+    () =>
+      remoteSummary
+        ? remoteSummary.requests
+        : requests.filter((request) => requestMatchesEquipment(request, item)),
+    [remoteSummary, requests, item],
   );
 
   const resolvedModelId = useMemo(
@@ -45,12 +55,15 @@ export function useEquipmentDerivedData({
 
   const compatible = useMemo(
     () =>
-      parts.filter((part) =>
-        Boolean(
-          resolvedModelId && part.compatibleModels?.includes(resolvedModelId),
-        ),
-      ),
-    [parts, resolvedModelId],
+      remoteSummary
+        ? remoteSummary.compatible
+        : parts.filter((part) =>
+            Boolean(
+              resolvedModelId &&
+                part.compatibleModels?.includes(resolvedModelId),
+            ),
+          ),
+    [remoteSummary, parts, resolvedModelId],
   );
 
   const shownRequests = useMemo(() => related.slice(0, 6), [related]);

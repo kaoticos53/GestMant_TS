@@ -4,6 +4,7 @@ import { QueryCtx, mutation, query } from "./_generated/server";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
+import { requestMatchesEquipment } from "../lib/workshop";
 import { detectEquipmentChanges } from "../lib/movements";
 import { recordEquipmentMovement } from "./_inventory/movements";
 import { markDestinationDeleted } from "./_mailShares/orphans";
@@ -440,4 +441,55 @@ export const remove = mutation({
       await markDestinationDeleted(ctx, "equipment", args.id, Date.now());
     },
   ),
+});
+
+/**
+ * Devuelve las peticiones y repuestos compatibles de un equipo concreto
+ * sin obligar al cliente a cruzar colecciones completas en memoria.
+ */
+export const relatedSummary = query({
+  args: { equipmentId: v.id("equipment") },
+  handler: async (ctx, args) => {
+    const me = await memberOrNull(ctx);
+    if (
+      !me ||
+      !(await hasAnyCapability(ctx, me, [
+        "viewEquipment",
+        "manageEquipment",
+        "lookupEquipment",
+        "lookupCatalog",
+      ]))
+    ) {
+      return null;
+    }
+
+    const item = await ctx.db.get(args.equipmentId);
+    if (!item) return null;
+
+    let resolvedModelId = item.modelId;
+    if (!resolvedModelId) {
+      const normalizedModel = item.model.trim().toLowerCase();
+      const models = await ctx.db.query("equipmentModels").collect();
+      resolvedModelId = models.find(
+        (m) => m.model.trim().toLowerCase() === normalizedModel,
+      )?._id;
+    }
+
+    const allParts = await ctx.db.query("spareParts").collect();
+    const compatible = resolvedModelId
+      ? allParts.filter((part) =>
+          part.compatibleModels?.includes(resolvedModelId!),
+        )
+      : [];
+
+    const allRequests = await ctx.db
+      .query("partRequests")
+      .order("desc")
+      .collect();
+    const requests = allRequests.filter(
+      (req) => req.deletedAt === undefined && requestMatchesEquipment(req, item),
+    );
+
+    return { compatible, requests };
+  },
 });
