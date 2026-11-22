@@ -238,6 +238,22 @@ const ARRAY_REF_FIELDS: Record<string, readonly string[]> = {
 };
 
 /**
+ * Referencias que pueden apuntar a una fila que ya no existe y que, por eso, se
+ * conservan tal cual cuando no se pueden remapear.
+ *
+ * Es el caso del rastro de documentos: `incidentDocumentLog` guarda el cambio
+ * de un adjunto ya retirado, y esa es la única constancia de que existió. Al
+ * restaurar, el documento no vuelve (no está en la copia) y la fila del rastro
+ * se quedaba sin `documentId`, que el esquema exige: la restauración se caía a
+ * mitad, con las tablas ya vaciadas. Los identificadores de Convex no se
+ * reutilizan, así que conservar el antiguo deja la referencia donde estaba: en
+ * un documento que ya no está.
+ */
+const DANGLING_REF_FIELDS: Record<string, readonly string[]> = {
+  incidentDocumentLog: ["documentId"],
+};
+
+/**
  * Limpia `_id` y `_creationTime` del documento exportado y remapea sus claves
  * foráneas conocidas al nuevo `_id` asignado durante la restauración.
  */
@@ -252,13 +268,14 @@ export function remapBackupDocument(
     clone[key] = value;
   }
 
+  const dangling = DANGLING_REF_FIELDS[table] ?? [];
   for (const field of SINGLE_REF_FIELDS[table] ?? []) {
     const oldVal = clone[field];
     if (typeof oldVal === "string") {
       const mapped = idMap.get(oldVal);
       if (mapped !== undefined) {
         clone[field] = mapped;
-      } else {
+      } else if (!dangling.includes(field)) {
         delete clone[field];
       }
     }

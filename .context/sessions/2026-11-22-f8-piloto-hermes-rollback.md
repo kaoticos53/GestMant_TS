@@ -31,7 +31,7 @@ para que el rollback no se rompa sin que nadie lo note).
 
 - [ ] Copia previa del taller hecha y verificada: `npm run nas:backup -- --host IP-DEL-NAS`.
 - [ ] Ensayo de rollback en verde: `npx vitest run tests/rollbackRehearsal.test.ts`.
-- [ ] Restauración probada en un deployment de banco de pruebas (§5.2), no solo en memoria.
+- [x] Restauración probada en un deployment de banco de pruebas (§5.2 y §8), no solo en memoria.
 - [ ] Los dos técnicos del piloto tienen cuenta activa y contraseña de aplicación de Hermes
       (con doble factor, la contraseña normal devuelve `account.AUTH_FAILED`).
 - [ ] Aviso al taller de que el buzón es de **solo lectura**: sin enviar, sin delegar, sin legal hold.
@@ -180,11 +180,10 @@ que usa la pantalla de Ajustes, no una copia de la lógica:
 5. Muestras manuales: una incidencia con su equipo, una copia de correo en modo
    resumen, y `securityAuditLog` con las entradas anteriores a la restauración.
 
-**Estado:** no ejecutado contra un deployment vivo. En este equipo Docker no está
-arrancado (`docker ps` falla) y el backend autoalojado de `127.0.0.1:3210` no
-responde, así que no hay banco de pruebas al que apuntar sin levantar
-infraestructura. Lo ejecutado es el mismo procedimiento sobre el deployment en
-memoria con los handlers reales.
+**Estado:** **ejecutado** el 2026-11-22 contra el deployment real que levanta
+`docker/convex` en `127.0.0.1:3210`, entrando con el administrador de desarrollo
+y llamando a las mismas acciones que la pantalla. Los números y el defecto que
+salió están en §8.
 
 ### 5.3 Runbook de rollback (lo que se hace si el piloto va mal)
 
@@ -230,8 +229,9 @@ total filas de la copia: 6 · restauradas: 6 · 3 ms
   `bodyText`, `attachments` ni `emlStorageId`.
 - `securityAuditLog` conserva `workshop_backup_export` y
   `workshop_backup_restore` después del vaciado.
-- Restauración completa medida en **3 ms** para 6 filas (memoria; no es una
-  cifra de producción).
+- Restauración completa medida en **3 ms** para 6 filas: es el deployment en
+  memoria del test, **no** una cifra de producción. La medida de verdad, contra
+  el backend de Docker, está en §8 (879 filas, ~1,2 s).
 
 Estado de la validación automática en esta sesión: `npx tsc --noEmit` sin
 errores, `eslint` sin avisos en el ensayo, suite completa **2871 pruebas en 272
@@ -256,3 +256,92 @@ vivo, y ningún tiempo de sincronización real de un buzón del taller.
 - [ ] Ejecutar §5.2 en un deployment vivo y anotar aquí los recuentos de verdad.
 - [ ] Ejecutar la tabla de §4 con una cuenta real y anotar C1–C12.
 - [ ] Si el piloto se alarga, comprobar C11 (caducidad del token a las ~48 h).
+
+---
+
+## 8. Ensayo de rollback contra el deployment real (2026-11-22)
+
+Backend levantado con `npm run convex:up` (`docker/convex/docker-compose.yml`),
+`npx convex dev --once` para subir las funciones y el administrador de desarrollo
+(`admin@taller.es`, credencial de `LOCAL_SETUP.md`) entrando por el proveedor de
+contraseña, como la pantalla. Nada de atajos: `exportBackup` y `restoreBackup`
+son las acciones de Ajustes → Copias de seguridad.
+
+Preparación del taller: `workshopReset:resetWorkshop` (467 filas, 6 pasadas) y
+`seed:seedDemoData` para dejar la muestra completa.
+
+### 8.1 Lo que salió mal a la primera: la restauración se caía a mitad
+
+```
+Failed to insert or update a document in table "incidentDocumentLog" because it
+does not match the schema: Object is missing the required field `documentId`.
+```
+
+La copia guarda el rastro de un adjunto **retirado**: el documento se borra, la
+fila de `incidentDocumentLog` se queda y su `documentId` apunta a una fila que ya
+no existe —el propio `schema.ts` lo documenta como legítimo—. Al restaurar, ese
+documento no vuelve en la copia, `remapBackupDocument` no encontraba el id nuevo
+y **borraba el campo**, que el esquema exige. El fallo llegaba con las tablas ya
+vaciadas: el taller quedó a medias (peticiones y movimientos a 0) hasta volver a
+sembrarlo. En memoria no salía porque el ensayo no tenía ningún adjunto retirado.
+
+**Arreglo (`src/lib/backup.ts`):** `DANGLING_REF_FIELDS` marca las referencias
+que pueden quedarse huérfanas; `incidentDocumentLog.documentId` se conserva con
+su valor histórico cuando no hay remapeo (los identificadores de Convex no se
+reutilizan, así que sigue apuntando a lo que apuntaba: a nada).
+`tests/rollbackRehearsal.test.ts` siembra ahora ese adjunto retirado y comprueba
+que vuelve el rastro con su `documentId` (7 filas en memoria, antes 6).
+
+### 8.2 Recuentos por tabla, contra el backend de Docker
+
+Dos vueltas completas, con deriva real entre la copia y la vuelta atrás (un
+repuesto y un equipo nuevos, y el stock de `CON-ALCO2` de 12 a 1012):
+
+```
+tabla                     copia  deriva  después
+appSettings                  1       1        1
+catalogs                   150     150      150
+equipment                   25      26       25
+equipmentModels             25      26       25
+equipmentMovements          51      52       51
+incidentDocumentLog        103     103      103
+incidentDocuments           71      71       71
+incidents                  123     123      123
+maintenanceRecords         115     115      115
+messages                     5       5        5
+notifications                8       8        8
+partRequests               106     106      106
+requestDecisions            22      22       22
+roles                        1       1        1
+spareParts                  43      44       43
+stockMovements              30      32       30
+total de la copia: 879 · restauradas: 879 · 16 tablas con filas
+export 54 ms / 55 ms · deriva 83 ms / 89 ms · restauración 1226 ms / 1223 ms
+copia 614,0 KB
+```
+
+- Recuentos idénticos a la copia en las 16 tablas, las dos veces.
+- `DRIFT-001` (repuesto posterior) y `EQ-DRIFT-1` (equipo posterior) no existen
+  tras la vuelta; el stock de `CON-ALCO2` vuelve a 12.
+- Comprobación independiente con consulta del CLI: mismos recuentos
+  (`equipment` 25, `spareParts` 43, `incidents` 123, `partRequests` 106,
+  `stockMovements` 30, `incidentDocumentLog` 103…), `users` 14 intactos y
+  `securityAuditLog` con las entradas `workshop_backup_export` /
+  `workshop_backup_restore` (22 → 35).
+- **Cifra para el handover: ~1,2 s y 879 filas / 614 KB** en este equipo, contra
+  el deployment de Docker en la misma máquina. Sustituye a los «3 ms / 6 filas»
+  en memoria, que solo valen para el test.
+
+### 8.3 Riesgos que siguen
+
+- ⚠️ **Un fallo a mitad de la restauración deja el taller a medias.** Se vacía
+  primero y se inserta después, tanda a tanda y en mutaciones separadas (visto en
+  §8.1: el taller quedó sin peticiones ni movimientos). El arreglo quita la
+  causa conocida, pero no cambia el orden. Si se quiere blindar, hay que validar
+  la copia entera antes de vaciar nada, o dejar la copia actual a mano antes de
+  restaurar.
+- `mailShares` **no se ha podido probar con datos reales** (0 filas: sin buzón
+  sincronizado en este deployment). Su comportamiento está cubierto en memoria
+  por el test, incluida la omisión con traza `mail_share_restore_skip`.
+- `users` y `securityAuditLog` siguen fuera de la copia: la restauración no los
+  toca (comprobado: 14 usuarios y la auditoría con su historia).

@@ -118,6 +118,26 @@ async function seedWorkshop(t: TestBackend) {
       sharedByName: "Administradora",
       sharedAt: 1_795_179_963_000,
     });
+
+    // Un adjunto retirado: el documento se borra y el rastro se queda, con una
+    // referencia a una fila que ya no existe. Es el caso que rompía la
+    // restauración contra un deployment con historia de verdad.
+    const retiredDocId = await ctx.db.insert("incidentDocuments", {
+      incidentId,
+      name: "Parte retirado.pdf",
+      author: "Administradora",
+      createdAt: 1_795_179_963_000,
+    });
+    await ctx.db.insert("incidentDocumentLog", {
+      incidentId,
+      documentId: retiredDocId,
+      action: "removed",
+      name: "Parte retirado.pdf",
+      by: "Administradora",
+      byId: adminId,
+      at: 1_795_179_963_000,
+    });
+    await ctx.db.delete(retiredDocId);
   });
 
   return { admin, adminId, cameraId, monitorId };
@@ -214,7 +234,21 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(shares[0]?.emlStorageId).toBeUndefined();
     expect(shares[0]?.destinationReference).toBe("INC-0001");
 
-    // 7. La auditoría no entra en el vaciado: sigue con su historia.
+    // 7. El rastro de un adjunto retirado vuelve entero: se conserva el
+    //    `documentId` histórico aunque el documento no esté en la copia, en vez
+    //    de dejar la fila sin la referencia que el esquema exige.
+    const documentLog = await t.run((ctx) =>
+      ctx.db.query("incidentDocumentLog").collect(),
+    );
+    expect(documentLog).toHaveLength(1);
+    expect(documentLog[0]?.action).toBe("removed");
+    expect(documentLog[0]?.documentId).toBeDefined();
+    const documents = await t.run((ctx) =>
+      ctx.db.query("incidentDocuments").collect(),
+    );
+    expect(documents).toHaveLength(0);
+
+    // 8. La auditoría no entra en el vaciado: sigue con su historia.
     const audit = await t.run((ctx) =>
       ctx.db.query("securityAuditLog").collect(),
     );
