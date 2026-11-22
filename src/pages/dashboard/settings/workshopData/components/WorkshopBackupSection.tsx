@@ -171,7 +171,11 @@ export function WorkshopBackupSection() {
       );
       download(protectedText, result.summary.exportedAt);
       toast.success(
-        `Copia cifrada y comprimida descargada (${result.summary.totalRecords} registros)`,
+        `Copia cifrada y comprimida descargada (${result.summary.totalRecords} registros${
+          result.summary.fileCount
+            ? ` · ${result.summary.fileCount} archivos`
+            : ""
+        })`,
       );
       setExportOpen(false);
       setExportPassphrase("");
@@ -257,7 +261,9 @@ export function WorkshopBackupSection() {
     try {
       const res = await restoreBackup({ rawJson: pendingRawJson });
       toast.success(
-        `Copia restaurada correctamente (${res.restoredRecords} registros). Puedes deshacerla durante ${Math.round(
+        `Copia restaurada correctamente (${res.restoredRecords} registros${
+          res.restoredFiles ? ` · ${res.restoredFiles} archivos` : ""
+        }). Puedes deshacerla durante ${Math.round(
           BACKUP_UNDO_WINDOW_MS / 60_000,
         )} minutos.`,
       );
@@ -579,6 +585,9 @@ export function WorkshopBackupSection() {
               <div className="rounded-lg border bg-muted/30 p-3 space-y-1">
                 <p className="font-medium">
                   {pendingSummary.totalRecords} registros detectados
+                  {pendingSummary.fileCount
+                    ? ` · ${pendingSummary.fileCount} archivos`
+                    : ""}
                   {pendingBytes > 0 && ` · ${formatFileSize(pendingBytes)}`}
                 </p>
                 <p className="text-muted-foreground">

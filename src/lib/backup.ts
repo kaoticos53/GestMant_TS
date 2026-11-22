@@ -11,6 +11,15 @@ export const BACKUP_LEGACY_VERSION = 1 as const;
 export const BACKUP_UNDO_WINDOW_MS = 10 * 60 * 1000;
 export const RESTORE_CONFIRM_WORD = "RESTAURAR" as const;
 
+/** Tope de un archivo suelto que viaja dentro de la copia. */
+export const MAX_BACKUP_FILE_BYTES = 25 * 1024 * 1024;
+
+/** Tope del conjunto de archivos de una copia, ya sumados en claro. */
+export const MAX_BACKUP_FILES_BYTES = 64 * 1024 * 1024;
+
+/** Tope del número de archivos de una copia: un taller no tiene miles de fichas. */
+export const MAX_BACKUP_FILES = 10_000;
+
 /**
  * Orden topológico de tablas respaldables (padres antes que hijos) para
  * garantizar la reconstrucción de relaciones al remapar `_id` en Convex.
@@ -90,6 +99,21 @@ export function restoreSizeLevel(records: number): RestoreSizeLevel {
 export interface BackupManifest {
   totalRecords: number;
   tableCounts: Partial<Record<BackupTableName, number>>;
+  /** Presentes solo cuando la copia incluye archivos. */
+  fileCount?: number;
+  fileBytes?: number;
+}
+
+/**
+ * Un archivo del almacén que la copia lleva dentro. Los bytes van en base64
+ * porque el contenedor es JSON; el tamaño es el del archivo en claro, no el de
+ * su representación, y sirve para comprobar que no se ha quedado a medias.
+ */
+export interface BackupFile {
+  storageId: string;
+  contentType: string;
+  size: number;
+  data: string;
 }
 
 export interface WorkshopBackupPayload {
@@ -98,6 +122,8 @@ export interface WorkshopBackupPayload {
   exportedAt: number;
   exportedBy: string;
   tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>>;
+  /** Archivos citados por las filas; en una copia antigua no existen. */
+  files?: BackupFile[];
   /** Recuentos con los que se generó la copia; la restauración los comprueba. */
   manifest: BackupManifest;
 }
@@ -107,11 +133,14 @@ export interface BackupSummary {
   exportedBy: string;
   totalRecords: number;
   tableCounts: Partial<Record<BackupTableName, number>>;
+  fileCount?: number;
+  fileBytes?: number;
 }
 
 /** Cuenta las filas de cada tabla conocida, en el orden canónico del backup. */
 export function backupManifest(
   tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>>,
+  files?: readonly BackupFile[],
 ): BackupManifest {
   const tableCounts: Partial<Record<BackupTableName, number>> = {};
   let totalRecords = 0;
@@ -120,7 +149,179 @@ export function backupManifest(
     tableCounts[table] = count;
     totalRecords += count;
   }
-  return { totalRecords, tableCounts };
+  if (files === undefined) return { totalRecords, tableCounts };
+  return {
+    totalRecords,
+    tableCounts,
+    fileCount: files.length,
+    fileBytes: files.reduce((total, file) => total + file.size, 0),
+  };
+}
+
+const STORAGE_ADDRESS_IN_TEXT = /\/api\/storage\/([A-Za-z0-9_-]+)/g;
+const BASE64_RE =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/**
+ * Los archivos del almacén que citan las filas de una copia. Se buscan tanto
+ * los ids sueltos —el valor de un `storageId`, o dentro de una nota— como las
+ * direcciones `/api/storage/...` que llevan una imagen incrustada. Solo se
+ * devuelven los que existen en el almacén: un id histórico que ya no tiene
+ * archivo no se puede copiar y se queda como estaba.
+ */
+export function collectBackupStorageIds(
+  tables: Partial<Record<BackupTableName, Array<Record<string, unknown>>>>,
+  available: ReadonlySet<string>,
+): string[] {
+  const found = new Set<string>();
+
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      if (available.has(value)) found.add(value);
+      for (const match of value.matchAll(STORAGE_ADDRESS_IN_TEXT)) {
+        const id = match[1];
+        if (id !== undefined && available.has(id)) found.add(id);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (value !== null && typeof value === "object") {
+      for (const item of Object.values(value)) visit(item);
+    }
+  };
+
+  for (const table of BACKUP_TABLES) {
+    for (const row of tables[table] ?? []) visit(row);
+  }
+  return [...found].sort();
+}
+
+function remapStorageString(
+  value: string,
+  map: ReadonlyMap<string, string>,
+): string {
+  let next = value;
+  for (const [oldId, newId] of map) {
+    if (next.includes(oldId)) next = next.split(oldId).join(newId);
+  }
+  return next;
+}
+
+/**
+ * Cambia los ids de archivo de una fila restaurada por los del almacén de
+ * destino. Recorre el documento entero para que también se actualicen las
+ * imágenes incrustadas en una nota o una descripción, no solo los campos que
+ * se llaman `storageId`.
+ */
+export function remapStorageReferences(
+  value: unknown,
+  map: ReadonlyMap<string, string>,
+): unknown {
+  if (map.size === 0) return value;
+  if (typeof value === "string") return remapStorageString(value, map);
+  if (Array.isArray(value)) {
+    return value.map((item) => remapStorageReferences(item, map));
+  }
+  if (value !== null && typeof value === "object") {
+    const copy: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      copy[key] = remapStorageReferences(item, map);
+    }
+    return copy;
+  }
+  return value;
+}
+
+/** Longitud que tendrán los bytes de un base64 ya validado, o `null`. */
+function decodedBase64Length(value: string): number | null {
+  if (value.length === 0) return 0;
+  if (value.length % 4 !== 0 || !BASE64_RE.test(value)) return null;
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
+}
+
+/** Decodifica los bytes de un archivo de la copia; el parser ya los validó. */
+export function decodeBackupFile(data: string): Uint8Array {
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/** Representa los bytes de un archivo para el bloque `files` de la copia. */
+export function encodeBackupFile(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/** Lee y valida el bloque `files` de una copia. */
+function readBackupFiles(
+  value: unknown,
+):
+  | { ok: true; files: BackupFile[]; bytes: number }
+  | { ok: false; error: string } {
+  if (!Array.isArray(value)) {
+    return { ok: false, error: "El bloque `files` de la copia no es válido." };
+  }
+  if (value.length > MAX_BACKUP_FILES) {
+    return { ok: false, error: "La copia declara demasiados archivos." };
+  }
+
+  const files: BackupFile[] = [];
+  const seen = new Set<string>();
+  let bytes = 0;
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return { ok: false, error: "La copia contiene un archivo inválido." };
+    }
+    const file = entry as Record<string, unknown>;
+    if (
+      typeof file.storageId !== "string" ||
+      file.storageId.length === 0 ||
+      typeof file.contentType !== "string" ||
+      typeof file.size !== "number" ||
+      !Number.isInteger(file.size) ||
+      file.size < 0 ||
+      file.size > MAX_BACKUP_FILE_BYTES ||
+      typeof file.data !== "string"
+    ) {
+      return { ok: false, error: "La copia contiene un archivo inválido." };
+    }
+    if (seen.has(file.storageId)) {
+      return { ok: false, error: "La copia repite el mismo archivo." };
+    }
+    const decoded = decodedBase64Length(file.data);
+    if (decoded === null || decoded !== file.size) {
+      return {
+        ok: false,
+        error: "Un archivo de la copia no coincide con el tamaño que declara.",
+      };
+    }
+    seen.add(file.storageId);
+    bytes += file.size;
+    if (bytes > MAX_BACKUP_FILES_BYTES) {
+      return {
+        ok: false,
+        error: "La copia supera el tamaño máximo de archivos.",
+      };
+    }
+    files.push({
+      storageId: file.storageId,
+      contentType: file.contentType,
+      size: file.size,
+      data: file.data,
+    });
+  }
+  return { ok: true, files, bytes };
 }
 
 export function parseWorkshopBackup(rawJson: string):
@@ -197,6 +398,15 @@ export function parseWorkshopBackup(rawJson: string):
     totalRecords += rows.length;
   }
 
+  let files: BackupFile[] | undefined;
+  let fileBytes = 0;
+  if (obj.files !== undefined) {
+    const read = readBackupFiles(obj.files);
+    if (!read.ok) return read;
+    files = read.files;
+    fileBytes = read.bytes;
+  }
+
   if (version === BACKUP_VERSION) {
     const declared = obj.manifest;
     if (!declared || typeof declared !== "object" || Array.isArray(declared)) {
@@ -238,13 +448,36 @@ export function parseWorkshopBackup(rawJson: string):
           "El total de registros del manifiesto no coincide con las tablas de la copia.",
       };
     }
+    const declaredFileCount = manifest.fileCount;
+    if (
+      declaredFileCount !== undefined &&
+      (typeof declaredFileCount !== "number" ||
+        declaredFileCount !== (files?.length ?? 0))
+    ) {
+      return {
+        ok: false,
+        error:
+          "El manifiesto declara un número de archivos distinto del que lleva la copia.",
+      };
+    }
+    const declaredFileBytes = manifest.fileBytes;
+    if (
+      declaredFileBytes !== undefined &&
+      (typeof declaredFileBytes !== "number" || declaredFileBytes !== fileBytes)
+    ) {
+      return {
+        ok: false,
+        error:
+          "El manifiesto declara un tamaño de archivos distinto del que lleva la copia.",
+      };
+    }
   }
 
   const exportedAt =
     typeof obj.exportedAt === "number" ? obj.exportedAt : Date.now();
   const exportedBy =
     typeof obj.exportedBy === "string" ? obj.exportedBy : "Desconocido";
-  const manifest = backupManifest(cleanTables);
+  const manifest = backupManifest(cleanTables, files);
 
   return {
     ok: true,
@@ -254,6 +487,7 @@ export function parseWorkshopBackup(rawJson: string):
       exportedAt,
       exportedBy,
       tables: cleanTables,
+      ...(files === undefined ? {} : { files }),
       manifest,
     },
     summary: {
@@ -261,6 +495,8 @@ export function parseWorkshopBackup(rawJson: string):
       exportedBy,
       totalRecords,
       tableCounts,
+      fileCount: files?.length ?? 0,
+      fileBytes,
     },
     migratedFrom: version === BACKUP_LEGACY_VERSION ? version : undefined,
   };
@@ -358,6 +594,7 @@ export function remapBackupDocument(
   table: BackupTableName,
   doc: Record<string, unknown>,
   idMap: ReadonlyMap<string, string>,
+  storageIdMap: ReadonlyMap<string, string> = new Map(),
 ): Record<string, unknown> {
   const clone: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(doc)) {
@@ -446,5 +683,8 @@ export function remapBackupDocument(
     });
   }
 
-  return clone;
+  // Después de remapear las referencias entre tablas, se cambian los ids de
+  // archivo por los del almacén de destino. Recorre todo el documento porque
+  // una nota puede llevar una imagen incrustada en su texto.
+  return remapStorageReferences(clone, storageIdMap) as Record<string, unknown>;
 }

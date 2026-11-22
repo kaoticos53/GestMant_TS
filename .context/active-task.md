@@ -116,3 +116,13 @@ diez minutos y `undoRestore` devuelve el taller al estado anterior, con traza
 Handover en
 `.context/sessions/2026-11-22-progreso-deshacer-restauracion.md`. La interfaz
 no se ha revisado visualmente.
+
+**Archivos y fotos huérfanas (2026-11-22):** la limpieza de fotos de
+restauración ya no depende de la última fila escrita: lee todas las cabeceras
+con el índice `by_seq_savedAt`, resuelve la más reciente y retira los lotes
+anteriores y los trozos sin cabecera con traza `workshop_backup_prune`. La copia
+incluye los bytes de fotos, documentos, albaranes y versiones anteriores que
+citan las fichas —hasta 25 MB por archivo y 64 MB en total— y la restauración
+los repone con ids nuevos, remapeando también las imágenes incrustadas. Los
+adjuntos y el `.eml` de correos compartidos siguen fuera por diseño. Handover
+en `.context/sessions/2026-11-22-archivos-fotos-huerfanas.md`.

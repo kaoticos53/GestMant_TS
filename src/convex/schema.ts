@@ -1702,7 +1702,10 @@ const schema = defineSchema({
     finishedAt: v.optional(v.number()),
   })
     .index("by_batch", ["batch", "seq"])
-    .index("by_savedAt", ["savedAt"]),
+    .index("by_savedAt", ["savedAt"])
+    // Las cabeceras (`seq` 0), de la más reciente a la más antigua: la pasada
+    // de limpieza necesita ver todas las fotos, no solo el último trozo escrito.
+    .index("by_seq_savedAt", ["seq", "savedAt"]),
 
   // La reserva del mantenimiento del taller: una sola fila. Restaurar, recuperar
   // una restauración interrumpida y vaciar el taller la toman antes de tocar

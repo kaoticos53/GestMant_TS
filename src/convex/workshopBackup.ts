@@ -5,18 +5,24 @@ import {
   BACKUP_TABLES,
   BACKUP_UNDO_WINDOW_MS,
   BACKUP_VERSION,
+  MAX_BACKUP_FILE_BYTES,
+  MAX_BACKUP_FILES_BYTES,
   backupMailShareRow,
   backupManifest,
+  collectBackupStorageIds,
+  decodeBackupFile,
+  encodeBackupFile,
   parseWorkshopBackup,
   remapBackupDocument,
   restoreMailShareRow,
+  type BackupFile,
   type BackupSummary,
   type BackupTableName,
   type WorkshopBackupPayload,
 } from "../lib/backup";
 import { RESTORE_PHASE, ROLES } from "./schema";
 import { internal } from "./_generated/api";
-import type { Id, TableNames } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import {
   action,
   internalAction,
@@ -146,6 +152,23 @@ export const collectAllTables = internalQuery({
   },
 });
 
+/** Los archivos que existen en el almacén, con lo poco que el sistema sabe. */
+export const listStorageFiles = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const perm = await ctx.runQuery(internal.workshopBackup.checkAdmin, {
+      userId: args.userId,
+    });
+    if (!perm.allowed) throw new ConvexError(perm.reason ?? NO_ADMIN_MSG);
+    const rows = await ctx.db.system.query("_storage").collect();
+    return rows.map((row) => ({
+      storageId: String(row._id),
+      contentType: row.contentType ?? "application/octet-stream",
+      size: row.size ?? 0,
+    }));
+  },
+});
+
 export const clearBatch = internalMutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args): Promise<number> => {
@@ -170,6 +193,8 @@ const batchArgs = {
   table: v.string(),
   rowsJson: v.string(),
   idMapJson: v.string(),
+  /** Remapeo de ids de archivo; en una foto o copia antigua va vacío. */
+  storageIdMapJson: v.optional(v.string()),
 };
 
 /**
@@ -183,6 +208,7 @@ async function insertBackupRows(
   table: BackupTableName,
   rows: Array<Record<string, unknown>>,
   idMap: Map<string, string>,
+  storageIdMap: Map<string, string> = new Map(),
 ): Promise<InsertedPairs> {
   const createdPairs: InsertedPairs = [];
 
@@ -220,7 +246,7 @@ async function insertBackupRows(
       continue;
     }
 
-    const doc = remapBackupDocument(table, rawRow, idMap);
+    const doc = remapBackupDocument(table, rawRow, idMap, storageIdMap);
     const insertedId = await ctx.db.insert(table as TableNames, doc as never);
     if (oldId) {
       idMap.set(oldId, String(insertedId));
@@ -241,10 +267,21 @@ function restoreTable(tableName: string): BackupTableName {
 }
 
 /** Lote deserializado de la copia: filas y remapeo acumulado. */
-function readBatch(args: { rowsJson: string; idMapJson: string }) {
+function readBatch(args: {
+  rowsJson: string;
+  idMapJson: string;
+  storageIdMapJson?: string;
+}) {
   const rows = JSON.parse(args.rowsJson) as Array<Record<string, unknown>>;
   const idEntries = JSON.parse(args.idMapJson) as Array<[string, string]>;
-  return { rows, idMap: new Map<string, string>(idEntries) };
+  const storageEntries = args.storageIdMapJson
+    ? (JSON.parse(args.storageIdMapJson) as Array<[string, string]>)
+    : [];
+  return {
+    rows,
+    idMap: new Map<string, string>(idEntries),
+    storageIdMap: new Map<string, string>(storageEntries),
+  };
 }
 
 export const insertTableBatch = internalMutation({
@@ -259,8 +296,15 @@ export const insertTableBatch = internalMutation({
         "El backend ha cortado a mitad de la inserción (fallo simulado).",
       );
     }
-    const { rows, idMap } = readBatch(args);
-    return await insertBackupRows(ctx, args.userId, table, rows, idMap);
+    const { rows, idMap, storageIdMap } = readBatch(args);
+    return await insertBackupRows(
+      ctx,
+      args.userId,
+      table,
+      rows,
+      idMap,
+      storageIdMap,
+    );
   },
 });
 
@@ -308,13 +352,14 @@ export const checkTableBatch = internalMutation({
   args: batchArgs,
   handler: async (ctx, args) => {
     await assertAdminUser(ctx, args.userId);
-    const { rows, idMap } = readBatch(args);
+    const { rows, idMap, storageIdMap } = readBatch(args);
     const pairs = await insertBackupRows(
       ctx,
       args.userId,
       restoreTable(args.table),
       rows,
       idMap,
+      storageIdMap,
     );
     throw new ConvexError({ pairs });
   },
@@ -486,33 +531,16 @@ export const beginSnapshotUndo = internalMutation({
 export const pendingRestoreSnapshot = internalQuery({
   args: {},
   handler: async (ctx) => {
+    // Se leen las cabeceras (`seq` 0), no el último trozo escrito: un lote a
+    // medio escribir de un intento muerto no puede esconder una foto anterior
+    // que sí está completa.
     const last = await ctx.db
       .query("workshopRestoreSnapshots")
-      .withIndex("by_savedAt")
+      .withIndex("by_seq_savedAt", (q) => q.eq("seq", 0))
       .order("desc")
       .first();
     if (!last) return null;
-    const head = await ctx.db
-      .query("workshopRestoreSnapshots")
-      .withIndex("by_batch", (q) => q.eq("batch", last.batch).eq("seq", 0))
-      .unique();
-    if (!head) return null;
-    return {
-      batch: head.batch,
-      savedBy: head.savedBy,
-      savedAt: head.savedAt,
-      aliveAt: head.aliveAt ?? head.savedAt,
-      complete: head.complete === true,
-      chunkCount: head.chunkCount ?? 0,
-      checksum: head.checksum ?? null,
-      applied: head.appliedAt !== undefined,
-      appliedRecords: head.appliedRecords ?? 0,
-      phase: head.phase ?? null,
-      processedRecords: head.processedRecords ?? 0,
-      totalRecords: head.totalRecords ?? 0,
-      undoUntil: head.undoUntil ?? null,
-      finishedAt: head.finishedAt ?? null,
-    };
+    return snapshotView(last);
   },
 });
 
@@ -704,11 +732,57 @@ export const clearSnapshot = internalMutation({
   },
 });
 
+/**
+ * Retira las fotos que ya no son la actual. La recuperación solo mira la
+ * cabecera más reciente: cualquier lote anterior —o los trozos de una escritura
+ * que murió antes de sellar— es una foto huérfana que nunca se va a aplicar y
+ * que, sin esta pasada, se quedaría en la base para siempre.
+ *
+ * `keepBatch` es la foto que sigue en juego (restauración viva o ventana de
+ * deshacer abierta). Sin él se retiran todas. La traza guarda los lotes y los
+ * documentos retirados, no sus contenidos.
+ */
+export const pruneOrphanSnapshots = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    keepBatch: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (args.userId !== undefined) await assertAdminUser(ctx, args.userId);
+    const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+    const removedBatches = new Set<string>();
+    let removedRows = 0;
+    for (const row of rows) {
+      if (args.keepBatch !== undefined && row.batch === args.keepBatch) {
+        continue;
+      }
+      await ctx.db.delete(row._id);
+      removedBatches.add(row.batch);
+      removedRows += 1;
+    }
+    if (removedRows > 0) {
+      await logSecurityEvent(ctx, {
+        actorId: args.userId ?? null,
+        action: "workshop_backup_prune",
+        target: "system:backup",
+        metadata: {
+          keptBatch: args.keepBatch ?? null,
+          batches: [...removedBatches].sort(),
+          rows: removedRows,
+        },
+      });
+    }
+    return { batches: removedBatches.size, rows: removedRows };
+  },
+});
+
 export const logAudit = internalMutation({
   args: {
     userId: v.id("users"),
     kind: v.union(v.literal("export"), v.literal("restore")),
     totalRecords: v.number(),
+    fileCount: v.optional(v.number()),
+    fileBytes: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await assertAdminUser(ctx, args.userId);
@@ -719,7 +793,11 @@ export const logAudit = internalMutation({
           ? "workshop_backup_export"
           : "workshop_backup_restore",
       target: "system:backup",
-      metadata: { totalRecords: args.totalRecords },
+      metadata: {
+        totalRecords: args.totalRecords,
+        fileCount: args.fileCount ?? 0,
+        fileBytes: args.fileBytes ?? 0,
+      },
     });
   },
 });
@@ -820,6 +898,7 @@ async function checkBackupBatch(
 async function walkChunks(
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
+  storageIdMap: ReadonlyMap<string, string>,
   run: (args: BatchArgs) => Promise<InsertedPairs>,
   onChunk?: (progress: {
     written: number;
@@ -839,6 +918,7 @@ async function walkChunks(
         table,
         rowsJson: JSON.stringify(rows.slice(i, i + BACKUP_CHUNK_SIZE)),
         idMapJson: JSON.stringify(Array.from(idMap.entries())),
+        storageIdMapJson: JSON.stringify(Array.from(storageIdMap.entries())),
       });
       for (const pair of pairs) idMap.set(pair.oldId, pair.newId);
       // Solo cuentan las filas que de verdad volvieron: una copia de correo
@@ -860,6 +940,7 @@ async function walkBackup(
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
   mode: "check" | "restore",
+  storageIdMap: ReadonlyMap<string, string> = new Map(),
   onChunk?: (progress: {
     written: number;
     table: BackupTableName;
@@ -868,6 +949,7 @@ async function walkBackup(
   return await walkChunks(
     userId,
     tables,
+    storageIdMap,
     (args) =>
       mode === "check"
         ? checkBackupBatch(ctx, args)
@@ -892,6 +974,26 @@ type PendingSnapshot = {
   undoUntil: number | null;
   finishedAt: number | null;
 };
+
+/** Lo que la pantalla y la recuperación necesitan de una cabecera de foto. */
+function snapshotView(head: Doc<"workshopRestoreSnapshots">): PendingSnapshot {
+  return {
+    batch: head.batch,
+    savedBy: head.savedBy,
+    savedAt: head.savedAt,
+    aliveAt: head.aliveAt ?? head.savedAt,
+    complete: head.complete === true,
+    chunkCount: head.chunkCount ?? 0,
+    checksum: head.checksum ?? null,
+    applied: head.appliedAt !== undefined,
+    appliedRecords: head.appliedRecords ?? 0,
+    phase: head.phase ?? null,
+    processedRecords: head.processedRecords ?? 0,
+    totalRecords: head.totalRecords ?? 0,
+    undoUntil: head.undoUntil ?? null,
+    finishedAt: head.finishedAt ?? null,
+  };
+}
 
 /**
  * Latido de una foto en juego. Se manda como mucho cada
@@ -1014,6 +1116,7 @@ async function applySnapshot(
   const written = await walkChunks(
     userId,
     tables,
+    new Map(),
     (args) =>
       ctx.runMutation(internal.workshopBackup.insertSnapshotBatch, args),
     async ({ written: current }) => {
@@ -1266,6 +1369,96 @@ async function resolvePendingSnapshot(
   return true;
 }
 
+/**
+ * Lee del almacén los archivos que citan las filas de la copia. La lista sale
+ * de las propias filas —incluidas las imágenes incrustadas en una nota—, no de
+ * todo el almacén: una copia no debe llevarse objetos que ya nadie usa.
+ */
+async function collectBackupFiles(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  tables: WorkshopBackupPayload["tables"],
+): Promise<{ files: BackupFile[]; bytes: number }> {
+  const stored = await ctx.runQuery(internal.workshopBackup.listStorageFiles, {
+    userId,
+  });
+  const byId = new Map(stored.map((file) => [file.storageId, file]));
+  const ids = collectBackupStorageIds(tables, new Set(byId.keys()));
+  const files: BackupFile[] = [];
+  let bytes = 0;
+
+  for (const storageId of ids) {
+    const meta = byId.get(storageId);
+    const blob = await ctx.storage.get(storageId as Id<"_storage">);
+    if (!blob) {
+      throw new ConvexError(
+        "La copia no se ha podido generar: un archivo citado ya no está en el almacén.",
+      );
+    }
+    if (blob.size > MAX_BACKUP_FILE_BYTES) {
+      throw new ConvexError(
+        "La copia no se ha podido generar: un archivo supera el tamaño máximo que cabe en ella.",
+      );
+    }
+    bytes += blob.size;
+    if (bytes > MAX_BACKUP_FILES_BYTES) {
+      throw new ConvexError(
+        "La copia no se ha podido generar: entre todos los archivos superan el tamaño máximo que cabe en ella.",
+      );
+    }
+    const content = new Uint8Array(await blob.arrayBuffer());
+    files.push({
+      storageId,
+      contentType: blob.type || meta?.contentType || "application/octet-stream",
+      size: content.byteLength,
+      data: encodeBackupFile(content),
+    });
+  }
+
+  return { files, bytes };
+}
+
+/**
+ * Vuelve a poner en el almacén los archivos de la copia y devuelve el remapeo
+ * de sus ids. Los objetos nuevos se apuntan para poder retirarlos si la
+ * restauración no llega a escribir las filas que los citan.
+ */
+async function storeBackupFiles(
+  ctx: ActionCtx,
+  files: readonly BackupFile[] | undefined,
+  storedIds: Id<"_storage">[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const file of files ?? []) {
+    const bytes = decodeBackupFile(file.data);
+    if (bytes.byteLength !== file.size) {
+      throw new ConvexError(
+        "Un archivo de la copia no coincide con el tamaño que declara.",
+      );
+    }
+    const stored = await ctx.storage.store(
+      new Blob([bytes], { type: file.contentType }),
+    );
+    storedIds.push(stored);
+    map.set(file.storageId, String(stored));
+  }
+  return map;
+}
+
+/** Retira los archivos nuevos de una restauración que no llegó a escribirse. */
+async function discardStoredFiles(
+  ctx: ActionCtx,
+  storedIds: readonly Id<"_storage">[],
+): Promise<void> {
+  for (const storageId of storedIds) {
+    try {
+      await ctx.storage.delete(storageId);
+    } catch {
+      // La limpieza nocturna los recogerá si el borrado no llega a tiempo.
+    }
+  }
+}
+
 /** Exporta una copia completa en JSON de todas las tablas operativas del taller. */
 export const exportBackup = action({
   args: {},
@@ -1300,6 +1493,14 @@ export const exportBackup = action({
       );
     }
 
+    // La comprobación de esquema va antes de leer los archivos: si la copia no
+    // se pudiera restaurar, no se paga el coste de recorrer el almacén.
+    const archivedFiles = await collectBackupFiles(
+      ctx,
+      userId,
+      collected.tables,
+    );
+
     const exportedAt = Date.now();
     const payload = {
       format: BACKUP_FORMAT,
@@ -1307,13 +1508,18 @@ export const exportBackup = action({
       exportedAt,
       exportedBy: perm.actorName,
       tables: collected.tables,
-      manifest: backupManifest(collected.tables),
+      ...(archivedFiles.files.length === 0
+        ? {}
+        : { files: archivedFiles.files }),
+      manifest: backupManifest(collected.tables, archivedFiles.files),
     };
 
     await ctx.runMutation(internal.workshopBackup.logAudit, {
       userId,
       kind: "export",
       totalRecords: collected.totalRecords,
+      fileCount: archivedFiles.files.length,
+      fileBytes: archivedFiles.bytes,
     });
 
     return {
@@ -1323,6 +1529,8 @@ export const exportBackup = action({
         exportedBy: perm.actorName,
         totalRecords: collected.totalRecords,
         tableCounts: collected.tableCounts,
+        fileCount: archivedFiles.files.length,
+        fileBytes: archivedFiles.bytes,
       },
     };
   },
@@ -1345,6 +1553,7 @@ export const restoreBackup = action({
     args,
   ): Promise<{
     restoredRecords: number;
+    restoredFiles: number;
     exportedAt: number;
     undoUntil: number;
   }> => {
@@ -1408,13 +1617,27 @@ export const restoreBackup = action({
         }
       }
 
+      // Cualquier otro lote que quedara de intentos anteriores es una foto
+      // huérfana: la restauración nueva va a guardar la suya y solo esa podrá
+      // deshacerse. Se retira antes de seguir, con traza.
+      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
+        userId,
+      });
+
       // 2. Comprobar la copia entera antes de vaciar nada: recorre el mismo camino
       //    de inserción, pero cada lote se revierte. Una fila que el esquema
       //    rechaza se descubre aquí, con el taller todavía intacto, y no a mitad
       //    del vaciado.
-      await walkBackup(ctx, userId, parsed.backup.tables, "check", async () => {
-        await beat();
-      });
+      await walkBackup(
+        ctx,
+        userId,
+        parsed.backup.tables,
+        "check",
+        new Map(),
+        async () => {
+          await beat();
+        },
+      );
 
       // 3. Guardar en la base el estado actual, en trozos, antes de vaciar. Si el
       //    backend muere a mitad —no solo si la acción llega a ver el fallo—, esta
@@ -1437,6 +1660,23 @@ export const restoreBackup = action({
       const progress = restoreProgressReporter(ctx, userId, batch, beat);
       const targetRecords = parsed.backup.manifest.totalRecords;
 
+      // Los archivos se ponen antes de vaciar nada. Si el almacén falla a
+      // mitad, el taller sigue como estaba; los objetos ya escritos se retiran
+      // para no dejar basura que nadie cita.
+      const storedFileIds: Id<"_storage">[] = [];
+      let storageIdMap: Map<string, string>;
+      try {
+        storageIdMap = await storeBackupFiles(
+          ctx,
+          parsed.backup.files,
+          storedFileIds,
+        );
+      } catch (error) {
+        await discardStoredFiles(ctx, storedFileIds);
+        throw error;
+      }
+      const restoredFiles = storageIdMap.size;
+
       let restoredRecords: number;
       let undoUntil: number;
       try {
@@ -1452,6 +1692,7 @@ export const restoreBackup = action({
           userId,
           parsed.backup.tables,
           "restore",
+          storageIdMap,
           async ({ written }) => {
             await progress("inserting", written, targetRecords);
           },
@@ -1473,6 +1714,7 @@ export const restoreBackup = action({
         const detail = error instanceof Error ? error.message : String(error);
         try {
           await applySnapshot(ctx, userId, snapshot.tables, batch, leaseToken);
+          await discardStoredFiles(ctx, storedFileIds);
         } catch (recoveryError) {
           const recoveryDetail =
             recoveryError instanceof Error
@@ -1502,10 +1744,13 @@ export const restoreBackup = action({
         userId,
         kind: "restore",
         totalRecords: restoredRecords,
+        fileCount: parsed.summary.fileCount ?? 0,
+        fileBytes: parsed.summary.fileBytes ?? 0,
       });
 
       return {
         restoredRecords,
+        restoredFiles,
         exportedAt: parsed.backup.exportedAt,
         undoUntil,
       };
@@ -1629,6 +1874,12 @@ export const undoRestore = action({
         },
       );
 
+      // La foto que se acaba de aplicar ya se retiró; las anteriores tampoco
+      // pueden volver a usarse.
+      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
+        userId,
+      });
+
       await ctx.runMutation(internal.workshopBackup.logUndo, {
         userId,
         savedBy: current.savedBy,
@@ -1660,7 +1911,16 @@ export const recoverInterruptedRestore = internalAction({
       internal.workshopBackup.pendingRestoreSnapshot,
       {},
     );
-    if (pending === null || Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
+    if (pending === null) {
+      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {});
+      return { recovered: false };
+    }
+    if (Date.now() - pending.aliveAt < SNAPSHOT_STALE_MS) {
+      // La foto actual puede ser de una restauración viva: no se toca, pero las
+      // anteriores ya no pueden aplicarse y se retiran igualmente.
+      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
+        keepBatch: pending.batch,
+      });
       return { recovered: false };
     }
     // La cuenta que guardó la foto puede haberse desactivado o borrado: la
@@ -1694,14 +1954,26 @@ export const recoverInterruptedRestore = internalAction({
       token: leaseToken,
     };
     try {
-      return {
-        recovered: await resolvePendingSnapshot(
-          ctx,
-          actor,
-          pending,
-          leaseToken,
-        ),
-      };
+      const recovered = await resolvePendingSnapshot(
+        ctx,
+        actor,
+        pending,
+        leaseToken,
+      );
+      // Si la foto se conserva (ventana de deshacer), se queda ella sola; si se
+      // resolvió o se descartó, no queda ninguna que preserve. En los dos casos
+      // los lotes anteriores son huérfanos.
+      const current = await ctx.runQuery(
+        internal.workshopBackup.pendingRestoreSnapshot,
+        {},
+      );
+      await ctx.runMutation(internal.workshopBackup.pruneOrphanSnapshots, {
+        // Si la foto resuelta era la última y se descartó, `current` puede ser
+        // una anterior: esa tampoco se aplica, porque la última era la única
+        // que correspondía al estado que se estaba restaurando.
+        keepBatch: current?.batch === pending.batch ? current.batch : undefined,
+      });
+      return { recovered };
     } finally {
       await ctx.runMutation(
         internal.workshopMaintenance.releaseMaintenanceLease,

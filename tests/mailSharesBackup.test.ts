@@ -108,6 +108,9 @@ describe("mailShares en el backup", () => {
 
     const exported = await admin.action(api.workshopBackup.exportBackup, {});
     expect(exported.summary.tableCounts.mailShares).toBe(1);
+    // El contenido del correo no viaja: sus adjuntos y su `.eml` no entran en
+    // el bloque de archivos de la copia.
+    expect(exported.summary.fileCount).toBe(0);
 
     const payload = JSON.parse(exported.rawJson) as BackupPayload;
     const row = payload.tables.mailShares?.[0];
