@@ -1665,6 +1665,10 @@ const schema = defineSchema({
     // Solo cuando están todos los trozos: una foto a medio escribir se
     // descarta, no se intenta recuperar.
     complete: v.optional(v.boolean()),
+    // La copia ya está escrita entera; el taller no quedó a medias aunque la
+    // foto siga aquí porque la acción murió antes de retirarla.
+    appliedAt: v.optional(v.number()),
+    appliedRecords: v.optional(v.number()),
   })
     .index("by_batch", ["batch", "seq"])
     .index("by_savedAt", ["savedAt"]),

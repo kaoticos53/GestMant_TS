@@ -190,6 +190,37 @@ async function crashMidRestore(t: TestBackend) {
   return { admin, adminId, exported, beforeRestore };
 }
 
+/**
+ * Deja una restauración terminada pero con la foto sin retirar, como la dejaría
+ * un backend que muere justo después del último lote.
+ */
+async function crashAfterInsert(t: TestBackend) {
+  const { admin, adminId } = await seedWorkshop(t);
+  const exported = await admin.action(api.workshopBackup.exportBackup, {});
+
+  await admin.mutation(api.spareParts.create, {
+    code: "EXTRA-999",
+    name: "Llegó después de la copia",
+    category: "Electrónica",
+    unit: "ud",
+    stock: 7,
+    minStock: 0,
+  });
+
+  backupFaults.simulateCrashAfterInsert = true;
+  try {
+    await expect(
+      admin.action(api.workshopBackup.restoreBackup, {
+        rawJson: exported.rawJson,
+      }),
+    ).rejects.toThrow(/después de insertar/);
+  } finally {
+    backupFaults.simulateCrashAfterInsert = false;
+  }
+
+  return { admin, adminId, exported };
+}
+
 describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () => {
   test("restaura la copia y deja los recuentos por tabla iguales a los exportados", async () => {
     const t = backend();
@@ -536,6 +567,51 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     expect(recovery?.actorId).toBe(otherAdminId);
     expect(JSON.parse(recovery?.metadata ?? "{}")).toMatchObject({
       snapshotSavedBy: adminId,
+    });
+  });
+
+  test("una restauración terminada no se deshace si queda la foto", async () => {
+    const t = backend();
+    const { admin, adminId, exported } = await crashAfterInsert(t);
+
+    // La copia entera quedó puesta, no el estado anterior a la restauración.
+    const after = await tableCounts(t);
+    for (const table of BACKUP_TABLES) {
+      expect(after[table], `recuento de ${table}`).toBe(
+        exported.summary.tableCounts[table] ?? 0,
+      );
+    }
+    expect(
+      (await admin.query(api.spareParts.list, {})).map((part) => part.code),
+    ).toEqual(["BK-001"]);
+
+    // La foto quedó marcada como aplicada y sin retirar.
+    const chunks = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.some((row) => row.appliedAt !== undefined)).toBe(true);
+
+    // Pasado el margen, la pasada retira la foto sin tocar el taller.
+    await ageSnapshot(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(await tableCounts(t)).toEqual(after);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+
+    // La auditoría distingue este caso: no revirtió, solo cerró la foto.
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const recovery = audit.find(
+      (row) => row.action === "workshop_backup_recover",
+    );
+    expect(JSON.parse(recovery?.metadata ?? "{}")).toMatchObject({
+      snapshotSavedBy: adminId,
+      snapshotApplied: true,
     });
   });
 

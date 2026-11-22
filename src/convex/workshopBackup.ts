@@ -348,6 +348,33 @@ export const touchRestoreSnapshot = internalMutation({
   },
 });
 
+/**
+ * Marca que la copia ya está escrita entera. Si la acción muere después, la
+ * recuperación ve la marca y retira la foto sin deshacer la restauración.
+ */
+export const markSnapshotApplied = internalMutation({
+  args: {
+    userId: v.id("users"),
+    batch: v.string(),
+    totalRecords: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await assertAdminUser(ctx, args.userId);
+    const head = await ctx.db
+      .query("workshopRestoreSnapshots")
+      .withIndex("by_batch", (q) =>
+        q.eq("batch", args.batch).eq("seq", 0),
+      )
+      .unique();
+    if (!head) return false;
+    await ctx.db.patch(head._id, {
+      appliedAt: Date.now(),
+      appliedRecords: args.totalRecords,
+    });
+    return true;
+  },
+});
+
 /** La foto pendiente, si la hay: quién la guardó, cuándo y si está completa. */
 export const pendingRestoreSnapshot = internalQuery({
   args: {},
@@ -371,6 +398,8 @@ export const pendingRestoreSnapshot = internalQuery({
       savedAt: head.savedAt,
       aliveAt: head.aliveAt ?? head.savedAt,
       complete: head.complete === true,
+      applied: head.appliedAt !== undefined,
+      appliedRecords: head.appliedRecords ?? 0,
     };
   },
 });
@@ -464,6 +493,8 @@ export const logRecovery = internalMutation({
     userId: v.id("users"),
     savedBy: v.id("users"),
     totalRecords: v.number(),
+    /** `true` si la copia ya estaba puesta y solo se retiró la foto. */
+    applied: v.boolean(),
   },
   handler: async (ctx, args) => {
     await assertAdminUser(ctx, args.userId);
@@ -476,6 +507,7 @@ export const logRecovery = internalMutation({
         totalRecords: args.totalRecords,
         snapshotSavedBy: args.savedBy,
         snapshotSavedByEmail: saved?.email ?? null,
+        snapshotApplied: args.applied,
       },
     });
   },
@@ -580,6 +612,8 @@ type PendingSnapshot = {
   savedAt: number;
   aliveAt: number;
   complete: boolean;
+  applied: boolean;
+  appliedRecords: number;
 };
 
 /**
@@ -747,8 +781,36 @@ async function recoverSnapshot(
     userId,
     savedBy: pending.savedBy,
     totalRecords: restored,
+    applied: false,
   });
   return restored;
+}
+
+/**
+ * Cierra una foto pendiente. Si la copia ya estaba insertada —la acción murió
+ * entre el último lote y retirar la foto—, solo la retira: deshacerla devolvería
+ * el taller al estado anterior y perdería una restauración terminada. Si no,
+ * reescribe el estado que guarda la foto.
+ */
+async function settlePendingSnapshot(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  pending: PendingSnapshot,
+): Promise<void> {
+  if (pending.applied) {
+    await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
+      userId,
+      batch: pending.batch,
+    });
+    await ctx.runMutation(internal.workshopBackup.logRecovery, {
+      userId,
+      savedBy: pending.savedBy,
+      totalRecords: pending.appliedRecords,
+      applied: true,
+    });
+    return;
+  }
+  await recoverSnapshot(ctx, userId, pending);
 }
 
 /** Exporta una copia completa en JSON de todas las tablas operativas del taller. */
@@ -846,7 +908,7 @@ export const restoreBackup = action({
         );
       }
       if (pending.complete) {
-        await recoverSnapshot(ctx, userId, pending);
+        await settlePendingSnapshot(ctx, userId, pending);
       } else {
         // Murió mientras guardaba la foto: el taller no llegó a vaciarse.
         await ctx.runMutation(internal.workshopBackup.clearSnapshot, {
@@ -886,6 +948,13 @@ export const restoreBackup = action({
         "restore",
         beat,
       );
+      // La copia está entera: si la acción muere antes de retirar la foto, la
+      // recuperación sabrá que no tiene que deshacerla.
+      await ctx.runMutation(internal.workshopBackup.markSnapshotApplied, {
+        userId,
+        batch,
+        totalRecords: restoredRecords,
+      });
     } catch (error) {
       // Pruebas: como si el backend hubiera muerto antes de recuperar.
       if (backupFaults.simulateCrash) throw error;
@@ -903,6 +972,14 @@ export const restoreBackup = action({
       }
       throw new ConvexError(
         `La restauración falló a mitad y se ha devuelto el taller al estado anterior: ${detail}`,
+      );
+    }
+
+    // Pruebas: como si el backend muriera con la copia entera puesta y la foto
+    // todavía sin retirar.
+    if (backupFaults.simulateCrashAfterInsert) {
+      throw new ConvexError(
+        "La restauración se ha cortado después de insertar la copia.",
       );
     }
 
@@ -961,7 +1038,8 @@ export const recoverInterruptedRestore = internalAction({
       });
       return { recovered: false };
     }
-    await recoverSnapshot(ctx, actor, pending);
-    return { recovered: true };
+    const rewrote = !pending.applied;
+    await settlePendingSnapshot(ctx, actor, pending);
+    return { recovered: rewrote };
   },
 });

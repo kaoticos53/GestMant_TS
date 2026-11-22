@@ -431,6 +431,12 @@ Otra prueba desactiva a la cuenta que guardó la foto y comprueba que recupera
 otro administrador activo, que la foto conserva a su dueño y que la auditoría
 registra las dos trazas.
 
+La foto guarda además `appliedAt` cuando la copia ya está insertada entera. Una
+tercera prueba corta la acción justo después del último lote y antes de retirar
+la foto: la pasada ve la marca, retira la foto sin tocar el taller —que se queda
+con la copia, no con el estado anterior— y lo deja en la auditoría con
+`snapshotApplied: true`.
+
 Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 
 - Restauración normal con la foto persistida: **1 196 ms**, 880 filas
@@ -459,9 +465,10 @@ Ensayo real contra el mismo Docker, con el taller de 880 filas / 614 KB:
 - El latido depende del reloj del backend. Una deriva grande entre procesos
   (improbable en un solo deployment) podría adelantar o retrasar la recuperación.
 - Si el backend muere **después** de insertar toda la copia y **antes** de
-  retirar la foto, la siguiente recuperación devuelve el taller al estado
-  anterior: se pierde una restauración que había terminado. Es el lado seguro
-  —taller coherente— y el usuario ya habrá visto un fallo, pero la copia hay que
+  retirar la foto, la foto queda marcada como aplicada (`appliedAt`) y la pasada
+  solo la retira: no deshace una restauración terminada. Queda una ventana
+  mínima entre el último lote y esa marca —una mutación—; si la muerte cae justo
+  ahí, la recuperación aún revierte a un taller coherente y la copia hay que
   volver a lanzarla.
 - La recuperación usa la cuenta que guardó la foto si sigue siendo un
   administrador activo; si se desactivó o se borró, la completa cualquiera de
