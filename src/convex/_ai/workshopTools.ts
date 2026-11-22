@@ -365,3 +365,112 @@ export const queryManuals = internalQuery({
       }));
   },
 });
+
+export const queryMailbox = internalQuery({
+  args: {
+    userId: v.id("users"),
+    query: v.optional(v.string()),
+    tag: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db
+      .query("mailAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+    if (!account) return [];
+
+    const headers = await ctx.db
+      .query("mailHeaders")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .collect();
+
+    const q = args.query ?? "";
+    const tagFilter = args.tag?.trim();
+
+    return headers
+      .filter((h) => {
+        if (h.deletedRemoteAt !== undefined) return false;
+        if (tagFilter && !h.tags?.includes(tagFilter)) return false;
+        return matchesQuery(
+          [h.subject, h.fromName, h.fromAddress, h.snippet, (h.tags ?? []).join(" ")],
+          q,
+        );
+      })
+      .sort((a, b) => b.date - a.date)
+      .slice(0, MAX_TOOL_RESULTS)
+      .map((h) => ({
+        messageId: h.messageId,
+        date: new Date(h.date).toISOString().slice(0, 10),
+        from: h.fromName ? `${h.fromName} <${h.fromAddress}>` : h.fromAddress,
+        subject: h.subject,
+        snippet: h.snippet.slice(0, 180),
+        tags: h.tags ?? [],
+        hasAttachments: h.hasAttachments,
+      }));
+  },
+});
+
+export const queryMovements = internalQuery({
+  args: {
+    query: v.optional(v.string()),
+    canParts: v.boolean(),
+    canEquipment: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const q = args.query ?? "";
+
+    const stock = args.canParts
+      ? (
+          await ctx.db
+            .query("stockMovements")
+            .withIndex("by_createdAt")
+            .order("desc")
+            .take(80)
+        )
+          .filter((m) =>
+            matchesQuery([m.partCode, m.partName, m.actorName, m.reason], q),
+          )
+          .slice(0, 15)
+          .map((m) => ({
+            type: "stock",
+            date: new Date(m.createdAt).toISOString().slice(0, 10),
+            partCode: m.partCode,
+            partName: m.partName,
+            kind: m.kind,
+            delta: m.delta,
+            actor: m.actorName,
+            reason: m.reason ?? null,
+          }))
+      : [];
+
+    const equipment = args.canEquipment
+      ? (
+          await ctx.db
+            .query("equipmentMovements")
+            .withIndex("by_createdAt")
+            .order("desc")
+            .take(80)
+        )
+          .filter((m) =>
+            matchesQuery(
+              [m.equipmentCode, m.equipmentName, m.actorName, m.toLocation, m.note],
+              q,
+            ),
+          )
+          .slice(0, 15)
+          .map((m) => ({
+            type: "equipment",
+            date: new Date(m.createdAt).toISOString().slice(0, 10),
+            equipmentCode: m.equipmentCode ?? null,
+            equipmentName: m.equipmentName,
+            kind: m.kind,
+            fromLocation: m.fromLocation ?? null,
+            toLocation: m.toLocation ?? null,
+            actor: m.actorName,
+            note: m.note ?? null,
+          }))
+      : [];
+
+    return { stock, equipment };
+  },
+});

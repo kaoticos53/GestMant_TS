@@ -171,6 +171,65 @@ export const AI_WORKSHOP_TOOLS: readonly AiToolDefinition[] = [
       },
     },
   },
+  {
+    type: "function",
+    module: "core",
+    function: {
+      name: "search_workshop_memory",
+      description:
+        "Búsqueda rápida y compacta en la memoria unificada del taller (incidencias, equipos, repuestos, manuales, hechos aprendidos y tus correos) con expansión de sinónimos. Úsala primero para ahorrar tokens.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Síntoma, código, modelo, número de serie o tema a buscar.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    module: "core",
+    function: {
+      name: "search_mailbox",
+      description:
+        "Busca en tus correos personales de Zimbra (asunto, remitente, extracto, etiquetas como requests/incidents/equipment/purchasing y cuerpos cacheados).",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Texto del asunto, remitente o contenido.",
+          },
+          tag: {
+            type: "string",
+            description: "Etiqueta opcional: requests, incidents, equipment, purchasing, external_sat, manuals, informative.",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    module: "core",
+    function: {
+      name: "search_movements",
+      description:
+        "Consulta movimientos recientes de stock de repuestos y traslados/bajas de equipos.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Código, nombre de repuesto/equipo, usuario o motivo.",
+          },
+        },
+      },
+    },
+  },
 ];
 
 /**

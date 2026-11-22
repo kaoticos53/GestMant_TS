@@ -21,6 +21,7 @@ import {
   type WorkshopContextSnapshot,
   type WorkshopQaAnswer,
 } from "../lib/ai";
+import { compactChatTurns } from "../lib/ai/memory";
 import { isClosedIncident } from "../lib/incidentFlow";
 import type { Capability } from "../lib/permissions";
 import { richDocToPlainText } from "../lib/richDoc";
@@ -142,6 +143,7 @@ export const activeMemberProfile = internalQuery({
       name: member.name?.trim() || member.email?.trim() || "Técnico",
       role,
       capabilities: capabilitiesFromGrants(grants),
+      canViewMailbox: Boolean(grants.viewMailbox),
     };
   },
 });
@@ -476,6 +478,13 @@ async function dispatchWorkshopTool(
   name: string,
   rawArgs: string,
   allowedNames: ReadonlySet<string>,
+  actor: {
+    userId: Id<"users">;
+    allowedModules: string[];
+    canViewMailbox: boolean;
+    canParts: boolean;
+    canEquipment: boolean;
+  },
 ): Promise<string> {
   if (!allowedNames.has(name)) {
     return JSON.stringify({
@@ -545,6 +554,34 @@ async function dispatchWorkshopTool(
           query: strArg("query"),
         }),
       );
+    case "search_workshop_memory":
+      return JSON.stringify(
+        await ctx.runQuery(internal.aiMemory.searchMemory, {
+          userId: actor.userId,
+          query: strArg("query") ?? "",
+          allowedModules: actor.allowedModules,
+          includeMailbox: actor.canViewMailbox,
+        }),
+      );
+    case "search_mailbox":
+      if (!actor.canViewMailbox) {
+        return JSON.stringify({ error: "Sin permiso para consultar tu buzón." });
+      }
+      return JSON.stringify(
+        await ctx.runQuery(internal._ai.workshopTools.queryMailbox, {
+          userId: actor.userId,
+          query: strArg("query"),
+          tag: strArg("tag"),
+        }),
+      );
+    case "search_movements":
+      return JSON.stringify(
+        await ctx.runQuery(internal._ai.workshopTools.queryMovements, {
+          query: strArg("query"),
+          canParts: actor.canParts,
+          canEquipment: actor.canEquipment,
+        }),
+      );
     default:
       return JSON.stringify({ error: `Herramienta desconocida: ${name}` });
   }
@@ -610,13 +647,19 @@ export const askWorkshop = action({
     const allowedTools = resolveAllowedAiTools(
       config.enabledModules,
       member.capabilities,
+    ).filter(
+      (tool) =>
+        tool.function.name !== "search_mailbox" || member.canViewMailbox,
     );
     const allowedToolNames = new Set(allowedTools.map((t) => t.function.name));
+    const allowedModuleList = config.enabledModules.filter(
+      (m) => member.capabilities[m],
+    );
 
     const taskCfg = config.taskParams.workshop_chat;
     const messages = buildWorkshopChatMessages({
       question,
-      history: args.history,
+      history: compactChatTurns(args.history ?? []),
       context,
       customPrompt: taskCfg.customPrompt,
       variables: {
@@ -637,7 +680,13 @@ export const askWorkshop = action({
       tools: allowedTools,
       collectDebug: args.debug === true,
       executeTool: (name, rawArgs) =>
-        dispatchWorkshopTool(ctx, name, rawArgs, allowedToolNames),
+        dispatchWorkshopTool(ctx, name, rawArgs, allowedToolNames, {
+          userId: member.userId,
+          allowedModules: allowedModuleList,
+          canViewMailbox: member.canViewMailbox,
+          canParts: member.capabilities.parts,
+          canEquipment: member.capabilities.equipment,
+        }),
     });
 
     const parsed = parseWorkshopQaResponse(content, validRefs);

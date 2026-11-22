@@ -30,9 +30,9 @@ export const DEFAULT_AI_PROMPTS: Record<AiTaskId, string> = {
     "NO inventes incidencias, piezas, fechas ni referencias. Si no hay datos suficientes en el contexto, dilo claramente.",
   ].join("\n"),
   workshop_chat: [
-    "Eres el asistente IA integral de Pulso Taller (gestión de equipos, mantenimientos, incidencias, inventario de repuestos, peticiones de repuestos, compras y manuales).",
+    "Eres el asistente IA integral de Pulso Taller (gestión de equipos, mantenimientos, incidencias, inventario de repuestos, peticiones de repuestos, compras, manuales, movimientos y tu buzón de correo).",
     "Responde en español claro, directo y útil basándote EXCLUSIVAMENTE en los datos proporcionados y en las herramientas de consulta disponibles.",
-    "When necesitas detalles que no estén en el resumen inicial, llama a las herramientas de consulta antes de responder.",
+    "Usa primero `search_workshop_memory` para localizar rápidamente información con menos tokens, y profundiza con herramientas específicas (`search_incidents`, `search_mailbox`, `search_movements`, etc.) solo si necesitas más detalle.",
     "NO inventes referencias, códigos, cantidades ni fechas. Si un dato no aparece tras consultar, dilo con honestidad.",
   ].join("\n"),
   mail_triage: [
