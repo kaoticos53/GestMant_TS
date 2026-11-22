@@ -130,7 +130,9 @@ en `.context/sessions/2026-11-22-archivos-fotos-huerfanas.md`.
 **Aviso de la pasada (2026-11-22):** `recoverInterruptedRestore` avisa a todos
 los administradores activos cuando de verdad interviene: recupera el estado
 anterior, descarta una foto inservible, cierra una foto terminada o retira
-lotes huérfanos. No genera aviso en las pasadas sin intervención. Handover en
+lotes huérfanos. El recuento del aviso usa lotes/fotos, no los trozos o
+documentos que componen cada foto. No genera aviso en las pasadas sin
+intervención. Handover en
 `.context/sessions/2026-11-22-aviso-pasada-recuperacion.md`.
 
 **Formato de copia v3 (2026-11-22):** el JSON interior sube a v3 para que un

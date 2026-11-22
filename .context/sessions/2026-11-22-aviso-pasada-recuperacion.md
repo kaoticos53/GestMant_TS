@@ -49,3 +49,12 @@ Cerrar el punto 8 del backlog de copias: **avisar a los administradores cuando l
 - [ ] Revisar visualmente la campana con un aviso de recuperación y comprobar que el texto se lee bien en móvil.
 - ⚠️ **Riesgo conocido:** si no hay ningún administrador activo, `notifySecurityAlert` no puede entregar el aviso; la auditoría sigue quedando.
 - **Sin push:** el commit queda pendiente y no se ha subido nada al remoto.
+
+---
+
+## Corrección posterior — recuento por lotes (2026-11-22)
+
+- El aviso contaba `pruned.rows`, que son los documentos o trozos de la foto, no las fotos. Una foto partida en tres trozos se anunciaba como «3 fotos huérfanas».
+- `notifyRecoveryIntervention` recibe ahora `prunedBatches` y la pasada le pasa `pruned.batches`. La auditoría conserva `rows` y `batches` para diagnóstico.
+- Prueba añadida en `tests/backupSnapshotCleanup.test.ts`: una foto anterior con tres documentos deja el aviso en «1 foto huérfana», mientras `workshop_backup_prune` sigue registrando `rows: 3`.
+- Verificación: `tsc`, Prettier y ESLint correctos; suite completa con **2 912 pruebas pasando**, 69 omitidas.

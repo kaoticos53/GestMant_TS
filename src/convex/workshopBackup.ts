@@ -789,7 +789,7 @@ export const notifyRecoveryIntervention = internalMutation({
       v.literal("cleared"),
       v.literal("recovered"),
     ),
-    prunedRows: v.number(),
+    prunedBatches: v.number(),
   },
   handler: async (ctx, args) => {
     const parts: string[] = [];
@@ -802,11 +802,13 @@ export const notifyRecoveryIntervention = internalMutation({
     } else if (args.action === "discarded") {
       parts.push("ha descartado una foto de restauración inservible");
     }
-    if (args.prunedRows > 0) {
+    // Una foto puede estar partida en varios documentos (`seq`): el aviso
+    // cuenta fotos, no trozos, para no inflar el número.
+    if (args.prunedBatches > 0) {
       parts.push(
-        args.prunedRows === 1
+        args.prunedBatches === 1
           ? "ha retirado 1 foto huérfana de restauraciones anteriores"
-          : `ha retirado ${args.prunedRows} fotos huérfanas de restauraciones anteriores`,
+          : `ha retirado ${args.prunedBatches} fotos huérfanas de restauraciones anteriores`,
       );
     }
     if (parts.length === 0) return false;
@@ -1963,10 +1965,10 @@ export const recoverInterruptedRestore = internalAction({
         internal.workshopBackup.pruneOrphanSnapshots,
         {},
       );
-      if (pruned.rows > 0) {
+      if (pruned.batches > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedRows: pruned.rows },
+          { action: "kept" as const, prunedBatches: pruned.batches },
         );
       }
       return { recovered: false };
@@ -1978,10 +1980,10 @@ export const recoverInterruptedRestore = internalAction({
         internal.workshopBackup.pruneOrphanSnapshots,
         { keepBatch: pending.batch },
       );
-      if (pruned.rows > 0) {
+      if (pruned.batches > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: "kept" as const, prunedRows: pruned.rows },
+          { action: "kept" as const, prunedBatches: pruned.batches },
         );
       }
       return { recovered: false };
@@ -2040,10 +2042,10 @@ export const recoverInterruptedRestore = internalAction({
             current?.batch === pending.batch ? current.batch : undefined,
         },
       );
-      if (resolution.action !== "kept" || pruned.rows > 0) {
+      if (resolution.action !== "kept" || pruned.batches > 0) {
         await ctx.runMutation(
           internal.workshopBackup.notifyRecoveryIntervention,
-          { action: resolution.action, prunedRows: pruned.rows },
+          { action: resolution.action, prunedBatches: pruned.batches },
         );
       }
       return { recovered: resolution.recovered };

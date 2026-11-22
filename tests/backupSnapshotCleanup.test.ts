@@ -100,6 +100,65 @@ describe("limpieza de fotos huérfanas de restauración", () => {
     ).toBe(true);
   });
 
+  test("cuenta una foto partida en varios trozos como una sola foto huérfana", async () => {
+    const { t, adminId } = await setup();
+    const now = Date.now();
+
+    await insertHead(t, adminId, "foto-actual", now - 120_000, {
+      appliedAt: now - 60_000,
+      appliedRecords: 0,
+      undoUntil: now + 60_000,
+    });
+    // Una sola foto anterior repartida en tres documentos. El aviso debe
+    // contar el lote, no los tres trozos.
+    await t.run(async (ctx) => {
+      for (const seq of [0, 1, 2]) {
+        await ctx.db.insert("workshopRestoreSnapshots", {
+          batch: "foto-en-trozos",
+          seq,
+          payload: '{"tables":{}}',
+          savedBy: adminId,
+          savedAt: now - 240_000,
+          aliveAt: now - 240_000,
+          ...(seq === 0
+            ? {
+                complete: true,
+                chunkCount: 3,
+                checksum: "0".repeat(64),
+              }
+            : {}),
+        });
+      }
+    });
+
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+
+    const rows = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(rows.map((row) => row.batch)).toEqual(["foto-actual"]);
+
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const prune = audit.find((row) => row.action === "workshop_backup_prune");
+    expect(JSON.parse(prune?.metadata ?? "{}")).toMatchObject({
+      batches: ["foto-en-trozos"],
+      rows: 3,
+    });
+
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    const notice = notifications.find((row) =>
+      row.text.includes("La pasada de recuperación"),
+    );
+    expect(notice?.text).toContain("1 foto huérfana");
+    expect(notice?.text).not.toContain("3 fotos huérfanas");
+  });
+
   test("una cabecera antigua no queda escondida por un trozo nuevo sin cabecera", async () => {
     const { t, adminId } = await setup();
     const now = Date.now();
