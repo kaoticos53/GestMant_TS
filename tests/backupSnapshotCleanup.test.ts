@@ -259,6 +259,66 @@ describe("limpieza de fotos huérfanas de restauración", () => {
     expect(rows.map((row) => row.batch)).toEqual(["foto-actual"]);
   });
 
+  test("una foto partida entre páginas se cuenta y se avisa una sola vez", async () => {
+    const { t, adminId } = await setup();
+    const now = Date.now();
+
+    // Sin cabecera (`seq` 0) la foto es huérfana; 101 documentos hacen que el
+    // corte de página de 100 la parta en dos pasadas de la limpieza.
+    await t.run(async (ctx) => {
+      for (let seq = 1; seq <= 101; seq += 1) {
+        await ctx.db.insert("workshopRestoreSnapshots", {
+          batch: "foto-cruzada",
+          seq,
+          payload: '{"tables":{}}',
+          savedBy: adminId,
+          savedAt: now - 60_000,
+          aliveAt: now - 60_000,
+        });
+      }
+    });
+
+    // Primera página: retira 100 documentos, pero la foto sigue viva. No hay
+    // aviso todavía.
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(
+      await t.run((ctx) => ctx.db.query("notifications").collect()),
+    ).toHaveLength(0);
+
+    // Segunda página: retira el último documento y cierra la foto. El aviso
+    // aparece una sola vez y con el recuento de fotos, no de páginas.
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+
+    const audit = await t.run((ctx) =>
+      ctx.db
+        .query("securityAuditLog")
+        .withIndex("by_action", (q) => q.eq("action", "workshop_backup_prune"))
+        .collect(),
+    );
+    expect(audit).toHaveLength(2);
+    const pages = audit.map(
+      (row) =>
+        JSON.parse(row.metadata ?? "{}") as {
+          photos: string[];
+          chunks: number;
+        },
+    );
+    expect(pages.map((page) => page.chunks).sort((a, b) => a - b)).toEqual([
+      1, 100,
+    ]);
+    expect(pages.flatMap((page) => page.photos)).toEqual(["foto-cruzada"]);
+
+    const notifications = await t.run((ctx) =>
+      ctx.db.query("notifications").collect(),
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.text).toContain("1 foto huérfana");
+  });
+
   test("avisa una sola vez aunque el fallo de recuperación se repita", async () => {
     const { t } = await setup();
 

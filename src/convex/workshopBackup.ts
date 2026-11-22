@@ -771,7 +771,7 @@ export const pruneOrphanSnapshots = internalMutation({
       .withIndex("by_savedAt")
       .order("asc")
       .take(limit + 1);
-    const removedPhotos = new Set<string>();
+    const touchedPhotos = new Set<string>();
     let removedChunks = 0;
     for (const row of rows) {
       if (removedChunks >= limit) break;
@@ -779,8 +779,20 @@ export const pruneOrphanSnapshots = internalMutation({
         continue;
       }
       await ctx.db.delete(row._id);
-      removedPhotos.add(row.batch);
+      touchedPhotos.add(row.batch);
       removedChunks += 1;
+    }
+    // Una foto puede quedar partida entre dos páginas. Solo se cuenta cuando
+    // esta página retira su último documento; si aún le quedan trozos, la
+    // página siguiente la cerrará y la contará una sola vez. La auditoría, en
+    // cambio, se escribe igualmente por página.
+    const removedPhotos = new Set<string>();
+    for (const batch of touchedPhotos) {
+      const remaining = await ctx.db
+        .query("workshopRestoreSnapshots")
+        .withIndex("by_batch", (q) => q.eq("batch", batch))
+        .first();
+      if (remaining === null) removedPhotos.add(batch);
     }
     if (removedChunks > 0) {
       await logSecurityEvent(ctx, {

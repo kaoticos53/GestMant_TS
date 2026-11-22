@@ -43,6 +43,9 @@ observabilidad de la pasada de recuperación y blindaje del comando de tipos.
 - **Paginación:** `pruneOrphanSnapshots` retira como máximo 100 documentos por
   pasada (tope configurable de 500) empezando por la foto más antigua. Devuelve
   `hasMore`; el cron siguiente continúa. La foto que se conserva no se toca.
+  Una foto partida entre dos páginas solo se cuenta cuando la página retira su
+  último documento; la página intermedia deja su evento de auditoría con los
+  trozos retirados y sin foto cerrada, así que no hay aviso ni recuento doble.
 - **Metadatos:** `logSecurityEvent` añade `metadataVersion: 1` a los objetos
   nuevos. La traza de limpieza usa la versión 2 y `readSnapshotPruneMetadata`
   entiende `batches`/`rows` (histórico) y `photos`/`chunks` (actual). El visor y
@@ -64,6 +67,9 @@ observabilidad de la pasada de recuperación y blindaje del comando de tipos.
   277 archivos en verde y 1 omitido.
 - **Pruebas enfocadas:** ✅ 29 pruebas entre compatibilidad, limpieza, auditoría
   y gobernanza.
+- **Caso de foto partida:** ✅ `tests/backupSnapshotCleanup.test.ts` usa una foto
+  huérfana de 101 documentos: la primera página no avisa, la segunda avisa una
+  sola vez y la auditoría conserva dos eventos de página.
 - **Lint (`npm run lint`):** ✅ 0 errores; quedan 19 avisos preexistentes de
   Fast Refresh, generados y TanStack Virtual.
 - **Pruebas manuales / UI:** no se revisó visualmente. El único cambio de
