@@ -48,6 +48,11 @@ el taller intacto (medido contra el backend de Docker: rechazo en 155 ms, 880
 filas antes y después, `CON-ALCO2` en 12). Handover en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md` (§8.3).
 
+La escala con volumen también está medida (§8.5 del mismo handover): con 7 806
+filas (8 tandas de `seedMoreDemoData`) exportar tarda 1,0 s y restaurar 15,4 s;
+con 3 465 filas, 0,35 s y 4,5 s. El aviso de la pantalla tiene sentido a partir
+de ~2,5–3 MB (unas 3 000 filas), no antes.
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

@@ -388,3 +388,44 @@ Medido contra el mismo deployment de Docker, dos vueltas:
   por el test, incluida la omisión con traza `mail_share_restore_skip`.
 - `users` y `securityAuditLog` siguen fuera de la copia: la restauración no los
   toca (comprobado: 14 usuarios y la auditoría con su historia).
+
+### 8.5 Escala con volumen (2026-11-22, misma tarde)
+
+Mismo deployment. Se partió del taller de 880 filas y se añadieron tandas de
+`seed:seedMoreDemoData({ incidents: 200, requests: 200 })`, unas 870 filas cada
+una (8 tandas, hasta 7 806 filas). En cada tramo se exporta y se restaura **la
+misma copia**, así que el tiempo de restaurar incluye vaciar lo que ya había
+(igual de grande que la copia):
+
+| filas |   copia | exportar | restaurar |
+| ----: | ------: | -------: | --------: |
+|   880 | 0,63 MB |    52 ms |    1,51 s |
+| 1 723 | 1,44 MB |   182 ms |    2,26 s |
+| 2 598 | 2,26 MB |   285 ms |    3,27 s |
+| 3 465 | 3,07 MB |   351 ms |    4,52 s |
+| 4 335 | 3,88 MB |   462 ms |    7,64 s |
+| 6 073 | 5,50 MB |   738 ms |   11,49 s |
+| 7 806 | 7,13 MB | 1 022 ms |   15,45 s |
+
+- **Exportar** es lineal y barato: ~0,11 s por cada 1 000 filas, más ~40 ms
+  fijos. A 7,8 mil filas, 1 s.
+- **Restaurar** tiene dos costes lineales: la comprobación en seco más la
+  inserción cuestan ~1,3–2,0 ms por fila de la copia, y el vaciado ~0,65 ms por
+  fila que ya hubiera. Regla práctica para la pantalla:
+  `segundos ≈ 1,5 + 0,002 × filas_de_la_copia + 0,0006 × filas_del_taller`.
+- Con una copia pequeña sobre un taller grande manda el vaciado: volver a la
+  copia de 880 filas sobre las 7 806 tardó **6,5 s**.
+- No se alcanzó ningún límite de tamaño: 7,13 MB de JSON salieron y entraron sin
+  problema. Por encima de eso no se probó. Son cifras de este equipo (Windows,
+  backend Docker en la misma máquina); en producción cambia el hardware.
+
+**Dónde avisar:** con la muestra normal (880 filas, 0,6 MB, ~1,5 s) no hace falta
+nada. El aviso tiene sentido a partir de **~2,5–3 MB (unas 2 500–3 500 filas)**,
+donde restaurar pasa de 3 s y se acerca a 5 s; conviene decir el tiempo estimado
+y que no se cierre la pestaña. A partir de **~5,5 MB (6 000 filas, 11 s)** el
+aviso debería ser bien visible. El taller de este deployment son 880 filas: el
+umbral está muy por encima de lo que hay hoy.
+
+El ensayo se hizo con un script temporal (borrado) y el taller quedó devuelto a
+la copia de partida: 880 filas, mismos recuentos tabla a tabla que §8.2 más
+`publicStats`.
