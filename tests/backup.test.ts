@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BACKUP_FORMAT,
   BACKUP_LEGACY_VERSION,
+  BACKUP_PREVIOUS_VERSION,
   BACKUP_TABLES,
   BACKUP_VERSION,
   backupManifest,
@@ -58,11 +59,63 @@ describe("Backup y Restauración (Dominio puro)", () => {
     expect(parsed.backup.tables.equipment).toHaveLength(1);
   });
 
+  it("migra una copia v2 sin archivos al formato actual", () => {
+    const tables = { equipment: [{ _id: "e1", name: "Cámara" }] };
+    const raw = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_PREVIOUS_VERSION,
+      exportedAt: 1,
+      exportedBy: "admin@taller.es",
+      tables,
+      manifest: backupManifest(tables),
+    });
+
+    const parsed = parseWorkshopBackup(raw);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.migratedFrom).toBe(2);
+    expect(parsed.backup.version).toBe(BACKUP_VERSION);
+    expect(parsed.backup.files).toBeUndefined();
+    expect(parsed.summary.fileCount).toBe(0);
+  });
+
+  it("migra una copia v2 con archivos sin perderlos", () => {
+    const file = {
+      storageId: "storage-1",
+      contentType: "image/png",
+      size: 5,
+      data: "aGVsbG8=",
+    };
+    const tables = {
+      incidentDocuments: [
+        { _id: "doc-1", incidentId: "inc-1", storageId: "storage-1" },
+      ],
+    };
+    const raw = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_PREVIOUS_VERSION,
+      exportedAt: 1,
+      exportedBy: "admin@taller.es",
+      tables,
+      files: [file],
+      manifest: backupManifest(tables, [file]),
+    });
+
+    const parsed = parseWorkshopBackup(raw);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.migratedFrom).toBe(2);
+    expect(parsed.backup.version).toBe(BACKUP_VERSION);
+    expect(parsed.backup.files).toEqual([file]);
+    expect(parsed.summary.fileCount).toBe(1);
+    expect(parsed.summary.fileBytes).toBe(5);
+  });
+
   it("rechaza una copia v2 cuyo manifiesto no cuadra", () => {
     const tables = { equipment: [{ _id: "e1", name: "Cámara" }] };
     const raw = JSON.stringify({
       format: BACKUP_FORMAT,
-      version: BACKUP_VERSION,
+      version: BACKUP_PREVIOUS_VERSION,
       exportedAt: 1,
       exportedBy: "admin@taller.es",
       tables,
@@ -84,6 +137,9 @@ describe("Backup y Restauración (Dominio puro)", () => {
         JSON.stringify({ format: BACKUP_FORMAT, version: 99, tables: {} }),
       ).ok,
     ).toBe(false);
+    // Una copia v3 con archivos no la puede leer un cliente anterior: su
+    // parser solo conoce v1/v2 y la rechaza antes de restaurar sin ellos.
+    expect(BACKUP_VERSION).toBe(3);
   });
 
   it("remapea relaciones padre-hijo y elimina _id / _creationTime antiguos", () => {

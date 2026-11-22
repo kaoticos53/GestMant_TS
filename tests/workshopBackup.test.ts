@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
+import { BACKUP_VERSION } from "../src/lib/backup";
 import { backend } from "./backend";
 
 async function setup() {
@@ -68,7 +69,7 @@ describe("Fase 2 TDD — workshopBackup (exportación y restauración completa)"
       version: number;
       manifest: { totalRecords: number; tableCounts: Record<string, number> };
     };
-    expect(payload.version).toBe(2);
+    expect(payload.version).toBe(BACKUP_VERSION);
     expect(payload.manifest.totalRecords).toBe(exported.summary.totalRecords);
     expect(payload.manifest.tableCounts.equipment).toBe(1);
 

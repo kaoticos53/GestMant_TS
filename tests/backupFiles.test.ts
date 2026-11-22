@@ -135,8 +135,12 @@ describe("archivos y adjuntos en la copia de seguridad", () => {
     const exported = await admin.action(api.workshopBackup.exportBackup, {});
     expect(exported.summary.fileCount).toBe(4);
     const payload = JSON.parse(exported.rawJson) as {
+      version?: number;
       files?: BackupFile[];
     };
+    // La copia nueva se marca con el formato interior v3: un cliente que solo
+    // conoce v1/v2 no puede restaurarla ignorando sus archivos.
+    expect(payload.version).toBe(3);
     const files = payload.files ?? [];
     expect(files.map((file) => file.storageId).sort()).toEqual(
       [

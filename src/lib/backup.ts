@@ -4,9 +4,11 @@
  */
 
 export const BACKUP_FORMAT = "pulso-taller-backup" as const;
-export const BACKUP_VERSION = 2 as const;
-/** La primera versión que se sabe leer; se migra al formato actual al cargarla. */
+export const BACKUP_VERSION = 3 as const;
+/** Copia inicial, sin manifiesto; se migra en memoria al cargarla. */
 export const BACKUP_LEGACY_VERSION = 1 as const;
+/** Copia con manifiesto y bloque de archivos opcional; se migra en memoria. */
+export const BACKUP_PREVIOUS_VERSION = 2 as const;
 /** Tiempo durante el que se puede deshacer una restauración terminada. */
 export const BACKUP_UNDO_WINDOW_MS = 10 * 60 * 1000;
 export const RESTORE_CONFIRM_WORD = "RESTAURAR" as const;
@@ -353,7 +355,11 @@ export function parseWorkshopBackup(rawJson: string):
     };
   }
   const version = obj.version;
-  if (version !== BACKUP_VERSION && version !== BACKUP_LEGACY_VERSION) {
+  if (
+    version !== BACKUP_VERSION &&
+    version !== BACKUP_PREVIOUS_VERSION &&
+    version !== BACKUP_LEGACY_VERSION
+  ) {
     return {
       ok: false,
       error: `Versión de copia no soportada (${String(version)}). Actualiza Pulso Taller para poder leerla.`,
@@ -407,7 +413,8 @@ export function parseWorkshopBackup(rawJson: string):
     fileBytes = read.bytes;
   }
 
-  if (version === BACKUP_VERSION) {
+  // v2 y v3 traen manifiesto; v1 no lo tenía y se completa al migrarla.
+  if (version !== BACKUP_LEGACY_VERSION) {
     const declared = obj.manifest;
     if (!declared || typeof declared !== "object" || Array.isArray(declared)) {
       return {
@@ -498,7 +505,7 @@ export function parseWorkshopBackup(rawJson: string):
       fileCount: files?.length ?? 0,
       fileBytes,
     },
-    migratedFrom: version === BACKUP_LEGACY_VERSION ? version : undefined,
+    migratedFrom: version === BACKUP_VERSION ? undefined : version,
   };
 }
 

@@ -132,3 +132,9 @@ los administradores activos cuando de verdad interviene: recupera el estado
 anterior, descarta una foto inservible, cierra una foto terminada o retira
 lotes huérfanos. No genera aviso en las pasadas sin intervención. Handover en
 `.context/sessions/2026-11-22-aviso-pasada-recuperacion.md`.
+
+**Formato de copia v3 (2026-11-22):** el JSON interior sube a v3 para que un
+cliente que solo conoce v1/v2 rechace las copias nuevas en vez de restaurarlas
+sin sus archivos. La app nueva sigue leyendo y migrando v1 y v2, incluida una v2
+con bloque `files`. Handover en
+`.context/sessions/2026-11-22-formato-copia-v3.md`.
