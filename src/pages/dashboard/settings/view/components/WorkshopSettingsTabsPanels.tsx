@@ -1,4 +1,5 @@
 import { TabsContent } from "@/components/ui/tabs";
+import { AiMemoryCard } from "@/pages/dashboard/settings/AiMemoryCard";
 import { AiPromptsCard } from "@/pages/dashboard/settings/AiPromptsCard";
 import { AiSettingsCard } from "@/pages/dashboard/settings/AiSettingsCard";
 import { AuditAlertSettingsCard } from "@/pages/dashboard/settings/AuditAlertSettingsCard";
@@ -97,6 +98,7 @@ export function WorkshopSettingsTabsPanels({
         >
           <AiSettingsCard />
           <AiPromptsCard />
+          <AiMemoryCard />
         </TabsContent>
       )}
       {canManageData && (

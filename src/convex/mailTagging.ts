@@ -11,6 +11,7 @@ import {
   sanitizeMailTags,
   type MailTagRule,
 } from "../lib/mailClient/tagging";
+import { formatMailChunk } from "../lib/ai/memory";
 import { readAccount, requireMailboxMember } from "./mailAccounts";
 
 const conditionValidator = v.object({
@@ -260,6 +261,34 @@ export const setMessageTags = mutation({
       tagReason: tags.length > 0 ? "Etiquetado manual" : "Etiquetas limpiadas",
       taggedAt: Date.now(),
     });
+
+    const chunkDraft = formatMailChunk({
+      messageId: header.messageId,
+      subject: header.subject,
+      fromName: header.fromName,
+      fromAddress: header.fromAddress,
+      snippet: header.snippet,
+      tags,
+    });
+    const existingChunk = await ctx.db
+      .query("aiKnowledgeChunks")
+      .withIndex("by_entity", (q) =>
+        q.eq("module", "mailbox").eq("entityId", header.messageId),
+      )
+      .first();
+    if (existingChunk) {
+      await ctx.db.patch(existingChunk._id, {
+        ...chunkDraft,
+        ownerUserId: user._id,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("aiKnowledgeChunks", {
+        ...chunkDraft,
+        ownerUserId: user._id,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });
 
