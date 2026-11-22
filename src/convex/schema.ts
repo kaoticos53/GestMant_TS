@@ -1772,6 +1772,51 @@ const schema = defineSchema({
     acquiredAt: v.number(),
     aliveAt: v.number(),
   }).index("by_key", ["key"]),
+
+  // Índice compacto unificado para RAG híbrido (búsqueda de texto + vectorIndex opcional).
+  aiKnowledgeChunks: defineTable({
+    scope: v.union(v.literal("shared"), v.literal("mailbox")),
+    ownerUserId: v.optional(v.id("users")),
+    module: v.union(
+      v.literal("incidents"),
+      v.literal("equipment"),
+      v.literal("parts"),
+      v.literal("requests"),
+      v.literal("purchasing"),
+      v.literal("manuals"),
+      v.literal("movements"),
+      v.literal("mailbox"),
+    ),
+    entityId: v.string(),
+    reference: v.string(),
+    title: v.string(),
+    compactText: v.string(),
+    tags: v.array(v.string()),
+    updatedAt: v.number(),
+    embedding: v.optional(v.array(v.float64())),
+  })
+    .index("by_entity", ["module", "entityId"])
+    .index("by_owner", ["ownerUserId", "module"])
+    .searchIndex("search_text", {
+      searchField: "compactText",
+      filterFields: ["scope", "module", "ownerUserId"],
+    })
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 768,
+      filterFields: ["scope", "module", "ownerUserId"],
+    }),
+
+  // Hechos destilados de largo plazo del taller para el chat IA.
+  aiMemoryFacts: defineTable({
+    title: v.string(),
+    fact: v.string(),
+    module: v.string(),
+    sourceRef: v.optional(v.string()),
+    active: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  }).index("by_active", ["active"]),
 });
 
 export default schema;

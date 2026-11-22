@@ -8,7 +8,7 @@
 
 import type { WorkshopChatTurn } from "./types";
 
-export type AiMemoryScope = "workshop" | "mailbox";
+export type AiMemoryScope = "shared" | "mailbox";
 
 export type AiMemoryModule =
   | "incidents"
@@ -60,7 +60,7 @@ export function formatIncidentChunk(inc: {
   ].filter(Boolean);
 
   return {
-    scope: "workshop",
+    scope: "shared",
     module: "incidents",
     entityId: inc.id,
     reference: inc.reference,
@@ -93,7 +93,7 @@ export function formatEquipmentChunk(eq: {
     .join(" · ");
 
   return {
-    scope: "workshop",
+    scope: "shared",
     module: "equipment",
     entityId: eq.id,
     reference: eq.code,
@@ -129,7 +129,7 @@ export function formatPartChunk(part: {
     .join(" · ");
 
   return {
-    scope: "workshop",
+    scope: "shared",
     module: "parts",
     entityId: part.id,
     reference: part.code,
