@@ -3,6 +3,15 @@ import { defineSchema, defineTable } from "convex/server";
 import { Infer, v } from "convex/values";
 
 // Roles del taller: administrador, responsable de repuestos y técnico.
+// Fases visibles de una restauración; el backend las escribe y la pantalla las
+// lee. La fase final es un estado del dominio y no se repite como literal.
+export const RESTORE_PHASE = {
+  SAVING: "saving",
+  CLEARING: "clearing",
+  INSERTING: "inserting",
+  COMPLETED: "completed",
+} as const;
+
 export const ROLES = {
   ADMIN: "admin",
   MANAGER: "manager",
@@ -1674,6 +1683,23 @@ const schema = defineSchema({
     // foto siga aquí porque la acción murió antes de retirarla.
     appliedAt: v.optional(v.number()),
     appliedRecords: v.optional(v.number()),
+    // Progreso visible de la restauración. La fase y los contadores se
+    // actualizan mientras la acción avanza, para que la pantalla pueda mostrar
+    // qué está haciendo sin adivinar por el tiempo transcurrido.
+    phase: v.optional(
+      v.union(
+        v.literal("saving"),
+        v.literal("clearing"),
+        v.literal("inserting"),
+        v.literal("completed"),
+      ),
+    ),
+    processedRecords: v.optional(v.number()),
+    totalRecords: v.optional(v.number()),
+    // La foto se conserva después de una restauración correcta para poder
+    // deshacerla durante esta ventana. Pasada, la recuperación la retira.
+    undoUntil: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
   })
     .index("by_batch", ["batch", "seq"])
     .index("by_savedAt", ["savedAt"]),

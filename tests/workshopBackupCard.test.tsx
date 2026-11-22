@@ -9,16 +9,23 @@ import { settle } from "./settle";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { mockUseAction, mockToastSuccess, mockToastError, mockProtectBackup } =
-  vi.hoisted(() => ({
-    mockUseAction: vi.fn(),
-    mockToastSuccess: vi.fn(),
-    mockToastError: vi.fn(),
-    mockProtectBackup: vi.fn(),
-  }));
+const {
+  mockUseAction,
+  mockUseQuery,
+  mockToastSuccess,
+  mockToastError,
+  mockProtectBackup,
+} = vi.hoisted(() => ({
+  mockUseAction: vi.fn(),
+  mockUseQuery: vi.fn(),
+  mockToastSuccess: vi.fn(),
+  mockToastError: vi.fn(),
+  mockProtectBackup: vi.fn(),
+}));
 
 vi.mock("convex/react", () => ({
   useAction: mockUseAction,
+  useQuery: mockUseQuery,
 }));
 
 vi.mock("sonner", () => ({
@@ -52,6 +59,7 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
   let root: Root;
   let exportMock: ReturnType<typeof vi.fn>;
   let restoreMock: ReturnType<typeof vi.fn>;
+  let undoMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     container = document.createElement("div");
@@ -81,12 +89,26 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     restoreMock = vi.fn().mockResolvedValue({
       restoredRecords: 1,
       exportedAt: 1_700_000_000_000,
+      undoUntil: Date.now() + 10 * 60 * 1000,
     });
+    undoMock = vi.fn().mockResolvedValue({ restoredRecords: 1 });
 
     let call = 0;
     mockUseAction.mockImplementation(() => {
       call += 1;
-      return call % 2 === 1 ? exportMock : restoreMock;
+      if (call % 3 === 1) return exportMock;
+      if (call % 3 === 2) return restoreMock;
+      return undoMock;
+    });
+    mockUseQuery.mockReturnValue({
+      active: false,
+      phase: "idle",
+      processedRecords: 0,
+      totalRecords: 0,
+      startedAt: null,
+      undoAvailable: false,
+      undoUntil: null,
+      completedAt: null,
     });
 
     if (!URL.createObjectURL) {
@@ -395,6 +417,71 @@ describe("WorkshopBackupSection (Fase 3 TDD)", () => {
     expect(document.body.textContent).not.toContain(
       "Confirmar restauración de copia",
     );
+    expect(mockToastSuccess).toHaveBeenCalled();
+  });
+
+  it("muestra la fase y el avance de una restauración larga", async () => {
+    mockUseQuery.mockReturnValue({
+      active: true,
+      phase: "inserting",
+      processedRecords: 40,
+      totalRecords: 120,
+      startedAt: 1_700_000_000_000,
+      undoAvailable: false,
+      undoUntil: null,
+      completedAt: null,
+    });
+
+    await act(async () => {
+      root.render(<WorkshopBackupSection />);
+    });
+    await settle();
+
+    expect(document.body.textContent).toContain("Insertando registros");
+    expect(document.body.textContent).toContain("40 de 120 registros");
+    expect(document.body.textContent).toContain("No cierres la pestaña");
+  });
+
+  it("ofrece deshacer una restauración terminada", async () => {
+    mockUseQuery.mockReturnValue({
+      active: false,
+      phase: "completed",
+      processedRecords: 1,
+      totalRecords: 1,
+      startedAt: 1_700_000_000_000,
+      undoAvailable: true,
+      undoUntil: Date.now() + 10 * 60 * 1000,
+      completedAt: 1_700_000_000_000,
+    });
+
+    await act(async () => {
+      root.render(<WorkshopBackupSection />);
+    });
+    await settle();
+
+    expect(document.body.textContent).toContain("Restauración completada");
+    const undoButtons = Array.from(
+      document.body.querySelectorAll("button"),
+    ).filter((button) => button.textContent?.includes("Deshacer restauración"));
+    expect(undoButtons).toHaveLength(1);
+
+    await act(async () => {
+      undoButtons[0]?.click();
+    });
+    await settle();
+
+    expect(document.body.textContent).toContain(
+      "Deshacer la última restauración",
+    );
+    const confirmButtons = Array.from(
+      document.body.querySelectorAll("button"),
+    ).filter((button) => button.textContent?.includes("Deshacer restauración"));
+    await act(async () => {
+      confirmButtons.at(-1)?.click();
+    });
+    await settle();
+
+    expect(undoMock).toHaveBeenCalledWith({});
     expect(mockToastSuccess).toHaveBeenCalled();
   });
 });

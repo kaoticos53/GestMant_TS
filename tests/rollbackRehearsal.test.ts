@@ -166,6 +166,16 @@ async function ageSnapshot(t: TestBackend) {
   });
 }
 
+/** La ventana de deshacer termina, sin esperar diez minutos. */
+async function expireUndo(t: TestBackend) {
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+    for (const row of rows) {
+      await ctx.db.patch(row._id, { undoUntil: Date.now() - 1 });
+    }
+  });
+}
+
 /** Siembra un taller, lo exporta y deja una deriva posterior a la copia. */
 async function driftedWorkshop(t: TestBackend) {
   const { admin, adminId } = await seedWorkshop(t);
@@ -490,12 +500,11 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     }
     const parts = await admin.query(api.spareParts.list, {});
     expect(parts.map((part) => part.code)).toEqual(["BK-001"]);
+    // La restauración nueva deja su propia foto para poder deshacerla; la
+    // recuperación previa no dejó el taller a medias.
     expect(
       await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
-    ).toHaveLength(0);
-
-    // La recuperación previa no dejó el taller a medias: el estado anterior
-    // existía antes de aplicar la copia.
+    ).toHaveLength(1);
     expect(beforeRestore.spareParts).toBe(
       (exported.summary.tableCounts.spareParts ?? 0) + 1,
     );
@@ -603,8 +612,19 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     );
     expect(chunks.some((row) => row.appliedAt !== undefined)).toBe(true);
 
-    // Pasado el margen, la pasada retira la foto sin tocar el taller.
+    // Sin latido, la foto sigue siendo válida: la ventana de deshacer está
+    // abierta y no se retira todavía.
     await ageSnapshot(t);
+    expect(
+      await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
+    ).toEqual({ recovered: false });
+    expect(await tableCounts(t)).toEqual(after);
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(1);
+
+    // Cerrada la ventana, la pasada retira la foto sin tocar el taller.
+    await expireUndo(t);
     expect(
       await t.action(internal.workshopBackup.recoverInterruptedRestore, {}),
     ).toEqual({ recovered: false });
@@ -955,5 +975,161 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
       "BK-001",
       "EXTRA-999",
     ]);
+  });
+
+  test("una restauración terminada se puede deshacer durante su ventana", async () => {
+    const t = backend();
+    const { admin } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+
+    // El taller cambia después de la copia: deshacer tiene que devolver este
+    // estado, no el que traía la copia.
+    await admin.mutation(api.spareParts.create, {
+      code: "EXTRA-999",
+      name: "Llegó después de la copia",
+      category: "Electrónica",
+      unit: "ud",
+      stock: 7,
+      minStock: 0,
+    });
+    await t.run(async (ctx) => {
+      const row = await ctx.db
+        .query("spareParts")
+        .withIndex("by_code", (q) => q.eq("code", "BK-001"))
+        .unique();
+      if (row) await ctx.db.patch(row._id, { stock: 999 });
+    });
+    const beforeRestore = await tableCounts(t);
+
+    const restored = await admin.action(api.workshopBackup.restoreBackup, {
+      rawJson: exported.rawJson,
+    });
+    expect(restored.undoUntil).toBeGreaterThan(Date.now());
+
+    const status = await admin.query(api.workshopBackup.getRestoreStatus, {});
+    expect(status).toMatchObject({
+      active: false,
+      phase: "completed",
+      undoAvailable: true,
+    });
+    expect(status?.undoUntil).toBeGreaterThan(Date.now());
+
+    const undone = await admin.action(api.workshopBackup.undoRestore, {});
+    expect(undone.restoredRecords).toBeGreaterThan(0);
+    expect(await tableCounts(t)).toEqual(beforeRestore);
+
+    const parts = await admin.query(api.spareParts.list, {});
+    expect(parts.find((part) => part.code === "BK-001")?.stock).toBe(999);
+    expect(parts.find((part) => part.code === "EXTRA-999")).toBeDefined();
+    expect(
+      await t.run((ctx) => ctx.db.query("workshopRestoreSnapshots").collect()),
+    ).toHaveLength(0);
+
+    const audit = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    expect(audit.some((row) => row.action === "workshop_backup_undo")).toBe(
+      true,
+    );
+  });
+
+  test("cerrada la ventana, deshacer se rechaza", async () => {
+    const t = backend();
+    const { admin } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+    await admin.action(api.workshopBackup.restoreBackup, {
+      rawJson: exported.rawJson,
+    });
+    await expireUndo(t);
+
+    await expect(
+      admin.action(api.workshopBackup.undoRestore, {}),
+    ).rejects.toThrow(/ventana/i);
+  });
+
+  test("una nueva restauración sustituye la ventana de deshacer anterior", async () => {
+    const t = backend();
+    const { admin } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+    await admin.action(api.workshopBackup.restoreBackup, {
+      rawJson: exported.rawJson,
+    });
+    const firstSnapshot = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(firstSnapshot.length).toBeGreaterThan(0);
+
+    // La foto terminada no debe hacer creer que hay una restauración viva.
+    const second = await admin.action(api.workshopBackup.restoreBackup, {
+      rawJson: exported.rawJson,
+    });
+    expect(second.restoredRecords).toBeGreaterThan(0);
+
+    const after = await t.run((ctx) =>
+      ctx.db.query("workshopRestoreSnapshots").collect(),
+    );
+    expect(after).toHaveLength(1);
+    expect(after[0]?.batch).not.toBe(firstSnapshot[0]?.batch);
+  });
+
+  test("el estado visible informa la fase y el avance de la restauración", async () => {
+    const t = backend();
+    const { admin, adminId } = await seedWorkshop(t);
+    const now = Date.now();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("workshopRestoreSnapshots", {
+        batch: "estado-visible",
+        seq: 0,
+        payload: "{}",
+        savedBy: adminId,
+        savedAt: now,
+        aliveAt: now,
+        complete: true,
+        chunkCount: 1,
+        checksum: "0".repeat(64),
+        phase: "inserting",
+        processedRecords: 40,
+        totalRecords: 120,
+      });
+    });
+    const lease = {
+      userId: adminId,
+      kind: "restore" as const,
+      batch: "estado-visible",
+    };
+    const token = await t.mutation(
+      internal.workshopMaintenance.acquireMaintenanceLease,
+      lease,
+    );
+
+    const status = await admin.query(api.workshopBackup.getRestoreStatus, {});
+    expect(status).toMatchObject({
+      active: true,
+      phase: "inserting",
+      processedRecords: 40,
+      totalRecords: 120,
+    });
+
+    // Si la acción muere, la foto sigue ahí pero ya no está activa: la pantalla
+    // puede avisar de que la recuperación automática actuará.
+    await t.run(async (ctx) => {
+      const rows = await ctx.db.query("workshopRestoreSnapshots").collect();
+      for (const row of rows) {
+        await ctx.db.patch(row._id, { aliveAt: Date.now() - 60_000 });
+      }
+    });
+    await t.mutation(internal.workshopMaintenance.releaseMaintenanceLease, {
+      userId: adminId,
+      kind: "restore",
+      token,
+    });
+    const interrupted = await admin.query(
+      api.workshopBackup.getRestoreStatus,
+      {},
+    );
+    expect(interrupted).toMatchObject({
+      active: false,
+      phase: "interrupted",
+    });
   });
 });

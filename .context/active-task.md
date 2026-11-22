@@ -107,3 +107,12 @@ con el mismo recorrido de la restauración antes de entregarla. La tarjeta pide
 la frase al exportar y al abrir un archivo protegido. Handover en
 `.context/sessions/2026-11-22-copias-cifradas-v2.md`. No se ha revisado la
 interfaz en navegador.
+
+**Progreso y deshacer (2026-11-22):** la foto previa registra fase y avance, y
+`getRestoreStatus` alimenta una barra reactiva que sobrevive a la recarga; sin
+latido avisa de restauración interrumpida. Tras terminar, la foto se conserva
+diez minutos y `undoRestore` devuelve el taller al estado anterior, con traza
+`workshop_backup_undo`; otra restauración o un vaciado cierran esa ventana.
+Handover en
+`.context/sessions/2026-11-22-progreso-deshacer-restauracion.md`. La interfaz
+no se ha revisado visualmente.

@@ -7,6 +7,8 @@ export const BACKUP_FORMAT = "pulso-taller-backup" as const;
 export const BACKUP_VERSION = 2 as const;
 /** La primera versión que se sabe leer; se migra al formato actual al cargarla. */
 export const BACKUP_LEGACY_VERSION = 1 as const;
+/** Tiempo durante el que se puede deshacer una restauración terminada. */
+export const BACKUP_UNDO_WINDOW_MS = 10 * 60 * 1000;
 export const RESTORE_CONFIRM_WORD = "RESTAURAR" as const;
 
 /**
