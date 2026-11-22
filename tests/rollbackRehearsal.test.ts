@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { api } from "../src/convex/_generated/api";
 import type { TableNames } from "../src/convex/_generated/dataModel";
+import { backupFaults } from "../src/convex/backupFaults";
 import { BACKUP_TABLES, type BackupTableName } from "../src/lib/backup";
 import { backend } from "./backend";
 
@@ -275,5 +276,55 @@ describe("F8 — ensayo de rollback en un deployment de banco de pruebas", () =>
     const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
     expect(shares[0]?.mode).toBe("original");
     expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
+  });
+
+  test("si la inserción real se corta a mitad, devuelve el taller al estado anterior", async () => {
+    const t = backend();
+    const { admin } = await seedWorkshop(t);
+    const exported = await admin.action(api.workshopBackup.exportBackup, {});
+
+    // El taller cambia después de la copia: si la restauración se corta, lo que
+    // tiene que quedar es esto, no lo que traía la copia.
+    await admin.mutation(api.spareParts.create, {
+      code: "EXTRA-999",
+      name: "Llegó después de la copia",
+      category: "Electrónica",
+      unit: "ud",
+      stock: 7,
+      minStock: 0,
+    });
+    const beforeRestore = await tableCounts(t);
+
+    // El backend corta al insertar las copias de correo: el taller ya está
+    // vaciado y casi todo lo demás insertado, como en el fallo de verdad.
+    backupFaults.failOnTable = "mailShares";
+    try {
+      await expect(
+        admin.action(api.workshopBackup.restoreBackup, {
+          rawJson: exported.rawJson,
+        }),
+      ).rejects.toThrow(/se ha devuelto el taller al estado anterior/);
+    } finally {
+      backupFaults.failOnTable = null;
+    }
+
+    // Tabla a tabla, el taller es el de justo antes del intento: la copia no
+    // ganó y lo que llegó después de la copia sigue ahí.
+    expect(await tableCounts(t)).toEqual(beforeRestore);
+    const parts = await admin.query(api.spareParts.list, {});
+    expect(parts.map((part) => part.code).sort()).toEqual([
+      "BK-001",
+      "EXTRA-999",
+    ]);
+    expect(parts.find((part) => part.code === "BK-001")?.stock).toBe(10);
+
+    // La copia de correo vuelve entera —cuerpo, adjuntos y `.eml`—: no es una
+    // copia restaurada, es el mismo taller de antes.
+    const shares = await t.run((ctx) => ctx.db.query("mailShares").collect());
+    expect(shares).toHaveLength(1);
+    expect(shares[0]?.mode).toBe("original");
+    expect(shares[0]?.bodyText).toBe("Cuerpo del correo");
+    expect(shares[0]?.attachments).toHaveLength(1);
+    expect(shares[0]?.emlStorageId).toBeDefined();
   });
 });

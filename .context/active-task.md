@@ -58,6 +58,13 @@ aviso desde 3 000 filas y aviso reforzado desde 6 000, sin tocar la palabra
 («Restaurando la copia…»), deshabilita botón y campo, y un pestillo evita lanzar
 una segunda restauración desde otra pulsación.
 
+Si la inserción falla a mitad, la restauración ya no deja el taller a medias:
+antes de vaciar guarda el estado actual (copias de correo incluidas, sin
+proyectar) y lo reescribe al fallar, con el error explicando lo ocurrido. Lo
+prueba `tests/rollbackRehearsal.test.ts` inyectando un fallo en la inserción
+real (`backupFaults`), y contra Docker la restauración de 880 filas pasa de
+~1,51 s a 1,66 s por la lectura extra. Handover §8.3/§8.4.
+
 **F8 preparada (2026-11-22):** el procedimiento del piloto con buzones reales, la
 tabla de validación contra Hermes y el runbook de rollback están en
 `.context/sessions/2026-11-22-f8-piloto-hermes-rollback.md`. El ensayo de

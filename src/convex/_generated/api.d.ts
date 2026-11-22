@@ -36,6 +36,7 @@ import type * as audit from "../audit.js";
 import type * as auditAlerts from "../auditAlerts.js";
 import type * as auth from "../auth.js";
 import type * as auth_emailOtp from "../auth/emailOtp.js";
+import type * as backupFaults from "../backupFaults.js";
 import type * as catalogs from "../catalogs.js";
 import type * as cleanupLog from "../cleanupLog.js";
 import type * as crons from "../crons.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   auditAlerts: typeof auditAlerts;
   auth: typeof auth;
   "auth/emailOtp": typeof auth_emailOtp;
+  backupFaults: typeof backupFaults;
   catalogs: typeof catalogs;
   cleanupLog: typeof cleanupLog;
   crons: typeof crons;

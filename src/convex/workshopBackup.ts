@@ -23,6 +23,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { logSecurityEvent } from "./audit";
+import { backupFaults } from "./backupFaults";
 
 const BATCH_DELETE = 64;
 const MAX_CLEAR_PASSES = 400;
@@ -64,7 +65,15 @@ export const checkAdmin = internalQuery({
 });
 
 export const collectAllTables = internalQuery({
-  args: { userId: v.id("users") },
+  args: {
+    userId: v.id("users"),
+    /**
+     * Sin proyectar: el estado que se guarda antes de vaciar no es una copia de
+     * seguridad, así que las copias de correo viajan con su cuerpo, sus adjuntos
+     * y su `.eml` para poder devolver el taller tal y como estaba.
+     */
+    raw: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
     if (!user || user.active === false || user.isAnonymous === true) {
@@ -85,7 +94,7 @@ export const collectAllTables = internalQuery({
       // Las copias de correo salen solo como metadatos: el contenido es del
       // expediente y no viaja en un JSON de backup.
       const exported =
-        table === "mailShares"
+        table === "mailShares" && !args.raw
           ? (rows as unknown as Array<Record<string, unknown>>).map(
               backupMailShareRow,
             )
@@ -204,14 +213,48 @@ export const insertTableBatch = internalMutation({
   args: batchArgs,
   handler: async (ctx, args): Promise<InsertedPairs> => {
     await assertAdminUser(ctx, args.userId);
+    const table = restoreTable(args.table);
+    // Punto de ruptura de las pruebas de recuperación: simula un backend que
+    // corta entre el vaciado y el último lote. En producción no se rellena.
+    if (backupFaults.failOnTable === table) {
+      throw new ConvexError(
+        "El backend ha cortado a mitad de la inserción (fallo simulado).",
+      );
+    }
     const { rows, idMap } = readBatch(args);
-    return await insertBackupRows(
-      ctx,
-      args.userId,
-      restoreTable(args.table),
-      rows,
-      idMap,
-    );
+    return await insertBackupRows(ctx, args.userId, table, rows, idMap);
+  },
+});
+
+/**
+ * Reinserta un lote del estado que había antes de vaciar. Es la vuelta atrás de
+ * una restauración cortada, así que no se proyecta nada: las copias de correo
+ * vuelven con su cuerpo, sus adjuntos y su `.eml`, y su destino se remapea como
+ * cualquier otra referencia.
+ */
+export const insertSnapshotBatch = internalMutation({
+  args: batchArgs,
+  handler: async (ctx, args): Promise<InsertedPairs> => {
+    await assertAdminUser(ctx, args.userId);
+    const table = restoreTable(args.table);
+    const { rows, idMap } = readBatch(args);
+    const createdPairs: InsertedPairs = [];
+
+    for (const rawRow of rows) {
+      const oldId = typeof rawRow._id === "string" ? rawRow._id : undefined;
+      const doc = remapBackupDocument(table, rawRow, idMap);
+      if (table === "mailShares" && typeof doc.destinationId === "string") {
+        const mapped = idMap.get(doc.destinationId);
+        if (mapped !== undefined) doc.destinationId = mapped;
+      }
+      const insertedId = await ctx.db.insert(table as TableNames, doc as never);
+      if (oldId) {
+        idMap.set(oldId, String(insertedId));
+        createdPairs.push({ oldId, newId: String(insertedId) });
+      }
+    }
+
+    return createdPairs;
   },
 });
 
@@ -306,16 +349,22 @@ async function checkBackupBatch(
   );
 }
 
+type BatchArgs = {
+  userId: Id<"users">;
+  table: BackupTableName;
+  rowsJson: string;
+  idMapJson: string;
+};
+
 /**
- * Recorre la copia tabla a tabla y lote a lote, en el orden topológico. En modo
- * `check` cada lote se inserta y se revierte; en modo `restore` se escribe de
- * verdad. Devuelve las filas que quedaron escritas.
+ * Recorre unas tablas —las de una copia o las del estado guardado— en el orden
+ * topológico, lote a lote, y acumula el remapeo entre lotes. Devuelve las filas
+ * que el lote correspondiente dice haber escrito.
  */
-async function walkBackup(
-  ctx: ActionCtx,
+async function walkChunks(
   userId: Id<"users">,
   tables: WorkshopBackupPayload["tables"],
-  mode: "check" | "restore",
+  run: (args: BatchArgs) => Promise<InsertedPairs>,
 ): Promise<number> {
   const idMap = new Map<string, string>();
   let written = 0;
@@ -325,29 +374,60 @@ async function walkBackup(
     if (!rows || rows.length === 0) continue;
 
     for (let i = 0; i < rows.length; i += BACKUP_CHUNK_SIZE) {
-      const args = {
+      const pairs = await run({
         userId,
         table,
         rowsJson: JSON.stringify(rows.slice(i, i + BACKUP_CHUNK_SIZE)),
         idMapJson: JSON.stringify(Array.from(idMap.entries())),
-      };
-      const pairs =
-        mode === "check"
-          ? await checkBackupBatch(ctx, args)
-          : await ctx.runMutation(
-              internal.workshopBackup.insertTableBatch,
-              args,
-            );
-      for (const pair of pairs) {
-        idMap.set(pair.oldId, pair.newId);
-      }
+      });
+      for (const pair of pairs) idMap.set(pair.oldId, pair.newId);
       // Solo cuentan las filas que de verdad volvieron: una copia de correo
       // omitida por no encontrar su ficha no es un registro restaurado.
-      if (mode === "restore") written += pairs.length;
+      written += pairs.length;
     }
   }
 
   return written;
+}
+
+/**
+ * Recorre la copia: en modo `check` cada lote se inserta y se revierte; en modo
+ * `restore` se escribe de verdad. Devuelve las filas que quedaron escritas.
+ */
+async function walkBackup(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  tables: WorkshopBackupPayload["tables"],
+  mode: "check" | "restore",
+): Promise<number> {
+  return await walkChunks(userId, tables, (args) =>
+    mode === "check"
+      ? checkBackupBatch(ctx, args)
+      : ctx.runMutation(internal.workshopBackup.insertTableBatch, args),
+  );
+}
+
+/**
+ * Vuelve a dejar el taller como estaba con el estado guardado antes de vaciar.
+ * Es la red de seguridad si la inserción de la copia se corta a mitad: retira lo
+ * que se hubiera alcanzado a escribir y reescribe el estado anterior, también
+ * en el orden topológico.
+ */
+async function restoreSnapshot(
+  ctx: ActionCtx,
+  userId: Id<"users">,
+  tables: WorkshopBackupPayload["tables"],
+): Promise<void> {
+  for (let pass = 0; pass < MAX_CLEAR_PASSES; pass++) {
+    const deleted = await ctx.runMutation(internal.workshopBackup.clearBatch, {
+      userId,
+    });
+    if (deleted === 0) break;
+  }
+
+  await walkChunks(userId, tables, (args) =>
+    ctx.runMutation(internal.workshopBackup.insertSnapshotBatch, args),
+  );
 }
 
 /** Exporta una copia completa en JSON de todas las tablas operativas del taller. */
@@ -402,7 +482,9 @@ export const exportBackup = action({
  * Restaura una copia de seguridad JSON completa remapeando referencias internas.
  *
  * Antes de vaciar nada recorre la copia entera en seco: un registro que el
- * esquema rechaza detiene la restauración con el taller todavía intacto.
+ * esquema rechaza detiene la restauración con el taller todavía intacto. Antes
+ * de vaciar guarda también el estado actual, y si la inserción se corta a mitad
+ * lo reescribe para no dejar el taller a medias.
  */
 export const restoreBackup = action({
   args: { rawJson: v.string() },
@@ -432,22 +514,49 @@ export const restoreBackup = action({
     //    del vaciado.
     await walkBackup(ctx, userId, parsed.backup.tables, "check");
 
-    // 2. Limpiar tablas restaurables sin tocar securityAuditLog ni users
-    for (let pass = 0; pass < MAX_CLEAR_PASSES; pass++) {
-      const deleted = await ctx.runMutation(
-        internal.workshopBackup.clearBatch,
-        { userId },
-      );
-      if (deleted === 0) break;
-    }
-
-    // 3. Insertar en orden topológico remapeando oldId -> newId
-    const restoredRecords = await walkBackup(
-      ctx,
-      userId,
-      parsed.backup.tables,
-      "restore",
+    // 2. Guardar el estado actual antes de vaciar: si la inserción se corta a
+    //    mitad —el backend cae, salta un límite—, con esto se devuelve el taller
+    //    a como estaba. Va después de la comprobación, que no escribe nada.
+    const snapshot = await ctx.runQuery(
+      internal.workshopBackup.collectAllTables,
+      { userId, raw: true },
     );
+
+    let restoredRecords: number;
+    try {
+      // 3. Limpiar tablas restaurables sin tocar securityAuditLog ni users
+      for (let pass = 0; pass < MAX_CLEAR_PASSES; pass++) {
+        const deleted = await ctx.runMutation(
+          internal.workshopBackup.clearBatch,
+          { userId },
+        );
+        if (deleted === 0) break;
+      }
+
+      // 4. Insertar en orden topológico remapeando oldId -> newId
+      restoredRecords = await walkBackup(
+        ctx,
+        userId,
+        parsed.backup.tables,
+        "restore",
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      try {
+        await restoreSnapshot(ctx, userId, snapshot.tables);
+      } catch (recoveryError) {
+        const recoveryDetail =
+          recoveryError instanceof Error
+            ? recoveryError.message
+            : String(recoveryError);
+        throw new ConvexError(
+          `La restauración falló a mitad y tampoco se pudo devolver el taller al estado anterior: ${recoveryDetail}. Fallo original: ${detail}`,
+        );
+      }
+      throw new ConvexError(
+        `La restauración falló a mitad y se ha devuelto el taller al estado anterior: ${detail}`,
+      );
+    }
 
     await ctx.runMutation(internal.workshopBackup.logAudit, {
       userId,

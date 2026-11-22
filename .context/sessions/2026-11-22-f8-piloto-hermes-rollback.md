@@ -358,6 +358,17 @@ copia 614,0 KB
    falla, el error llega con el detalle del esquema y el taller sigue como
    estaba.
 
+Para el fallo que la comprobación no puede ver —una inserción que se cae a
+mitad, con las tablas ya vaciadas—, antes de borrar se guarda el estado actual
+(`collectAllTables` con `raw: true`, sin proyectar las copias de correo) y, si
+la inserción falla, se reescribe ese estado (`insertSnapshotBatch`) antes de
+devolver el error: «La restauración falló a mitad y se ha devuelto el taller al
+estado anterior». `tests/rollbackRehearsal.test.ts` lo prueba con un fallo
+inyectado en la inserción real (`backupFaults.failOnTable`, un punto de ruptura
+que en producción está a `null`): el taller queda tabla a tabla como estaba, con
+lo que llegó después de la copia y con la copia de correo entera —cuerpo,
+adjuntos y `.eml`—, no como resumen.
+
 Medido contra el mismo deployment de Docker, dos vueltas:
 
 - `differing: []` en las 29 tablas de `BACKUP_TABLES`; idénticos a la copia tras
@@ -371,18 +382,26 @@ Medido contra el mismo deployment de Docker, dos vueltas:
   restaurado y el taller sigue como estaba: …» y el detalle del esquema detrás.
   Recuentos antes y después idénticos (880 filas) y `CON-ALCO2` sigue en 12. Ese
   mismo fallo, en §8.1, dejó el taller vacío a medias.
+- Con la foto del estado previo, la restauración de 880 filas pasa de ~1,51 s a
+  **1,66 s** (export 112 ms, `differing: []` en las 29 tablas, la deriva de
+  prueba desaparece). La foto añade una lectura completa; dentro de la fórmula
+  de la pantalla cae en el redondeo.
 - `users` y `securityAuditLog` no se volvieron a contar aquí; la restauración no
   los toca (§8.2) y la comprobación previa escribe y revierte dentro de sus
   propias mutaciones.
 
 ### 8.4 Riesgos que siguen
 
-- ⚠️ **Si la acción se corta a mitad de la inserción, no hay vuelta atrás.** La
-  comprobación previa cierra el caso de §8.1 —una copia que el esquema rechaza ya
-  no llega a vaciar nada—, pero si el proceso muere o el backend corta entre el
-  vaciado y el último lote, el taller queda a medias. Cerrarlo del todo pediría
-  guardar el estado previo y recuperarlo, o poder escribir la copia nueva junto a
-  la vieja. Mientras tanto: copia a mano antes de restaurar en producción.
+- ⚠️ **La recuperación corre dentro de la acción.** Cubre un fallo que la acción
+  ve —una inserción rechazada, un límite, un error del backend—, que es el caso
+  del ensayo. No cubre que el proceso muera entre el vaciado y el último lote:
+  entonces el `catch` no llega a ejecutarse y el estado previo se pierde con la
+  acción. Para eso habría que dejar la foto guardada en la base y recuperarla al
+  arrancar. Mientras tanto: copia a mano antes de restaurar en producción.
+- La vuelta atrás reescribe con identificadores nuevos y sin el `_creationTime`
+  original (Convex no lo admite al insertar): el contenido y las relaciones
+  quedan, los ids y las fechas de creación no. Es el mismo precio que paga una
+  restauración normal.
 - `mailShares` **no se ha podido probar con datos reales** (0 filas: sin buzón
   sincronizado en este deployment). Su comportamiento está cubierto en memoria
   por el test, incluida la omisión con traza `mail_share_restore_skip`.
