@@ -79,6 +79,7 @@ import type * as publicStats from "../publicStats.js";
 import type * as purchasing from "../purchasing.js";
 import type * as references from "../references.js";
 import type * as reportUploads from "../reportUploads.js";
+import type * as search from "../search.js";
 import type * as seed from "../seed.js";
 import type * as seedPurchasing from "../seedPurchasing.js";
 import type * as spareParts from "../spareParts.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   purchasing: typeof purchasing;
   references: typeof references;
   reportUploads: typeof reportUploads;
+  search: typeof search;
   seed: typeof seed;
   seedPurchasing: typeof seedPurchasing;
   spareParts: typeof spareParts;
