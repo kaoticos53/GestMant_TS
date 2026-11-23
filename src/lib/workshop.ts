@@ -186,6 +186,68 @@ export function requestMatchesEquipment(
   return request.equipment.toLowerCase().includes(model);
 }
 
+/**
+ * Resuelve el equipo del inventario asociado a una incidencia:
+ * 1) Por `equipmentId` explícito si existe en la lista.
+ * 2) Por coincidencia exacta de número de serie (sin falso positivo por modelo si el nº de serie no coincide).
+ * 3) Si no hay nº de serie en la incidencia, por modelo único en inventario (o modelo + ubicación única).
+ */
+export function findMatchingEquipmentForIncident<
+  T extends {
+    _id: string;
+    model: string;
+    serialNumber?: string;
+    location?: string;
+  },
+>(
+  incident: {
+    equipmentId?: string;
+    model?: string;
+    serialNumber?: string;
+    location?: string;
+  },
+  equipment: readonly T[],
+): T | null {
+  if (incident.equipmentId) {
+    return equipment.find((item) => item._id === incident.equipmentId) ?? null;
+  }
+
+  const norm = (value?: string | null) => (value ?? "").trim().toLowerCase();
+  const incSerial = norm(incident.serialNumber);
+  const incModel = norm(incident.model);
+  const incLocation = norm(incident.location);
+
+  if (incSerial !== "") {
+    const serialMatches = equipment.filter(
+      (item) => norm(item.serialNumber) === incSerial,
+    );
+    if (serialMatches.length === 0) return null;
+    if (serialMatches.length === 1) return serialMatches[0];
+    if (incModel !== "") {
+      const modelMatches = serialMatches.filter(
+        (item) => norm(item.model) === incModel,
+      );
+      if (modelMatches.length === 1) return modelMatches[0];
+    }
+    return serialMatches[0];
+  }
+
+  if (incModel !== "") {
+    const modelMatches = equipment.filter(
+      (item) => norm(item.model) === incModel,
+    );
+    if (modelMatches.length === 1) return modelMatches[0];
+    if (modelMatches.length > 1 && incLocation !== "") {
+      const locationMatches = modelMatches.filter(
+        (item) => norm(item.location) === incLocation,
+      );
+      if (locationMatches.length === 1) return locationMatches[0];
+    }
+  }
+
+  return null;
+}
+
 export type StockState = "out" | "low" | "ok";
 
 export function stockState(stock: number, minStock: number): StockState {

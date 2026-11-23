@@ -10,6 +10,7 @@ import {
   alertReachesRole,
   documentTrailLabel,
   equipmentLabel,
+  findMatchingEquipmentForIncident,
   formatFileSize,
   hasTechnicianNote,
   inProgressSince,
@@ -671,5 +672,70 @@ describe("incidentStatusLabel — el estado y, cuando importa, dónde está el e
     expect(incidentStatusLabel("assigned", false)).toBe("Asignada");
     expect(incidentStatusLabel("resolved", true)).toBe("Resuelta");
     expect(incidentStatusLabel("unresolved", false)).toBe("Sin resolución");
+  });
+});
+
+describe("findMatchingEquipmentForIncident — vinculación automática de equipos", () => {
+  const inventory = [
+    {
+      _id: "eq-1",
+      model: "HDC-3500",
+      serialNumber: "SN-100",
+      location: "Plató 1",
+    },
+    {
+      _id: "eq-2",
+      model: "FX6",
+      serialNumber: "SN-200",
+      location: "Plató 2",
+    },
+    {
+      _id: "eq-3",
+      model: "FX6",
+      serialNumber: "SN-300",
+      location: "Plató 3",
+    },
+  ];
+
+  test("prioriza equipmentId explícito cuando está presente", () => {
+    expect(
+      findMatchingEquipmentForIncident(
+        { equipmentId: "eq-2", model: "HDC-3500", serialNumber: "SN-100" },
+        inventory,
+      )?._id,
+    ).toBe("eq-2");
+  });
+
+  test("empareja por número de serie normalizado aunque no tenga equipmentId", () => {
+    expect(
+      findMatchingEquipmentForIncident(
+        { model: "Otro", serialNumber: "  sn-100 " },
+        inventory,
+      )?._id,
+    ).toBe("eq-1");
+  });
+
+  test("si la incidencia indica número de serie y no existe, no empareja por modelo", () => {
+    expect(
+      findMatchingEquipmentForIncident(
+        { model: "HDC-3500", serialNumber: "SN-999" },
+        inventory,
+      ),
+    ).toBeNull();
+  });
+
+  test("sin número de serie empareja si hay una única unidad del modelo o única en esa ubicación", () => {
+    expect(
+      findMatchingEquipmentForIncident({ model: "hdc-3500" }, inventory)?._id,
+    ).toBe("eq-1");
+    expect(
+      findMatchingEquipmentForIncident(
+        { model: "FX6", location: "plató 2" },
+        inventory,
+      )?._id,
+    ).toBe("eq-2");
+    expect(
+      findMatchingEquipmentForIncident({ model: "FX6" }, inventory),
+    ).toBeNull();
   });
 });

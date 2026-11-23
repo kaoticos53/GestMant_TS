@@ -14,23 +14,23 @@ export function PartMovementsSection({
   movements,
 }: PartMovementsSectionProps) {
   return (
-    <section className="space-y-2">
-      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+      <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <History className="size-3.5" />
         Últimos movimientos de stock
       </h3>
       {movements === undefined ? (
-        <div className="space-y-2" aria-label="Cargando movimientos">
+        <div className="mt-2.5 space-y-2" aria-label="Cargando movimientos">
           <Skeleton className="h-12 rounded-lg" />
           <Skeleton className="h-12 rounded-lg" />
         </div>
       ) : movements.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+        <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs text-muted-foreground">
           <Boxes className="size-4 shrink-0" />
           <span>Sin movimientos registrados para este repuesto.</span>
         </div>
       ) : (
-        <ul className="divide-y rounded-lg border">
+        <ul className="mt-2.5 divide-y rounded-lg border border-border/70">
           {movements.map((mov) => {
             const kindMeta =
               STOCK_MOVEMENT_META[mov.kind as StockMovementKind] ?? {

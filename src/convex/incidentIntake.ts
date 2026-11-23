@@ -18,6 +18,7 @@ import {
   type IncidentIntakeInput,
 } from "../lib/incidentIntake";
 import { INCIDENT_INTAKE_NOTICE } from "../lib/incidentMail";
+import { findMatchingEquipmentForIncident } from "../lib/workshop";
 
 /**
  * La mitad que habla con la base del alta de una incidencia: el camino por el que
@@ -114,10 +115,16 @@ export async function registerIncidentIntake(
   const reference = await freeReference(ctx, "incident");
   const publicCode = await freePublicCode(ctx);
 
-  const incidentId = await ctx.db.insert(
-    "incidents",
-    incidentIntakeRecord(intake, { now, reference, publicCode }),
+  const allEquipment = await ctx.db.query("equipment").collect();
+  const matchedEquipment = findMatchingEquipmentForIncident(
+    intake,
+    allEquipment,
   );
+
+  const incidentId = await ctx.db.insert("incidents", {
+    ...incidentIntakeRecord(intake, { now, reference, publicCode }),
+    ...(matchedEquipment ? { equipmentId: matchedEquipment._id } : {}),
+  });
 
   // La marca del borrador se apunta en la ficha ya creada: así el reintento de
   // mañana —o el de dentro de un minuto, si la red va y viene— encuentra el caso

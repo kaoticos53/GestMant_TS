@@ -13,7 +13,11 @@ import {
   blockedJourneySteps,
   nextIncidentAction,
 } from "@/lib/incidentJourney";
-import { INCIDENT_STATUS_META, incidentStatusLabel } from "@/lib/workshop";
+import {
+  INCIDENT_STATUS_META,
+  findMatchingEquipmentForIncident,
+  incidentStatusLabel,
+} from "@/lib/workshop";
 import type { EquipmentDoc, IncidentDoc } from "../../types";
 import {
   filterAndSortIncidentRequests,
@@ -49,9 +53,7 @@ export function useIncidentDetailState({
   const inWorkshop = isIncidentInWorkshop(incident);
   const statusLabel = incidentStatusLabel(incident.status, inWorkshop);
 
-  const linkedEquipment = incident.equipmentId
-    ? (equipment.find((item) => item._id === incident.equipmentId) ?? null)
-    : null;
+  const linkedEquipment = findMatchingEquipmentForIncident(incident, equipment);
 
   const linkedRequests = filterAndSortIncidentRequests(requests, incident._id);
 

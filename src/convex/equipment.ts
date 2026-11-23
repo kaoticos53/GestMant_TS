@@ -1,10 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { QueryCtx, mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { QueryCtx, MutationCtx, mutation, query } from "./_generated/server";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
-import { requestMatchesEquipment } from "../lib/workshop";
+import {
+  findMatchingEquipmentForIncident,
+  requestMatchesEquipment,
+} from "../lib/workshop";
 import { detectEquipmentChanges } from "../lib/movements";
 import { recordEquipmentMovement } from "./_inventory/movements";
 import { markDestinationDeleted } from "./_mailShares/orphans";
@@ -200,6 +204,24 @@ export const nextCode = query({
   },
 });
 
+async function linkMatchingIncidents(
+  ctx: MutationCtx,
+  equipmentId: Id<"equipment">,
+) {
+  const allEquipment = await ctx.db.query("equipment").collect();
+  const unlinked = await ctx.db
+    .query("incidents")
+    .filter((q) => q.eq(q.field("equipmentId"), undefined))
+    .collect();
+  for (const inc of unlinked) {
+    if (inc.deletedAt !== undefined) continue;
+    const matched = findMatchingEquipmentForIncident(inc, allEquipment);
+    if (matched?._id === equipmentId) {
+      await ctx.db.patch(inc._id, { equipmentId });
+    }
+  }
+}
+
 export const create = mutation({
   args: equipmentArgs,
   handler: secureMutation(
@@ -290,6 +312,7 @@ export const create = mutation({
         actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
         createdAt: now,
       });
+      await linkMatchingIncidents(ctx, id);
       return id;
     },
   ),
@@ -389,6 +412,7 @@ export const update = mutation({
           createdAt: now,
         });
       }
+      await linkMatchingIncidents(ctx, args.id);
     },
   ),
 });

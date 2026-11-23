@@ -57,149 +57,175 @@ export function PartDetailSheet({
 
   return (
     <Sheet open={part !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-5 overflow-y-auto sm:max-w-lg">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         {part && (
           <>
-            <SheetHeader className="space-y-2 border-b pb-4">
+            <SheetHeader>
               <div className="flex flex-wrap items-center gap-2 pr-6">
-                <span className="font-mono text-xs font-semibold text-muted-foreground">
+                <span className="font-mono text-sm font-semibold text-muted-foreground">
                   {part.code}
                   {part.partNumber ? ` · ${part.partNumber}` : ""}
                 </span>
+                <Badge
+                  variant="outline"
+                  className="border-border bg-muted text-muted-foreground"
+                >
+                  {part.category}
+                </Badge>
                 <Badge variant="outline" className={meta.badgeClassName}>
                   {meta.label}
                 </Badge>
               </div>
-              <SheetTitle className="text-left text-lg leading-snug">
+              <SheetTitle className="text-xl tracking-tight">
                 {part.name}
               </SheetTitle>
-              <SheetDescription className="text-left">
-                {part.category}
+              <SheetDescription>
+                {part.location
+                  ? `Ubicación ${part.location}`
+                  : "Sin ubicación"}
                 {part.supplier ? ` · Proveedor: ${part.supplier}` : ""}
               </SheetDescription>
             </SheetHeader>
 
-            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3.5 text-sm">
-              <div>
-                <span className="text-xs text-muted-foreground">Stock actual</span>
-                <p className="mt-0.5 text-xl font-bold tabular-nums">
-                  {part.stock}{" "}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {part.unit}
-                  </span>
+            <div className="grid gap-4 px-4 pb-6 sm:px-6">
+              <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Ficha del repuesto
                 </p>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground">Stock mínimo</span>
-                <p className="mt-0.5 text-xl font-semibold tabular-nums text-muted-foreground">
-                  {part.minStock}{" "}
-                  <span className="text-xs font-normal">{part.unit}</span>
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin className="size-3.5 shrink-0" />
-                <span>Ubicación: {part.location || "Sin asignar"}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Tag className="size-3.5 shrink-0" />
-                <span>
-                  Precio:{" "}
-                  {part.unitPrice && part.unitPrice > 0
-                    ? formatCurrency(part.unitPrice)
-                    : "—"}
-                </span>
-              </div>
-            </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Stock actual
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-bold tabular-nums">
+                      {part.stock}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {part.unit}
+                      </span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Stock mínimo
+                    </dt>
+                    <dd className="mt-0.5 text-lg font-semibold tabular-nums text-muted-foreground">
+                      {part.minStock}{" "}
+                      <span className="text-xs font-normal">{part.unit}</span>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3.5 shrink-0" />
+                      Ubicación
+                    </dt>
+                    <dd className="mt-0.5 font-medium">
+                      {part.location || "Sin asignar"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Tag className="size-3.5 shrink-0" />
+                      Precio unitario
+                    </dt>
+                    <dd className="mt-0.5 font-medium tabular-nums">
+                      {part.unitPrice && part.unitPrice > 0
+                        ? formatCurrency(part.unitPrice)
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
 
-            <div className="flex flex-wrap gap-2">
-              {canManage && (
-                <>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      onClose();
-                      onStockAdjust(part);
-                    }}
-                  >
-                    <SlidersHorizontal className="mr-1.5 size-4" />
-                    Ajustar stock
-                  </Button>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+                  {canManage && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          onClose();
+                          onStockAdjust(part);
+                        }}
+                      >
+                        <SlidersHorizontal className="mr-1.5 size-4" />
+                        Ajustar stock
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          onClose();
+                          onEdit(part);
+                        }}
+                      >
+                        <Pencil className="mr-1.5 size-4" />
+                        Editar ficha
+                      </Button>
+                    </>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      onClose();
-                      onEdit(part);
-                    }}
+                    onClick={() => onPrintLabel(part)}
                   >
-                    <Pencil className="mr-1.5 size-4" />
-                    Editar ficha
+                    <Printer className="mr-1.5 size-4" />
+                    Etiqueta
                   </Button>
-                </>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onPrintLabel(part)}
-              >
-                <Printer className="mr-1.5 size-4" />
-                Etiqueta
-              </Button>
-            </div>
-
-            {part.description && (
-              <section className="space-y-1.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Descripción
-                </h3>
-                <RichText
-                  value={part.description}
-                  className="rounded-lg border bg-card p-3 text-sm leading-6"
-                />
-              </section>
-            )}
-
-            <section className="space-y-2">
-              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <Wrench className="size-3.5" />
-                Modelos compatibles ({compatibles.length})
-              </h3>
-              {compatibles.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Sin modelos de equipo vinculados.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {compatibles.map((model) => {
-                    const label = modelLabel(model);
-                    return onSelectModel ? (
-                      <Button
-                        key={model._id}
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => {
-                          onClose();
-                          onSelectModel(model.model);
-                        }}
-                      >
-                        {label}
-                      </Button>
-                    ) : (
-                      <Badge key={model._id} variant="secondary">
-                        {label}
-                      </Badge>
-                    );
-                  })}
                 </div>
-              )}
-            </section>
+              </div>
 
-            <PartMovementsSection unit={part.unit} movements={movements} />
+              {part.description && (
+                <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Descripción
+                  </h3>
+                  <RichText
+                    value={part.description}
+                    className="mt-1.5 text-sm leading-6"
+                  />
+                </section>
+              )}
+
+              <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+                <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <Wrench className="size-3.5" />
+                  Modelos compatibles ({compatibles.length})
+                </h3>
+                {compatibles.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Sin modelos de equipo vinculados.
+                  </p>
+                ) : (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {compatibles.map((model) => {
+                      const label = modelLabel(model);
+                      return onSelectModel ? (
+                        <Button
+                          key={model._id}
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => {
+                            onClose();
+                            onSelectModel(model.model);
+                          }}
+                        >
+                          {label}
+                        </Button>
+                      ) : (
+                        <Badge key={model._id} variant="secondary">
+                          {label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <PartMovementsSection unit={part.unit} movements={movements} />
+            </div>
           </>
         )}
       </SheetContent>
