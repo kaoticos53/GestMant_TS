@@ -1,4 +1,5 @@
 import type { Id } from "@/convex/_generated/dataModel";
+import type { SortValue } from "@/lib/tableSort";
 import type {
   EquipmentDoc,
   EquipmentModelDoc,
@@ -6,6 +7,45 @@ import type {
   PartDoc,
   UsageStats,
 } from "./types";
+
+export type EquipmentModelColumnId =
+  | "brand"
+  | "model"
+  | "category"
+  | "preventive"
+  | "usage";
+
+/** Definición de columnas ordenables para la tabla de modelos de equipo. */
+export function buildEquipmentModelSortColumns(usageStats: UsageStats): Record<
+  EquipmentModelColumnId,
+  { label: string; value: (item: EquipmentModelDoc) => SortValue }
+> {
+  return {
+    brand: {
+      label: "Marca",
+      value: (item) => item.brand ?? "",
+    },
+    model: {
+      label: "Modelo",
+      value: (item) => item.model,
+    },
+    category: {
+      label: "Categoría",
+      value: (item) => item.category ?? "",
+    },
+    preventive: {
+      label: "Preventivo",
+      value: (item) => item.defaultMaintenanceIntervalDays ?? null,
+    },
+    usage: {
+      label: "Uso",
+      value: (item) =>
+        (usageStats.equipCount.get(item._id) ?? 0) +
+        (usageStats.partsCount.get(item._id) ?? 0) +
+        (usageStats.manualsCount.get(item._id) ?? 0),
+    },
+  };
+}
 
 /**
  * Calcula el recuento de uso de cada modelo en el taller:

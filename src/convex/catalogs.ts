@@ -1,6 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { normalizeCatalogString } from "../lib/catalogs";
+import {
+  hasExtendedContactDetails,
+  normalizeCatalogString,
+  sanitizeSupplierContacts,
+  type CatalogKind,
+  type SupplierContact,
+} from "../lib/catalogs";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { Doc } from "./_generated/dataModel";
 import { MutationCtx, QueryCtx, mutation, query } from "./_generated/server";
@@ -90,6 +96,42 @@ export const listAll = query({
   },
 });
 
+const supplierContactValidator = v.object({
+  name: v.string(),
+  phone: v.optional(v.string()),
+  email: v.optional(v.string()),
+});
+
+const supplierDetailsArgs = {
+  address: v.optional(v.string()),
+  contacts: v.optional(v.array(supplierContactValidator)),
+  notes: v.optional(v.string()),
+};
+
+function cleanExtendedCatalogDetails(
+  kind: Doc<"catalogs">["kind"],
+  args: {
+    address?: string;
+    contacts?: SupplierContact[];
+    notes?: string;
+  },
+) {
+  if (kind === "location" || !hasExtendedContactDetails(kind as CatalogKind)) {
+    return {};
+  }
+  const address = args.address?.trim() || undefined;
+  const notes = args.notes?.trim() || undefined;
+  let contacts: SupplierContact[] | undefined;
+  if (args.contacts !== undefined) {
+    const sanitized = sanitizeSupplierContacts(args.contacts);
+    if (!sanitized.ok) {
+      throw new ConvexError(sanitized.error);
+    }
+    contacts = sanitized.contacts.length > 0 ? sanitized.contacts : undefined;
+  }
+  return { address, contacts, notes };
+}
+
 /**
  * Da de alta o devuelve el elemento de catálogo si ya existe con esa normalización.
  * Diseñado para ser invocado transparentemente al guardar formularios si el valor es nuevo.
@@ -97,6 +139,7 @@ export const listAll = query({
 const ensureItemArgs = {
   kind: catalogKindValidator,
   name: v.string(),
+  ...supplierDetailsArgs,
 };
 
 export const ensureItem = mutation({
@@ -128,11 +171,19 @@ export const ensureItem = mutation({
         return existing._id;
       }
 
+      const extendedDetails = cleanExtendedCatalogDetails(args.kind, args);
       const now = Date.now();
       return await ctx.db.insert("catalogs", {
         kind: args.kind,
         name: cleanName,
         normalized,
+        ...(extendedDetails.address
+          ? { address: extendedDetails.address }
+          : {}),
+        ...(extendedDetails.contacts
+          ? { contacts: extendedDetails.contacts }
+          : {}),
+        ...(extendedDetails.notes ? { notes: extendedDetails.notes } : {}),
         createdAt: now,
         updatedAt: now,
       });
@@ -314,6 +365,7 @@ async function propagateCatalogRename(
 const updateArgs = {
   id: v.id("catalogs"),
   name: v.string(),
+  ...supplierDetailsArgs,
 };
 
 export const update = mutation({
@@ -353,10 +405,21 @@ export const update = mutation({
         );
       }
 
+      const extendedDetails = cleanExtendedCatalogDetails(item.kind, args);
+      const hasDetails =
+        item.kind !== "location" &&
+        hasExtendedContactDetails(item.kind as CatalogKind);
       const now = Date.now();
       await ctx.db.patch(args.id, {
         name: cleanName,
         normalized,
+        ...(hasDetails
+          ? {
+              address: extendedDetails.address,
+              contacts: extendedDetails.contacts,
+              notes: extendedDetails.notes,
+            }
+          : {}),
         updatedAt: now,
       });
 

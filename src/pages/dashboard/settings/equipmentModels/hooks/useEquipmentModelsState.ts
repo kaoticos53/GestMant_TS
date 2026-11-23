@@ -4,9 +4,12 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
+import { useTableSort } from "@/hooks/use-table-sort";
+import { sortRows } from "@/lib/tableSort";
 import { getErrorMessage } from "@/lib/workshop";
 import type { EquipmentModelDoc } from "../types";
 import {
+  buildEquipmentModelSortColumns,
   computeModelUsageStats,
   filterEquipmentModels,
   getCannotDeleteReason,
@@ -48,13 +51,33 @@ export function useEquipmentModelsState() {
     [models, search],
   );
 
+  const columns = useMemo(
+    () => buildEquipmentModelSortColumns(usageStats),
+    [usageStats],
+  );
+
+  const [sort, setSort] = useTableSort({
+    table: "equipmentModels",
+    columns,
+  });
+
+  const sortedModels = useMemo(
+    () =>
+      sortRows(
+        filteredModels,
+        (item, column) => columns[column].value(item),
+        sort,
+      ),
+    [filteredModels, columns, sort],
+  );
+
   const { areaRef, rowsFit } = useRowsThatFit();
   const paging = useTablePagination({
-    total: filteredModels.length,
+    total: sortedModels.length,
     rowsFit,
     resetKey: search,
   });
-  const visible = filteredModels.slice(paging.from - 1, paging.to);
+  const visible = sortedModels.slice(paging.from - 1, paging.to);
 
   const handleOpenCreate = () => {
     setEditingModel(null);
@@ -100,6 +123,9 @@ export function useEquipmentModelsState() {
     isDeleting,
     usageStats,
     filteredModels,
+    columns,
+    sort,
+    setSort,
     areaRef,
     paging,
     visible,

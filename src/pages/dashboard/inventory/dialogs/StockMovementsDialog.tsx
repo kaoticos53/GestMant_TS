@@ -7,6 +7,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { STOCK_MOVEMENT_META, type StockMovementKind } from "@/lib/movements";
@@ -81,57 +89,57 @@ export function StockMovementsDialog({
             No hay movimientos registrados con ese filtro.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="bg-muted/50">
-                <tr className="border-b">
-                  <th className="px-3 py-2 font-medium">Fecha</th>
-                  <th className="px-3 py-2 font-medium">Repuesto</th>
-                  <th className="px-3 py-2 font-medium">Tipo</th>
-                  <th className="px-3 py-2 font-medium text-right">Variación</th>
-                  <th className="px-3 py-2 font-medium text-right">Saldo</th>
-                  <th className="px-3 py-2 font-medium">Referencia / Motivo</th>
-                  <th className="px-3 py-2 font-medium">Usuario</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="max-h-[55vh] overflow-auto rounded-lg border border-border/70">
+            <Table className="text-xs">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Repuesto</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead className="text-right">Variación</TableHead>
+                  <TableHead className="text-right">Saldo</TableHead>
+                  <TableHead>Referencia / Motivo</TableHead>
+                  <TableHead>Usuario</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filtered.map((row) => {
                   const meta =
                     STOCK_MOVEMENT_META[row.kind as StockMovementKind];
                   const deltaLabel =
                     row.delta > 0 ? `+${row.delta}` : String(row.delta);
                   return (
-                    <tr key={row._id} className="border-b last:border-b-0">
-                      <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                    <TableRow key={row._id} className="hover:bg-muted/40">
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
                         {formatDateTime(row.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell>
                         <span className="font-mono font-medium">
                           {row.partCode}
                         </span>
                         <span className="ml-1.5 text-muted-foreground">
                           {row.partName}
                         </span>
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell>
                         <Badge variant="outline" className="text-[11px]">
                           {meta.label}
                         </Badge>
-                      </td>
-                      <td
+                      </TableCell>
+                      <TableCell
                         className={cn(
-                          "px-3 py-2 text-right font-mono font-semibold tabular-nums",
+                          "text-right font-mono font-semibold tabular-nums",
                           row.delta > 0
                             ? "text-emerald-600"
                             : "text-destructive",
                         )}
                       >
                         {deltaLabel}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono tabular-nums">
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
                         {row.previousStock} → {row.nextStock}
-                      </td>
-                      <td className="px-3 py-2">
+                      </TableCell>
+                      <TableCell>
                         {row.reference && (
                           <Badge
                             variant="secondary"
@@ -143,15 +151,15 @@ export function StockMovementsDialog({
                         <span className="text-muted-foreground">
                           {row.reason ?? ""}
                         </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {row.actorName}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </DialogContent>

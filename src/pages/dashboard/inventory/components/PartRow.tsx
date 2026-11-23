@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import {
   Eye,
@@ -33,7 +34,7 @@ export interface PartRowProps {
   rowRef?: (node: HTMLTableRowElement | null) => void;
 }
 
-export function PartRow({
+export const PartRow = memo(function PartRow({
   part,
   canManage,
   catalogModels,
@@ -190,4 +191,4 @@ export function PartRow({
       </TableCell>
     </TableRow>
   );
-}
+});

@@ -22,6 +22,9 @@ export function EquipmentModelsCard() {
     isDeleting,
     usageStats,
     filteredModels,
+    columns,
+    sort,
+    setSort,
     areaRef,
     paging,
     visible,
@@ -47,6 +50,9 @@ export function EquipmentModelsCard() {
         ) : (
           <div className="overflow-hidden rounded-lg border border-border/70">
             <EquipmentModelsTable
+              columns={columns}
+              sort={sort}
+              onSortChange={setSort}
               visibleModels={visible}
               usageStats={usageStats}
               areaRef={areaRef}

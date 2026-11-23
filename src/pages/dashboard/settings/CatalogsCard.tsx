@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { hasExtendedContactDetails } from "@/lib/catalogs";
 import { BookOpen, Plus } from "lucide-react";
 import { CatalogsKindSelector } from "./catalogs/components/CatalogsKindSelector";
 import { CatalogsSearchBar } from "./catalogs/components/CatalogsSearchBar";
@@ -30,6 +31,8 @@ export function CatalogsCard() {
     paging,
     newItemName,
     setNewItemName,
+    newSupplierDetails,
+    setNewSupplierDetails,
     isAddingNew,
     setIsAddingNew,
     handleCreate,
@@ -110,6 +113,9 @@ export function CatalogsCard() {
           singularLabel={meta.singular}
           placeholder={meta.placeholder}
           name={newItemName}
+          isSupplier={hasExtendedContactDetails(selectedKind)}
+          supplierDetails={newSupplierDetails}
+          onChangeSupplierDetails={setNewSupplierDetails}
           onChangeName={setNewItemName}
           onSubmit={handleCreate}
           onClose={() => setIsAddingNew(false)}
@@ -120,7 +126,11 @@ export function CatalogsCard() {
         <EditCatalogItemDialog
           item={editingItem}
           singularLabel={meta.singular}
+          isSupplier={hasExtendedContactDetails(selectedKind)}
           onChangeName={(name) => setEditingItem({ ...editingItem, name })}
+          onChangeSupplierDetails={(details) =>
+            setEditingItem({ ...editingItem, ...details })
+          }
           onSave={handleUpdate}
           onClose={() => setEditingItem(null)}
         />

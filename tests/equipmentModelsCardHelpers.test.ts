@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
+  buildEquipmentModelSortColumns,
   computeModelUsageStats,
   filterEquipmentModels,
   getCannotDeleteReason,
@@ -125,6 +126,23 @@ describe("equipmentModelsCard helpers", () => {
     it("permite borrar (null) si no hay equipos ni manuales (aunque haya repuestos compatibles)", () => {
       const modelCleanId = "clean" as Id<"equipmentModels">;
       expect(getCannotDeleteReason(modelCleanId, stats)).toBeNull();
+    });
+  });
+
+  describe("buildEquipmentModelSortColumns", () => {
+    it("extrae valores de ordenación para marca, modelo, categoría, preventivo y uso", () => {
+      const stats: UsageStats = {
+        equipCount: new Map([[model1Id, 3]]),
+        partsCount: new Map([[model1Id, 2]]),
+        manualsCount: new Map([[model1Id, 1]]),
+      };
+      const cols = buildEquipmentModelSortColumns(stats);
+      expect(cols.brand.value(mockModels[0])).toBe("Sony");
+      expect(cols.model.value(mockModels[1])).toBe("ATEM Mini Pro");
+      expect(cols.category.value(mockModels[0])).toBe("Cámaras");
+      expect(cols.preventive.value(mockModels[0])).toBeNull();
+      expect(cols.usage.value(mockModels[0])).toBe(6);
+      expect(cols.usage.value(mockModels[1])).toBe(0);
     });
   });
 });

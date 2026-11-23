@@ -6,9 +6,11 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListArea } from "@/components/ListArea";
+import { SortableTableHead, TableSortBar } from "@/components/TableSort";
 import {
   Table,
   TableBody,
@@ -17,9 +19,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { TableSort } from "@/lib/tableSort";
+import type { EquipmentModelColumnId } from "../helpers";
 import type { EquipmentModelDoc, UsageStats } from "../types";
 
 export interface EquipmentModelsTableProps {
+  columns: Record<EquipmentModelColumnId, { label: string }>;
+  sort: TableSort<EquipmentModelColumnId> | null;
+  onSortChange: (sort: TableSort<EquipmentModelColumnId> | null) => void;
   visibleModels: EquipmentModelDoc[];
   usageStats: UsageStats;
   areaRef: (element: HTMLDivElement | null) => void;
@@ -29,6 +36,9 @@ export interface EquipmentModelsTableProps {
 }
 
 export function EquipmentModelsTable({
+  columns,
+  sort,
+  onSortChange,
   visibleModels,
   usageStats,
   areaRef,
@@ -37,41 +47,86 @@ export function EquipmentModelsTable({
   onOpenDelete,
 }: EquipmentModelsTableProps) {
   return (
-    <ListArea
-      ref={areaRef}
-      resetKey={page}
-      maxHeightClass="max-h-[calc(100dvh_-_48rem)]"
-    >
-      <Table>
-        <TableHeader className="sticky top-0 z-10 bg-card">
-          <TableRow>
-            <TableHead>Marca</TableHead>
-            <TableHead>Modelo</TableHead>
-            <TableHead className="hidden md:table-cell">Categoría</TableHead>
-            <TableHead className="hidden lg:table-cell">Preventivo</TableHead>
-            <TableHead>Uso</TableHead>
-            <TableHead className="text-right">Acciones</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleModels.map((item) => {
-            const eqCount = usageStats.equipCount.get(item._id) ?? 0;
-            const spCount = usageStats.partsCount.get(item._id) ?? 0;
-            const manCount = usageStats.manualsCount.get(item._id) ?? 0;
+    <>
+      <TableSortBar columns={columns} sort={sort} onSortChange={onSortChange} />
+      <ListArea
+        ref={areaRef}
+        resetKey={page}
+        maxHeightClass="max-h-[55dvh] min-h-[16rem]"
+      >
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <SortableTableHead
+                column="brand"
+                label="Marca"
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+              <SortableTableHead
+                column="model"
+                label="Modelo"
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+              <SortableTableHead
+                column="category"
+                label="Categoría"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="hidden md:table-cell"
+              />
+              <SortableTableHead
+                column="preventive"
+                label="Preventivo"
+                sort={sort}
+                onSortChange={onSortChange}
+                className="hidden lg:table-cell"
+              />
+              <SortableTableHead
+                column="usage"
+                label="Uso"
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+              <TableHead className="text-right">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleModels.map((item) => {
+              const eqCount = usageStats.equipCount.get(item._id) ?? 0;
+              const spCount = usageStats.partsCount.get(item._id) ?? 0;
+              const manCount = usageStats.manualsCount.get(item._id) ?? 0;
 
-            return (
-              <TableRow key={item._id} className="hover:bg-muted/40">
-                <TableCell className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {item.brand || "—"}
-                </TableCell>
-                <TableCell className="max-w-[20rem]">
-                  <span className="block truncate font-semibold text-foreground">
-                    {item.model}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {item.name}
-                  </span>
-                </TableCell>
+              return (
+                <TableRow key={item._id} className="hover:bg-muted/40">
+                  <TableCell className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {item.brand || "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[20rem]">
+                    <DetailTitleButton
+                      onClick={() => onOpenEdit(item)}
+                      className="font-semibold text-foreground"
+                    >
+                      {item.model}
+                    </DetailTitleButton>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {item.name}
+                    </span>
+                    {(item.category ||
+                      item.defaultMaintenanceIntervalDays !== undefined) && (
+                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground lg:hidden">
+                        {[
+                          item.category ? item.category : null,
+                          item.defaultMaintenanceIntervalDays !== undefined
+                            ? `cada ${item.defaultMaintenanceIntervalDays} días`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    )}
+                  </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {item.category ? (
                     <Badge
@@ -169,5 +224,6 @@ export function EquipmentModelsTable({
         </TableBody>
       </Table>
     </ListArea>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import {
   calculateSimilarity,
   damerauLevenshteinDistance,
   normalizeCatalogString,
+  sanitizeSupplierContacts,
 } from "../src/lib/catalogs";
 
 describe("Catálogos y Autocompletado (src/lib/catalogs.ts)", () => {
@@ -93,6 +94,30 @@ describe("Catálogos y Autocompletado (src/lib/catalogs.ts)", () => {
       expect(CATALOG_KIND_LABELS.externalWorkshop).toBeDefined();
       expect(CATALOG_KIND_LABELS.externalWorkshop.label).toContain("Empresas externas");
       expect(CATALOG_KIND_LABELS.externalWorkshop.singular).toContain("SAT");
+    });
+  });
+
+  describe("contactos de proveedor (sanitizeSupplierContacts)", () => {
+    test("limpia espacios, descarta filas vacías y conserva múltiples contactos", () => {
+      const res = sanitizeSupplierContacts([
+        { name: "  Ana Pérez ", phone: " 600123456 ", email: " ana@prov.es " },
+        { name: "   ", phone: "", email: "" },
+        { name: "Luis Gómez", phone: "", email: "luis@prov.es" },
+      ]);
+      expect(res).toEqual({
+        ok: true,
+        contacts: [
+          { name: "Ana Pérez", phone: "600123456", email: "ana@prov.es" },
+          { name: "Luis Gómez", email: "luis@prov.es" },
+        ],
+      });
+    });
+
+    test("rechaza un contacto con teléfono o correo pero sin nombre", () => {
+      const res = sanitizeSupplierContacts([
+        { name: "  ", phone: "600123456", email: "" },
+      ]);
+      expect(res.ok).toBe(false);
     });
   });
 });

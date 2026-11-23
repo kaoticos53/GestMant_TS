@@ -1,3 +1,4 @@
+import { useCallback, useState } from "react";
 import { ListArea } from "@/components/ListArea";
 import { SortableTableHead, TableSortBar } from "@/components/TableSort";
 import {
@@ -7,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useVirtualRows } from "@/hooks/use-virtual-rows";
 import type { TableSort } from "@/lib/tableSort";
 import type { ManualColumnId, ManualsColumns } from "../helpers/columns";
 import type { EquipmentDoc, ManualDoc } from "../types";
@@ -39,6 +41,22 @@ export function ManualsTable({
   onEdit,
   onDelete,
 }: ManualsTableProps) {
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const keepArea = useCallback(
+    (node: HTMLDivElement | null) => {
+      setScrollElement(node);
+      if (typeof areaRef === "function") {
+        areaRef(node);
+      } else if (areaRef && "current" in areaRef) {
+        (areaRef as { current: HTMLDivElement | null }).current = node;
+      }
+    },
+    [areaRef],
+  );
+  const virtual = useVirtualRows({ count: visibleManuals.length, scrollElement });
+
   return (
     <>
       <TableSortBar
@@ -46,7 +64,7 @@ export function ManualsTable({
         sort={sort}
         onSortChange={onSortChange}
       />
-      <ListArea ref={areaRef} resetKey={resetKey}>
+      <ListArea ref={keepArea} resetKey={resetKey}>
         <Table className="w-full">
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
@@ -88,17 +106,33 @@ export function ManualsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {visibleManuals.map((manual) => (
-              <ManualsTableRow
-                key={manual._id}
-                manual={manual}
-                linkedEquipment={equipmentOf(manual)}
-                rights={rights}
-                onOpenDetail={onOpenDetail}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
-            ))}
+            {virtual.active && virtual.paddingTop > 0 && (
+              <tr aria-hidden="true">
+                <td colSpan={6} style={{ height: virtual.paddingTop }} />
+              </tr>
+            )}
+            {virtual.indices.map((index) => {
+              const manual = visibleManuals[index];
+              if (!manual) return null;
+              return (
+                <ManualsTableRow
+                  key={manual._id}
+                  rowIndex={virtual.active ? index : undefined}
+                  rowRef={virtual.active ? virtual.measureElement : undefined}
+                  manual={manual}
+                  linkedEquipment={equipmentOf(manual)}
+                  rights={rights}
+                  onOpenDetail={onOpenDetail}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              );
+            })}
+            {virtual.active && virtual.paddingBottom > 0 && (
+              <tr aria-hidden="true">
+                <td colSpan={6} style={{ height: virtual.paddingBottom }} />
+              </tr>
+            )}
           </TableBody>
         </Table>
       </ListArea>

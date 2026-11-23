@@ -11,6 +11,8 @@ export function HistoryTableRow({
   onToggleRow,
   onToggleCell,
   onOpenOrder,
+  rowIndex,
+  rowRef,
 }: {
   row: PurchaseHistoryRow;
   isRowSelected: boolean;
@@ -18,11 +20,15 @@ export function HistoryTableRow({
   onToggleRow: (rowId: string) => void;
   onToggleCell: (rowId: string, column: PurchaseHistoryColumn) => void;
   onOpenOrder?: (orderReference: string) => void;
+  rowIndex?: number;
+  rowRef?: (node: HTMLTableRowElement | null) => void;
 }) {
   const completado = row.pendingQuantity === 0;
 
   return (
     <TableRow
+      data-index={rowIndex}
+      ref={rowRef}
       className={`border-b border-border/40 transition-colors ${
         isRowSelected
           ? "bg-primary/10"

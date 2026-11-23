@@ -1,5 +1,9 @@
 import type { Id } from "@/convex/_generated/dataModel";
-import { normalizeCatalogString } from "@/lib/catalogs";
+import {
+  hasExtendedContactDetails,
+  normalizeCatalogString,
+  type CatalogKind,
+} from "@/lib/catalogs";
 import type { CatalogItemDoc } from "./types";
 
 /**
@@ -12,9 +16,27 @@ export function filterCatalogItems(
 ): CatalogItemDoc[] {
   const query = normalizeCatalogString(search);
   if (!query) return items;
-  return items.filter((item) =>
-    normalizeCatalogString(item.name).includes(query),
-  );
+  return items.filter((item) => {
+    if (normalizeCatalogString(item.name).includes(query)) return true;
+    if (
+      item.kind === "location" ||
+      !hasExtendedContactDetails(item.kind as CatalogKind)
+    ) {
+      return false;
+    }
+    if (item.address && normalizeCatalogString(item.address).includes(query)) {
+      return true;
+    }
+    if (item.notes && normalizeCatalogString(item.notes).includes(query)) {
+      return true;
+    }
+    return (item.contacts ?? []).some(
+      (c) =>
+        normalizeCatalogString(c.name).includes(query) ||
+        (c.phone && normalizeCatalogString(c.phone).includes(query)) ||
+        (c.email && normalizeCatalogString(c.email).includes(query)),
+    );
+  });
 }
 
 /**

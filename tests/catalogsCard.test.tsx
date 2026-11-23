@@ -29,6 +29,23 @@ const { MARCAS, PROVEEDORES } = vi.hoisted(() => ({
     kind: "supplier",
     name: `Proveedor ${i}`,
     normalized: `proveedor ${i}`,
+    ...(i === 0
+      ? {
+          address: "Calle Mayor 12, Madrid",
+          contacts: [
+            {
+              name: "Carlos Ruiz",
+              phone: "910001122",
+              email: "carlos@proveedor.es",
+            },
+            {
+              name: "Marta Soler",
+              phone: "622334455",
+            },
+          ],
+          notes: "Entregas de 9 a 14h",
+        }
+      : {}),
   })),
 }));
 
@@ -153,7 +170,7 @@ describe("los catálogos maestros, como tabla paginada", () => {
   test("las marcas se leen en una tabla con su pie de páginas", async () => {
     await pintar();
 
-    expect(cabeceras()).toEqual(["Marca", "Normalizado", "Acciones"]);
+    expect(cabeceras()).toEqual(["Marca", "Actualizado", "Acciones"]);
     // Según lo que mide el área: sin medida todavía, el tamaño de siempre.
     expect(filas()).toHaveLength(10);
     expect(filas()[0]).toContain("Marca 0");
@@ -182,7 +199,11 @@ describe("los catálogos maestros, como tabla paginada", () => {
     await pulsar(boton("Proveedores")!);
 
     // Otra lista es otra lista: no se arrastra la página de la anterior.
-    expect(cabeceras()).toEqual(["Proveedor", "Normalizado", "Acciones"]);
+    expect(cabeceras()).toEqual([
+      "Proveedor",
+      "Contacto / Dirección",
+      "Acciones",
+    ]);
     expect(resumen()).toBe("Mostrando 1 a 10 de 12 proveedores");
     expect(filas()[0]).toContain("Proveedor 0");
   });
@@ -201,5 +222,51 @@ describe("los catálogos maestros, como tabla paginada", () => {
     // Con el filtro puesto, el pie añade cuántos hay en el catálogo.
     expect(resumen()).toContain("Mostrando el 1 de 1 marca");
     expect(resumen()).toContain("45 en el catálogo");
+  });
+
+  test("los proveedores muestran dirección, contactos y notas, y permiten añadir múltiples contactos en el diálogo", async () => {
+    await pintar();
+    await pulsar(boton("Proveedores")!);
+
+    expect(filas()[0]).toContain("Calle Mayor 12, Madrid");
+    expect(filas()[0]).toContain("Carlos Ruiz");
+    expect(filas()[0]).toContain("910001122");
+    expect(filas()[0]).toContain("carlos@proveedor.es");
+    expect(filas()[0]).toContain("Marta Soler");
+    expect(filas()[0]).toContain("Entregas de 9 a 14h");
+    expect(
+      container.querySelector("a[href='tel:910001122']"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector("a[href='mailto:carlos@proveedor.es']"),
+    ).not.toBeNull();
+
+    await pulsar(boton("Añadir proveedor")!);
+    const dialog = document.body.querySelector("[role='dialog']");
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain("Dirección");
+    expect(dialog?.textContent).toContain("Personas de contacto");
+    expect(dialog?.textContent).toContain("Notas");
+
+    const addContactBtn = [...(dialog?.querySelectorAll("button") ?? [])].find(
+      (b) => (b.textContent ?? "").includes("Añadir contacto"),
+    );
+    expect(addContactBtn).toBeDefined();
+    await pulsar(addContactBtn!);
+    expect(
+      dialog?.querySelectorAll("input[placeholder='Nombre de contacto']").length,
+    ).toBe(2);
+  });
+
+  test("las empresas externas y SAT también ofrecen dirección, contactos y notas", async () => {
+    await pintar();
+    await pulsar(boton("Empresas externas y SAT")!);
+    await pulsar(boton("Añadir empresa externa / sat")!);
+
+    const dialog = document.body.querySelector("[role='dialog']");
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain("Dirección");
+    expect(dialog?.textContent).toContain("Personas de contacto");
+    expect(dialog?.textContent).toContain("Notas");
   });
 });

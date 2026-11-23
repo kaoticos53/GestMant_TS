@@ -5,7 +5,13 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
-import { CATALOG_KIND_LABELS, type CatalogKind } from "@/lib/catalogs";
+import {
+  CATALOG_KIND_LABELS,
+  hasExtendedContactDetails,
+  sanitizeSupplierContacts,
+  type CatalogKind,
+  type SupplierDetails,
+} from "@/lib/catalogs";
 import { getErrorMessage } from "@/lib/workshop";
 import {
   filterCatalogItems,
@@ -25,6 +31,13 @@ export function useCatalogsState() {
   );
   const [targetMergeId, setTargetMergeId] = useState<string>("");
   const [newItemName, setNewItemName] = useState("");
+  const [newSupplierDetails, setNewSupplierDetails] = useState<SupplierDetails>(
+    {
+      address: "",
+      contacts: [{ name: "", phone: "", email: "" }],
+      notes: "",
+    },
+  );
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"catalogs"> | null>(null);
 
@@ -70,10 +83,34 @@ export function useCatalogsState() {
     e.preventDefault();
     const validation = validateCatalogItemName(newItemName);
     if (!validation.valid) return;
+    let supplierPayload: SupplierDetails = {};
+    if (hasExtendedContactDetails(selectedKind)) {
+      const sanitized = sanitizeSupplierContacts(
+        newSupplierDetails.contacts ?? [],
+      );
+      if (!sanitized.ok) {
+        toast.error(sanitized.error);
+        return;
+      }
+      supplierPayload = {
+        address: newSupplierDetails.address?.trim() || undefined,
+        contacts: sanitized.contacts,
+        notes: newSupplierDetails.notes?.trim() || undefined,
+      };
+    }
     try {
-      await ensureItem({ kind: selectedKind, name: validation.cleaned });
+      await ensureItem({
+        kind: selectedKind,
+        name: validation.cleaned,
+        ...supplierPayload,
+      });
       toast.success(`${meta.singular} añadida al catálogo`);
       setNewItemName("");
+      setNewSupplierDetails({
+        address: "",
+        contacts: [{ name: "", phone: "", email: "" }],
+        notes: "",
+      });
       setIsAddingNew(false);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -84,8 +121,25 @@ export function useCatalogsState() {
     if (!editingItem) return;
     const validation = validateCatalogItemName(editingItem.name);
     if (!validation.valid) return;
+    let supplierPayload: SupplierDetails = {};
+    if (hasExtendedContactDetails(selectedKind)) {
+      const sanitized = sanitizeSupplierContacts(editingItem.contacts ?? []);
+      if (!sanitized.ok) {
+        toast.error(sanitized.error);
+        return;
+      }
+      supplierPayload = {
+        address: editingItem.address?.trim() || undefined,
+        contacts: sanitized.contacts,
+        notes: editingItem.notes?.trim() || undefined,
+      };
+    }
     try {
-      await updateItem({ id: editingItem.id, name: validation.cleaned });
+      await updateItem({
+        id: editingItem.id,
+        name: validation.cleaned,
+        ...supplierPayload,
+      });
       toast.success(`${meta.singular} actualizada`);
       setEditingItem(null);
     } catch (err) {
@@ -131,6 +185,8 @@ export function useCatalogsState() {
     paging,
     newItemName,
     setNewItemName,
+    newSupplierDetails,
+    setNewSupplierDetails,
     isAddingNew,
     setIsAddingNew,
     handleCreate,

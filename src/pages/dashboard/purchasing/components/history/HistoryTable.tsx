@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { useVirtualRows } from "@/hooks/use-virtual-rows";
 import type {
   PurchaseHistoryColumn,
   PurchaseHistoryRow,
@@ -36,9 +38,17 @@ export function HistoryTable({
   onOpenOrder?: (orderReference: string) => void;
   selectedCount: number;
 }) {
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const virtual = useVirtualRows({ count: rows.length, scrollElement });
+
   return (
     <Card className="overflow-hidden border-border/80 shadow-xs">
-      <div className="max-h-[70vh] overflow-auto select-none">
+      <div
+        ref={setScrollElement}
+        className="max-h-[70vh] overflow-auto select-none"
+      >
         <Table className="border-collapse text-xs">
           <HistoryTableHead
             areAllSelected={areAllSelected}
@@ -58,17 +68,35 @@ export function HistoryTable({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <HistoryTableRow
-                  key={row.id}
-                  row={row}
-                  isRowSelected={isRowSelected(row.id)}
-                  isSelected={(column) => isSelected(row.id, column)}
-                  onToggleRow={onToggleRow}
-                  onToggleCell={onToggleCell}
-                  onOpenOrder={onOpenOrder}
-                />
-              ))
+              <>
+                {virtual.active && virtual.paddingTop > 0 && (
+                  <tr aria-hidden="true">
+                    <td colSpan={12} style={{ height: virtual.paddingTop }} />
+                  </tr>
+                )}
+                {virtual.indices.map((index) => {
+                  const row = rows[index];
+                  if (!row) return null;
+                  return (
+                    <HistoryTableRow
+                      key={row.id}
+                      rowIndex={virtual.active ? index : undefined}
+                      rowRef={virtual.active ? virtual.measureElement : undefined}
+                      row={row}
+                      isRowSelected={isRowSelected(row.id)}
+                      isSelected={(column) => isSelected(row.id, column)}
+                      onToggleRow={onToggleRow}
+                      onToggleCell={onToggleCell}
+                      onOpenOrder={onOpenOrder}
+                    />
+                  );
+                })}
+                {virtual.active && virtual.paddingBottom > 0 && (
+                  <tr aria-hidden="true">
+                    <td colSpan={12} style={{ height: virtual.paddingBottom }} />
+                  </tr>
+                )}
+              </>
             )}
           </TableBody>
         </Table>

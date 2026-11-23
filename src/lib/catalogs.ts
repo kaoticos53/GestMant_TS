@@ -21,6 +21,51 @@ export interface CatalogItemLike {
   normalized?: string;
 }
 
+export interface SupplierContact {
+  name: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface SupplierDetails {
+  address?: string;
+  contacts?: SupplierContact[];
+  notes?: string;
+}
+
+/** Catálogos que almacenan ficha ampliada de contacto (dirección, personas y notas). */
+export function hasExtendedContactDetails(kind: CatalogKind): boolean {
+  return kind === "supplier" || kind === "externalWorkshop";
+}
+
+/**
+ * Normaliza la lista de personas de contacto de un proveedor descartando filas vacías.
+ * Si una fila tiene teléfono o correo sin nombre, devuelve error de validación.
+ */
+export function sanitizeSupplierContacts(
+  contacts: readonly SupplierContact[],
+): { ok: true; contacts: SupplierContact[] } | { ok: false; error: string } {
+  const cleaned: SupplierContact[] = [];
+  for (const contact of contacts) {
+    const name = contact.name.trim();
+    const phone = contact.phone?.trim() || undefined;
+    const email = contact.email?.trim() || undefined;
+    if (!name && !phone && !email) continue;
+    if (!name) {
+      return {
+        ok: false,
+        error: "Indica el nombre de cada persona de contacto.",
+      };
+    }
+    cleaned.push({
+      name,
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+    });
+  }
+  return { ok: true, contacts: cleaned };
+}
+
 export interface SimilarityMatch<T extends CatalogItemLike = CatalogItemLike> {
   item: T;
   distance: number;

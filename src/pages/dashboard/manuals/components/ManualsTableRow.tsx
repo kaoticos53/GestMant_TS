@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Download, Eye, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,24 +21,28 @@ export interface ManualsTableRowProps {
   onOpenDetail: (manual: ManualDoc) => void;
   onEdit: (manual: ManualDoc) => void;
   onDelete: (manual: ManualDoc) => void;
+  rowIndex?: number;
+  rowRef?: (node: HTMLTableRowElement | null) => void;
 }
 
 /**
- * Fila individual del catálogo de manuales con badges de tipo/forma,
+ * Fila individual memoizada del catálogo de manuales con badges de tipo/forma,
  * columnas responsivas y botones de acción según permisos RBAC.
  */
-export function ManualsTableRow({
+export const ManualsTableRow = memo(function ManualsTableRow({
   manual,
   linkedEquipment,
   rights,
   onOpenDetail,
   onEdit,
   onDelete,
+  rowIndex,
+  rowRef,
 }: ManualsTableRowProps) {
   const meta = MANUAL_KIND_META[manual.kind];
 
   return (
-    <TableRow className="hover:bg-muted/40">
+    <TableRow className="hover:bg-muted/40" data-index={rowIndex} ref={rowRef}>
       <TableCell className="min-w-[14rem]">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge
@@ -139,4 +144,4 @@ export function ManualsTableRow({
       </TableCell>
     </TableRow>
   );
-}
+});

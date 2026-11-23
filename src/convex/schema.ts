@@ -1447,6 +1447,18 @@ const schema = defineSchema({
     ),
     name: v.string(), // Nombre oficial o canónico visible, ej. "Plató 1" o "Estantería A-01"
     normalized: v.string(), // Minúsculas, sin acentos ni espacios sobrantes para deduplicación
+    // Datos ampliados para proveedores (kind === "supplier")
+    address: v.optional(v.string()),
+    contacts: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          phone: v.optional(v.string()),
+          email: v.optional(v.string()),
+        }),
+      ),
+    ),
+    notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
