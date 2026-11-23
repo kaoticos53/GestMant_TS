@@ -140,4 +140,28 @@ describe("PartDetailSheet (Fase 2)", () => {
     expect(text).not.toContain("Editar ficha");
     expect(text).toContain("Etiqueta");
   });
+
+  it("muestra desglose físico y reservado cuando hay stock reservado", async () => {
+    mockUseQuery.mockReturnValue([]);
+
+    await act(async () => {
+      root.render(
+        <PartDetailSheet
+          part={{ ...SAMPLE_PART, stock: 7, reservedStock: 3 }}
+          canManage={false}
+          catalogModels={SAMPLE_MODELS}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onStockAdjust={vi.fn()}
+          onPrintLabel={vi.fn()}
+        />,
+      );
+      await settle();
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Stock disponible");
+    expect(text).toContain("Físico 10 ud");
+    expect(text).toContain("Reservado 3 ud");
+  });
 });

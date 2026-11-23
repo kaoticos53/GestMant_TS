@@ -1,3 +1,4 @@
+import { CatalogContactInfo } from "@/components/CatalogContactInfo";
 import { Truck } from "lucide-react";
 import { formatDateTime } from "@/lib/workshop";
 import { formatExternalRepairCost, getExternalRepairBadge } from "./helpers";
@@ -31,6 +32,12 @@ export function IncidentExternalRepairSection({
           <dd className="font-medium text-foreground">
             {repair.companyName}
           </dd>
+          <CatalogContactInfo
+            kind="externalWorkshop"
+            name={repair.companyName}
+            catalogId={repair.externalWorkshopId}
+            className="mt-1.5 grid gap-1 rounded-md border border-indigo-500/20 bg-background/60 p-2 text-xs text-muted-foreground"
+          />
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Fecha de envío</dt>

@@ -1,10 +1,13 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { QueryCtx, mutation, query } from "./_generated/server";
+import { QueryCtx, internalMutation, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
 import { secureMutation } from "./_auth/secureMutation";
 import { recordStockMovement } from "./_inventory/movements";
+import { reconcileReservedStockImpl } from "./_inventory/reservedStock";
+import { syncDashboardStatsIfPresent } from "./_stats/dashboardStats";
+import { resolveCatalogId } from "./_catalogs/resolve";
 import type { IdentityIssue } from "./permissions";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 
@@ -224,6 +227,8 @@ export const create = mutation({
       const description = richDocToStore(args.description);
       const now = Date.now();
       const initialStock = Math.max(0, Math.floor(args.stock));
+      const supplierName = args.supplier?.trim() || undefined;
+      const supplierId = await resolveCatalogId(ctx, "supplier", supplierName);
       const id = await ctx.db.insert("spareParts", {
         code,
         name,
@@ -233,7 +238,8 @@ export const create = mutation({
         stock: initialStock,
         minStock: Math.max(0, Math.floor(args.minStock)),
         ...(args.location?.trim() ? { location: args.location.trim().toUpperCase() } : {}),
-        ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
+        ...(supplierName ? { supplier: supplierName } : {}),
+        ...(supplierId ? { supplierId } : {}),
         ...(args.partNumber?.trim() ? { partNumber: args.partNumber.trim() } : {}),
         ...(typeof args.unitPrice === "number" && args.unitPrice >= 0
           ? { unitPrice: args.unitPrice }
@@ -254,6 +260,7 @@ export const create = mutation({
         actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
         createdAt: now,
       });
+      await syncDashboardStatsIfPresent(ctx);
       return id;
     },
   ),
@@ -318,7 +325,15 @@ export const update = mutation({
       if (args.stock !== undefined) patch.stock = Math.max(0, Math.floor(args.stock));
       if (args.minStock !== undefined) patch.minStock = Math.max(0, Math.floor(args.minStock));
       if (args.location !== undefined) patch.location = args.location.trim().toUpperCase();
-      if (args.supplier !== undefined) patch.supplier = args.supplier.trim();
+      if (args.supplier !== undefined) {
+        const cleanSupplier = args.supplier.trim();
+        patch.supplier = cleanSupplier;
+        patch.supplierId = await resolveCatalogId(
+          ctx,
+          "supplier",
+          cleanSupplier,
+        );
+      }
       if (args.partNumber !== undefined) patch.partNumber = args.partNumber.trim();
       if (args.purchaseUrl !== undefined) patch.purchaseUrl = args.purchaseUrl.trim();
       if (args.compatibleWith !== undefined) {
@@ -357,6 +372,7 @@ export const update = mutation({
           createdAt: now,
         });
       }
+      await syncDashboardStatsIfPresent(ctx);
     },
   ),
 });
@@ -395,6 +411,7 @@ export const adjustStock = mutation({
         actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
         createdAt: now,
       });
+      await syncDashboardStatsIfPresent(ctx);
     },
   ),
 });
@@ -414,6 +431,15 @@ export const remove = mutation({
         const part = await ctx.db.get(args.id);
       if (!part) throw new ConvexError("El repuesto ya no existe.");
       await ctx.db.delete(args.id);
+      await syncDashboardStatsIfPresent(ctx);
     },
   ),
+});
+
+/** Recalcula el stock reservado de todos los repuestos a partir de peticiones activas. */
+export const reconcileReservedStock = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    return await reconcileReservedStockImpl(ctx);
+  },
 });

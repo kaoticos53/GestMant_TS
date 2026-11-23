@@ -237,4 +237,12 @@ crons.daily(
   {},
 );
 
+/** Reconciliación nocturna de contadores precalculados del panel resumen. */
+crons.daily(
+  "reconciliar contadores del panel",
+  { hourUTC: 4, minuteUTC: 30 },
+  internal.dashboard.rebuildStats,
+  {},
+);
+
 export default crons;

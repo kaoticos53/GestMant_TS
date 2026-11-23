@@ -14,7 +14,55 @@ export type EquipmentMovementKind =
   | "created"
   | "location_change"
   | "decommission"
-  | "reactivation";
+  | "reactivation"
+  | "loan_out"
+  | "loan_return";
+
+export type EquipmentOperationalState =
+  | "operational"
+  | "in_workshop"
+  | "external_repair"
+  | "loaned"
+  | "decommissioned";
+
+export const EQUIPMENT_OPERATIONAL_META: Record<
+  EquipmentOperationalState,
+  { label: string; badgeClassName: string }
+> = {
+  operational: {
+    label: "Operativo",
+    badgeClassName:
+      "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  in_workshop: {
+    label: "En taller",
+    badgeClassName:
+      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  external_repair: {
+    label: "En SAT externo",
+    badgeClassName:
+      "border-purple-500/25 bg-purple-500/10 text-purple-700 dark:text-purple-300",
+  },
+  loaned: {
+    label: "Prestado",
+    badgeClassName: "border-signal/25 bg-signal/10 text-signal",
+  },
+  decommissioned: {
+    label: "De baja",
+    badgeClassName: "border-border bg-muted text-muted-foreground",
+  },
+};
+
+export function resolveOperationalState(item: {
+  operationalState?: EquipmentOperationalState;
+  decommissionDate?: number;
+  currentLoan?: unknown;
+}): EquipmentOperationalState {
+  if (item.decommissionDate !== undefined) return "decommissioned";
+  if (item.currentLoan) return "loaned";
+  return item.operationalState ?? "operational";
+}
 
 export const STOCK_MOVEMENT_META: Record<
   StockMovementKind,
@@ -35,6 +83,8 @@ export const EQUIPMENT_MOVEMENT_META: Record<
   location_change: { label: "Traslado" },
   decommission: { label: "Baja" },
   reactivation: { label: "Reactivación" },
+  loan_out: { label: "Préstamo temporal" },
+  loan_return: { label: "Devolución de préstamo" },
 };
 
 export interface StockDelta {

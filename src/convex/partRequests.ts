@@ -11,7 +11,9 @@ import {
 } from "./_generated/server";
 import { memberOrNull } from "./permissions";
 import { recordStockMovement } from "./_inventory/movements";
+import { adjustReservedStock } from "./_inventory/reservedStock";
 import { freeReference } from "./references";
+import { reservedUnits } from "../lib/inventoryStock";
 import {
   canEditRequest,
   canRequestStep,
@@ -426,6 +428,7 @@ export const create = mutation({
         ...(attachments.length > 0 ? { attachments } : {}),
         ...(notes ? { notes } : {}),
         ...(args.incidentId ? { incidentId: args.incidentId } : {}),
+        lifecycle: "active",
         createdAt: Date.now(),
       });
 
@@ -733,6 +736,37 @@ export const cancel = mutation({
       const now = Date.now();
       const name = await actorName(ctx, decisionActor);
       const reason = decisionReason(args.note);
+      if (request.heldFrom === REQUEST_STATUSES.APPROVED) {
+        for (const line of request.lines) {
+          const remaining = lineRemaining(line, REQUEST_STATUSES.APPROVED);
+          if (remaining <= 0) continue;
+          const part = await ctx.db.get(line.sparePartId);
+          if (!part) continue;
+          const nextStock = part.stock + remaining;
+          const nextReserved = Math.max(
+            0,
+            reservedUnits(part.reservedStock) - remaining,
+          );
+          await ctx.db.patch(part._id, {
+            stock: nextStock,
+            reservedStock: nextReserved,
+            updatedAt: now,
+          });
+          await recordStockMovement(ctx, {
+            sparePartId: part._id,
+            partCode: part.code,
+            partName: part.name,
+            kind: "request_return",
+            previousStock: part.stock,
+            nextStock,
+            reference: request.reference,
+            reason: `Cancelación ${request.reference}`,
+            actorId: decisionActor,
+            actorName: name,
+            createdAt: now,
+          });
+        }
+      }
       await ctx.db.patch(args.requestId, {
         status: cancelled,
         cancelledAt: now,
@@ -847,9 +881,11 @@ export const approve = mutation({
       const approverName = await actorName(ctx, userId);
       for (let i = 0; i < request.lines.length; i++) {
         const part = parts[i];
-        const nextStock = part.stock - request.lines[i].quantity;
+        const qty = request.lines[i].quantity;
+        const nextStock = part.stock - qty;
         await ctx.db.patch(part._id, {
           stock: nextStock,
+          reservedStock: reservedUnits(part.reservedStock) + qty,
           updatedAt: now,
         });
         await recordStockMovement(ctx, {
@@ -961,6 +997,7 @@ export const archive = mutation({
       await ctx.db.patch(args.requestId, {
         archivedAt: Date.now(),
         archivedBy: await actorName(ctx, userId),
+        lifecycle: "archived",
       });
     },
   ),
@@ -989,6 +1026,7 @@ export const unarchive = mutation({
       await ctx.db.patch(args.requestId, {
         archivedAt: undefined,
         archivedBy: undefined,
+        lifecycle: request.deletedAt !== undefined ? "trashed" : "active",
       });
     },
   ),
@@ -1082,6 +1120,12 @@ async function deliverMaterial(
     });
   } else {
     await ctx.db.patch(request._id, { lines });
+  }
+
+  for (const [sparePartId, extra] of entregas) {
+    if (extra > 0) {
+      await adjustReservedStock(ctx, sparePartId, -extra, now);
+    }
   }
 
   await recordDecision(ctx, request._id, by, {

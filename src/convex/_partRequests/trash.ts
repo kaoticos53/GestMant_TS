@@ -79,6 +79,7 @@ export const withdraw = mutation({
       await ctx.db.patch(args.requestId, {
         deletedAt: now,
         deletedBy: await actorName(ctx, userId),
+        lifecycle: "trashed",
         ...(reason ? { deletedReason: reason } : {}),
         // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
         // el plazo con el que entró, igual que en la papelera del almacén.
@@ -117,6 +118,7 @@ export const restore = mutation({
         deletedBy: undefined,
         deletedReason: undefined,
         purgeAt: undefined,
+        lifecycle: request.archivedAt !== undefined ? "archived" : "active",
       });
     },
   ),

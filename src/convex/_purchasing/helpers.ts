@@ -207,6 +207,7 @@ export async function applyReception(
     orderId: order._id,
     orderReference: order.reference,
     supplier: order.supplier,
+    ...(order.supplierId ? { supplierId: order.supplierId } : {}),
     lines: received,
     deliveryNote: {
       storageId: args.deliveryNote.storageId,

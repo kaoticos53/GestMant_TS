@@ -47,6 +47,7 @@ vi.mock("@/convex/_generated/api", () => ({
     },
     partRequests: { list: { nombre: "partRequests.list" } },
     spareParts: { list: { nombre: "spareParts.list" } },
+    catalogs: { list: { nombre: "catalogs.list" } },
     // La sección de correos compartidos de cada petición: aquí no hay copias.
     mailShares: {
       listForDestination: { nombre: "mailShares.listForDestination" },

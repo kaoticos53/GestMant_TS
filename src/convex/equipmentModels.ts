@@ -6,6 +6,7 @@ import { secureMutation } from "./_auth/secureMutation";
 import type { IdentityIssue } from "./permissions";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
+import { resolveCatalogId } from "./_catalogs/resolve";
 
 /** El catálogo de modelos requiere sesión iniciada. */
 async function requireUser(ctx: QueryCtx) {
@@ -121,13 +122,20 @@ export const create = mutation({
       }
 
       const now = Date.now();
+      const defaultSupplier = args.defaultSupplier?.trim() || undefined;
+      const supplierId = await resolveCatalogId(
+        ctx,
+        "supplier",
+        defaultSupplier,
+      );
       const id = await ctx.db.insert("equipmentModels", {
         brand: args.brand?.trim() || undefined,
         model,
         name,
         category: args.category?.trim() || undefined,
         defaultMaintenanceIntervalDays: args.defaultMaintenanceIntervalDays,
-        defaultSupplier: args.defaultSupplier?.trim() || undefined,
+        defaultSupplier,
+        ...(supplierId ? { supplierId } : {}),
         description: args.description ? richDocToStore(args.description) : undefined,
         createdAt: now,
         updatedAt: now,
@@ -172,13 +180,20 @@ export const update = mutation({
       }
 
       const now = Date.now();
+      const defaultSupplier = args.defaultSupplier?.trim() || undefined;
+      const supplierId = await resolveCatalogId(
+        ctx,
+        "supplier",
+        defaultSupplier,
+      );
       await ctx.db.patch(args.id, {
         brand: args.brand?.trim() || undefined,
         model,
         name,
         category: args.category?.trim() || undefined,
         defaultMaintenanceIntervalDays: args.defaultMaintenanceIntervalDays,
-        defaultSupplier: args.defaultSupplier?.trim() || undefined,
+        defaultSupplier,
+        supplierId,
         description: args.description ? richDocToStore(args.description) : undefined,
         updatedAt: now,
       });

@@ -1,7 +1,12 @@
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  EQUIPMENT_OPERATIONAL_META,
+  resolveOperationalState,
+} from "@/lib/movements";
 import { equipmentLabel } from "@/lib/workshop";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { BookOpen, Copy, Eye, Pencil, Printer, Trash2 } from "lucide-react";
@@ -41,6 +46,8 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
   rowIndex,
   rowRef,
 }: EquipmentTableRowProps) {
+  const opState = resolveOperationalState(item);
+  const opMeta = EQUIPMENT_OPERATIONAL_META[opState];
   return (
     <TableRow className="hover:bg-muted/40" data-index={rowIndex} ref={rowRef}>
       <TableCell className="max-w-[18rem]">
@@ -50,6 +57,21 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
         <DetailTitleButton onClick={() => onViewDetail(item)}>
           {equipmentLabel(item)}
         </DetailTitleButton>
+        {opState !== "operational" && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className={cn("text-[11px]", opMeta.badgeClassName)}
+            >
+              {opMeta.label}
+            </Badge>
+            {item.currentLoan && (
+              <span className="truncate text-xs text-muted-foreground">
+                a {item.currentLoan.borrowerName}
+              </span>
+            )}
+          </div>
+        )}
         {reviewOverdue && (
           <span className="block text-xs font-medium text-amber-700">
             Revisión preventiva vencida

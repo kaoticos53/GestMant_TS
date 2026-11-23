@@ -54,6 +54,7 @@ export const archive = mutation({
       await ctx.db.patch(args.incidentId, {
         archivedAt: now,
         archivedBy: name,
+        lifecycle: "archived",
         updatedAt: now,
         history: [
           ...incident.history,
@@ -90,6 +91,7 @@ export const unarchive = mutation({
       await ctx.db.patch(args.incidentId, {
         archivedAt: undefined,
         archivedBy: undefined,
+        lifecycle: incident.deletedAt !== undefined ? "trashed" : "active",
         updatedAt: now,
         history: [
           ...incident.history,
@@ -204,6 +206,7 @@ export const withdraw = mutation({
       await ctx.db.patch(args.incidentId, {
         deletedAt: now,
         deletedBy: name,
+        lifecycle: "trashed",
         ...(reason ? { deletedReason: reason } : {}),
         // El plazo vigente se cuenta ahora, no al recuperarla: lo retirado cumple
         // el plazo con el que entró, igual que en la papelera del almacén.
@@ -260,6 +263,7 @@ export const restore = mutation({
         deletedBy: undefined,
         deletedReason: undefined,
         purgeAt: undefined,
+        lifecycle: incident.archivedAt !== undefined ? "archived" : "active",
         updatedAt: now,
         history: [
           ...incident.history,

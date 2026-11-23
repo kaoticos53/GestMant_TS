@@ -52,6 +52,8 @@ export async function recordEquipmentMovement(
     kind: EquipmentMovementKind;
     fromLocation?: string;
     toLocation?: string;
+    borrowerName?: string;
+    expectedReturnAt?: number;
     note?: string;
     actorId?: Id<"users">;
     actorName: string;
@@ -65,6 +67,12 @@ export async function recordEquipmentMovement(
     kind: args.kind,
     ...(args.fromLocation ? { fromLocation: args.fromLocation } : {}),
     ...(args.toLocation ? { toLocation: args.toLocation } : {}),
+    ...(args.borrowerName?.trim()
+      ? { borrowerName: args.borrowerName.trim() }
+      : {}),
+    ...(args.expectedReturnAt !== undefined
+      ? { expectedReturnAt: args.expectedReturnAt }
+      : {}),
     ...(args.note?.trim() ? { note: args.note.trim() } : {}),
     ...(args.actorId ? { actorId: args.actorId } : {}),
     actorName: args.actorName.trim() || "Sistema",

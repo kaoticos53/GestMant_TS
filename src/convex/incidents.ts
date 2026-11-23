@@ -15,6 +15,8 @@ import {
   verifyHumanChallenge,
 } from "./humanChallenge";
 import { scheduleReporterEmail, scheduleStaffEmail } from "./incidentMail";
+import { resolveCatalogId } from "./_catalogs/resolve";
+import { syncEquipmentOperationalState } from "./_inventory/equipmentState";
 import { registerIncidentIntake } from "./incidentIntake";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
@@ -675,6 +677,10 @@ export const verify = mutation({
             ),
           ],
         });
+        const targetEqId = args.equipmentId ?? incident.equipmentId;
+        if (targetEqId) {
+          await syncEquipmentOperationalState(ctx, targetEqId, now);
+        }
         await notifyUsers(
           ctx,
           [
@@ -729,6 +735,10 @@ export const verify = mutation({
           ),
         ],
       });
+      const targetEqId = args.equipmentId ?? incident.equipmentId;
+      if (targetEqId) {
+        await syncEquipmentOperationalState(ctx, targetEqId, now);
+      }
 
       const label =
         status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
@@ -913,6 +923,10 @@ export const close = mutation({
           ),
         ],
       });
+      const targetEqId = args.equipmentId ?? incident.equipmentId;
+      if (targetEqId) {
+        await syncEquipmentOperationalState(ctx, targetEqId, now);
+      }
 
       const label =
         status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución";
@@ -1000,6 +1014,11 @@ export const sendToExternalRepair = mutation({
       if (!companyName) {
         throw new ConvexError("Indica el nombre de la empresa externa o SAT.");
       }
+      const externalWorkshopId = await resolveCatalogId(
+        ctx,
+        "externalWorkshop",
+        companyName,
+      );
       const defectNotes =
         richDocToStore(args.defectNotes) ?? args.defectNotes.trim();
       const dispatchNotes = args.dispatchNotes?.trim() || undefined;
@@ -1010,6 +1029,7 @@ export const sendToExternalRepair = mutation({
         externalRepair: {
           sentAt: now,
           companyName,
+          ...(externalWorkshopId ? { externalWorkshopId } : {}),
           contactName: args.contactName?.trim() || undefined,
           contactPhone: args.contactPhone?.trim() || undefined,
           defectNotes,
@@ -1028,6 +1048,9 @@ export const sendToExternalRepair = mutation({
           ),
         ],
       });
+      if (incident.equipmentId) {
+        await syncEquipmentOperationalState(ctx, incident.equipmentId, now);
+      }
 
       await notifyUsers(
         ctx,
@@ -1114,6 +1137,9 @@ export const receiveFromExternalRepair = mutation({
           ),
         ],
       });
+      if (incident.equipmentId) {
+        await syncEquipmentOperationalState(ctx, incident.equipmentId, now);
+      }
 
       await notifyUsers(
         ctx,
@@ -1245,6 +1271,12 @@ export const updateEquipment = mutation({
           ),
         ],
       });
+      if (incident.equipmentId) {
+        await syncEquipmentOperationalState(ctx, incident.equipmentId, now);
+      }
+      if (args.equipmentId && args.equipmentId !== incident.equipmentId) {
+        await syncEquipmentOperationalState(ctx, args.equipmentId, now);
+      }
     },
   ),
 });

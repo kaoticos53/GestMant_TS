@@ -62,6 +62,13 @@ export function EquipmentMovementsSection({
                           Ubicación inicial: {mov.toLocation}
                         </span>
                       )}
+                      {(mov.kind === "loan_out" ||
+                        mov.kind === "loan_return") && (
+                        <span className="font-medium">
+                          {mov.borrowerName ? `${mov.borrowerName}` : ""}
+                          {mov.toLocation ? ` · ${mov.toLocation}` : ""}
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       Por {mov.actorName}

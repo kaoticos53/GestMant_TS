@@ -54,6 +54,7 @@ export async function archiveClosedIncidentsBefore(
     await ctx.db.patch(incident._id, {
       archivedAt: now,
       archivedBy: args.by,
+      lifecycle: "archived",
       updatedAt: now,
       history: [
         ...incident.history,
@@ -90,6 +91,7 @@ export async function archiveDecidedRequestsBefore(
     await ctx.db.patch(request._id, {
       archivedAt: now,
       archivedBy: args.by,
+      lifecycle: "archived",
     });
     archived += 1;
   }

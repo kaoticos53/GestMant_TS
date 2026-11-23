@@ -9,8 +9,12 @@ import {
   workWithoutTraceDays,
 } from "../lib/workshop";
 import type { Id } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { hasAnyCapability, hasCapability, memberOrNull } from "./permissions";
+import {
+  getGlobalDashboardStats,
+  rebuildDashboardStatsImpl,
+} from "./_stats/dashboardStats";
 import {
   INCIDENT_STATUSES,
   PRIORITIES,
@@ -132,6 +136,47 @@ export const summary = query({
       })
       .sort((a, b) => b.days - a.days);
 
+    const [
+      cachedStats,
+      canInventory,
+      canEquipment,
+      canManuals,
+      canPurchasing,
+    ] = await Promise.all([
+      getGlobalDashboardStats(ctx),
+      hasAnyCapability(ctx, me, ["viewInventory", "lookupCatalog"]),
+      hasAnyCapability(ctx, me, [
+        "viewEquipment",
+        "lookupCatalog",
+        "lookupEquipment",
+      ]),
+      hasCapability(ctx, me, "viewManuals"),
+      hasAnyCapability(ctx, me, ["viewPurchasing", "managePurchasing"]),
+    ]);
+
+    if (cachedStats !== null) {
+      return {
+        incidents: { reported: cachedStats.incidentsReported },
+        requests: {
+          active: cachedStats.requestsActive,
+          pending: cachedStats.requestsPending,
+          urgent: cachedStats.requestsPendingUrgent,
+          withoutReference: cachedStats.requestsPendingWithoutReference,
+          issued: cachedStats.requestsIssued,
+        },
+        parts: {
+          total: canInventory ? cachedStats.partsTotal : 0,
+          lowStock: canInventory ? cachedStats.partsLowStock : 0,
+        },
+        equipment: canEquipment ? cachedStats.equipmentTotal : 0,
+        manuals: canManuals ? cachedStats.manualsTotal : 0,
+        purchasing: {
+          pending: canPurchasing ? cachedStats.purchasingPending : 0,
+        },
+        staleWork,
+      };
+    }
+
     // --- Peticiones: la cola viva (el archivo tiene su propia pantalla) -----
     const requests = (
       await ctx.db.query("partRequests").withIndex("by_createdAt").collect()
@@ -143,30 +188,18 @@ export const summary = query({
     );
 
     // --- Repuestos: el catálogo, con la misma regla que su filtro -----------
-    const parts = (await hasAnyCapability(ctx, me, [
-      "viewInventory",
-      "lookupCatalog",
-    ]))
+    const parts = canInventory
       ? await ctx.db.query("spareParts").withIndex("by_name").collect()
       : [];
 
     // --- Equipos y manuales: el total, que es lo que cuentan sus píldoras ---
-    const equipment = (await hasAnyCapability(ctx, me, [
-      "viewEquipment",
-      "lookupCatalog",
-      "lookupEquipment",
-    ]))
+    const equipment = canEquipment
       ? await ctx.db.query("equipment").collect()
       : [];
-    const manuals = (await hasCapability(ctx, me, "viewManuals"))
-      ? await ctx.db.query("manuals").collect()
-      : [];
+    const manuals = canManuals ? await ctx.db.query("manuals").collect() : [];
 
     // --- Compras: lo que espera a que alguien monte la orden ----------------
-    const purchasing = (await hasAnyCapability(ctx, me, [
-      "viewPurchasing",
-      "managePurchasing",
-    ]))
+    const purchasing = canPurchasing
       ? await ctx.db
           .query("purchaseRequests")
           .withIndex("by_status", (q) =>
@@ -295,5 +328,13 @@ export const analytics = query({
       })),
       pendingPurchaseRequests: rawPurchasing.length,
     });
+  },
+});
+
+/** Reconstruye los contadores globales precalculados del panel resumen. */
+export const rebuildStats = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    return await rebuildDashboardStatsImpl(ctx);
   },
 });

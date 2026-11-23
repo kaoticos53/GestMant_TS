@@ -115,14 +115,23 @@ export async function registerIncidentIntake(
   const reference = await freeReference(ctx, "incident");
   const publicCode = await freePublicCode(ctx);
 
-  const allEquipment = await ctx.db.query("equipment").collect();
-  const matchedEquipment = findMatchingEquipmentForIncident(
-    intake,
-    allEquipment,
-  );
+  let matchedEquipment = null;
+  if (intake.serialNumber) {
+    matchedEquipment = await ctx.db
+      .query("equipment")
+      .withIndex("by_serialNumber", (q) =>
+        q.eq("serialNumber", intake.serialNumber),
+      )
+      .first();
+  }
+  if (!matchedEquipment) {
+    const allEquipment = await ctx.db.query("equipment").collect();
+    matchedEquipment = findMatchingEquipmentForIncident(intake, allEquipment);
+  }
 
   const incidentId = await ctx.db.insert("incidents", {
     ...incidentIntakeRecord(intake, { now, reference, publicCode }),
+    lifecycle: "active",
     ...(matchedEquipment ? { equipmentId: matchedEquipment._id } : {}),
   });
 

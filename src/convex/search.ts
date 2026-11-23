@@ -113,11 +113,21 @@ export const global = query({
       const ref = looksLikeIncidentReference(trimmed)
         ? normalizeIncidentReference(trimmed)
         : null;
-      const incidents = await ctx.db
-        .query("incidents")
-        .withIndex("by_createdAt")
-        .order("desc")
-        .collect();
+      const byExactRef =
+        ref !== null
+          ? await ctx.db
+              .query("incidents")
+              .withIndex("by_reference", (idx) => idx.eq("reference", ref))
+              .first()
+          : null;
+      const incidents =
+        byExactRef && byExactRef.deletedAt === undefined
+          ? [byExactRef]
+          : await ctx.db
+              .query("incidents")
+              .withIndex("by_createdAt")
+              .order("desc")
+              .collect();
 
       for (const incident of incidents) {
         if (incident.deletedAt !== undefined) continue;

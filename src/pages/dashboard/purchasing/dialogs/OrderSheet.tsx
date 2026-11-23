@@ -1,4 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { CatalogContactInfo } from "@/components/CatalogContactInfo";
 import { JourneySummary } from "@/components/JourneySummary";
 import type { PurchaseOrderDoc } from "@/lib/purchasing";
 import type { ReceptionDoc } from "../types";
@@ -73,6 +74,12 @@ export function OrderSheet({
             onCancelEditing={handleCancelEditingSolicitud}
             onChangeCode={setCodigoSolicitud}
             onSave={() => void handleSaveSolicitud()}
+          />
+
+          <CatalogContactInfo
+            kind="supplier"
+            name={order.supplier}
+            catalogId={order.supplierId}
           />
 
           {order.notes && (

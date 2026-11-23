@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { RichText } from "@/components/RichText";
 import { STOCK_META, formatCurrency, stockState } from "@/lib/workshop";
+import { physicalStock, reservedUnits } from "@/lib/inventoryStock";
 import { modelLabel } from "../helpers";
 import type { EquipmentModelDoc, PartDoc } from "../types";
 
@@ -101,6 +102,12 @@ export const PartRow = memo(function PartRow({
             {meta.label}
           </Badge>
         </div>
+        {reservedUnits(part.reservedStock) > 0 && (
+          <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">
+            Físico {physicalStock(part.stock, part.reservedStock)} · Reservado{" "}
+            {reservedUnits(part.reservedStock)}
+          </span>
+        )}
       </TableCell>
       <TableCell className="hidden sm:table-cell text-right tabular-nums text-muted-foreground">
         {part.minStock}

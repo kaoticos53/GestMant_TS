@@ -11,6 +11,9 @@ import {
 } from "../lib/workshop";
 import { detectEquipmentChanges } from "../lib/movements";
 import { recordEquipmentMovement } from "./_inventory/movements";
+import { syncEquipmentOperationalState } from "./_inventory/equipmentState";
+import { resolveCatalogId } from "./_catalogs/resolve";
+import { adjustDashboardStats } from "./_stats/dashboardStats";
 import { markDestinationDeleted } from "./_mailShares/orphans";
 
 /** El inventario de equipos requiere sesión iniciada. */
@@ -275,6 +278,8 @@ export const create = mutation({
       // su documento tal cual (y sin restos cuando se queda vacía). Una nota de
       // antes, escrita en texto plano, se guarda igual que estaba.
       const description = richDocToStore(args.description);
+      const supplierName = args.supplier?.trim() || undefined;
+      const supplierId = await resolveCatalogId(ctx, "supplier", supplierName);
       const id = await ctx.db.insert("equipment", {
         code,
         ...(modelId ? { modelId } : {}),
@@ -286,7 +291,8 @@ export const create = mutation({
         ...(args.serialNumber?.trim()
           ? { serialNumber: args.serialNumber.trim() }
           : {}),
-        ...(args.supplier?.trim() ? { supplier: args.supplier.trim() } : {}),
+        ...(supplierName ? { supplier: supplierName } : {}),
+        ...(supplierId ? { supplierId } : {}),
         ...(args.purchaseDate !== undefined
           ? { purchaseDate: args.purchaseDate }
           : {}),
@@ -299,6 +305,10 @@ export const create = mutation({
         ...(args.maintenanceIntervalDays !== undefined
           ? { maintenanceIntervalDays: args.maintenanceIntervalDays }
           : {}),
+        operationalState:
+          args.decommissionDate !== undefined
+            ? "decommissioned"
+            : "operational",
         createdAt: now,
         updatedAt: now,
       });
@@ -313,6 +323,7 @@ export const create = mutation({
         createdAt: now,
       });
       await linkMatchingIncidents(ctx, id);
+      await adjustDashboardStats(ctx, { equipmentTotal: 1 });
       return id;
     },
   ),
@@ -370,6 +381,8 @@ export const update = mutation({
 
       const now = Date.now();
       const nextLocation = args.location?.trim() || undefined;
+      const supplierName = args.supplier?.trim() || undefined;
+      const supplierId = await resolveCatalogId(ctx, "supplier", supplierName);
       await ctx.db.patch(args.id, {
         code,
         modelId: modelId || undefined,
@@ -381,7 +394,8 @@ export const update = mutation({
         // sin ella, y el documento del editor se guarda tal cual llega.
         description: richDocToStore(args.description),
         serialNumber: args.serialNumber?.trim() || undefined,
-        supplier: args.supplier?.trim() || undefined,
+        supplier: supplierName,
+        supplierId,
         // `undefined` en patch elimina el campo: así se borran fechas vacías
         purchaseDate: args.purchaseDate,
         decommissionDate: args.decommissionDate,
@@ -413,6 +427,140 @@ export const update = mutation({
         });
       }
       await linkMatchingIncidents(ctx, args.id);
+      await syncEquipmentOperationalState(ctx, args.id, now);
+    },
+  ),
+});
+
+const loanOutArgs = {
+  id: v.id("equipment"),
+  borrowerName: v.string(),
+  location: v.optional(v.string()),
+  expectedReturnAt: v.optional(v.number()),
+  notes: v.optional(v.string()),
+};
+
+/** Registra un préstamo temporal de equipo y deja traza en `equipmentMovements`. */
+export const loanOut = mutation({
+  args: loanOutArgs,
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
+      denyMessage:
+        "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    loanOutArgs,
+    async (ctx, args, actor) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) throw new ConvexError("El equipo ya no existe.");
+      if (item.decommissionDate !== undefined) {
+        throw new ConvexError(
+          "No se puede prestar un equipo que está dado de baja.",
+        );
+      }
+      if (item.currentLoan) {
+        throw new ConvexError(
+          `El equipo ya está prestado a ${item.currentLoan.borrowerName}. Registra primero su devolución.`,
+        );
+      }
+      const borrowerName = args.borrowerName.trim();
+      if (!borrowerName) {
+        throw new ConvexError("Indica la persona o departamento receptor.");
+      }
+
+      const now = Date.now();
+      const loanLocation = args.location?.trim() || undefined;
+      const notes = args.notes?.trim() || undefined;
+      const currentLoan = {
+        borrowerName,
+        ...(loanLocation ? { location: loanLocation } : {}),
+        loanedAt: now,
+        ...(args.expectedReturnAt !== undefined
+          ? { expectedReturnAt: args.expectedReturnAt }
+          : {}),
+        ...(notes ? { notes } : {}),
+      };
+
+      await ctx.db.patch(args.id, {
+        currentLoan,
+        operationalState: "loaned",
+        updatedAt: now,
+      });
+
+      await recordEquipmentMovement(ctx, {
+        equipmentId: args.id,
+        equipmentCode: item.code,
+        equipmentName: item.name,
+        kind: "loan_out",
+        ...(item.location ? { fromLocation: item.location } : {}),
+        ...(loanLocation ? { toLocation: loanLocation } : {}),
+        borrowerName,
+        ...(args.expectedReturnAt !== undefined
+          ? { expectedReturnAt: args.expectedReturnAt }
+          : {}),
+        ...(notes ? { note: notes } : {}),
+        actorId: actor._id,
+        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        createdAt: now,
+      });
+    },
+  ),
+});
+
+const returnLoanArgs = {
+  id: v.id("equipment"),
+  notes: v.optional(v.string()),
+};
+
+/** Registra la devolución de un equipo prestado temporalmente. */
+export const returnLoan = mutation({
+  args: returnLoanArgs,
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
+      denyMessage:
+        "No tienes permisos para gestionar los equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    returnLoanArgs,
+    async (ctx, args, actor) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) throw new ConvexError("El equipo ya no existe.");
+      if (!item.currentLoan) {
+        throw new ConvexError("Este equipo no tiene ningún préstamo activo.");
+      }
+
+      const now = Date.now();
+      const previousLoan = item.currentLoan;
+      const notes = args.notes?.trim() || undefined;
+
+      await ctx.db.patch(args.id, {
+        currentLoan: undefined,
+        updatedAt: now,
+      });
+
+      await recordEquipmentMovement(ctx, {
+        equipmentId: args.id,
+        equipmentCode: item.code,
+        equipmentName: item.name,
+        kind: "loan_return",
+        ...(previousLoan.location
+          ? { fromLocation: previousLoan.location }
+          : {}),
+        ...(item.location ? { toLocation: item.location } : {}),
+        borrowerName: previousLoan.borrowerName,
+        ...(notes ? { note: notes } : {}),
+        actorId: actor._id,
+        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        createdAt: now,
+      });
+
+      await syncEquipmentOperationalState(ctx, args.id, now);
     },
   ),
 });
@@ -460,6 +608,7 @@ export const remove = mutation({
       }
 
       await ctx.db.delete(args.id);
+      await adjustDashboardStats(ctx, { equipmentTotal: -1 });
       // La copia del correo no se purga en el acto: queda huérfana siete días
       // en la papelera administrativa, porque su ficha ya no existe.
       await markDestinationDeleted(ctx, "equipment", args.id, Date.now());

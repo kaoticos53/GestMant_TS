@@ -15,6 +15,7 @@ import {
 import { canBuyForRequest } from "../lib/requestFlow";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_REQUEST_STATUSES } from "./schema";
 
+import { resolveCatalogId } from "./_catalogs/resolve";
 import { actorName, applyReception, missingLines } from "./_purchasing/helpers";
 
 /* ------------------------------------------------------------------ */
@@ -71,6 +72,8 @@ async function apartarLineas(
       continue;
     }
     const reference = await freeReference(ctx, "purchaseRequest");
+    const effectiveSupplier = supplier || line.supplier;
+    const supplierId = await resolveCatalogId(ctx, "supplier", effectiveSupplier);
     await ctx.db.insert("purchaseRequests", {
       reference,
       requestId: request._id,
@@ -82,7 +85,8 @@ async function apartarLineas(
       name: line.name,
       unit: line.unit,
       quantity: line.quantity,
-      supplier: supplier || line.supplier,
+      supplier: effectiveSupplier,
+      ...(supplierId ? { supplierId } : {}),
       status: PURCHASE_REQUEST_STATUSES.PENDING,
       reason: line.reason,
       ...(options.notes?.trim() ? { notes: options.notes.trim() } : {}),
@@ -431,6 +435,7 @@ export const createOrder = mutation({
         );
       }
       const supplier = suppliers[0];
+      const supplierId = await resolveCatalogId(ctx, "supplier", supplier);
 
       const now = Date.now();
       const reference = await freeReference(ctx, "purchaseOrder");
@@ -438,6 +443,7 @@ export const createOrder = mutation({
       const orderId = await ctx.db.insert("purchaseOrders", {
         reference,
         supplier,
+        ...(supplierId ? { supplierId } : {}),
         status: PURCHASE_ORDER_STATUSES.PENDING,
         orderedAt: now,
         orderedBy: by,

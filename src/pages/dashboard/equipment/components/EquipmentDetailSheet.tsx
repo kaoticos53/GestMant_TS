@@ -12,6 +12,7 @@ import { EquipmentDataSection } from "./detail/EquipmentDataSection";
 import { EquipmentMaintenanceSection } from "./detail/EquipmentMaintenanceSection";
 import { EquipmentManualsSection } from "./detail/EquipmentManualsSection";
 import { EquipmentMovementsSection } from "./detail/EquipmentMovementsSection";
+import { EquipmentOperationalSection } from "./detail/EquipmentOperationalSection";
 import { EquipmentPartsSection } from "./detail/EquipmentPartsSection";
 import { EquipmentRequestsSection } from "./detail/EquipmentRequestsSection";
 import { EquipmentSheetHeader } from "./detail/EquipmentSheetHeader";
@@ -71,6 +72,8 @@ export function EquipmentDetailSheet({
         />
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
+          <EquipmentOperationalSection item={item} canManage={canManage} />
+
           <EquipmentDataSection
             item={item}
             exporting={exporting}

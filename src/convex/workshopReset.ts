@@ -80,6 +80,7 @@ const RESET_TABLES: TableNames[] = [
   // que no puede quedarse contando el trabajo que ya no está. Se borra, y el
   // cron de `publicStats` toma una nueva —con ceros— en su siguiente pasada.
   "publicStats",
+  "dashboardStats",
   // El flag de «muestra cargada» vive aquí: si no se va, volver a cargar datos
   // de ejemplo no haría nada.
   "appSettings",

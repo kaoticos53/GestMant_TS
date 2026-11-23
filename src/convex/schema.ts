@@ -331,9 +331,11 @@ const schema = defineSchema({
     category: v.string(), // Electrónica, Conectores, Mecánica, Consumibles...
     unit: v.string(), // "ud", "m", "par"
     stock: v.number(),
+    reservedStock: v.optional(v.number()),
     minStock: v.number(), // umbral de alerta de stock bajo
     location: v.optional(v.string()), // estantería, ej. "B-03"
     supplier: v.optional(v.string()),
+    supplierId: v.optional(v.id("catalogs")),
     partNumber: v.optional(v.string()), // referencia del fabricante/proveedor
     unitPrice: v.optional(v.number()),
     purchaseUrl: v.optional(v.string()), // ficha del proveedor
@@ -346,7 +348,13 @@ const schema = defineSchema({
   })
     .index("by_code", ["code"])
     .index("by_category", ["category"])
-    .index("by_name", ["name"]),
+    .index("by_name", ["name"])
+    .index("by_supplier", ["supplier"])
+    .index("by_supplierId", ["supplierId"])
+    .searchIndex("search_text", {
+      searchField: "name",
+      filterFields: ["category"],
+    }),
 
   // Catálogo de modelos de equipos (plantillas técnicas del fabricante)
   equipmentModels: defineTable({
@@ -356,6 +364,7 @@ const schema = defineSchema({
     category: v.optional(v.string()), // categoría del equipo
     defaultMaintenanceIntervalDays: v.optional(v.number()), // intervalo preventivo estándar
     defaultSupplier: v.optional(v.string()), // proveedor habitual
+    supplierId: v.optional(v.id("catalogs")),
     description: v.optional(v.string()), // especificaciones generales o notas técnicas
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -375,17 +384,43 @@ const schema = defineSchema({
     // Ficha de compra y ciclo de vida del equipo
     serialNumber: v.optional(v.string()), // número de serie
     supplier: v.optional(v.string()), // proveedor
+    supplierId: v.optional(v.id("catalogs")),
     purchaseDate: v.optional(v.number()), // fecha de alta (timestamp)
     decommissionDate: v.optional(v.number()), // fecha de baja (timestamp)
     warrantyEndDate: v.optional(v.number()), // fin de garantía (timestamp)
     // Plan de mantenimiento preventivo: días entre revisiones (sin plan = vacío)
     maintenanceIntervalDays: v.optional(v.number()),
+    operationalState: v.optional(
+      v.union(
+        v.literal("operational"),
+        v.literal("in_workshop"),
+        v.literal("external_repair"),
+        v.literal("loaned"),
+        v.literal("decommissioned"),
+      ),
+    ),
+    currentLoan: v.optional(
+      v.object({
+        borrowerName: v.string(),
+        location: v.optional(v.string()),
+        loanedAt: v.number(),
+        expectedReturnAt: v.optional(v.number()),
+        notes: v.optional(v.string()),
+      }),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_code", ["code"])
     .index("by_model", ["model"])
-    .index("by_modelId", ["modelId"]),
+    .index("by_modelId", ["modelId"])
+    .index("by_serialNumber", ["serialNumber"])
+    .index("by_supplier", ["supplier"])
+    .index("by_supplierId", ["supplierId"])
+    .searchIndex("search_text", {
+      searchField: "name",
+      filterFields: ["model"],
+    }),
 
   // Incidencias/averías notificadas por cualquier usuario del taller
   incidents: defineTable({
@@ -439,6 +474,7 @@ const schema = defineSchema({
         // Envío
         sentAt: v.number(),
         companyName: v.string(), // Empresa externa / SAT
+        externalWorkshopId: v.optional(v.id("catalogs")),
         contactName: v.optional(v.string()), // Persona o departamento de contacto
         contactPhone: v.optional(v.string()), // Teléfono o contacto del SAT
         defectNotes: v.string(), // Descripción técnica de la avería comunicada
@@ -581,6 +617,13 @@ const schema = defineSchema({
     // Va aparte del aviso a quien notificó porque son dos correos distintos y a
     // públicos distintos; guardarlo evita repetir el mismo aviso del taller.
     staffNotifiedStatus: v.optional(v.string()),
+    lifecycle: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("archived"),
+        v.literal("trashed"),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -591,6 +634,8 @@ const schema = defineSchema({
     // retirado) y otro para la pasada que borra lo caducado.
     .index("by_deletedAt", ["deletedAt"])
     .index("by_purgeAt", ["purgeAt"])
+    .index("by_lifecycle_status", ["lifecycle", "status"])
+    .index("by_lifecycle_createdAt", ["lifecycle", "createdAt"])
     // Los filtros que se repiten: «lo que tiene asignado este técnico en este
     // estado» —su cola— y «lo que le ha pasado a este equipo, por fecha», que es
     // el historial de la ficha. Van compuestos para que la consulta lea el tramo
@@ -605,7 +650,11 @@ const schema = defineSchema({
     .index("by_publicCode", ["publicCode"])
     // Por la marca del borrador sin conexión: es como se reconoce un envío
     // repetido antes de crear la incidencia otra vez.
-    .index("by_clientDraftId", ["clientDraftId"]),
+    .index("by_clientDraftId", ["clientDraftId"])
+    .searchIndex("search_text", {
+      searchField: "description",
+      filterFields: ["status", "lifecycle"],
+    }),
 
   // Notificaciones in-app a los interesados de cada incidencia
   notifications: defineTable({
@@ -723,7 +772,11 @@ const schema = defineSchema({
     // Marca y modelo siempre se consultan juntos: son la clasificación de
     // taller con la que se busca «los manuales de este modelo».
     .index("by_brand_model", ["brand", "model"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .searchIndex("search_text", {
+      searchField: "title",
+      filterFields: ["type"],
+    }),
 
   // Peticiones de repuestos de los técnicos hacia el responsable
   partRequests: defineTable({
@@ -797,6 +850,13 @@ const schema = defineSchema({
     deletedReason: v.optional(v.string()),
     // Cuándo se borra de verdad, si nadie la recupera.
     purgeAt: v.optional(v.number()),
+    lifecycle: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("archived"),
+        v.literal("trashed"),
+      ),
+    ),
     createdAt: v.number(),
   })
     .index("by_status", ["status"])
@@ -809,11 +869,17 @@ const schema = defineSchema({
     // retirado) y otro para la pasada que borra lo caducado.
     .index("by_deletedAt", ["deletedAt"])
     .index("by_purgeAt", ["purgeAt"])
+    .index("by_lifecycle_status", ["lifecycle", "status"])
+    .index("by_lifecycle_createdAt", ["lifecycle", "createdAt"])
     .index("by_incident", ["incidentId"])
     .index("by_requester", ["requesterId"])
     // La referencia ordenada como se escribe, que es como se numera la serie:
     // la más alta ya repartida está al final (`lib/references`).
-    .index("by_reference", ["reference"]),
+    .index("by_reference", ["reference"])
+    .searchIndex("search_text", {
+      searchField: "description",
+      filterFields: ["status", "lifecycle"],
+    }),
 
   // Auditoría de decisiones sobre peticiones: cada vía explicable (rechazo,
   // suspensión, devolución, cancelación, presupuesto externo, entrega) deja
@@ -844,6 +910,7 @@ const schema = defineSchema({
     unit: v.string(),
     quantity: v.number(), // lo que hay que comprar
     supplier: v.string(), // por proveedor se agrupan las que están sin tratar
+    supplierId: v.optional(v.id("catalogs")),
     status: purchaseRequestStatusValidator,
     // Motivo por el que se compra, tal y como lo ve el responsable: no había
     // stock, el repuesto es nuevo (no estaba en el catálogo), etc.
@@ -878,6 +945,7 @@ const schema = defineSchema({
   purchaseOrders: defineTable({
     reference: v.string(), // "OC-0001"
     supplier: v.string(),
+    supplierId: v.optional(v.id("catalogs")),
     status: purchaseOrderStatusValidator,
     orderedAt: v.number(), // la fecha de la orden
     orderedBy: v.string(),
@@ -901,6 +969,7 @@ const schema = defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_supplier", ["supplier"])
+    .index("by_supplierId", ["supplierId"])
     .index("by_orderedAt", ["orderedAt"])
     .index("by_solicitudeCode", ["solicitudeCode"])
     // La referencia, para repartir el número siguiente sin leer la tabla
@@ -915,6 +984,7 @@ const schema = defineSchema({
     orderId: v.id("purchaseOrders"),
     orderReference: v.string(), // "OC-0001", copiado
     supplier: v.string(),
+    supplierId: v.optional(v.id("catalogs")),
     lines: v.array(receptionLineValidator),
     deliveryNote: deliveryNoteValidator, // el albarán: sin él no hay recepción
     note: v.optional(v.string()),
@@ -943,6 +1013,13 @@ const schema = defineSchema({
     key: v.string(),
     seeded: v.boolean(),
   }).index("by_key", ["key"]),
+
+  // Tabla unificada de ajustes no sensibles por sección (consolidación gradual de singletons).
+  workshopSettings: defineTable({
+    section: v.string(),
+    payload: v.string(),
+    updatedAt: v.number(),
+  }).index("by_section", ["section"]),
 
   // Por dónde va la numeración de cada serie de referencias: la incidencia, la
   // petición de repuestos, la petición de compra y la orden (`lib/references`).
@@ -1373,6 +1450,7 @@ const schema = defineSchema({
   })
     .index("by_sparePart", ["sparePartId", "createdAt"])
     .index("by_createdAt", ["createdAt"])
+    .index("by_kind", ["kind", "createdAt"])
     .index("by_reference", ["reference"]),
 
   // Historial de desplazamientos y ciclo de vida de equipos.
@@ -1385,9 +1463,13 @@ const schema = defineSchema({
       v.literal("location_change"),
       v.literal("decommission"),
       v.literal("reactivation"),
+      v.literal("loan_out"),
+      v.literal("loan_return"),
     ),
     fromLocation: v.optional(v.string()),
     toLocation: v.optional(v.string()),
+    borrowerName: v.optional(v.string()),
+    expectedReturnAt: v.optional(v.number()),
     note: v.optional(v.string()),
     actorId: v.optional(v.id("users")),
     actorName: v.string(),
@@ -1848,6 +1930,25 @@ const schema = defineSchema({
   })
     .index("by_user_updated", ["userId", "updatedAt"])
     .index("by_dedupe", ["dedupeKey", "status"]),
+
+  // Contadores precalculados del panel resumen para reducir lecturas reactivas.
+  dashboardStats: defineTable({
+    key: v.literal("global"),
+    incidentsReported: v.number(),
+    requestsActive: v.number(),
+    requestsPending: v.number(),
+    requestsPendingUrgent: v.number(),
+    requestsPendingWithoutReference: v.number(),
+    requestsIssued: v.number(),
+    partsTotal: v.number(),
+    partsLowStock: v.number(),
+    partsOutOfStock: v.number(),
+    equipmentTotal: v.number(),
+    manualsTotal: v.number(),
+    purchasingPending: v.number(),
+    openPurchaseOrders: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });
 
 export default schema;

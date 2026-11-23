@@ -7,6 +7,7 @@ import {
   Tag,
   Wrench,
 } from "lucide-react";
+import { CatalogContactInfo } from "@/components/CatalogContactInfo";
 import { RichText } from "@/components/RichText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/sheet";
 import { api } from "@/convex/_generated/api";
 import { STOCK_META, formatCurrency, stockState } from "@/lib/workshop";
+import { physicalStock, reservedUnits } from "@/lib/inventoryStock";
 import { modelLabel } from "../helpers";
 import type { EquipmentModelDoc, PartDoc } from "../types";
 import { PartMovementsSection } from "./PartMovementsSection";
@@ -95,7 +97,9 @@ export function PartDetailSheet({
                 <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                   <div>
                     <dt className="text-xs text-muted-foreground">
-                      Stock actual
+                      {reservedUnits(part.reservedStock) > 0
+                        ? "Stock disponible"
+                        : "Stock actual"}
                     </dt>
                     <dd className="mt-0.5 text-lg font-bold tabular-nums">
                       {part.stock}{" "}
@@ -103,6 +107,13 @@ export function PartDetailSheet({
                         {part.unit}
                       </span>
                     </dd>
+                    {reservedUnits(part.reservedStock) > 0 && (
+                      <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                        Físico {physicalStock(part.stock, part.reservedStock)}{" "}
+                        {part.unit} · Reservado{" "}
+                        {reservedUnits(part.reservedStock)} {part.unit}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">
@@ -134,6 +145,15 @@ export function PartDetailSheet({
                     </dd>
                   </div>
                 </dl>
+
+                {part.supplier && (
+                  <CatalogContactInfo
+                    kind="supplier"
+                    name={part.supplier}
+                    catalogId={part.supplierId}
+                    className="mt-3 grid gap-1.5 rounded-lg border border-border/70 bg-muted/30 p-2.5 text-xs text-muted-foreground"
+                  />
+                )}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
                   {canManage && (

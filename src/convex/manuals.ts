@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { markDestinationDeleted } from "./_mailShares/orphans";
+import { adjustDashboardStats } from "./_stats/dashboardStats";
 import {
   MANUAL_FILE_FORMAT,
   MANUAL_TYPES,
@@ -386,6 +387,7 @@ export const create = mutation({
         createdAt: now,
         updatedAt: now,
       });
+      await adjustDashboardStats(ctx, { manualsTotal: 1 });
     },
   ),
 });
@@ -601,6 +603,7 @@ export const remove = mutation({
       }
       if (manual.storageId) await ctx.storage.delete(manual.storageId);
       await ctx.db.delete(args.id);
+      await adjustDashboardStats(ctx, { manualsTotal: -1 });
       // La copia del correo queda huérfana hasta que venza su plazo: el manual
       // ya no existe y no hay forma de volver a engancharla.
       await markDestinationDeleted(ctx, "manual", args.id, Date.now());
