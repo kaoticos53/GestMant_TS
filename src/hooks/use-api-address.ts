@@ -35,18 +35,14 @@ export function useApiAddress({
   const everConnected = connection.hasEverConnected;
   const connected = connection.isWebSocketConnected;
 
-  // Cuánto lleva la app intentándolo. El reloj solo anda mientras no haya
-  // conectado nunca: en cuanto lo hace, el aviso sobra.
+  // Cuánto lleva la app intentándolo. Un único temporizador vence al cumplirse
+  // el margen de cortesía para no provocar re-renders cada segundo.
   const [waitedMs, setWaitedMs] = useState(0);
   useEffect(() => {
     if (everConnected || connected) return;
-    const startedAt = Date.now();
-    const timer = window.setInterval(
-      () => setWaitedMs(Date.now() - startedAt),
-      1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [everConnected, connected]);
+    const timer = window.setTimeout(() => setWaitedMs(graceMs), graceMs);
+    return () => window.clearTimeout(timer);
+  }, [everConnected, connected, graceMs]);
 
   // Lo que ha contestado una petición normal: `null` mientras no se sepa, que es
   // distinto de «no contesta».

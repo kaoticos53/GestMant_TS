@@ -31,7 +31,7 @@ flowchart LR
 ## 3. Requisitos Funcionales
 
 - **RF-001 (Orquestador local `start.ps1` + `local-dev.mjs`):** Comprueba Node/Docker, levanta contenedores de `docker/convex/`, prepara `.env.local` y claves JWT/JWKS, lanza el observador de `src/convex/` y Vite (`5173`). Soporta `-Repair`, `-Fresh`, `-Check`, `-Stop`, `-NoOpen` y `-TakeOver`.
-- **RF-002 (Despliegue Synology `docker/synology/`):** Contenedores basados en `nginx:stable-alpine` y `node:stable-alpine` con `apk upgrade --no-cache`, scripts `funciones.sh` / `vigila-funciones.sh` / `copia-previa.sh`, variables opcionales `DEEPSEEK_API_KEY`, `PULSO_TURNSTILE_SITE_KEY`, `PULSO_TURNSTILE_SECRET_KEY`, `PULSO_CHALLENGE_SECRET`, `PULSO_SETTINGS_ENCRYPTION_KEY` y `CLOUDFLARE_TUNNEL_TOKEN`.
+- **RF-002 (Despliegue Synology `docker/synology/`):** Contenedores basados en `nginx:stable-alpine` y `node:stable-alpine` con `apk upgrade --no-cache`, scripts `funciones.sh` / `vigila-funciones.sh` / `copia-previa.sh`, variables opcionales `DEEPSEEK_API_KEY`, `PULSO_TURNSTILE_SITE_KEY`, `PULSO_TURNSTILE_SECRET_KEY`, `PULSO_CHALLENGE_SECRET`, `PULSO_SETTINGS_ENCRYPTION_KEY` y `CLOUDFLARE_TUNNEL_TOKEN`. En `nginx.conf` se activa `gzip_vary on`, `gzip_comp_level 5`, `gzip_proxied any` y reglas de caché dedicadas (`/manifest.webmanifest`, `/logo.svg`) incluyendo `security-headers.conf`; `vite.config.ts` separa *chunks* de `tiptap` y `convex`.
 - **RF-003 (Sondas de salud `health.ts`):** Expone `/healthz` y `/readyz` para monitorización de contenedores.
 - **RF-004 (Tareas programadas `crons.ts`):**
   - `03:15` UTC: `archive.runAutoArchive`
@@ -44,7 +44,7 @@ flowchart LR
   - `05:45`–`06:00` UTC: purga de tablas efímeras (`publicLookupLimits`, `otpLimits`, `humanChallenge`, `ai.purgeExpiredUsage`)
   - `07:00` UTC: `weeklyReport.runScheduled`
   - Cada `15` min: `publicStats.refresh`
-- **RF-005 (Backups y versionado):** `scripts/nas-backup.mjs` genera copias consistentes; `scripts/update-version.mjs` sincroniza versión y changelog.
+- **RF-005 (Backups y versionado):** `scripts/nas-backup.mjs` genera copias consistentes; `workshopBackup.exportBackup` serializa el JSON de copia de seguridad en formato compacto (sin indentación) para reducir RAM y payload; `scripts/update-version.mjs` sincroniza versión y changelog.
 
 ---
 

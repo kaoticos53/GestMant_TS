@@ -5,6 +5,7 @@ import {
   blockedIncidentSteps,
   canAdvanceIncident,
   canChangeWorkshopTechnician,
+  countIncidentsByStatus,
   incidentCloseStep,
   incidentStepBlocker,
   incidentStepStatus,
@@ -461,5 +462,26 @@ describe("el sitio donde está el equipo — lo que el estado no dice", () => {
     expect(nextIncidentStatus("waitingParts", "partsArrived")).toBe(
       "repairing",
     );
+  });
+
+  test("countIncidentsByStatus cuenta todos los estados en una sola pasada", () => {
+    const counts = countIncidentsByStatus([
+      { status: "reported" },
+      { status: "reported" },
+      { status: "workshop" },
+      { status: "externalRepair" },
+      { status: "resolved" },
+    ]);
+    expect(counts).toEqual({
+      all: 5,
+      reported: 2,
+      assigned: 0,
+      workshop: 1,
+      waitingParts: 0,
+      repairing: 0,
+      externalRepair: 1,
+      resolved: 1,
+      unresolved: 0,
+    });
   });
 });

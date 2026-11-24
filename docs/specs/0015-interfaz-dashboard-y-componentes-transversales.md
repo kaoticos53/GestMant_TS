@@ -47,6 +47,7 @@ Define la experiencia de usuario común de Pulso Taller: navegación lateral ple
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Code-splitting por ruta (`React.lazy` en `src/main.tsx`) y límites de error aislados por módulo (`ModuleErrorBoundary`).
+- **RNF-002:** El filtrado de colas (`useIncidentFilters`) memoiza los campos buscables y calcula los conteos por estado en una sola pasada $O(n)$; `usePersistentDraft` lee `localStorage` una sola vez al montar.
 
 ---
 

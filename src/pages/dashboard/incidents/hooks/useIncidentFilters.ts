@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { groupByDate, sortByDate } from "@/lib/browse";
+import { countIncidentsByStatus } from "@/lib/incidentFlow";
 import { richDocToPlainText } from "@/lib/richDoc";
 import {
   incidentPriorityRank,
@@ -40,6 +41,14 @@ export function searchableFields(
   ];
 }
 
+function inQueueOrder(items: IncidentDoc[]): IncidentDoc[] {
+  return [...items].sort(
+    (a, b) =>
+      STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
+      b.reportedAt - a.reportedAt,
+  );
+}
+
 export function useIncidentFilters({
   incidents,
   initialDetailId = null,
@@ -66,50 +75,50 @@ export function useIncidentFilters({
     writeDensity(safeLocalStorage(), next);
   };
 
-  const inQueueOrder = (items: IncidentDoc[]) =>
-    [...items].sort(
-      (a, b) =>
-        STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
-        b.reportedAt - a.reportedAt,
-    );
-
-  const matched = incidents.filter((incident) =>
-    matchesIncidentQuery(
-      searchableFields(incident),
-      incident.reference,
-      search,
-    ),
+  const searchableIndex = useMemo(
+    () =>
+      incidents.map((incident) => ({
+        incident,
+        fields: searchableFields(incident),
+      })),
+    [incidents],
   );
 
-  const filtered =
-    filter === "all"
-      ? matched
-      : matched.filter((item) => item.status === filter);
+  const matched = useMemo(
+    () =>
+      searchableIndex
+        .filter(({ incident, fields }) =>
+          matchesIncidentQuery(fields, incident.reference, search),
+        )
+        .map(({ incident }) => incident),
+    [searchableIndex, search],
+  );
 
-  const counts: Record<IncidentStatus | "all", number> = {
-    all: matched.length,
-    reported: matched.filter((item) => item.status === "reported").length,
-    assigned: matched.filter((item) => item.status === "assigned").length,
-    workshop: matched.filter((item) => item.status === "workshop").length,
-    waitingParts: matched.filter((item) => item.status === "waitingParts")
-      .length,
-    repairing: matched.filter((item) => item.status === "repairing").length,
-    externalRepair: matched.filter((item) => item.status === "externalRepair")
-      .length,
-    resolved: matched.filter((item) => item.status === "resolved").length,
-    unresolved: matched.filter((item) => item.status === "unresolved").length,
-  };
+  const filtered = useMemo(
+    () =>
+      filter === "all"
+        ? matched
+        : matched.filter((item) => item.status === filter),
+    [matched, filter],
+  );
+
+  const counts = useMemo(() => countIncidentsByStatus(matched), [matched]);
 
   const byDate = sort === "recent" || sort === "oldest";
-  const ordered = byDate
-    ? sortByDate(filtered, (incident) => incident.reportedAt, sort)
-    : sort === "priority"
-      ? [...filtered].sort(
-          (a, b) =>
-            incidentPriorityRank(b.priority) -
-              incidentPriorityRank(a.priority) || b.reportedAt - a.reportedAt,
-        )
-      : inQueueOrder(filtered);
+  const ordered = useMemo(
+    () =>
+      byDate
+        ? sortByDate(filtered, (incident) => incident.reportedAt, sort)
+        : sort === "priority"
+          ? [...filtered].sort(
+              (a, b) =>
+                incidentPriorityRank(b.priority) -
+                  incidentPriorityRank(a.priority) ||
+                b.reportedAt - a.reportedAt,
+            )
+          : inQueueOrder(filtered),
+    [byDate, filtered, sort],
+  );
 
   const { areaRef, rowsFit } = useRowsThatFit({
     shape: "cards",
@@ -122,14 +131,23 @@ export function useIncidentFilters({
     resetKey: `${search}|${sort}|${filter}`,
   });
 
-  const visible = ordered.slice(paging.from - 1, paging.to);
-  const sections = byDate
-    ? groupByDate(visible, (incident) => incident.reportedAt)
-    : [{ key: "queue", label: "", items: visible }];
+  const visible = useMemo(
+    () => ordered.slice(paging.from - 1, paging.to),
+    [ordered, paging.from, paging.to],
+  );
+  const sections = useMemo(
+    () =>
+      byDate
+        ? groupByDate(visible, (incident) => incident.reportedAt)
+        : [{ key: "queue", label: "", items: visible }],
+    [byDate, visible],
+  );
 
-  const detail = detailId
-    ? (incidents.find((item) => item._id === detailId) ?? null)
-    : null;
+  const detail = useMemo(
+    () =>
+      detailId ? (incidents.find((item) => item._id === detailId) ?? null) : null,
+    [detailId, incidents],
+  );
 
   return {
     filter,

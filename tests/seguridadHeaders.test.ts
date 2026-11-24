@@ -62,6 +62,14 @@ describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
     expect(conf).toMatch(
       /location = \/index\.html\s*\{[^}]*include \/etc\/nginx\/snippets\/security-headers\.conf;/s,
     );
+    expect(conf).toContain("gzip_vary on;");
+    expect(conf).toContain("gzip_comp_level 5;");
+    expect(conf).toMatch(
+      /location = \/manifest\.webmanifest\s*\{[^}]*include \/etc\/nginx\/snippets\/security-headers\.conf;/s,
+    );
+    expect(conf).toMatch(
+      /location = \/logo\.svg\s*\{[^}]*include \/etc\/nginx\/snippets\/security-headers\.conf;/s,
+    );
 
     // Anti-clickjacking
     expect(headers).toMatch(/add_header\s+X-Frame-Options\s+"DENY"\s+always;/);

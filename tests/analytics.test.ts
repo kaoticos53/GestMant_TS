@@ -79,4 +79,27 @@ describe("Analítica del taller (Dominio puro)", () => {
       ]),
     );
   });
+
+  it("ubica incidencias en los cubos exactos de 8 semanas en el borde temporal", () => {
+    const WEEK = 7 * DAY;
+    const res = buildWorkshopAnalytics({
+      now,
+      incidents: [
+        { status: "reported", reportedAt: now - 8 * WEEK },
+        { status: "reported", reportedAt: now - 1 },
+        { status: "reported", reportedAt: now },
+        { status: "reported", reportedAt: now - 8 * WEEK - 1 },
+      ],
+      requests: [],
+      parts: [],
+      equipment: [],
+      stockMovements: [],
+      pendingPurchaseRequests: 0,
+    });
+
+    expect(res.weeklyTrend[0]?.reported).toBe(1);
+    expect(res.weeklyTrend[7]?.reported).toBe(1);
+    const sum = res.weeklyTrend.reduce((acc, w) => acc + w.reported, 0);
+    expect(sum).toBe(2);
+  });
 });

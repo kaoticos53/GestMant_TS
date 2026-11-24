@@ -170,27 +170,33 @@ export function buildWorkshopAnalytics(input: {
     count: statusCounts.get(status) ?? 0,
   }));
 
-  // Tendencia semanal (últimas 8 semanas, de más antigua a actual)
-  const weeklyTrend: WorkshopAnalyticsResult["weeklyTrend"] = [];
-  for (let w = 7; w >= 0; w--) {
-    const start = now - (w + 1) * WEEK_MS;
-    const end = now - w * WEEK_MS;
-    let reported = 0;
-    let resolved = 0;
-    for (const inc of incidents) {
-      if (inc.reportedAt >= start && inc.reportedAt < end) reported += 1;
-      if (
-        inc.closedAt !== undefined &&
-        inc.closedAt >= start &&
-        inc.closedAt < end
-      ) {
-        resolved += 1;
-      }
+  // Tendencia semanal en una sola pasada O(n) (últimas 8 semanas, de más antigua a actual)
+  const windowStart = now - 8 * WEEK_MS;
+  const reportedBuckets = new Array<number>(8).fill(0);
+  const resolvedBuckets = new Array<number>(8).fill(0);
+
+  for (const inc of incidents) {
+    if (inc.reportedAt >= windowStart && inc.reportedAt < now) {
+      const idx = Math.floor((inc.reportedAt - windowStart) / WEEK_MS);
+      if (idx >= 0 && idx < 8) reportedBuckets[idx] += 1;
     }
+    if (
+      inc.closedAt !== undefined &&
+      inc.closedAt >= windowStart &&
+      inc.closedAt < now
+    ) {
+      const idx = Math.floor((inc.closedAt - windowStart) / WEEK_MS);
+      if (idx >= 0 && idx < 8) resolvedBuckets[idx] += 1;
+    }
+  }
+
+  const weeklyTrend: WorkshopAnalyticsResult["weeklyTrend"] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const end = now - (7 - i) * WEEK_MS;
     weeklyTrend.push({
       weekLabel: formatShortDay(end),
-      reported,
-      resolved,
+      reported: reportedBuckets[i]!,
+      resolved: resolvedBuckets[i]!,
     });
   }
 

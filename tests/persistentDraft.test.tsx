@@ -197,4 +197,24 @@ describe("usePersistentDraft — persistencia y prevención de pérdida de datos
     expect(window.localStorage.getItem("test:draft:reset")).toBeNull();
     expect(hookReturn.hasUnsavedChanges).toBe(false);
   });
+
+  test("lee localStorage una sola vez al montar cuando ya hay borrador guardado", () => {
+    window.localStorage.setItem(
+      "test:draft:single-read",
+      JSON.stringify({ title: "Borrador", notes: "Guardado" }),
+    );
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem");
+
+    function TestComponent() {
+      const state = usePersistentDraft<TestFormState>({
+        key: "test:draft:single-read",
+        initialValue: INITIAL_FORM,
+      });
+      return <div>{state.draft.title}</div>;
+    }
+
+    renderComponent(<TestComponent />);
+    expect(getItemSpy).toHaveBeenCalledTimes(1);
+    getItemSpy.mockRestore();
+  });
 });

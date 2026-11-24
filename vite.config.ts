@@ -259,6 +259,13 @@ export default defineConfig({
           'framer-motion': ['framer-motion'],
           'charts': ['recharts'],
           'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'tiptap': [
+            '@tiptap/react',
+            '@tiptap/starter-kit',
+            '@tiptap/extension-image',
+            '@tiptap/extensions',
+          ],
+          'convex': ['convex', '@convex-dev/auth/react'],
         },
         // Optimize chunk size
         chunkFileNames: 'assets/[name]-[hash].js',

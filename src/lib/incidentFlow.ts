@@ -469,3 +469,26 @@ export function blockedIncidentSteps(
   }
   return groups;
 }
+
+/**
+ * Cuenta incidencias por estado en una sola pasada O(n).
+ */
+export function countIncidentsByStatus(
+  items: readonly { status: IncidentStatus }[],
+): Record<IncidentStatus | "all", number> {
+  const counts: Record<IncidentStatus | "all", number> = {
+    all: items.length,
+    reported: 0,
+    assigned: 0,
+    workshop: 0,
+    waitingParts: 0,
+    repairing: 0,
+    externalRepair: 0,
+    resolved: 0,
+    unresolved: 0,
+  };
+  for (const item of items) {
+    counts[item.status] += 1;
+  }
+  return counts;
+}

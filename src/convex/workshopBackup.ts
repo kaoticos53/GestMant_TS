@@ -1635,7 +1635,7 @@ export const exportBackup = action({
     });
 
     return {
-      rawJson: JSON.stringify(payload, null, 2),
+      rawJson: JSON.stringify(payload),
       summary: {
         exportedAt,
         exportedBy: perm.actorName,

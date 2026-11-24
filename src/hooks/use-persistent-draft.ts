@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type StorageType = "local" | "session";
 
@@ -56,47 +56,44 @@ export function usePersistentDraft<T>({
 }: PersistentDraftOptions<T>): PersistentDraftReturn<T> {
   const storage = getStorage(storageType);
 
-  // Se calcula una sola vez al montar: si había un borrador previo distinto del
-  // valor inicial, se considera restaurado. Sin efecto ni segundo render.
-  const [isRestored, setIsRestored] = useState(() => {
-    if (!storage) return false;
-    try {
-      const raw = storage.getItem(key);
-      return raw !== null && !isEqual(JSON.parse(raw) as T, initialValue);
-    } catch {
-      // Ignorar fallo de parseo
-      return false;
-    }
-  });
-  const [draft, setDraft] = useState<T>(() => {
-    if (!storage) return initialValue;
+  // Se lee el almacén una sola vez al montar para evitar doble getItem + JSON.parse.
+  const [initialRead] = useState<{ value: T; restored: boolean }>(() => {
+    if (!storage) return { value: initialValue, restored: false };
     try {
       const raw = storage.getItem(key);
       if (raw !== null) {
         const parsed = JSON.parse(raw) as T;
-        return parsed;
+        return { value: parsed, restored: !isEqual(parsed, initialValue) };
       }
     } catch (error) {
-      console.warn(`[usePersistentDraft] No se pudo leer el borrador para "${key}":`, error);
+      console.warn(
+        `[usePersistentDraft] No se pudo leer el borrador para "${key}":`,
+        error,
+      );
     }
-    return initialValue;
+    return { value: initialValue, restored: false };
   });
+
+  const [isRestored, setIsRestored] = useState(initialRead.restored);
+  const [draft, setDraft] = useState<T>(initialRead.value);
 
   // `clearDraft` declara "ya guardado" el borrador actual sin tocarlo: se guarda
   // su referencia, y en cuanto `draft` cambie vuelve a contar como pendiente.
   const [clearedDraft, setClearedDraft] = useState<{ value: T } | null>(null);
 
+  const isDirty = useMemo(
+    () => !isEqual(draft, initialValue),
+    [draft, initialValue, isEqual],
+  );
+
   // Estado derivado: no necesita useState ni useEffect.
   const hasUnsavedChanges =
-    !(clearedDraft !== null && Object.is(clearedDraft.value, draft)) &&
-    !isEqual(draft, initialValue);
+    !(clearedDraft !== null && Object.is(clearedDraft.value, draft)) && isDirty;
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sincronización debounced con el almacenamiento
   useEffect(() => {
-    const isDirty = !isEqual(draft, initialValue);
-
     if (timerRef.current) {
       clearTimeout(timerRef.current);
     }
@@ -119,7 +116,7 @@ export function usePersistentDraft<T>({
         clearTimeout(timerRef.current);
       }
     };
-  }, [draft, key, storage, initialValue, debounceMs, isEqual]);
+  }, [draft, isDirty, key, storage, debounceMs]);
 
   // Alerta de recarga o navegación accidental cuando hay cambios pendientes
   useEffect(() => {

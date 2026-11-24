@@ -64,6 +64,7 @@ describe("Fase 2 TDD — workshopBackup (exportación y restauración completa)"
 
     // Exportar backup completo
     const exported = await admin.action(api.workshopBackup.exportBackup, {});
+    expect(exported.rawJson).not.toContain("\n  ");
     expect(exported.summary.totalRecords).toBeGreaterThanOrEqual(4);
     const payload = JSON.parse(exported.rawJson) as {
       version: number;
