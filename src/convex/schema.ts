@@ -39,6 +39,21 @@ export const priorityValidator = v.union(
 );
 export type Priority = Infer<typeof priorityValidator>;
 
+export const INCIDENT_PRIORITIES = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  URGENT: "urgent",
+} as const;
+
+export const incidentPriorityValidator = v.union(
+  v.literal(INCIDENT_PRIORITIES.LOW),
+  v.literal(INCIDENT_PRIORITIES.MEDIUM),
+  v.literal(INCIDENT_PRIORITIES.HIGH),
+  v.literal(INCIDENT_PRIORITIES.URGENT),
+);
+export type IncidentPriority = Infer<typeof incidentPriorityValidator>;
+
 export const REQUEST_STATUSES = {
   PENDING: "pending",
   APPROVED: "approved",
@@ -451,6 +466,9 @@ const schema = defineSchema({
     serialNumber: v.optional(v.string()),
     description: v.string(), // descripción de la avería/incidencia
     reportedAt: v.number(), // fecha de notificación
+    priority: v.optional(incidentPriorityValidator),
+    priorityNote: v.optional(v.string()),
+    priorityChangedAt: v.optional(v.number()),
     severity: v.optional(
       v.union(
         v.literal("low"),
@@ -504,6 +522,7 @@ const schema = defineSchema({
     // Datos aportados por el técnico al cerrar
     notes: v.optional(v.string()),
     resolvedNote: v.optional(v.string()),
+    userNote: v.optional(v.string()), // Nota pública para el usuario que notificó
     closedAt: v.optional(v.number()),
     // Documentos y notas que se van añadiendo durante el ciclo de vida
     // (por quien gestiona la incidencia).

@@ -39,7 +39,11 @@ import {
   type IncidentMailNotice,
 } from "./incidentMail";
 import { richDocToPlainText, richDocToStore } from "./richDoc";
-import type { IncidentStatus } from "./workshop";
+import {
+  normalizeIncidentPriority,
+  type IncidentPriority,
+  type IncidentStatus,
+} from "./workshop";
 
 /** El estado con el que nace una incidencia: notificada, sin asignar. */
 export const INTAKE_STATUS: IncidentStatus = "reported";
@@ -89,6 +93,7 @@ export interface IncidentIntakeInput {
   /** La descripción tal cual sale del editor (documento de `richDoc`). */
   description: string;
   reportedAt: number;
+  priority?: IncidentPriority;
   /** Campo trampa (honeypot) invisible: solo lo rellena un bot automatizado. */
   website?: string;
 }
@@ -107,6 +112,7 @@ export interface IncidentIntake {
   serialNumber?: string;
   description: string;
   reportedAt: number;
+  priority: IncidentPriority;
 }
 
 /**
@@ -218,6 +224,7 @@ export function readIncidentIntake(
       reporterName,
       description,
       reportedAt: input.reportedAt,
+      priority: normalizeIncidentPriority(input.priority),
       ...(equipmentKind !== undefined ? { equipmentKind } : {}),
       ...(model !== undefined ? { model } : {}),
       ...(reporterRole !== undefined ? { reporterRole } : {}),
@@ -252,6 +259,7 @@ export interface IncidentIntakeRecord {
   serialNumber?: string;
   description: string;
   reportedAt: number;
+  priority: IncidentPriority;
   status: IncidentStatus;
   history: IntakeHistoryEntry[];
   createdAt: number;
@@ -287,6 +295,7 @@ export function incidentIntakeRecord(
       : {}),
     description: intake.description,
     reportedAt: intake.reportedAt,
+    priority: intake.priority,
     status: INTAKE_STATUS,
     history: [
       {

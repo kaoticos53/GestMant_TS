@@ -8,9 +8,12 @@ import {
 } from "@/lib/incidentTracking";
 import { richDocToPlainText } from "@/lib/richDoc";
 import {
+  INCIDENT_PRIORITY_META,
   INCIDENT_STATUS_META,
+  formatDateTime,
   formatRelativeTime,
   incidentStatusLabel,
+  normalizeIncidentPriority,
 } from "@/lib/workshop";
 import {
   getTrackingCurrentSince,
@@ -25,6 +28,8 @@ import { TrackingPendingParts } from "./TrackingPendingParts";
 /** Tarjeta principal con la información pública recortada de la incidencia consultada. */
 export function TrackingCard({ tracking, arrivedAt }: TrackingCardProps) {
   const status = INCIDENT_STATUS_META[tracking.status];
+  const priorityMeta =
+    INCIDENT_PRIORITY_META[normalizeIncidentPriority(tracking.priority)];
   const inWorkshop = isIncidentInWorkshop({
     status: tracking.status,
     workshopAssigneeName: tracking.workshopAssigneeName ?? undefined,
@@ -53,6 +58,9 @@ export function TrackingCard({ tracking, arrivedAt }: TrackingCardProps) {
         <Badge variant="outline" className={status.badgeClassName}>
           {statusLabel}
         </Badge>
+        <Badge variant="outline" className={priorityMeta.badgeClassName}>
+          Prioridad: {priorityMeta.label}
+        </Badge>
       </header>
 
       <h3 className="mt-2 text-base font-semibold tracking-tight">
@@ -78,6 +86,31 @@ export function TrackingCard({ tracking, arrivedAt }: TrackingCardProps) {
       />
 
       <TrackingDetailsList tracking={tracking} />
+
+      {tracking.priorityNote && (
+        <section className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <h4 className="text-xs font-medium text-amber-800 dark:text-amber-300">
+            Motivo del cambio de prioridad
+            {tracking.priorityChangedAt
+              ? ` · ${formatDateTime(tracking.priorityChangedAt)}`
+              : ""}
+          </h4>
+          <p className="mt-1 whitespace-pre-line text-sm leading-6">
+            {tracking.priorityNote}
+          </p>
+        </section>
+      )}
+
+      {tracking.userNote && (
+        <section className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+          <h4 className="text-xs font-medium text-emerald-800 dark:text-emerald-300">
+            Nota para el usuario
+          </h4>
+          <p className="mt-1 whitespace-pre-line text-sm leading-6">
+            {tracking.userNote}
+          </p>
+        </section>
+      )}
 
       {description !== "" && (
         <section className="mt-4">

@@ -55,7 +55,7 @@ export function useRequestFilters({
       ? matched
       : matched.filter((request) => request.status === filter);
 
-  const byDate = sort !== "queue";
+  const byDate = sort === "recent" || sort === "oldest";
   const ordered = byDate
     ? sortByDate(filtered, (request) => request.createdAt, sort)
     : inQueueOrder(filtered);

@@ -41,5 +41,6 @@ export const STATUS_RANK: Record<IncidentStatus, number> = {
 export const SORT_OPTIONS: QueueSortOption[] = [
   { id: "recent", label: "Fecha: más recientes primero" },
   { id: "oldest", label: "Fecha: más antiguas primero" },
+  { id: "priority", label: "Prioridad: urgente primero" },
   { id: "queue", label: "Orden de trabajo: pendientes primero" },
 ];

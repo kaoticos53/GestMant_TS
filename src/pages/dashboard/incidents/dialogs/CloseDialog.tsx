@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ export function CloseDialog({
     incident.equipmentId ?? "",
   );
   const [notes, setNotes] = useState("");
+  const [userNote, setUserNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +54,7 @@ export function CloseDialog({
         outcome,
         equipmentId: equipmentId ? (equipmentId as Id<"equipment">) : undefined,
         notes: richDocToStore(notes),
+        userNote: userNote.trim() || undefined,
       });
       toast.success(
         outcome === "resolved"
@@ -119,12 +122,28 @@ export function CloseDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="close-notes">Datos aportados por el técnico</Label>
+            <Label htmlFor="close-notes">
+              Datos aportados por el técnico (uso interno)
+            </Label>
             <RichTextEditor
               id="close-notes"
               value={notes}
               onChange={setNotes}
               placeholder="Qué se ha hecho, causas, recomendaciones..."
+              disabled={busy}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="close-user-note">
+              Nota para el usuario (visible en seguimiento)
+            </Label>
+            <Textarea
+              id="close-user-note"
+              value={userNote}
+              onChange={(e) => setUserNote(e.target.value)}
+              placeholder="Mensaje claro para quien notificó la incidencia..."
+              rows={2}
               disabled={busy}
             />
           </div>

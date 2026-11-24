@@ -24,6 +24,7 @@ export default function ReportIncident() {
     reporterProps,
     equipmentProps,
     descriptionProps,
+    priorityProps,
   } = useReportIncidentState();
 
   return (
@@ -45,6 +46,7 @@ export default function ReportIncident() {
             reporterProps={reporterProps}
             equipmentProps={equipmentProps}
             descriptionProps={descriptionProps}
+            priorityProps={priorityProps}
             honeypotProps={honeypotProps}
             challengeProps={challengeProps}
             error={error}

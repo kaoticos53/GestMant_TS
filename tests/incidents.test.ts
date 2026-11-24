@@ -336,9 +336,13 @@ describe("consulta de una incidencia: la referencia del taller y el código de f
       "location",
       "model",
       "pendingParts",
+      "priority",
+      "priorityChangedAt",
+      "priorityNote",
       "reportedAt",
       "serialNumber",
       "status",
+      "userNote",
       "workshopAssigneeName",
     ]);
     expect(tracking).not.toHaveProperty("notes");

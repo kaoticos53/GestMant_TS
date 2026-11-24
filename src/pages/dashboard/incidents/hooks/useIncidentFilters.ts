@@ -3,6 +3,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { groupByDate, sortByDate } from "@/lib/browse";
 import { richDocToPlainText } from "@/lib/richDoc";
 import {
+  incidentPriorityRank,
   liveNotes,
   matchesIncidentQuery,
   type IncidentStatus,
@@ -99,10 +100,16 @@ export function useIncidentFilters({
     unresolved: matched.filter((item) => item.status === "unresolved").length,
   };
 
-  const byDate = sort !== "queue";
+  const byDate = sort === "recent" || sort === "oldest";
   const ordered = byDate
     ? sortByDate(filtered, (incident) => incident.reportedAt, sort)
-    : inQueueOrder(filtered);
+    : sort === "priority"
+      ? [...filtered].sort(
+          (a, b) =>
+            incidentPriorityRank(b.priority) -
+              incidentPriorityRank(a.priority) || b.reportedAt - a.reportedAt,
+        )
+      : inQueueOrder(filtered);
 
   const { areaRef, rowsFit } = useRowsThatFit({
     shape: "cards",

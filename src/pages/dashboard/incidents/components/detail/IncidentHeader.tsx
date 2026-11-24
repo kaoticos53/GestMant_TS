@@ -1,6 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatDateTime } from "@/lib/workshop";
+import {
+  INCIDENT_PRIORITY_META,
+  formatDateTime,
+  normalizeIncidentPriority,
+} from "@/lib/workshop";
+import { Flag } from "lucide-react";
 import type { IncidentDoc } from "../../types";
 
 export interface IncidentHeaderProps {
@@ -8,6 +14,7 @@ export interface IncidentHeaderProps {
   statusLabel: string;
   badgeClassName: string;
   statusDescription: string;
+  onChangePriority?: () => void;
 }
 
 export function IncidentHeader({
@@ -15,7 +22,10 @@ export function IncidentHeader({
   statusLabel,
   badgeClassName,
   statusDescription,
+  onChangePriority,
 }: IncidentHeaderProps) {
+  const priorityMeta =
+    INCIDENT_PRIORITY_META[normalizeIncidentPriority(incident.priority)];
   return (
     <SheetHeader className="sticky top-0 z-20 border-b border-border/70 bg-background/95 backdrop-blur-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -25,6 +35,21 @@ export function IncidentHeader({
         <Badge variant="outline" className={badgeClassName}>
           {statusLabel}
         </Badge>
+        <Badge variant="outline" className={priorityMeta.badgeClassName}>
+          Prioridad: {priorityMeta.label}
+        </Badge>
+        {onChangePriority && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onChangePriority}
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Flag className="size-3" />
+            Cambiar prioridad
+          </Button>
+        )}
         {incident.maintenanceId && (
           <Badge
             variant="outline"

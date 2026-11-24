@@ -33,8 +33,16 @@ import type { PendingPart } from "../lib/incidentTracking";
 import { normalizePublicCode } from "../lib/publicCode";
 import { isRequestAwaitingDelivery, lineRemaining } from "../lib/requestFlow";
 import { richDocToPlainText, richDocToStore } from "../lib/richDoc";
-import { normalizeIncidentReference } from "../lib/workshop";
-import { INCIDENT_STATUSES, incidentStatusValidator } from "./schema";
+import {
+  INCIDENT_PRIORITY_META,
+  normalizeIncidentReference,
+} from "../lib/workshop";
+import {
+  INCIDENT_PRIORITIES,
+  INCIDENT_STATUSES,
+  incidentPriorityValidator,
+  incidentStatusValidator,
+} from "./schema";
 
 import {
   actorName,
@@ -68,6 +76,7 @@ const reportPayloadArgs = {
   serialNumber: v.optional(v.string()),
   description: v.string(),
   reportedAt: v.number(),
+  priority: v.optional(incidentPriorityValidator),
   // Marca del borrador guardado sin conexión (`lib/offlineDrafts`): el mismo
   // aviso que se reintenta al volver la red llega con la misma marca y el alta
   // se reconoce en vez de duplicarse.
@@ -128,6 +137,7 @@ export const report = action({
       serialNumber: args.serialNumber,
       description: args.description,
       reportedAt: args.reportedAt,
+      priority: args.priority,
       clientDraftId: args.clientDraftId,
       website: args.website,
       isAuthenticatedMember: authenticated,
@@ -176,6 +186,7 @@ export const reportBatch = action({
           serialNumber: item.serialNumber,
           description: item.description,
           reportedAt: item.reportedAt,
+          priority: item.priority,
           clientDraftId: item.clientDraftId,
           website: item.website,
           isAuthenticatedMember: authenticated,
@@ -349,6 +360,10 @@ async function trackingOf(
     // que el taller se cita entre sí y no sale de aquí.
     code: incident.publicCode ?? null,
     status: incident.status,
+    priority: incident.priority ?? INCIDENT_PRIORITIES.MEDIUM,
+    priorityNote: incident.priorityNote ?? null,
+    priorityChangedAt: incident.priorityChangedAt ?? null,
+    userNote: incident.userNote ?? null,
     equipmentKind: incident.equipmentKind ?? null,
     model: incident.model ?? null,
     serialNumber: incident.serialNumber ?? null,
@@ -615,6 +630,7 @@ const verifyArgs = {
   ),
   equipmentId: v.optional(v.id("equipment")),
   notes: v.optional(v.string()),
+  userNote: v.optional(v.string()),
   expectedUpdatedAt: v.optional(v.number()),
 };
 
@@ -656,6 +672,7 @@ export const verify = mutation({
       }
 
       const notes = richDocToStore(args.notes);
+      const userNote = args.userNote?.trim() || undefined;
       const now = Date.now();
       const name = actorName(actor);
 
@@ -716,6 +733,7 @@ export const verify = mutation({
         status,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
         ...(notes ? { notes } : {}),
+        ...(userNote ? { userNote } : {}),
         closedAt: now,
         ...(maintenanceId ? { maintenanceId } : {}),
         updatedAt: now,
@@ -847,6 +865,7 @@ const closeArgs = {
   ),
   equipmentId: v.optional(v.id("equipment")),
   notes: v.optional(v.string()),
+  userNote: v.optional(v.string()),
   expectedUpdatedAt: v.optional(v.number()),
 };
 
@@ -889,6 +908,7 @@ export const close = mutation({
       }
 
       const notes = richDocToStore(args.notes);
+      const userNote = args.userNote?.trim() || undefined;
       const now = Date.now();
       const name = actorName(actor);
       const status = closed;
@@ -908,6 +928,7 @@ export const close = mutation({
         status,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
         ...(notes ? { notes } : {}),
+        ...(userNote ? { userNote } : {}),
         closedAt: now,
         ...(maintenanceId ? { maintenanceId } : {}),
         updatedAt: now,
@@ -1406,5 +1427,59 @@ export {
   withdrawn,
   type WithdrawnIncidentItem,
 } from "./_incidents/trash";
+
+const changePriorityArgs = {
+  incidentId: v.id("incidents"),
+  priority: incidentPriorityValidator,
+  note: v.optional(v.string()),
+  expectedUpdatedAt: v.optional(v.number()),
+};
+
+/** Cambia la prioridad de una incidencia y deja constancia del motivo. */
+export const changePriority = mutation({
+  args: changePriorityArgs,
+  handler: secureMutation(
+    {
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
+      authorize: incidentWorkerPolicy(
+        "Solo el técnico asignado o el coordinador pueden cambiar la prioridad de esta incidencia.",
+      ),
+    },
+    changePriorityArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      assertIncidentNotModified(incident, args.expectedUpdatedAt);
+
+      const prevPriority = incident.priority ?? INCIDENT_PRIORITIES.MEDIUM;
+      const note = args.note?.trim() || undefined;
+      if (prevPriority === args.priority && !note) return;
+
+      const now = Date.now();
+      const name = actorName(actor);
+      const prevLabel = INCIDENT_PRIORITY_META[prevPriority].label;
+      const nextLabel = INCIDENT_PRIORITY_META[args.priority].label;
+
+      await ctx.db.patch(args.incidentId, {
+        priority: args.priority,
+        priorityChangedAt: now,
+        ...(note ? { priorityNote: note } : {}),
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(
+            incident.status,
+            now,
+            name,
+            note
+              ? `Prioridad cambiada de ${prevLabel} a ${nextLabel} · ${note}`
+              : `Prioridad cambiada de ${prevLabel} a ${nextLabel}`,
+          ),
+        ],
+      });
+    },
+  ),
+});
 
 export const statusValidator = incidentStatusValidator;

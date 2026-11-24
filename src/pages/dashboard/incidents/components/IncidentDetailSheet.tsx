@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { JourneySummary } from "@/components/JourneySummary";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { incidentJourney } from "@/lib/incidentJourney";
+import { ChangePriorityDialog } from "../dialogs/ChangePriorityDialog";
 
 import type { EquipmentDoc, IncidentDoc } from "../types";
 import {
@@ -67,6 +69,8 @@ export function IncidentDetailSheet({
     canAssign,
   });
 
+  const [priorityOpen, setPriorityOpen] = useState(false);
+
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
@@ -75,6 +79,11 @@ export function IncidentDetailSheet({
           statusLabel={statusLabel}
           badgeClassName={status.badgeClassName}
           statusDescription={status.description}
+          onChangePriority={
+            derived.canWork || derived.canCoordinate
+              ? () => setPriorityOpen(true)
+              : undefined
+          }
         />
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
@@ -154,6 +163,13 @@ export function IncidentDetailSheet({
           trailPending={trailPending}
           onClose={onClose}
         />
+
+        {priorityOpen && (
+          <ChangePriorityDialog
+            incident={incident}
+            onClose={() => setPriorityOpen(false)}
+          />
+        )}
 
         <IncidentEquipmentModals
           incident={incident}

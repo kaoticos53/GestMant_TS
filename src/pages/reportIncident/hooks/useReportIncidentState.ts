@@ -10,7 +10,11 @@ import {
   saveOfflineDraft,
   type OfflineDraftPayload,
 } from "@/lib/offlineDrafts";
-import { getErrorMessage } from "@/lib/workshop";
+import {
+  DEFAULT_INCIDENT_PRIORITY,
+  getErrorMessage,
+  type IncidentPriority,
+} from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import { getTodayInputDate, validateReportIncidentForm } from "../helpers";
@@ -49,6 +53,9 @@ export function useReportIncidentState() {
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [reportedAt, setReportedAt] = useState(getTodayInputDate);
+  const [priority, setPriority] = useState<IncidentPriority>(
+    DEFAULT_INCIDENT_PRIORITY,
+  );
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
@@ -151,6 +158,7 @@ export function useReportIncidentState() {
       role: roleValue,
       location: locationValue,
       reportedAt,
+      priority,
       equipmentKind,
       model,
       serialNumber,
@@ -209,6 +217,7 @@ export function useReportIncidentState() {
     setModel("");
     setSerialNumber("");
     setReportedAt(getTodayInputDate());
+    setPriority(DEFAULT_INCIDENT_PRIORITY);
     setDescription("");
     setWebsite("");
     setError(null);
@@ -269,6 +278,10 @@ export function useReportIncidentState() {
       onDescriptionChange: setDescription,
       onResolvePublicChallenge: resolveChallenge,
       disabled: busy,
+    },
+    priorityProps: {
+      value: priority,
+      onChange: setPriority,
     },
   };
 }

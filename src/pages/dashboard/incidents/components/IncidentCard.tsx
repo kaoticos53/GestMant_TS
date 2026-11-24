@@ -5,9 +5,11 @@ import { RichText } from "@/components/RichText";
 import { isClosedIncident, isIncidentInWorkshop } from "@/lib/incidentFlow";
 import { cn } from "@/lib/utils";
 import {
+  INCIDENT_PRIORITY_META,
   INCIDENT_STATUS_META,
   formatDateTime,
   incidentStatusLabel,
+  normalizeIncidentPriority,
 } from "@/lib/workshop";
 import type { IncidentDoc } from "../types";
 
@@ -27,6 +29,8 @@ export function IncidentCard({
   onArchive: () => void;
 }) {
   const status = INCIDENT_STATUS_META[incident.status];
+  const priorityMeta =
+    INCIDENT_PRIORITY_META[normalizeIncidentPriority(incident.priority)];
   const isClosed = isClosedIncident(incident.status);
   // El estado de la espera y el de la reparación se enseñan con
   // el sitio: «En espera de repuestos · taller».
@@ -53,6 +57,9 @@ export function IncidentCard({
             </span>
             <Badge variant="outline" className={status.badgeClassName}>
               {statusLabel}
+            </Badge>
+            <Badge variant="outline" className={priorityMeta.badgeClassName}>
+              {priorityMeta.label}
             </Badge>
             {incident.location && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">

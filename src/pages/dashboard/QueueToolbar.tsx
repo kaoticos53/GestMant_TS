@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/select";
 import type { DateSortId } from "@/lib/browse";
 
-/** Órdenes de una cola: por fecha (dos sentidos) o el orden de trabajo. */
-export type QueueSortId = DateSortId | "queue";
+/** Órdenes de una cola: por fecha (dos sentidos), prioridad o el orden de trabajo. */
+export type QueueSortId = DateSortId | "queue" | "priority";
 
 export interface QueueSortOption {
   id: QueueSortId;

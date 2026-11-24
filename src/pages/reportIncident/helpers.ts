@@ -1,5 +1,6 @@
 import { looksLikeEmail } from "@/lib/incidentMail";
 import { richDocToPlainText, richDocToStore } from "@/lib/richDoc";
+import { normalizeIncidentPriority } from "@/lib/workshop";
 import type {
   ReportIncidentFormValues,
   ReportIncidentValidationResult,
@@ -78,6 +79,7 @@ export function validateReportIncidentForm(
       serialNumber: values.serialNumber.trim() || undefined,
       description: richDocToStore(values.description) ?? "",
       reportedAt: timestamp,
+      priority: normalizeIncidentPriority(values.priority),
     },
   };
 }

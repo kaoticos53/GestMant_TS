@@ -7,7 +7,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ArrowRight, Loader2, Siren, UserCheck, WifiOff } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { pendingDraftsNotice } from "@/lib/offlineDrafts";
+import {
+  DEFAULT_INCIDENT_PRIORITY,
+  INCIDENT_PRIORITIES,
+  INCIDENT_PRIORITY_META,
+  type IncidentPriority,
+} from "@/lib/workshop";
 import type { ComponentProps } from "react";
 import { DescriptionField } from "./DescriptionField";
 import { EquipmentFields } from "./EquipmentFields";
@@ -20,6 +34,10 @@ interface ReportIncidentFormProps {
   reporterProps: ComponentProps<typeof ReporterFields>;
   equipmentProps: ComponentProps<typeof EquipmentFields>;
   descriptionProps: ComponentProps<typeof DescriptionField>;
+  priorityProps?: {
+    value: IncidentPriority;
+    onChange: (value: IncidentPriority) => void;
+  };
   honeypotProps?: { value: string; onChange: (value: string) => void };
   challengeProps?: ComponentProps<typeof HumanChallengeField>;
   error: string | null;
@@ -43,6 +61,7 @@ export function ReportIncidentForm({
   reporterProps,
   equipmentProps,
   descriptionProps,
+  priorityProps,
   honeypotProps,
   challengeProps,
   error,
@@ -117,6 +136,29 @@ export function ReportIncidentForm({
 
           {/* Bloque 2: Equipo y notificación */}
           <EquipmentFields {...equipmentProps} isAuthenticated={isAuthenticated} />
+
+          {priorityProps && (
+            <div className="grid gap-2">
+              <Label htmlFor="report-priority">Prioridad</Label>
+              <Select
+                value={priorityProps.value ?? DEFAULT_INCIDENT_PRIORITY}
+                onValueChange={(value) =>
+                  priorityProps.onChange(value as IncidentPriority)
+                }
+              >
+                <SelectTrigger id="report-priority" disabled={busy}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INCIDENT_PRIORITIES.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {INCIDENT_PRIORITY_META[p].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Bloque 3: Descripción ocupando todo el ancho de la ficha */}
           <DescriptionField {...descriptionProps} />

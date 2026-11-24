@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,7 @@ export function VerifyDialog({
     incident.equipmentId ?? "",
   );
   const [notes, setNotes] = useState("");
+  const [userNote, setUserNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +56,7 @@ export function VerifyDialog({
         outcome,
         equipmentId: equipmentId ? (equipmentId as Id<"equipment">) : undefined,
         notes: richDocToStore(notes),
+        userNote: userNote.trim() || undefined,
       });
       toast.success(
         outcome === "workshop"
@@ -134,7 +137,7 @@ export function VerifyDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="verify-notes">Notas del técnico</Label>
+            <Label htmlFor="verify-notes">Notas del técnico (uso interno)</Label>
             <RichTextEditor
               id="verify-notes"
               value={notes}
@@ -143,6 +146,22 @@ export function VerifyDialog({
               disabled={busy}
             />
           </div>
+
+          {outcome !== "workshop" && (
+            <div className="grid gap-2">
+              <Label htmlFor="verify-user-note">
+                Nota para el usuario (visible en seguimiento)
+              </Label>
+              <Textarea
+                id="verify-user-note"
+                value={userNote}
+                onChange={(e) => setUserNote(e.target.value)}
+                placeholder="Explicación clara para quien notificó la incidencia..."
+                rows={2}
+                disabled={busy}
+              />
+            </div>
+          )}
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

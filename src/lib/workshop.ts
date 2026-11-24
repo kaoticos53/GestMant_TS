@@ -32,6 +32,64 @@ export type RequestStatus =
 
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 
+export const INCIDENT_PRIORITIES = [
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+
+export type IncidentPriority = (typeof INCIDENT_PRIORITIES)[number];
+
+export const DEFAULT_INCIDENT_PRIORITY: IncidentPriority = "medium";
+
+export const INCIDENT_PRIORITY_META: Record<
+  IncidentPriority,
+  { label: string; rank: number; badgeClassName: string }
+> = {
+  low: {
+    label: "Baja",
+    rank: 1,
+    badgeClassName: "border-border bg-muted text-muted-foreground",
+  },
+  medium: {
+    label: "Media",
+    rank: 2,
+    badgeClassName: "border-signal/25 bg-signal/10 text-signal",
+  },
+  high: {
+    label: "Alta",
+    rank: 3,
+    badgeClassName:
+      "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  urgent: {
+    label: "Urgente",
+    rank: 4,
+    badgeClassName: "border-destructive/35 bg-destructive/10 text-destructive",
+  },
+};
+
+export function normalizeIncidentPriority(
+  value?: string | null,
+): IncidentPriority {
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "urgent"
+  ) {
+    return value;
+  }
+  return DEFAULT_INCIDENT_PRIORITY;
+}
+
+export function incidentPriorityRank(
+  priority?: IncidentPriority | null,
+): number {
+  return INCIDENT_PRIORITY_META[normalizeIncidentPriority(priority)].rank;
+}
+
 export const PRIORITY_META: Record<
   Priority,
   { label: string; badgeClassName: string }
