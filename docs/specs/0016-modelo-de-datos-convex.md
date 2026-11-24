@@ -56,6 +56,10 @@ erDiagram
 - **RF-001 (Contadores atómicos `references.ts`):** `referenceCounters` asigna referencias correlativas únicas sin colisiones (`INC-XXXX`, `PET-XXXX`, `PC-XXXX`, `OC-XXXX`, `EQ-XXX`).
 - **RF-002 (Organización modular `src/convex/`):** Helpers internos agrupados en `_ai/`, `_auth/`, `_incidents/`, `_inventory/`, `_mail/`, `_partRequests/`, `_purchasing/`, expuestos solo mediante `internalQuery`/`internalMutation` o funciones de dominio.
 - **RF-003 (Registro estático de tipos):** Toda nueva función o módulo bajo `src/convex/` debe quedar declarado en `src/convex/_generated/api.d.ts` (validado automáticamente por `tests/nasSetup.test.ts`). El índice se regenera con `npx convex codegen` contra un deployment activo.
+- **RF-004 (Consultas indexadas de alto tráfico):**
+  - `partRequests` declara el índice `by_equipment` (`["equipmentId"]`) para desvinculación (`equipment.remove`) y consultas por equipo (`equipment.relatedSummary`) sin escaneo completo.
+  - `dashboard.summary` consulta `dashboardStats` en paralelo con solo los estados en curso (`STALE_WORK_CANDIDATE_STATUSES`) mediante `incidents.by_lifecycle_status` (cubriendo `lifecycle: "active"` y filas legacy sin `lifecycle`), evitando leer incidencias cerradas, archivadas o en papelera.
+  - `equipment.ts` vincula incidencias sin equipo usando `incidents.by_equipment_and_created` (`equipmentId === undefined`) en lugar de `.filter(...)`.
 
 ---
 

@@ -306,6 +306,45 @@ export function findMatchingEquipmentForIncident<
   return null;
 }
 
+/**
+ * Comprobación rápida O(1) de si una incidencia sin equipo asignado podría
+ * emparejar con un equipo concreto según las mismas reglas de serie/modelo
+ * que `findMatchingEquipmentForIncident`. Permite evitar cargar el inventario
+ * entero cuando ninguna incidencia sin vincular coincide con el equipo tocado.
+ */
+export function incidentCouldMatchEquipment(
+  incident: {
+    equipmentId?: string;
+    model?: string;
+    serialNumber?: string;
+  },
+  equipment: {
+    _id: string;
+    model: string;
+    serialNumber?: string;
+  },
+): boolean {
+  if (incident.equipmentId !== undefined) {
+    return incident.equipmentId === equipment._id;
+  }
+
+  const norm = (value?: string | null) => (value ?? "").trim().toLowerCase();
+  const incSerial = norm(incident.serialNumber);
+  const incModel = norm(incident.model);
+
+  if (incSerial !== "") {
+    const eqSerial = norm(equipment.serialNumber);
+    return eqSerial !== "" && incSerial === eqSerial;
+  }
+
+  if (incModel !== "") {
+    const eqModel = norm(equipment.model);
+    return eqModel !== "" && incModel === eqModel;
+  }
+
+  return false;
+}
+
 export type StockState = "out" | "low" | "ok";
 
 export function stockState(stock: number, minStock: number): StockState {

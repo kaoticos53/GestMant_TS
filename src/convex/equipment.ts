@@ -6,7 +6,12 @@ import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { hasAnyCapability, memberOrNull } from "./permissions";
 import { richDocToStore } from "../lib/richDoc";
 import {
+  nextFreeEquipmentCodeFromExisting,
+  parseEquipmentCodeNumber,
+} from "../lib/equipmentRecord";
+import {
   findMatchingEquipmentForIncident,
+  incidentCouldMatchEquipment,
   requestMatchesEquipment,
 } from "../lib/workshop";
 import { detectEquipmentChanges } from "../lib/movements";
@@ -164,36 +169,23 @@ async function codeClash(ctx: QueryCtx, code: string, excludeId?: string) {
 export async function generateFreeEquipmentCode(
   ctx: QueryCtx,
 ): Promise<string> {
-  const all = await ctx.db.query("equipment").collect();
-  let highest = 0;
-  for (const item of all) {
-    if (!item.code) continue;
-    const match = /^EQ-(\d+)$/i.exec(item.code.trim());
-    if (match) {
-      const num = parseInt(match[1], 10);
-      if (Number.isFinite(num) && num > highest) {
-        highest = num;
-      }
-    }
+  const eqPrefixed = await ctx.db
+    .query("equipment")
+    .withIndex("by_code", (q) => q.gte("code", "EQ-").lt("code", "EQ."))
+    .collect();
+  let candidate = nextFreeEquipmentCodeFromExisting(
+    eqPrefixed.map((item) => item.code),
+  );
+  while (
+    await ctx.db
+      .query("equipment")
+      .withIndex("by_code", (q) => q.eq("code", candidate))
+      .first()
+  ) {
+    const currentNum = parseEquipmentCodeNumber(candidate) ?? 0;
+    candidate = `EQ-${String(currentNum + 1).padStart(3, "0")}`;
   }
-
-  let candidateNum = highest + 1;
-  while (true) {
-    const candidateCode = `EQ-${String(candidateNum).padStart(3, "0")}`;
-    const clashInList = all.some(
-      (eq) => eq.code?.trim().toUpperCase() === candidateCode.toUpperCase(),
-    );
-    if (!clashInList) {
-      const existing = await ctx.db
-        .query("equipment")
-        .withIndex("by_code", (q) => q.eq("code", candidateCode))
-        .first();
-      if (!existing) {
-        return candidateCode;
-      }
-    }
-    candidateNum++;
-  }
+  return candidate;
 }
 
 /**
@@ -211,13 +203,25 @@ async function linkMatchingIncidents(
   ctx: MutationCtx,
   equipmentId: Id<"equipment">,
 ) {
-  const allEquipment = await ctx.db.query("equipment").collect();
   const unlinked = await ctx.db
     .query("incidents")
-    .filter((q) => q.eq(q.field("equipmentId"), undefined))
+    .withIndex("by_equipment_and_created", (q) =>
+      q.eq("equipmentId", undefined),
+    )
     .collect();
-  for (const inc of unlinked) {
-    if (inc.deletedAt !== undefined) continue;
+  if (unlinked.length === 0) return;
+
+  const target = await ctx.db.get(equipmentId);
+  if (!target) return;
+
+  const candidates = unlinked.filter(
+    (inc) =>
+      inc.deletedAt === undefined && incidentCouldMatchEquipment(inc, target),
+  );
+  if (candidates.length === 0) return;
+
+  const allEquipment = await ctx.db.query("equipment").collect();
+  for (const inc of candidates) {
     const matched = findMatchingEquipmentForIncident(inc, allEquipment);
     if (matched?._id === equipmentId) {
       await ctx.db.patch(inc._id, { equipmentId });
@@ -586,11 +590,12 @@ export const remove = mutation({
       const item = await ctx.db.get(args.id);
       if (!item) throw new ConvexError("El equipo ya no existe.");
 
-      const requests = await ctx.db.query("partRequests").collect();
+      const requests = await ctx.db
+        .query("partRequests")
+        .withIndex("by_equipment", (q) => q.eq("equipmentId", args.id))
+        .collect();
       for (const request of requests) {
-        if (request.equipmentId === args.id) {
-          await ctx.db.patch(request._id, { equipmentId: undefined });
-        }
+        await ctx.db.patch(request._id, { equipmentId: undefined });
       }
 
       // Los manuales del equipo no se borran con él: un manual es documentación
@@ -641,27 +646,53 @@ export const relatedSummary = query({
 
     let resolvedModelId = item.modelId;
     if (!resolvedModelId) {
-      const normalizedModel = item.model.trim().toLowerCase();
-      const models = await ctx.db.query("equipmentModels").collect();
-      resolvedModelId = models.find(
-        (m) => m.model.trim().toLowerCase() === normalizedModel,
-      )?._id;
+      const trimmedModel = item.model.trim();
+      const exactModel = await ctx.db
+        .query("equipmentModels")
+        .withIndex("by_model", (q) => q.eq("model", trimmedModel))
+        .first();
+      if (exactModel) {
+        resolvedModelId = exactModel._id;
+      } else {
+        const normalizedModel = trimmedModel.toLowerCase();
+        const models = await ctx.db.query("equipmentModels").collect();
+        resolvedModelId = models.find(
+          (m) => m.model.trim().toLowerCase() === normalizedModel,
+        )?._id;
+      }
     }
 
-    const allParts = await ctx.db.query("spareParts").collect();
+    const [allParts, linkedRequests, unlinkedRequests] = await Promise.all([
+      resolvedModelId
+        ? ctx.db.query("spareParts").collect()
+        : Promise.resolve([]),
+      ctx.db
+        .query("partRequests")
+        .withIndex("by_equipment", (q) =>
+          q.eq("equipmentId", args.equipmentId),
+        )
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("partRequests")
+        .withIndex("by_equipment", (q) => q.eq("equipmentId", undefined))
+        .order("desc")
+        .collect(),
+    ]);
+
     const compatible = resolvedModelId
       ? allParts.filter((part) =>
           part.compatibleModels?.includes(resolvedModelId!),
         )
       : [];
 
-    const allRequests = await ctx.db
-      .query("partRequests")
-      .order("desc")
-      .collect();
-    const requests = allRequests.filter(
-      (req) => req.deletedAt === undefined && requestMatchesEquipment(req, item),
-    );
+    const requests = [
+      ...linkedRequests.filter((req) => req.deletedAt === undefined),
+      ...unlinkedRequests.filter(
+        (req) =>
+          req.deletedAt === undefined && requestMatchesEquipment(req, item),
+      ),
+    ].sort((a, b) => b._creationTime - a._creationTime);
 
     return { compatible, requests };
   },

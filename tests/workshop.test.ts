@@ -14,6 +14,7 @@ import {
   formatFileSize,
   hasTechnicianNote,
   inProgressSince,
+  incidentCouldMatchEquipment,
   incidentStatusLabel,
   isNoteWithinEditWindow,
   liveNotes,
@@ -737,5 +738,41 @@ describe("findMatchingEquipmentForIncident — vinculación automática de equip
     expect(
       findMatchingEquipmentForIncident({ model: "FX6" }, inventory),
     ).toBeNull();
+  });
+});
+
+describe("incidentCouldMatchEquipment", () => {
+  const eq = {
+    _id: "eq-1",
+    model: "HDC-3500",
+    serialNumber: "SN-100",
+  };
+
+  test("coincide por nº de serie normalizado e impide falso positivo por modelo si difiere", () => {
+    expect(
+      incidentCouldMatchEquipment(
+        { model: "Otro", serialNumber: "  sn-100 " },
+        eq,
+      ),
+    ).toBe(true);
+    expect(
+      incidentCouldMatchEquipment(
+        { model: "HDC-3500", serialNumber: "SN-999" },
+        eq,
+      ),
+    ).toBe(false);
+  });
+
+  test("sin nº de serie coincide por modelo normalizado y respeta equipmentId explícito", () => {
+    expect(incidentCouldMatchEquipment({ model: " hdc-3500 " }, eq)).toBe(true);
+    expect(
+      incidentCouldMatchEquipment({ equipmentId: "eq-1", model: "Otro" }, eq),
+    ).toBe(true);
+    expect(
+      incidentCouldMatchEquipment(
+        { equipmentId: "eq-2", model: "HDC-3500" },
+        eq,
+      ),
+    ).toBe(false);
   });
 });

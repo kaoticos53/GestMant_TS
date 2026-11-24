@@ -178,13 +178,17 @@ export function isClosedIncident(status: string): boolean {
 }
 
 /** Los estados en los que la incidencia ya es de alguien y sigue abierta. */
-const IN_PROGRESS_STATUSES: readonly IncidentStatus[] = [
+export const IN_PROGRESS_INCIDENT_STATUSES = [
   "assigned",
   "workshop",
   "waitingParts",
   "repairing",
   "externalRepair",
-];
+] as const satisfies readonly IncidentStatus[];
+
+/** Estados candidatos para el aviso de trabajo sin constancia (`workWithoutTraceDays`). */
+export const STALE_WORK_CANDIDATE_STATUSES: readonly IncidentStatus[] =
+  IN_PROGRESS_INCIDENT_STATUSES;
 
 /**
  * ¿Está en curso? El trabajo ha empezado —tiene técnico, o técnico de taller— y
@@ -196,7 +200,9 @@ const IN_PROGRESS_STATUSES: readonly IncidentStatus[] = [
  * estado a pelo, y vive aquí con el resto de la máquina.
  */
 export function isIncidentInProgress(status: string): boolean {
-  return IN_PROGRESS_STATUSES.some((inProgress) => inProgress === status);
+  return IN_PROGRESS_INCIDENT_STATUSES.some(
+    (inProgress) => inProgress === status,
+  );
 }
 
 /** ¿Está la incidencia esperando el material de una petición? */

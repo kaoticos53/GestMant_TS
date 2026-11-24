@@ -891,6 +891,7 @@ const schema = defineSchema({
     .index("by_lifecycle_status", ["lifecycle", "status"])
     .index("by_lifecycle_createdAt", ["lifecycle", "createdAt"])
     .index("by_incident", ["incidentId"])
+    .index("by_equipment", ["equipmentId"])
     .index("by_requester", ["requesterId"])
     // La referencia ordenada como se escribe, que es como se numera la serie:
     // la más alta ya repartida está al final (`lib/references`).

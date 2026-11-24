@@ -269,4 +269,240 @@ describe("equipos: la descripción es la nota del equipo", () => {
       "Ya existe un equipo con el código EQ-555.",
     );
   });
+
+  test("create y update vinculan incidencias sin equipo y no tocan las ya vinculadas ni retiradas", async () => {
+    const { t, authed } = await authedTest("admin");
+    const now = Date.now();
+    const otroEqId = await authed.mutation(api.equipment.create, {
+      code: "EQ-700",
+      name: "Monitor referencia",
+      model: "PVM-1741",
+    });
+
+    const incPorSerieId = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-0701",
+        reporterName: "Laura",
+        description: "Sin imagen",
+        model: "Otro modelo",
+        serialNumber: "SN-XYZ-99",
+        reportedAt: now,
+        status: "reported",
+        history: [{ status: "reported", at: now, by: "Laura" }],
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const incPorModeloId = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-0702",
+        reporterName: "Laura",
+        description: "Botón atascado",
+        model: "HDC-4300",
+        reportedAt: now,
+        status: "reported",
+        history: [{ status: "reported", at: now, by: "Laura" }],
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const incYaVinculadaId = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-0703",
+        reporterName: "Laura",
+        description: "Ya vinculada",
+        model: "HDC-4300",
+        equipmentId: otroEqId,
+        reportedAt: now,
+        status: "reported",
+        history: [{ status: "reported", at: now, by: "Laura" }],
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const incRetiradaId = await t.run((ctx) =>
+      ctx.db.insert("incidents", {
+        reference: "INC-0704",
+        reporterName: "Laura",
+        description: "Retirada",
+        model: "HDC-4300",
+        deletedAt: now,
+        reportedAt: now,
+        status: "reported",
+        history: [{ status: "reported", at: now, by: "Laura" }],
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    const nuevoEqId = await authed.mutation(api.equipment.create, {
+      code: "EQ-701",
+      name: "Cámara 4K",
+      model: "HDC-4300",
+      serialNumber: "SN-TEMP",
+    });
+
+    expect(
+      (await t.run((ctx) => ctx.db.get(incPorModeloId)))?.equipmentId,
+    ).toBe(nuevoEqId);
+    expect(
+      (await t.run((ctx) => ctx.db.get(incYaVinculadaId)))?.equipmentId,
+    ).toBe(otroEqId);
+    expect(
+      (await t.run((ctx) => ctx.db.get(incRetiradaId)))?.equipmentId,
+    ).toBeUndefined();
+    expect(
+      (await t.run((ctx) => ctx.db.get(incPorSerieId)))?.equipmentId,
+    ).toBeUndefined();
+
+    // Al actualizar el número de serie, enlaza la incidencia pendiente por serie
+    await authed.mutation(api.equipment.update, {
+      id: nuevoEqId,
+      code: "EQ-701",
+      name: "Cámara 4K",
+      model: "HDC-4300",
+      serialNumber: "SN-XYZ-99",
+    });
+    expect(
+      (await t.run((ctx) => ctx.db.get(incPorSerieId)))?.equipmentId,
+    ).toBe(nuevoEqId);
+  });
+
+  test("remove desvincula solo las peticiones de repuestos del equipo borrado", async () => {
+    const { t, authed } = await authedTest("admin");
+    const now = Date.now();
+    const eqBorrado = await authed.mutation(api.equipment.create, {
+      code: "EQ-801",
+      name: "Grabador A",
+      model: "Ki Pro Ultra",
+    });
+    const eqConservado = await authed.mutation(api.equipment.create, {
+      code: "EQ-802",
+      name: "Grabador B",
+      model: "Ki Pro Ultra",
+    });
+
+    const reqBorrada = await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0801",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipmentId: eqBorrado,
+        equipment: "Grabador A Ki Pro Ultra",
+        lines: [],
+        createdAt: now,
+      }),
+    );
+    const reqAjena = await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0802",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipmentId: eqConservado,
+        equipment: "Grabador B Ki Pro Ultra",
+        lines: [],
+        createdAt: now,
+      }),
+    );
+
+    await authed.mutation(api.equipment.remove, { id: eqBorrado });
+
+    expect((await t.run((ctx) => ctx.db.get(reqBorrada)))?.equipmentId).toBeUndefined();
+    expect((await t.run((ctx) => ctx.db.get(reqAjena)))?.equipmentId).toBe(
+      eqConservado,
+    );
+  });
+
+  test("relatedSummary devuelve repuestos compatibles y peticiones propias o de texto libre sin mezclar otro equipo", async () => {
+    const { t, authed } = await authedTest("admin");
+    const now = Date.now();
+
+    const eqPrincipal = await authed.mutation(api.equipment.create, {
+      code: "EQ-901",
+      name: "Consola Mezcla 1",
+      model: "QL5",
+    });
+    const eqHermano = await authed.mutation(api.equipment.create, {
+      code: "EQ-902",
+      name: "Consola Mezcla 2",
+      model: "QL5",
+    });
+    const eqDoc = await t.run((ctx) => ctx.db.get(eqPrincipal));
+    expect(eqDoc?.modelId).toBeDefined();
+
+    const partCompatibleId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "FAD-QL5",
+        name: "Fader motorizado QL5",
+        category: "Audio",
+        unit: "ud",
+        stock: 4,
+        minStock: 1,
+        compatibleModels: [eqDoc!.modelId!],
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    const reqPropia = await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0901",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipmentId: eqPrincipal,
+        equipment: "Consola Mezcla 1 QL5",
+        lines: [],
+        createdAt: now - 3000,
+      }),
+    );
+    const reqTextoLibre = await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0902",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipment: "Consola QL5 de plató",
+        lines: [],
+        createdAt: now - 2000,
+      }),
+    );
+    // Vinculada explícitamente a otro equipo del mismo modelo: no debe colarse
+    await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0903",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipmentId: eqHermano,
+        equipment: "Consola Mezcla 2 QL5",
+        lines: [],
+        createdAt: now - 1000,
+      }),
+    );
+    // Petición retirada: excluida
+    await t.run((ctx) =>
+      ctx.db.insert("partRequests", {
+        reference: "PET-0904",
+        requesterName: "Teo",
+        priority: "normal",
+        status: "pending",
+        equipmentId: eqPrincipal,
+        deletedAt: now,
+        lines: [],
+        createdAt: now,
+      }),
+    );
+
+    const summary = await authed.query(api.equipment.relatedSummary, {
+      equipmentId: eqPrincipal,
+    });
+    expect(summary).not.toBeNull();
+    expect(summary!.compatible.map((p) => p._id)).toEqual([partCompatibleId]);
+    expect(summary!.requests.map((r) => r._id).sort()).toEqual(
+      [reqPropia, reqTextoLibre].sort(),
+    );
+  });
 });

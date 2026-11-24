@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   equipmentRecord,
   equipmentRecordPdfFilename,
+  nextFreeEquipmentCodeFromExisting,
+  parseEquipmentCodeNumber,
   type EquipmentRecordInput,
   type EquipmentRecordIntervention,
   type EquipmentRecordRequest,
@@ -453,5 +455,25 @@ describe("la ficha del equipo compuesta en PDF", () => {
     expect(texto).toContain("Sustitución del cable de cámara");
     // Y el pie, que es lo que hace que las hojas sueltas se puedan ordenar.
     expect(texto).toContain("Ficha del equipo «Cámara de estudio HDC-3500»");
+  });
+});
+
+describe("nextFreeEquipmentCodeFromExisting", () => {
+  test("devuelve EQ-001 cuando no hay equipos previos", () => {
+    expect(parseEquipmentCodeNumber("EQ-001")).toBe(1);
+    expect(parseEquipmentCodeNumber("CAM-99")).toBeNull();
+    expect(nextFreeEquipmentCodeFromExisting([])).toBe("EQ-001");
+  });
+
+  test("incrementa en base numérica ignorando el orden lexicográfico y códigos ajenos", () => {
+    expect(nextFreeEquipmentCodeFromExisting(["EQ-001", "EQ-002"])).toBe(
+      "EQ-003",
+    );
+    expect(nextFreeEquipmentCodeFromExisting(["EQ-99", "EQ-1000"])).toBe(
+      "EQ-1001",
+    );
+    expect(
+      nextFreeEquipmentCodeFromExisting([undefined, null, "CAM-99", "eq-005"]),
+    ).toBe("EQ-006");
   });
 });

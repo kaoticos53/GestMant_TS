@@ -52,6 +52,10 @@ Gestiona el parque de equipos físicos del taller (`EQ-XXX`), su catálogo maest
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Validación de duplicados en `equipmentModels` y herramienta de consolidación `backfillModelsFromEquipment`.
+- **RNF-002 (Consultas indexadas y asignación de código):**
+  - `equipment.create`/`update` pre-filtra incidencias sin equipo mediante el índice `by_equipment_and_created` (`equipmentId === undefined`) y el predicado puro `incidentCouldMatchEquipment` antes de leer el inventario completo.
+  - `equipment.remove` y `equipment.relatedSummary` usan el índice `partRequests.by_equipment`.
+  - `generateFreeEquipmentCode` consulta únicamente el rango `EQ-` en `equipment.by_code` y calcula el siguiente correlativo libre en $O(n)$ mediante `nextFreeEquipmentCodeFromExisting`.
 
 ---
 

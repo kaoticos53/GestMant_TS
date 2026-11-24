@@ -453,3 +453,48 @@ export function equipmentRecord(
   // hoja casi en blanco cuando el listado llena la primera.
   return `${blocks.join("\n\n")}\n`;
 }
+
+/**
+ * Extrae el correlativo numérico de un código estándar de equipo (`EQ-001` → `1`),
+ * o devuelve `null` si no sigue el formato `EQ-<dígitos>`.
+ */
+export function parseEquipmentCodeNumber(
+  code: string | undefined | null,
+): number | null {
+  if (!code) return null;
+  const match = /^EQ-(\d+)$/i.exec(code.trim());
+  if (!match) return null;
+  const num = Number.parseInt(match[1], 10);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+}
+
+/**
+ * Calcula en una sola pasada O(n) el siguiente código correlativo libre `EQ-XXX`
+ * a partir de los códigos existentes, evitando colisiones por padding o huecos.
+ */
+export function nextFreeEquipmentCodeFromExisting(
+  codes: Iterable<string | undefined | null>,
+): string {
+  const existing = new Set<string>();
+  let highest = 0;
+
+  for (const raw of codes) {
+    if (!raw) continue;
+    const normalized = raw.trim().toUpperCase();
+    if (!normalized) continue;
+    existing.add(normalized);
+    const num = parseEquipmentCodeNumber(normalized);
+    if (num !== null && num > highest) {
+      highest = num;
+    }
+  }
+
+  let candidateNum = highest + 1;
+  while (true) {
+    const candidate = `EQ-${String(candidateNum).padStart(3, "0")}`;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
+    candidateNum += 1;
+  }
+}

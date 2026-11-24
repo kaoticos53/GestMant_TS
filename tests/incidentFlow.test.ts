@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { IncidentStatus } from "../src/convex/schema";
 import {
   INCIDENT_STEP_LABELS,
+  STALE_WORK_CANDIDATE_STATUSES,
   blockedIncidentSteps,
   canAdvanceIncident,
   canChangeWorkshopTechnician,
@@ -483,5 +484,22 @@ describe("el sitio donde está el equipo — lo que el estado no dice", () => {
       resolved: 1,
       unresolved: 0,
     });
+  });
+
+  test("STALE_WORK_CANDIDATE_STATUSES coincide exactamente con los estados en curso", () => {
+    expect(STALE_WORK_CANDIDATE_STATUSES).toEqual([
+      "assigned",
+      "workshop",
+      "waitingParts",
+      "repairing",
+      "externalRepair",
+    ]);
+    for (const status of STALE_WORK_CANDIDATE_STATUSES) {
+      expect(isIncidentInProgress(status), status).toBe(true);
+    }
+    for (const status of ["reported", "resolved", "unresolved"] as const) {
+      expect(STALE_WORK_CANDIDATE_STATUSES).not.toContain(status);
+      expect(isIncidentInProgress(status), status).toBe(false);
+    }
   });
 });

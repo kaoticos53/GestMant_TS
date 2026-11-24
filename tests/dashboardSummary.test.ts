@@ -8,7 +8,7 @@
 import { backend } from "./backend";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
-import { api } from "../src/convex/_generated/api";
+import { api, internal } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 
 type Test = ReturnType<typeof convexTest>;
@@ -473,5 +473,106 @@ describe("el contador del armazón", () => {
         staleWork: [],
       });
     }
+  });
+
+  test("staleWork y contadores coinciden con y sin dashboardStats, incluyendo legacy y todos los estados en curso", async () => {
+    const mundo = await taller();
+    const { t, tecnico } = mundo;
+    const now = Date.now();
+
+    const insertarCaso = (fields: {
+      reference: string;
+      status:
+        | "reported"
+        | "assigned"
+        | "workshop"
+        | "waitingParts"
+        | "repairing"
+        | "externalRepair"
+        | "resolved"
+        | "unresolved";
+      daysAgo: number;
+      lifecycle?: "active" | "archived" | "trashed";
+      archivedAt?: number;
+      deletedAt?: number;
+    }) =>
+      t.run((ctx) =>
+        ctx.db.insert("incidents", {
+          reference: fields.reference,
+          reporterName: "Laura Peña",
+          description: "Caso de prueba.",
+          reportedAt: now - (fields.daysAgo + 1) * DAY,
+          status: fields.status,
+          assigneeId: tecnico,
+          assigneeName: "Teo Técnico",
+          ...(fields.lifecycle ? { lifecycle: fields.lifecycle } : {}),
+          ...(fields.archivedAt ? { archivedAt: fields.archivedAt } : {}),
+          ...(fields.deletedAt ? { deletedAt: fields.deletedAt } : {}),
+          history: [
+            {
+              status: "reported" as const,
+              at: now - (fields.daysAgo + 1) * DAY,
+              by: "Laura Peña",
+            },
+            {
+              status: "assigned" as const,
+              at: now - fields.daysAgo * DAY,
+              by: "Elena Vidal",
+            },
+          ],
+          createdAt: now - (fields.daysAgo + 1) * DAY,
+          updatedAt: now - fields.daysAgo * DAY,
+        }),
+      );
+
+    // Casos activos (con lifecycle explícito y legacy sin lifecycle) en los 5 estados candidatos
+    await insertarCaso({ reference: "INC-0101", status: "assigned", daysAgo: 9, lifecycle: "active" });
+    await insertarCaso({ reference: "INC-0102", status: "workshop", daysAgo: 8 });
+    await insertarCaso({ reference: "INC-0103", status: "waitingParts", daysAgo: 7, lifecycle: "active" });
+    await insertarCaso({ reference: "INC-0104", status: "repairing", daysAgo: 6 });
+    await insertarCaso({ reference: "INC-0105", status: "externalRepair", daysAgo: 5, lifecycle: "active" });
+
+    // Casos excluidos: reported, resolved, unresolved, archived y trashed
+    await insertarCaso({ reference: "INC-0106", status: "reported", daysAgo: 10, lifecycle: "active" });
+    await insertarCaso({ reference: "INC-0107", status: "resolved", daysAgo: 10, lifecycle: "active" });
+    await insertarCaso({ reference: "INC-0108", status: "unresolved", daysAgo: 10 });
+    await insertarCaso({
+      reference: "INC-0109",
+      status: "assigned",
+      daysAgo: 10,
+      lifecycle: "archived",
+      archivedAt: now - DAY,
+    });
+    await insertarCaso({
+      reference: "INC-0110",
+      status: "assigned",
+      daysAgo: 10,
+      lifecycle: "trashed",
+      deletedAt: now - DAY,
+    });
+
+    const sinStats = await mundo.gestora.query(api.dashboard.summary, {
+      marginDays: 3,
+    });
+    expect(sinStats.incidents.reported).toBe(1);
+    expect(
+      sinStats.staleWork.map((entry) => [
+        entry.incident.reference,
+        entry.incident.status,
+        entry.days,
+      ]),
+    ).toEqual([
+      ["INC-0101", "assigned", 9],
+      ["INC-0102", "workshop", 8],
+      ["INC-0103", "waitingParts", 7],
+      ["INC-0104", "repairing", 6],
+      ["INC-0105", "externalRepair", 5],
+    ]);
+
+    await t.mutation(internal.dashboard.rebuildStats, {});
+    const conStats = await mundo.gestora.query(api.dashboard.summary, {
+      marginDays: 3,
+    });
+    expect(conStats).toEqual(sinStats);
   });
 });

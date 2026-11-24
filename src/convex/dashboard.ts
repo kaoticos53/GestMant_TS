@@ -3,6 +3,7 @@ import {
   buildWorkshopAnalytics,
   type WorkshopAnalyticsResult,
 } from "../lib/analytics";
+import { STALE_WORK_CANDIDATE_STATUSES } from "../lib/incidentFlow";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   stockState,
@@ -103,21 +104,52 @@ export const summary = query({
     const me = await memberOrNull(ctx);
     if (me === null) return emptySummary();
 
-    // --- Incidencias: la cola viva, que es lo que mira el panel -------------
-    // Lo retirado no está en ninguna cara de la cola (vive en la papelera) y lo
-    // archivado es del apunte histórico: ni una cosa ni otra cuentan aquí.
-    const incidents = (
-      await ctx.db.query("incidents").withIndex("by_createdAt").collect()
-    ).filter(
-      (row) => row.deletedAt === undefined && row.archivedAt === undefined,
-    );
-    const reported = incidents.filter(
-      (row) => row.status === INCIDENT_STATUSES.REPORTED,
-    ).length;
+    const marginDays = args.marginDays ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
+
+    const [
+      cachedStats,
+      canInventory,
+      canEquipment,
+      canManuals,
+      canPurchasing,
+      candidateGroups,
+    ] = await Promise.all([
+      getGlobalDashboardStats(ctx),
+      hasAnyCapability(ctx, me, ["viewInventory", "lookupCatalog"]),
+      hasAnyCapability(ctx, me, [
+        "viewEquipment",
+        "lookupCatalog",
+        "lookupEquipment",
+      ]),
+      hasCapability(ctx, me, "viewManuals"),
+      hasAnyCapability(ctx, me, ["viewPurchasing", "managePurchasing"]),
+      // Trabajo en curso sin constancia: leemos únicamente las incidencias vivas
+      // (activas o legacy sin lifecycle) en estados en curso, evitando escanear
+      // incidencias notificadas, cerradas, archivadas o retiradas.
+      Promise.all(
+        STALE_WORK_CANDIDATE_STATUSES.flatMap((status) => [
+          ctx.db
+            .query("incidents")
+            .withIndex("by_lifecycle_status", (q) =>
+              q.eq("lifecycle", "active").eq("status", status),
+            )
+            .collect(),
+          ctx.db
+            .query("incidents")
+            .withIndex("by_lifecycle_status", (q) =>
+              q.eq("lifecycle", undefined).eq("status", status),
+            )
+            .collect(),
+        ]),
+      ),
+    ]);
 
     // Trabajo en curso sin constancia, de lo más parado a lo menos.
-    const marginDays = args.marginDays ?? DEFAULT_WORK_WITHOUT_TRACE_DAYS;
-    const staleWork: StaleWorkEntry[] = incidents
+    const staleWork: StaleWorkEntry[] = candidateGroups
+      .flat()
+      .filter(
+        (row) => row.deletedAt === undefined && row.archivedAt === undefined,
+      )
       .flatMap((incident) => {
         const days = workWithoutTraceDays(incident, undefined, marginDays);
         return days === null
@@ -135,24 +167,6 @@ export const summary = query({
             ];
       })
       .sort((a, b) => b.days - a.days);
-
-    const [
-      cachedStats,
-      canInventory,
-      canEquipment,
-      canManuals,
-      canPurchasing,
-    ] = await Promise.all([
-      getGlobalDashboardStats(ctx),
-      hasAnyCapability(ctx, me, ["viewInventory", "lookupCatalog"]),
-      hasAnyCapability(ctx, me, [
-        "viewEquipment",
-        "lookupCatalog",
-        "lookupEquipment",
-      ]),
-      hasCapability(ctx, me, "viewManuals"),
-      hasAnyCapability(ctx, me, ["viewPurchasing", "managePurchasing"]),
-    ]);
 
     if (cachedStats !== null) {
       return {
@@ -177,36 +191,71 @@ export const summary = query({
       };
     }
 
-    // --- Peticiones: la cola viva (el archivo tiene su propia pantalla) -----
-    const requests = (
-      await ctx.db.query("partRequests").withIndex("by_createdAt").collect()
-    ).filter(
+    // Ruta fallback cuando `dashboardStats` aún no existe: consultamos las
+    // colas vivas usando índices y capacidades en paralelo.
+    const [
+      reportedActive,
+      reportedLegacy,
+      requestsActive,
+      requestsLegacy,
+      parts,
+      equipment,
+      manuals,
+      purchasing,
+    ] = await Promise.all([
+      ctx.db
+        .query("incidents")
+        .withIndex("by_lifecycle_status", (q) =>
+          q.eq("lifecycle", "active").eq("status", INCIDENT_STATUSES.REPORTED),
+        )
+        .collect(),
+      ctx.db
+        .query("incidents")
+        .withIndex("by_lifecycle_status", (q) =>
+          q
+            .eq("lifecycle", undefined)
+            .eq("status", INCIDENT_STATUSES.REPORTED),
+        )
+        .collect(),
+      ctx.db
+        .query("partRequests")
+        .withIndex("by_lifecycle_createdAt", (q) =>
+          q.eq("lifecycle", "active"),
+        )
+        .collect(),
+      ctx.db
+        .query("partRequests")
+        .withIndex("by_lifecycle_createdAt", (q) =>
+          q.eq("lifecycle", undefined),
+        )
+        .collect(),
+      canInventory
+        ? ctx.db.query("spareParts").withIndex("by_name").collect()
+        : Promise.resolve([]),
+      canEquipment
+        ? ctx.db.query("equipment").collect()
+        : Promise.resolve([]),
+      canManuals ? ctx.db.query("manuals").collect() : Promise.resolve([]),
+      canPurchasing
+        ? ctx.db
+            .query("purchaseRequests")
+            .withIndex("by_status", (q) =>
+              q.eq("status", PURCHASE_REQUEST_STATUSES.PENDING),
+            )
+            .collect()
+        : Promise.resolve([]),
+    ]);
+
+    const reported = [...reportedActive, ...reportedLegacy].filter(
+      (row) => row.deletedAt === undefined && row.archivedAt === undefined,
+    ).length;
+
+    const requests = [...requestsActive, ...requestsLegacy].filter(
       (row) => row.deletedAt === undefined && row.archivedAt === undefined,
     );
     const pending = requests.filter(
       (row) => row.status === REQUEST_STATUSES.PENDING,
     );
-
-    // --- Repuestos: el catálogo, con la misma regla que su filtro -----------
-    const parts = canInventory
-      ? await ctx.db.query("spareParts").withIndex("by_name").collect()
-      : [];
-
-    // --- Equipos y manuales: el total, que es lo que cuentan sus píldoras ---
-    const equipment = canEquipment
-      ? await ctx.db.query("equipment").collect()
-      : [];
-    const manuals = canManuals ? await ctx.db.query("manuals").collect() : [];
-
-    // --- Compras: lo que espera a que alguien monte la orden ----------------
-    const purchasing = canPurchasing
-      ? await ctx.db
-          .query("purchaseRequests")
-          .withIndex("by_status", (q) =>
-            q.eq("status", PURCHASE_REQUEST_STATUSES.PENDING),
-          )
-          .collect()
-      : [];
 
     return {
       incidents: { reported },
