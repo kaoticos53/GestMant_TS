@@ -1518,4 +1518,64 @@ describe("el aviso a quien notificó — sale por el servicio configurado", () =
       }
     }
   });
+
+  test("el buzón interno (sandbox) guarda todos los envíos en BD sin salir a la red", async () => {
+    const { admin, manager } = await setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await admin.mutation(api.mailSettings.save, {
+      provider: "sandbox",
+      enabled: true,
+      fromName: "Taller Pruebas",
+      fromEmail: "",
+      replyTo: "soporte@taller.es",
+      bcc: "auditoria@taller.es",
+      domain: "",
+      relayUrl: "",
+    });
+
+    const sent = await admin.action(api.mailSettings.sendTest, {
+      to: "destinatario@taller.es",
+    });
+    expect(sent.ok).toBe(true);
+    expect(sent.provider).toBe("sandbox");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const inbox = await admin.query(api.mailSandbox.list, {});
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      origin: "prueba",
+      from: "Taller Pruebas <sandbox@pulso-taller.local>",
+      to: ["destinatario@taller.es"],
+      bcc: ["auditoria@taller.es"],
+      replyTo: "soporte@taller.es",
+      subject: "Prueba de correo · Pulso Taller",
+    });
+    expect(inbox[0].html).toContain("Ajustes del taller");
+    expect(inbox[0].text).toContain("Buzón interno (base de datos)");
+
+    // También queda apuntado en el histórico de envíos como entregado.
+    const log = await admin.query(api.mailLog.history, {});
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      provider: "sandbox",
+      ok: true,
+      to: ["destinatario@taller.es"],
+    });
+
+    // Solo el administrador puede consultar o vaciar el buzón interno.
+    await expectConvexError(
+      manager.query(api.mailSandbox.list, {}),
+      "Solo el administrador",
+    );
+    await expectConvexError(
+      manager.mutation(api.mailSandbox.clear, {}),
+      "Solo el administrador",
+    );
+
+    const cleared = await admin.mutation(api.mailSandbox.clear, {});
+    expect(cleared.deleted).toBe(1);
+    expect(await admin.query(api.mailSandbox.list, {})).toHaveLength(0);
+  });
 });

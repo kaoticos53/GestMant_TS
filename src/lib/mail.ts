@@ -29,6 +29,7 @@ export const MAIL_PROVIDERS = [
   "relay",
   "gmail",
   "ethereal",
+  "sandbox",
 ] as const;
 
 export type MailProvider = (typeof MAIL_PROVIDERS)[number];
@@ -165,6 +166,17 @@ export const MAIL_PROVIDER_META: Record<MailProvider, MailProviderMeta> = {
     userLabel: "Buzón de pruebas",
     secretLabel: "Contraseña del buzón",
   },
+  sandbox: {
+    id: "sandbox",
+    label: "Buzón interno (base de datos)",
+    summary:
+      "Guarda todos los correos en la base de datos sin enviarlos fuera. Ideal para pruebas y depuración.",
+    apiKeyEnv: null,
+    fields: [],
+    smtp: null,
+    userLabel: null,
+    secretLabel: null,
+  },
 };
 
 /** El catálogo como lista, en el orden en que se enseña. */
@@ -194,11 +206,11 @@ export function mailSmtpPreset(provider: MailProvider): MailSmtpPreset | null {
   return MAIL_PROVIDER_META[provider].smtp;
 }
 
-/** ¿Es un servicio con API HTTP? La pasarela va por su SDK, no por esta tabla. */
+/** ¿Es un servicio con API HTTP? La pasarela y el buzón interno no usan esta tabla. */
 export function isHttpMailProvider(
   provider: MailProvider,
-): provider is Exclude<MailProvider, "vly"> {
-  return provider !== "vly";
+): provider is Exclude<MailProvider, "vly" | "sandbox"> {
+  return provider !== "vly" && provider !== "sandbox";
 }
 
 /** Lo que se guarda en los ajustes del taller (`mailSettings`). */
@@ -389,9 +401,9 @@ export function validateMailSettings(input: {
       error: "El nombre del remitente no puede llevar saltos de línea.",
     };
   }
-  // El remitente es obligatorio en los servicios propios: sin él, el correo sale
+  // El remitente es obligatorio en los servicios externos: sin él, el correo sale
   // sin quién lo firma y la mitad de los buzones lo tiran.
-  if (provider !== "vly" && fromEmail === "") {
+  if (provider !== "vly" && provider !== "sandbox" && fromEmail === "") {
     return {
       ok: false,
       error:
@@ -533,6 +545,9 @@ export function mailConfigBlocker(transport: {
       ? `El deployment no tiene ${meta.apiKeyEnv}: el correo del taller no se puede enviar todavía.`
       : null;
   }
+  if (transport.provider === "sandbox") {
+    return null;
+  }
   if (transport.fromEmail.trim() === "") {
     return "No hay correo de remitente configurado: ponlo en los ajustes del correo.";
   }
@@ -670,6 +685,7 @@ export function mailRelayFailureHint(
  * que se poda solo al apuntar y se queda con los últimos.
  */
 export const MAIL_LOG_LIMIT = 200;
+export const MAIL_SANDBOX_LIMIT = 200;
 
 /** De dónde sale un envío, para leer el histórico de un vistazo. */
 export const MAIL_ORIGINS = [
@@ -721,6 +737,13 @@ export function buildMailRequest(
     return {
       ok: false,
       error: "La pasarela de la plataforma no se usa por esta puerta.",
+    };
+  }
+  if (provider === "sandbox") {
+    return {
+      ok: false,
+      error:
+        "El buzón interno guarda los correos en la base de datos y no realiza peticiones HTTP.",
     };
   }
   const blocker = mailConfigBlocker(transport);

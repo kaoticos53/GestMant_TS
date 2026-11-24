@@ -1,6 +1,7 @@
 import { createVlyIntegrations } from "@vly-ai/integrations";
 import {
   buildMailRequest,
+  formatSender,
   mailProviderLabel,
   mailRelayFailureHint,
   normalizeRecipients,
@@ -153,7 +154,37 @@ export async function deliverMailLogged(
   relatedId?: string,
   options?: { skipOutbox?: boolean },
 ): Promise<MailDelivery> {
-  const result = await deliverMail(config, message, what);
+  const bcc = config.bcc.trim().toLowerCase();
+  const normalizedTo = normalizeRecipients(message.to);
+
+  let result: MailDelivery;
+  if (config.enabled && config.provider === "sandbox") {
+    if (normalizedTo.length === 0) {
+      result = { ok: false, error: "El correo no tiene destinatarios." };
+    } else {
+      const from = formatSender({
+        fromName: config.fromName.trim() || "Pulso Taller",
+        fromEmail: config.fromEmail.trim() || "sandbox@pulso-taller.local",
+      });
+      const replyTo = config.replyTo.trim();
+      await ctx.runMutation(internal.mailSandbox.record, {
+        what,
+        origin,
+        from,
+        to: normalizedTo,
+        bcc: bcc === "" ? [] : [bcc],
+        ...(replyTo === "" ? {} : { replyTo }),
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+        ...(relatedId === undefined ? {} : { relatedId }),
+      });
+      result = { ok: true };
+    }
+  } else {
+    result = await deliverMail(config, message, what);
+  }
+
   const rawError = result.error;
   const exposedError =
     !result.ok && rawError !== undefined
@@ -169,8 +200,6 @@ export async function deliverMailLogged(
   ) {
     console.error("[MailDeliveryError]", rawError);
   }
-  const bcc = config.bcc.trim().toLowerCase();
-  const normalizedTo = normalizeRecipients(message.to);
   await ctx.runMutation(internal.mailLog.record, {
     what,
     origin,

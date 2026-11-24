@@ -1516,6 +1516,22 @@ const schema = defineSchema({
     relatedId: v.optional(v.string()), // la incidencia, cuando la hay
   }).index("by_at", ["at"]),
 
+  // Buzón interno de pruebas y depuración: guarda el mensaje completo en Convex
+  // cuando el proveedor activo es `sandbox`, sin salir a la red.
+  mailSandbox: defineTable({
+    at: v.number(),
+    what: v.string(),
+    origin: v.string(),
+    from: v.string(),
+    to: v.array(v.string()),
+    bcc: v.array(v.string()),
+    replyTo: v.optional(v.string()),
+    subject: v.string(),
+    text: v.string(),
+    html: v.string(),
+    relatedId: v.optional(v.string()),
+  }).index("by_at", ["at"]),
+
   // Cola de salida para reintentos automáticos y reenvío manual de correos fallidos.
   mailOutbox: defineTable({
     what: v.string(),

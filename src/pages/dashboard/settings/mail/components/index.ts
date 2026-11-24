@@ -1,4 +1,5 @@
 export { MailLogViewer } from "./MailLogViewer";
+export { MailSandboxViewer } from "./MailSandboxViewer";
 export { MailPathStatusBanner } from "./MailPathStatusBanner";
 export { MailProviderSettingsFields } from "./MailProviderSettingsFields";
 export { MailRelayCheckSection } from "./MailRelayCheckSection";

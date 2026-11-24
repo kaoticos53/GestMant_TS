@@ -8,6 +8,7 @@ import {
   MailPathStatusBanner,
   MailProviderSettingsFields,
   MailRelayCheckSection,
+  MailSandboxViewer,
   MailServerHeader,
   MailServerSkeleton,
   MailTestSendSection,
@@ -26,6 +27,7 @@ export function MailServerCard() {
   const history = useQuery(api.mailLog.history, { limit: 20 });
   const listOutbox = api.mailOutbox?.list;
   const outbox = useQuery(listOutbox, listOutbox ? { limit: 30 } : "skip");
+  const listSandbox = api.mailSandbox?.list;
 
   const {
     formData,
@@ -47,6 +49,15 @@ export function MailServerCard() {
     handleSave,
     keyStatus,
   } = useMailServerForm(settings);
+
+  const shouldLoadSandbox = Boolean(
+    listSandbox &&
+      (formData.provider === "sandbox" || settings?.provider === "sandbox"),
+  );
+  const sandboxInbox = useQuery(
+    listSandbox,
+    shouldLoadSandbox ? { limit: 50 } : "skip",
+  );
 
   const {
     checking,
@@ -119,6 +130,8 @@ export function MailServerCard() {
             lastTestTo={settings.lastTestTo}
             lastTestError={settings.lastTestError}
           />
+
+          {shouldLoadSandbox && <MailSandboxViewer inbox={sandboxInbox} />}
 
           <MailLogViewer history={history} outbox={outbox} />
 

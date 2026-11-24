@@ -87,7 +87,9 @@ export function useMailServerForm(settings: MailServerSettingsDoc | undefined) {
       ? "Google no acepta la contraseña de la cuenta: hay que activar la verificación en dos pasos y crear una contraseña de aplicación de 16 letras en la cuenta de Google. El remitente tiene que ser esa misma cuenta, o una dirección que la cuenta tenga verificada, o Google reescribirá la cabecera."
       : formData.provider === "ethereal"
         ? "Ethereal es un buzón de mentira, para probar sin molestar a nadie: se crea una cuenta gratis en ethereal.email y sus mensajes se leen en ethereal.email/messages. Lo que se mande desde aquí no llega a ningún buzón real."
-        : null;
+        : formData.provider === "sandbox"
+          ? "Buzón interno de pruebas: ningún correo sale al exterior. Todos los mensajes enviados por la aplicación se guardan en la base de datos para consultarlos aquí mismo (asunto, destinatarios, texto y HTML)."
+          : null;
 
   const changeProvider = useCallback((next: MailProvider) => {
     setFormData((prev) => {
