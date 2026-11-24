@@ -538,3 +538,10 @@ export function manualCountForEquipment(
   const { assigned, byModel } = manualsForEquipment(manuals, equipment);
   return assigned.length + byModel.length;
 }
+
+/** ¿Falta resolver alguna URL de versión histórica de archivo? */
+export function manualNeedsHistoryUrls(manual: {
+  history?: readonly { file?: unknown; url?: string | null }[];
+}): boolean {
+  return (manual.history ?? []).some((entry) => Boolean(entry.file) && !entry.url);
+}

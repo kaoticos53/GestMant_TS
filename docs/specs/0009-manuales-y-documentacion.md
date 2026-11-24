@@ -46,6 +46,7 @@ Almacena documentación técnica del taller en dos formatos: archivos PDF (`kind
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Los manuales de archivo se descargan o previsualizan de forma segura desde `_storage`.
+- **RNF-002 (Proyección ligera CQRS):** `manuals.list` conserva la `url` del archivo principal para descarga directa en tabla pero omite firmar `history[].url` por defecto (`includeHistoryUrls?: boolean`), mientras que `manuals.detail({ manualId })` resuelve las URLs completas del historial bajo demanda desde `ManualDetailSheet`.
 
 ---
 

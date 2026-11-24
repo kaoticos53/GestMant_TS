@@ -36,7 +36,7 @@ export function ManualsView({
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
 }) {
-  const manuals = useQuery(api.manuals.list) ?? [];
+  const manuals = useQuery(api.manuals.list, {}) ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
 
   const [formTarget, setFormTarget] = useState<{

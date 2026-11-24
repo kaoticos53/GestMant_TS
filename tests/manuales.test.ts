@@ -19,6 +19,7 @@ import {
   manualFileVersions,
   manualHistory,
   manualModels,
+  manualNeedsHistoryUrls,
   manualScopeLabel,
   manualTitleFromFile,
   manualsForEquipment,
@@ -498,11 +499,24 @@ describe("manuales: baja y retirada", () => {
     const [actualizado] = await authed.query(api.manuals.list, {});
     expect(actualizado.fileName).toBe("v2.pdf");
     expect(actualizado.url).toContain("api/storage/");
-    // El PDF sustituido no se borra: queda en el historial y se descarga igual.
-    const versiones = manualFileVersions(actualizado);
-    expect(versiones).toHaveLength(1);
-    expect(versiones[0].file?.fileName).toBe("v1.pdf");
-    expect(versiones[0].url).toContain("api/storage/");
+    // Proyección ligera en list: conserva `url` principal pero omite firmar versiones históricas.
+    const versionesListado = manualFileVersions(actualizado);
+    expect(versionesListado).toHaveLength(1);
+    expect(versionesListado[0].file?.fileName).toBe("v1.pdf");
+    expect(versionesListado[0].url).toBeNull();
+
+    // El PDF sustituido se firma bajo demanda en `manuals.detail` (o con `includeHistoryUrls: true`).
+    const detalle = await authed.query(api.manuals.detail, {
+      manualId: manual._id,
+    });
+    expect(detalle).not.toBeNull();
+    const versionesDetalle = manualFileVersions(detalle!);
+    expect(versionesDetalle[0].url).toContain("api/storage/");
+
+    const [conHistorial] = await authed.query(api.manuals.list, {
+      includeHistoryUrls: true,
+    });
+    expect(manualFileVersions(conHistorial!)[0].url).toContain("api/storage/");
     expect(await t.run((ctx) => ctx.storage.getUrl(primero))).not.toBeNull();
     expect(await t.run((ctx) => ctx.storage.getUrl(segundo))).not.toBeNull();
   });
@@ -598,6 +612,39 @@ describe("manuales: baja y retirada", () => {
     expect(manual.equipmentId).toBeUndefined();
     expect(manual.brand).toBe("Sony");
     expect(manual.model).toBe("HDC-3500");
+  });
+
+  test("manuals.detail respeta permisos y devuelve null sin sesión o para invitado", async () => {
+    const { t, authed } = await authedTest("manager");
+    await authed.mutation(api.manuals.create, {
+      title: "Nota interna",
+      kind: "note",
+      type: "Procedimiento interno",
+      notes: "<p>Detalle</p>",
+    });
+    const [{ _id: id }] = await authed.query(api.manuals.list, {});
+    const guestId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Invitado",
+        email: "guest-detail@taller.es",
+        role: "technician",
+        isAnonymous: true,
+      }),
+    );
+    const guest = t.withIdentity({ subject: `${guestId}|s-g` });
+
+    expect(
+      await t.query(api.manuals.detail, { manualId: id }),
+    ).toBeNull();
+    expect(
+      await guest.query(api.manuals.detail, { manualId: id }),
+    ).toBeNull();
+    const ok = await authed.query(api.manuals.detail, { manualId: id });
+    expect(ok?._id).toBe(id);
+
+    expect(manualNeedsHistoryUrls({ history: [{ file: { storageId: "x" }, url: null }] })).toBe(true);
+    expect(manualNeedsHistoryUrls({ history: [{ file: { storageId: "x" }, url: "https://ok" }] })).toBe(false);
+    expect(manualNeedsHistoryUrls({ history: [{ url: null }] })).toBe(false);
   });
 });
 

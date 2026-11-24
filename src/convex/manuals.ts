@@ -198,41 +198,65 @@ async function validateClassification(
   };
 }
 
+async function canReadManuals(ctx: QueryCtx): Promise<boolean> {
+  const userId = await getAuthUserId(ctx);
+  const me = userId === null ? null : await ctx.db.get(userId);
+  if (!me || me.isAnonymous === true) return false;
+  return await hasCapability(ctx, me, "viewManuals");
+}
+
+async function resolveManualEntry(
+  ctx: QueryCtx,
+  manual: Doc<"manuals">,
+  includeHistoryUrls: boolean,
+) {
+  return {
+    ...manual,
+    url: manual.storageId ? await ctx.storage.getUrl(manual.storageId) : null,
+    history: await Promise.all(
+      (manual.history ?? []).map(async (entry) => ({
+        ...entry,
+        url:
+          includeHistoryUrls && entry.file
+            ? await ctx.storage.getUrl(entry.file.storageId)
+            : null,
+      })),
+    ),
+  };
+}
+
 /**
- * Lista completa de manuales, con la dirección de su archivo y la de cada
- * versión anterior que guarde su historial. Requiere sesión del taller y la
- * capacidad de verlos; para quien no la tiene —o para un invitado— devuelve
- * vacío en vez de un error, porque el panel pide esta lista al montar y no debe
- * tumbarse por un módulo al que no se tiene acceso.
+ * Lista completa de manuales, con la dirección de su archivo principal y las
+ * versiones históricas firmadas solo bajo demanda (`includeHistoryUrls`) para
+ * evitar llamadas N+1 en el listado inicial.
  */
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    const me = userId === null ? null : await ctx.db.get(userId);
-    if (!me || me.isAnonymous === true) return [];
-    if (!(await hasCapability(ctx, me, "viewManuals"))) return [];
+  args: {
+    includeHistoryUrls: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    if (!(await canReadManuals(ctx))) return [];
+    const includeHistoryUrls = args.includeHistoryUrls === true;
     const rows = await ctx.db.query("manuals").collect();
     return await Promise.all(
-      sortManuals(rows).map(async (manual) => ({
-        ...manual,
-        // La dirección se resuelve al vuelo: el archivo sigue siendo del
-        // almacén del taller, no del texto de la ficha. Vale igual para las
-        // versiones anteriores: sustituir un PDF no lo borra, así que se sigue
-        // descargando desde el historial.
-        url: manual.storageId
-          ? await ctx.storage.getUrl(manual.storageId)
-          : null,
-        history: await Promise.all(
-          (manual.history ?? []).map(async (entry) => ({
-            ...entry,
-            url: entry.file
-              ? await ctx.storage.getUrl(entry.file.storageId)
-              : null,
-          })),
-        ),
-      })),
+      sortManuals(rows).map((manual) =>
+        resolveManualEntry(ctx, manual, includeHistoryUrls),
+      ),
     );
+  },
+});
+
+/**
+ * Ficha completa de un manual concreto con todas las URLs firmadas de su
+ * historial de versiones para hidratar `ManualDetailSheet` bajo demanda.
+ */
+export const detail = query({
+  args: { manualId: v.id("manuals") },
+  handler: async (ctx, args) => {
+    if (!(await canReadManuals(ctx))) return null;
+    const manual = await ctx.db.get(args.manualId);
+    if (!manual) return null;
+    return await resolveManualEntry(ctx, manual, true);
   },
 });
 

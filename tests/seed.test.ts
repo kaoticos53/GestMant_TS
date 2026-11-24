@@ -1190,9 +1190,14 @@ describe("los manuales de la muestra", () => {
     if (!manual) throw new Error("Falta el manual de la cámara.");
     expect(manual.kind).toBe("file");
 
+    const detalle = await manager.query(api.manuals.detail, {
+      manualId: manual._id,
+    });
+    if (!detalle) throw new Error("Falta la ficha detallada del manual.");
+
     // La ficha nace con el historial puesto: el alta y el reemplazo que dejó
-    // fuera la primera versión, que se sigue pudiendo descargar.
-    const versiones = manualFileVersions(manual);
+    // fuera la primera versión, que se sigue pudiendo descargar vía detail.
+    const versiones = manualFileVersions(detalle);
     expect(versiones).toHaveLength(1);
     expect(versiones[0].action).toBe("fileReplaced");
     expect(versiones[0].file?.fileName).toBe(

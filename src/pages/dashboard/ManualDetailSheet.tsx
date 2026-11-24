@@ -1,5 +1,8 @@
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
+import { manualNeedsHistoryUrls } from "@/lib/manuals";
 import { getErrorMessage } from "@/lib/workshop";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,13 +30,19 @@ export function ManualDetailSheet({
   equipment,
   onClose,
 }: ManualDetailSheetProps) {
-  const linked = findLinkedEquipment(equipment, manual.equipmentId);
+  const detailed = useQuery(
+    api.manuals.detail,
+    manualNeedsHistoryUrls(manual) ? { manualId: manual._id } : "skip",
+  );
+  const resolvedManual = detailed ?? manual;
+
+  const linked = findLinkedEquipment(equipment, resolvedManual.equipmentId);
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      await exportManualPdf(manual, linked);
+      await exportManualPdf(resolvedManual, linked);
       toast.success("Ficha del manual descargada en PDF");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -45,18 +54,21 @@ export function ManualDetailSheet({
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <ManualDetailHeader manual={manual} linked={linked} />
+        <ManualDetailHeader manual={resolvedManual} linked={linked} />
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
           <ManualExportCard
             exporting={exporting}
             onExport={() => void handleExport()}
           />
-          <ManualFileCard manual={manual} />
-          <ManualNotesCard notes={manual.notes} />
-          <ManualHistoryCard manual={manual} />
+          <ManualFileCard manual={resolvedManual} />
+          <ManualNotesCard notes={resolvedManual.notes} />
+          <ManualHistoryCard manual={resolvedManual} />
         </div>
-        <SharedMailSection destinationType="manual" destinationId={manual._id} />
+        <SharedMailSection
+          destinationType="manual"
+          destinationId={resolvedManual._id}
+        />
       </SheetContent>
     </Sheet>
   );

@@ -49,7 +49,7 @@ export function EquipmentView({
   const requests =
     useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
   const maintenance = useQuery(api.maintenance.list) ?? [];
-  const manuals = useQuery(api.manuals.list) ?? [];
+  const manuals = useQuery(api.manuals.list, {}) ?? [];
 
   const {
     search,

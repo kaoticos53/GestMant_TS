@@ -24,7 +24,7 @@ export function useEquipmentModelsState() {
   const equipment = useMemo(() => equipmentQuery ?? [], [equipmentQuery]);
   const partsQuery = useQuery(api.spareParts.list);
   const parts = useMemo(() => partsQuery ?? [], [partsQuery]);
-  const manualsQuery = useQuery(api.manuals.list);
+  const manualsQuery = useQuery(api.manuals.list, {});
   const manuals = useMemo(() => manualsQuery ?? [], [manualsQuery]);
 
   const removeModel = useMutation(api.equipmentModels.remove);
