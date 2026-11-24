@@ -227,3 +227,56 @@ export function unreadableFilesAlert(input: {
     "Lo puedes revisar en Ajustes del taller.",
   ].join(" ");
 }
+
+/* ------------------------------------------------------------------ */
+/* Clasificación de tablas sin referencias a `_storage`                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Tablas del esquema que nunca almacenan `v.id("_storage")` ni texto rico con
+ * enlaces autoritativos de `/api/storage/`. Se excluyen del barrido de citas
+ * para evitar leer miles de cabeceras de correo, logs o índices derivados.
+ *
+ * Invariante verificada por `tests/storageCleanup.test.ts` contra `schema.ts`:
+ * ninguna tabla aquí listada puede declarar `v.id("_storage")`.
+ * Nota: `backgroundJobs` tiene `resultStorageId` y por tanto NO se incluye aquí.
+ */
+export const NON_STORAGE_TABLES = [
+  // Tablas internas de @convex-dev/auth
+  "authSessions",
+  "authAccounts",
+  "authRefreshTokens",
+  "authVerificationCodes",
+  "authVerifiers",
+  "authRateLimits",
+  // Contadores, control de tasa y estado efímero
+  "referenceCounters",
+  "publicLookupLimits",
+  "otpSendLimits",
+  "publicChallengeUsed",
+  "aiUsageLimits",
+  "publicStats",
+  "dashboardStats",
+  "storageCleanupRuns",
+  "reportUploadPurges",
+  "workshopMaintenance",
+  // Logs e índices derivados sin referencias `_storage`
+  "securityAuditLog",
+  "stockMovements",
+  "equipmentMovements",
+  "mailLog",
+  "aiKnowledgeChunks",
+  // Metadatos y caché externa de Zimbra (los adjuntos viven en `mailAttachments` y `mailShares`)
+  "mailAccounts",
+  "mailFolders",
+  "mailHeaders",
+  "mailBodies",
+  "mailTagRules",
+] as const;
+
+const NON_STORAGE_TABLE_SET: ReadonlySet<string> = new Set(NON_STORAGE_TABLES);
+
+/** ¿Es seguro omitir esta tabla al buscar citas a archivos de `_storage`? */
+export function isNonStorageTable(tableName: string): boolean {
+  return NON_STORAGE_TABLE_SET.has(tableName);
+}

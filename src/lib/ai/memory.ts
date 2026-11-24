@@ -431,3 +431,105 @@ export function compactChatTurns(
     ...recent,
   ];
 }
+
+export interface ExistingMemoryChunk<TId = string> {
+  _id: TId;
+  scope: AiMemoryScope;
+  ownerUserId?: string;
+  module: AiMemoryModule;
+  entityId: string;
+  reference: string;
+  title: string;
+  compactText: string;
+  tags: readonly string[];
+  embedding?: readonly number[];
+}
+
+export interface MemoryChunkDiffPlan<TId = string> {
+  toInsert: MemoryChunkDraft[];
+  toPatch: Array<{
+    id: TId;
+    draft: MemoryChunkDraft;
+    /** `true` si cambió `compactText` y el embedding previo quedó obsoleto. */
+    clearEmbedding: boolean;
+  }>;
+  toDelete: TId[];
+  unchanged: number;
+}
+
+export function memoryChunkKey(chunk: {
+  module: AiMemoryModule;
+  entityId: string;
+}): string {
+  return `${chunk.module}:${chunk.entityId}`;
+}
+
+function sameStringList(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Calcula las operaciones mínimas (altas, actualizaciones y bajas) para
+ * sincronizar fragmentos de memoria IA preservando los embeddings vigentes.
+ */
+export function planMemoryChunkDiff<TId = string>(
+  existing: readonly ExistingMemoryChunk<TId>[],
+  desired: readonly MemoryChunkDraft[],
+): MemoryChunkDiffPlan<TId> {
+  const existingByKey = new Map<string, ExistingMemoryChunk<TId>>();
+  const toDelete: TId[] = [];
+
+  for (const chunk of existing) {
+    const key = memoryChunkKey(chunk);
+    if (existingByKey.has(key)) {
+      toDelete.push(chunk._id);
+    } else {
+      existingByKey.set(key, chunk);
+    }
+  }
+
+  const desiredByKey = new Map<string, MemoryChunkDraft>();
+  for (const draft of desired) {
+    desiredByKey.set(memoryChunkKey(draft), draft);
+  }
+
+  const toInsert: MemoryChunkDraft[] = [];
+  const toPatch: MemoryChunkDiffPlan<TId>["toPatch"] = [];
+  let unchanged = 0;
+
+  for (const [key, draft] of desiredByKey) {
+    const prev = existingByKey.get(key);
+    if (!prev) {
+      toInsert.push(draft);
+      continue;
+    }
+    existingByKey.delete(key);
+
+    const isSame =
+      prev.scope === draft.scope &&
+      prev.reference === draft.reference &&
+      prev.title === draft.title &&
+      prev.compactText === draft.compactText &&
+      sameStringList(prev.tags, draft.tags);
+
+    if (isSame) {
+      unchanged += 1;
+    } else {
+      toPatch.push({
+        id: prev._id,
+        draft,
+        clearEmbedding: prev.compactText !== draft.compactText,
+      });
+    }
+  }
+
+  for (const prev of existingByKey.values()) {
+    toDelete.push(prev._id);
+  }
+
+  return { toInsert, toPatch, toDelete, unchanged };
+}

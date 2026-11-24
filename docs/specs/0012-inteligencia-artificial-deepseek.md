@@ -57,6 +57,7 @@ Dotar al taller de capacidades IA extensibles sobre DeepSeek exclusivamente para
 
 - **RNF-001:** Timeout HTTP de `25_000 ms` por petición en `src/convex/_ai/client.ts` con reintento sin `response_format: json_object` si el endpoint devuelve contenido vacío con `image_url`.
 - **RNF-002:** Panel lateral derecho renderizado vía `createPortal(..., document.body)` (`z-50`), redimensionable (`320px`–`760px`), con renderizador Markdown React seguro (sin `dangerouslySetInnerHTML`) y auto-scroll al final.
+- **RNF-003:** La reindexación de memoria IA (`aiMemory.ts`: `executeWorkshopRebuild` y `executeMailboxRebuild`) aplica reconciliación diferencial pura (`planMemoryChunkDiff` en `src/lib/ai/memory.ts`): solo inserta, parchea o elimina fragmentos con cambios reales, logrando 0 escrituras cuando nada cambia y preservando los vectores `embedding` existentes mientras `compactText` no cambie.
 
 ---
 

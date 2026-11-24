@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
@@ -19,9 +19,11 @@ import {
   formatPurchaseOrderChunk,
   formatRequestChunk,
   formatStockMovementChunk,
+  planMemoryChunkDiff,
   rankMemoryChunks,
   reciprocalRankFusion,
   type AiMemoryModule,
+  type MemoryChunkDraft,
 } from "../lib/ai/memory";
 import { readAccount, requireMailboxMember } from "./mailAccounts";
 import { memberStatus, requireAdmin } from "./permissions";
@@ -56,6 +58,19 @@ export const upsertChunk = internalMutation({
       )
       .first();
 
+    if (
+      existing &&
+      existing.scope === args.scope &&
+      existing.ownerUserId === args.ownerUserId &&
+      existing.reference === args.reference &&
+      existing.title === args.title &&
+      existing.compactText === args.compactText &&
+      existing.tags.length === args.tags.length &&
+      existing.tags.every((tag, idx) => tag === args.tags[idx])
+    ) {
+      return existing._id;
+    }
+
     const record = {
       scope: args.scope,
       ownerUserId: args.ownerUserId,
@@ -69,7 +84,12 @@ export const upsertChunk = internalMutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, record);
+      await ctx.db.patch(existing._id, {
+        ...record,
+        ...(existing.compactText !== args.compactText
+          ? { embedding: undefined }
+          : {}),
+      });
       return existing._id;
     }
     return await ctx.db.insert("aiKnowledgeChunks", record);
@@ -94,22 +114,74 @@ export const removeChunk = internalMutation({
   },
 });
 
-async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
+async function applyMemoryChunkDiff(
+  ctx: MutationCtx,
+  existing: readonly Doc<"aiKnowledgeChunks">[],
+  desired: readonly MemoryChunkDraft[],
+  ownerUserId?: Id<"users">,
+): Promise<number> {
   const now = Date.now();
+  const diff = planMemoryChunkDiff(existing, desired);
 
-  const existing = await ctx.db.query("aiKnowledgeChunks").collect();
-  for (const chunk of existing) {
-    if (chunk.scope === "shared") {
-      await ctx.db.delete(chunk._id);
-    }
+  for (const id of diff.toDelete) {
+    await ctx.db.delete(id);
+  }
+  for (const { id, draft, clearEmbedding } of diff.toPatch) {
+    await ctx.db.patch(id, {
+      ...draft,
+      ...(ownerUserId !== undefined ? { ownerUserId } : {}),
+      updatedAt: now,
+      ...(clearEmbedding ? { embedding: undefined } : {}),
+    });
+  }
+  for (const draft of diff.toInsert) {
+    await ctx.db.insert("aiKnowledgeChunks", {
+      ...draft,
+      ...(ownerUserId !== undefined ? { ownerUserId } : {}),
+      updatedAt: now,
+    });
   }
 
-  let count = 0;
+  return desired.length;
+}
 
-    const incidents = await ctx.db.query("incidents").collect();
-    for (const inc of incidents) {
-      if (inc.deletedAt !== undefined || inc.archivedAt !== undefined) continue;
-      const draft = formatIncidentChunk({
+async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
+  const [
+    existingChunks,
+    incidents,
+    equipment,
+    parts,
+    manuals,
+    requests,
+    orders,
+    stockMovs,
+    eqMovs,
+  ] = await Promise.all([
+    ctx.db.query("aiKnowledgeChunks").collect(),
+    ctx.db.query("incidents").collect(),
+    ctx.db.query("equipment").collect(),
+    ctx.db.query("spareParts").collect(),
+    ctx.db.query("manuals").collect(),
+    ctx.db.query("partRequests").collect(),
+    ctx.db.query("purchaseOrders").collect(),
+    ctx.db
+      .query("stockMovements")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200),
+    ctx.db
+      .query("equipmentMovements")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200),
+  ]);
+
+  const desired: MemoryChunkDraft[] = [];
+
+  for (const inc of incidents) {
+    if (inc.deletedAt !== undefined || inc.archivedAt !== undefined) continue;
+    desired.push(
+      formatIncidentChunk({
         id: inc._id,
         reference: inc.reference,
         status: inc.status,
@@ -118,14 +190,13 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         model: inc.model,
         serialNumber: inc.serialNumber,
         description: inc.description,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const equipment = await ctx.db.query("equipment").collect();
-    for (const eq of equipment) {
-      const draft = formatEquipmentChunk({
+  for (const eq of equipment) {
+    desired.push(
+      formatEquipmentChunk({
         id: eq._id,
         code: eq.code ?? eq._id,
         name: eq.name,
@@ -134,14 +205,13 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         serialNumber: eq.serialNumber,
         location: eq.location,
         decommissionDate: eq.decommissionDate,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const parts = await ctx.db.query("spareParts").collect();
-    for (const part of parts) {
-      const draft = formatPartChunk({
+  for (const part of parts) {
+    desired.push(
+      formatPartChunk({
         id: part._id,
         code: part.code,
         name: part.name,
@@ -152,30 +222,26 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         location: part.location,
         supplier: part.supplier,
         partNumber: part.partNumber,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const manuals = await ctx.db.query("manuals").collect();
-    for (const manual of manuals) {
-      await ctx.db.insert("aiKnowledgeChunks", {
-        scope: "shared",
-        module: "manuals",
-        entityId: manual._id,
-        reference: manual._id,
-        title: manual.title,
-        compactText: `[Manual | ${manual.type}] ${manual.title}${manual.brand ? ` · ${manual.brand}` : ""}${manual.model ? ` ${manual.model}` : ""}`,
-        tags: [manual.type, manual.brand ?? ""].filter(Boolean),
-        updatedAt: now,
-      });
-      count += 1;
-    }
+  for (const manual of manuals) {
+    desired.push({
+      scope: "shared",
+      module: "manuals",
+      entityId: manual._id,
+      reference: manual._id,
+      title: manual.title,
+      compactText: `[Manual | ${manual.type}] ${manual.title}${manual.brand ? ` · ${manual.brand}` : ""}${manual.model ? ` ${manual.model}` : ""}`,
+      tags: [manual.type, manual.brand ?? ""].filter(Boolean),
+    });
+  }
 
-    const requests = await ctx.db.query("partRequests").collect();
-    for (const req of requests) {
-      if (req.deletedAt !== undefined || req.archivedAt !== undefined) continue;
-      const draft = formatRequestChunk({
+  for (const req of requests) {
+    if (req.deletedAt !== undefined || req.archivedAt !== undefined) continue;
+    desired.push(
+      formatRequestChunk({
         id: req._id,
         reference: req.reference,
         status: req.status,
@@ -183,31 +249,25 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         requesterName: req.requesterName,
         equipment: req.equipment,
         linesSummary: req.lines.map((l) => `${l.quantity}x ${l.name}`).join(", "),
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const orders = await ctx.db.query("purchaseOrders").collect();
-    for (const po of orders) {
-      const draft = formatPurchaseOrderChunk({
+  for (const po of orders) {
+    desired.push(
+      formatPurchaseOrderChunk({
         id: po._id,
         reference: po.reference,
         status: po.status,
         supplier: po.supplier,
         linesSummary: po.lines.map((l) => `${l.quantity}x ${l.name}`).join(", "),
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const stockMovs = await ctx.db
-      .query("stockMovements")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(200);
-    for (const mov of stockMovs) {
-      const draft = formatStockMovementChunk({
+  for (const mov of stockMovs) {
+    desired.push(
+      formatStockMovementChunk({
         id: mov._id,
         partCode: mov.partCode,
         partName: mov.partName,
@@ -215,18 +275,13 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         delta: mov.delta,
         actorName: mov.actorName,
         reason: mov.reason,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-    const eqMovs = await ctx.db
-      .query("equipmentMovements")
-      .withIndex("by_createdAt")
-      .order("desc")
-      .take(200);
-    for (const mov of eqMovs) {
-      const draft = formatEquipmentMovementChunk({
+  for (const mov of eqMovs) {
+    desired.push(
+      formatEquipmentMovementChunk({
         id: mov._id,
         equipmentCode: mov.equipmentCode,
         equipmentName: mov.equipmentName,
@@ -235,12 +290,12 @@ async function executeWorkshopRebuild(ctx: MutationCtx): Promise<number> {
         toLocation: mov.toLocation,
         actorName: mov.actorName,
         note: mov.note,
-      });
-      await ctx.db.insert("aiKnowledgeChunks", { ...draft, updatedAt: now });
-      count += 1;
-    }
+      }),
+    );
+  }
 
-  return count;
+  const existingShared = existingChunks.filter((c) => c.scope === "shared");
+  return await applyMemoryChunkDiff(ctx, existingShared, desired);
 }
 
 export const rebuildWorkshopIndex = mutation({
@@ -316,42 +371,35 @@ async function executeMailboxRebuild(
   const account = await readAccount(ctx, userId);
   if (!account) return 0;
 
-  const existing = await ctx.db
-    .query("aiKnowledgeChunks")
-    .withIndex("by_owner", (q) =>
-      q.eq("ownerUserId", userId).eq("module", "mailbox"),
-    )
-    .collect();
-  for (const chunk of existing) {
-    await ctx.db.delete(chunk._id);
-  }
+  const [existing, headers] = await Promise.all([
+    ctx.db
+      .query("aiKnowledgeChunks")
+      .withIndex("by_owner", (q) =>
+        q.eq("ownerUserId", userId).eq("module", "mailbox"),
+      )
+      .collect(),
+    ctx.db
+      .query("mailHeaders")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .take(400),
+  ]);
 
-  const headers = await ctx.db
-    .query("mailHeaders")
-    .withIndex("by_account", (q) => q.eq("accountId", account._id))
-    .take(400);
-
-  const now = Date.now();
-  let indexed = 0;
+  const desired: MemoryChunkDraft[] = [];
   for (const h of headers) {
     if (h.deletedRemoteAt !== undefined) continue;
-    const draft = formatMailChunk({
-      messageId: h.messageId,
-      subject: h.subject,
-      fromName: h.fromName,
-      fromAddress: h.fromAddress,
-      snippet: h.snippet,
-      tags: h.tags,
-    });
-    await ctx.db.insert("aiKnowledgeChunks", {
-      ...draft,
-      ownerUserId: userId,
-      updatedAt: now,
-    });
-    indexed += 1;
+    desired.push(
+      formatMailChunk({
+        messageId: h.messageId,
+        subject: h.subject,
+        fromName: h.fromName,
+        fromAddress: h.fromAddress,
+        snippet: h.snippet,
+        tags: h.tags,
+      }),
+    );
   }
 
-  return indexed;
+  return await applyMemoryChunkDiff(ctx, existing, desired, userId);
 }
 
 export const rebuildMyMailboxIndex = mutation({

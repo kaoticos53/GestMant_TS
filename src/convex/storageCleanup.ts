@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import {
   AUTO_CLEANUP_BY,
   fileReading,
+  isNonStorageTable,
   unreadableFilesAlert,
 } from "../lib/cleanupLog";
 import { internal } from "./_generated/api";
@@ -101,6 +102,7 @@ export const ORPHAN_FILE_RETENTION_MS = 24 * H;
  * archivos de golpe.
  */
 const SWEEP_LIMIT = 100;
+const GET_URL_BATCH_SIZE = 20;
 
 /** Lo que se busca escrito dentro de un texto, y con qué ventanas se busca. */
 type CitationIndex = {
@@ -210,6 +212,7 @@ async function citations(
   const cited = new Set<string>();
   const mentioned = new Set<string>();
   for (const name of Object.keys(schema.tables)) {
+    if (isNonStorageTable(name)) continue;
     const documents = await ctx.db.query(name as TableNames).collect();
     for (const document of documents) {
       collectCitations(document, index, cited, mentioned);
@@ -260,15 +263,23 @@ async function sweepOrphanRows(
   const addresses = new Map<Id<"_storage">, string>();
   const served = new Set<string>();
   let unreadable = 0;
-  for (const file of files) {
-    const address = await ctx.storage.getUrl(file._id);
-    if (address === null) {
-      unreadable += 1;
-      continue;
+  for (let i = 0; i < files.length; i += GET_URL_BATCH_SIZE) {
+    const batch = files.slice(i, i + GET_URL_BATCH_SIZE);
+    const resolved = await Promise.all(
+      batch.map(async (file) => ({
+        id: file._id,
+        address: await ctx.storage.getUrl(file._id),
+      })),
+    );
+    for (const { id, address } of resolved) {
+      if (address === null) {
+        unreadable += 1;
+        continue;
+      }
+      addresses.set(id, address);
+      const token = addressToken(address);
+      if (token !== null) served.add(token);
     }
-    addresses.set(file._id, address);
-    const token = addressToken(address);
-    if (token !== null) served.add(token);
   }
 
   // Lo que la base cita, en una sola vuelta por sus cadenas. Se busca escrito lo

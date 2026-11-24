@@ -48,6 +48,7 @@ Agrupa la administración operativa del taller: listas maestras (`catalogs`), mo
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Los crons de archivo y limpieza se ejecutan escalonadamente entre `03:15` y `05:30` UTC para evitar colisiones.
+- **RNF-002:** `storageCleanup.sweepOrphanRows` resuelve `ctx.storage.getUrl` en lotes paralelos de `20` ficheros y excluye en `citations()` las tablas clasificadas en `NON_STORAGE_TABLES` (`src/lib/cleanupLog.ts`: tablas efímeras, contadores, logs y cachés de buzón/IA que nunca contienen referencias `v.id("_storage")` ni URLs autoritativas), manteniendo siempre todas las tablas con `v.id("_storage")` (incluidas `backgroundJobs`, `mailShares`, `mailAttachments`, `manuals`, `incidents`, `incidentDocuments`, `partRequests`, `receptions`, `reportUploads`, `trashFiles`) y texto rico de usuario.
 
 ---
 

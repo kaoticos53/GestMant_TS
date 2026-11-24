@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { backend } from "./backend";
 import { ConvexError } from "convex/values";
-import { convexTest } from "convex-test";
+import { convexTest } from "convex/test";
 import { describe, expect, test } from "vitest";
+import { NON_STORAGE_TABLES, isNonStorageTable } from "../src/lib/cleanupLog";
 import { api, internal } from "../src/convex/_generated/api";
 import type { Id } from "../src/convex/_generated/dataModel";
 
@@ -764,5 +766,119 @@ describe("la constancia de las purgas a mano", () => {
       tech.query(api.cleanupLog.purges, {}),
       "Solo quien coordina",
     );
+  });
+});
+
+describe("invariante de tablas sin `_storage` y resolución paralela por lotes", () => {
+  test("ninguna tabla en NON_STORAGE_TABLES declara v.id(\"_storage\") y todas las tablas con adjuntos quedan incluidas en el barrido", () => {
+    const schemaSrc = readFileSync(
+      new URL("../src/convex/schema.ts", import.meta.url),
+      "utf8",
+    );
+
+    // Extrae bloques `  tableName: defineTable({...})` de primer nivel
+    const tableBlocks = new Map<string, string>();
+    const headerRe = /^\s{2}([a-zA-Z0-9_]+):\s*defineTable\(/gm;
+    const matches = [...schemaSrc.matchAll(headerRe)];
+    for (let i = 0; i < matches.length; i += 1) {
+      const current = matches[i]!;
+      const next = matches[i + 1];
+      const start = current.index ?? 0;
+      const end = next?.index ?? schemaSrc.length;
+      tableBlocks.set(current[1]!, schemaSrc.slice(start, end));
+    }
+
+    for (const table of NON_STORAGE_TABLES) {
+      const block = tableBlocks.get(table);
+      if (block) {
+        expect(
+          block,
+          `La tabla «${table}» declara _storage y no puede estar en NON_STORAGE_TABLES`,
+        ).not.toContain('v.id("_storage")');
+      }
+    }
+
+    const storageTables = [
+      "incidents",
+      "incidentDocuments",
+      "manuals",
+      "partRequests",
+      "receptions",
+      "reportUploads",
+      "trashFiles",
+      "mailShares",
+      "mailAttachments",
+      "backgroundJobs",
+    ];
+    for (const table of storageTables) {
+      expect(isNonStorageTable(table), table).toBe(false);
+    }
+  });
+
+  test("resuelve más de 20 archivos en lotes paralelos sin perder citas en incidents, mailAttachments ni backgroundJobs", async () => {
+    const { t, coordinator, coordinatorId } = await setup();
+    const incident = await reportedIncident(
+      t,
+      "<p>Revisión con más de 20 archivos en el almacén.</p>",
+    );
+
+    const allIds: Id<"_storage">[] = [];
+    for (let i = 0; i < 25; i += 1) {
+      allIds.push(await file(t));
+    }
+
+    const citedDoc = allIds[0]!;
+    const citedMail = allIds[10]!;
+    const citedJob = allIds[24]!;
+
+    await coordinator.mutation(api.incidents.attachDocument, {
+      incidentId: incident._id,
+      name: "evidencia.png",
+      storageId: citedDoc,
+    });
+
+    await t.run(async (ctx) => {
+      const accId = await ctx.db.insert("mailAccounts", {
+        userId: coordinatorId,
+        email: "coord@taller.es",
+        serverUrl: "https://mail.taller.es",
+        status: "connected",
+        enabled: true,
+        cacheLimitBytes: 1000,
+        cacheRetentionDays: 30,
+        cacheBytes: 0,
+        cacheBodyBytes: 0,
+        cacheAttachmentBytes: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      await ctx.db.insert("mailAttachments", {
+        userId: coordinatorId,
+        accountId: accId,
+        messageId: "m-25",
+        partIndex: 0,
+        contentType: "image/png",
+        size: 16,
+        inline: false,
+        storageId: citedMail,
+        createdAt: Date.now(),
+      });
+      await ctx.db.insert("backgroundJobs", {
+        userId: coordinatorId,
+        type: "backup_export",
+        title: "Copia completa",
+        status: "completed",
+        processed: 1,
+        resultStorageId: citedJob,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    // 25 totales - 3 citados = 22 huérfanos retirados
+    expect(await sweepEverything(t)).toBe(22);
+    expect(await stillStored(t, citedDoc)).toBe(true);
+    expect(await stillStored(t, citedMail)).toBe(true);
+    expect(await stillStored(t, citedJob)).toBe(true);
   });
 });
