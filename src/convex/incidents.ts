@@ -207,12 +207,38 @@ export const reportBatch = action({
   },
 });
 
+async function resolveIncidentDocuments(
+  ctx: QueryCtx,
+  documents: Doc<"incidents">["documents"],
+  signUrls: boolean,
+) {
+  const list = documents ?? [];
+  if (!signUrls) {
+    return list.map((document) => ({
+      ...document,
+      url: null as string | null,
+    }));
+  }
+  return await Promise.all(
+    list.map(async (document) => ({
+      ...document,
+      url: document.storageId
+        ? await ctx.storage.getUrl(document.storageId)
+        : null,
+    })),
+  );
+}
+
 /**
  * Cola de incidencias (más recientes primero). Requiere sesión. Por defecto
- * deja fuera lo archivado: el archivo se consulta aparte.
+ * deja fuera lo archivado y omite firmar URLs de adjuntos (`includeDocumentUrls`)
+ * para evitar llamadas N+1 al montar el módulo.
  */
 export const list = query({
-  args: { includeArchived: v.optional(v.boolean()) },
+  args: {
+    includeArchived: v.optional(v.boolean()),
+    includeDocumentUrls: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     // Invitado o cuenta de baja: vacío en vez de error (el panel pide esta lista
     // al montar). El resto de acciones sigue exigiendo una cuenta (`requireActor`).
@@ -229,20 +255,11 @@ export const list = query({
     const visible = args.includeArchived
       ? live
       : live.filter((item) => item.archivedAt === undefined);
-    // Los documentos del expediente viajan con su enlace ya resuelto: la ficha
-    // los abre tal cual, sin una consulta por documento. Es la misma forma que
-    // devuelven los adjuntos de una petición.
+    const signUrls = args.includeDocumentUrls === true;
     return await Promise.all(
       visible.map(async (item) => ({
         ...item,
-        documents: await Promise.all(
-          (item.documents ?? []).map(async (document) => ({
-            ...document,
-            url: document.storageId
-              ? await ctx.storage.getUrl(document.storageId)
-              : null,
-          })),
-        ),
+        documents: await resolveIncidentDocuments(ctx, item.documents, signUrls),
       })),
     );
   },
@@ -255,6 +272,7 @@ export const paginatedList = query({
   args: {
     paginationOpts: paginationOptsValidator,
     includeArchived: v.optional(v.boolean()),
+    includeDocumentUrls: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     if ((await memberOrNull(ctx)) === null) {
@@ -275,23 +293,34 @@ export const paginatedList = query({
       ? live
       : live.filter((item) => item.archivedAt === undefined);
 
+    const signUrls = args.includeDocumentUrls === true;
     const withDocs = await Promise.all(
       visible.map(async (item) => ({
         ...item,
-        documents: await Promise.all(
-          (item.documents ?? []).map(async (document) => ({
-            ...document,
-            url: document.storageId
-              ? await ctx.storage.getUrl(document.storageId)
-              : null,
-          })),
-        ),
+        documents: await resolveIncidentDocuments(ctx, item.documents, signUrls),
       })),
     );
 
     return {
       ...paginated,
       page: withDocs,
+    };
+  },
+});
+
+/**
+ * Ficha completa de una incidencia concreta con las URLs firmadas de todos sus
+ * documentos del expediente resueltas bajo demanda desde `IncidentDetailSheet`.
+ */
+export const detail = query({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    if ((await memberOrNull(ctx)) === null) return null;
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident || incident.deletedAt !== undefined) return null;
+    return {
+      ...incident,
+      documents: await resolveIncidentDocuments(ctx, incident.documents, true),
     };
   },
 });

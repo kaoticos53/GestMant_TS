@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { JourneySummary } from "@/components/JourneySummary";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import { incidentNeedsDocumentUrls } from "@/lib/incidentFlow";
 import { incidentJourney } from "@/lib/incidentJourney";
 import { ChangePriorityDialog } from "../dialogs/ChangePriorityDialog";
 
@@ -43,6 +46,12 @@ export function IncidentDetailSheet({
   onOpenRequest,
   onClose,
 }: IncidentDetailSheetProps) {
+  const detailed = useQuery(
+    api.incidents.detail,
+    incidentNeedsDocumentUrls(incident) ? { incidentId: incident._id } : "skip",
+  );
+  const resolvedIncident = detailed ?? incident;
+
   const {
     equipmentOpen,
     setEquipmentOpen,
@@ -62,7 +71,7 @@ export function IncidentDetailSheet({
     nowLabel,
     trailPending,
   } = useIncidentDetailState({
-    incident,
+    incident: resolvedIncident,
     equipment,
     requests,
     currentUserId,
@@ -75,7 +84,7 @@ export function IncidentDetailSheet({
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
         <IncidentHeader
-          incident={incident}
+          incident={resolvedIncident}
           statusLabel={statusLabel}
           badgeClassName={status.badgeClassName}
           statusDescription={status.description}
@@ -89,7 +98,7 @@ export function IncidentDetailSheet({
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
           <JourneySummary
             label="Recorrido de la incidencia"
-            stages={incidentJourney(incident.status, {
+            stages={incidentJourney(resolvedIncident.status, {
               inWorkshop,
               archived: derived.archived,
             })}
@@ -101,15 +110,15 @@ export function IncidentDetailSheet({
 
           <IncidentStatusBanners
             withdrawnAt={derived.withdrawnAt}
-            deletedBy={incident.deletedBy}
-            deletedReason={incident.deletedReason}
+            deletedBy={resolvedIncident.deletedBy}
+            deletedReason={resolvedIncident.deletedReason}
             archivedAt={derived.archivedAt}
             withdrawn={derived.withdrawn}
           />
 
           {/* Datos del equipo, notificación y SAT externo */}
           <IncidentEquipmentCard
-            incident={incident}
+            incident={resolvedIncident}
             linkedEquipment={linkedEquipment}
             canWork={derived.canWork}
             inWorkshop={inWorkshop}
@@ -119,18 +128,18 @@ export function IncidentDetailSheet({
 
           {/* Peticiones de material */}
           <IncidentPartRequestsCard
-            incident={incident}
+            incident={resolvedIncident}
             linkedRequests={linkedRequests}
             canOpenRequests={canOpenRequests}
             onOpenRequest={onOpenRequest}
           />
 
           {/* Historial de estados */}
-          <IncidentHistoryCard history={incident.history} />
+          <IncidentHistoryCard history={resolvedIncident.history} />
 
           {/* Expediente documental */}
           <IncidentDocumentsCard
-            incident={incident}
+            incident={resolvedIncident}
             canAssign={canAssign}
             canCoordinate={derived.canCoordinate}
             trail={trail}
@@ -138,7 +147,7 @@ export function IncidentDetailSheet({
 
           {/* Cuaderno de bitácora y notas del ciclo de vida */}
           <IncidentNotesCard
-            incident={incident}
+            incident={resolvedIncident}
             currentUserId={currentUserId}
             canWork={derived.canWork}
             canAssign={canAssign}
@@ -147,7 +156,7 @@ export function IncidentDetailSheet({
 
         {/* Barra fija de acciones y modales subordinados */}
         <IncidentActionsBar
-          incident={incident}
+          incident={resolvedIncident}
           equipment={equipment}
           linkedEquipment={linkedEquipment}
           linkedRequests={linkedRequests}
@@ -166,13 +175,13 @@ export function IncidentDetailSheet({
 
         {priorityOpen && (
           <ChangePriorityDialog
-            incident={incident}
+            incident={resolvedIncident}
             onClose={() => setPriorityOpen(false)}
           />
         )}
 
         <IncidentEquipmentModals
-          incident={incident}
+          incident={resolvedIncident}
           equipmentOpen={equipmentOpen}
           createEquipmentOpen={createEquipmentOpen}
           onCloseEquipment={() => setEquipmentOpen(false)}
@@ -180,7 +189,7 @@ export function IncidentDetailSheet({
         />
         <SharedMailSection
           destinationType="incident"
-          destinationId={incident._id}
+          destinationId={resolvedIncident._id}
         />
       </SheetContent>
     </Sheet>

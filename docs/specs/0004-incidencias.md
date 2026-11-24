@@ -86,6 +86,7 @@ stateDiagram-v2
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Paginación y vistas compactas/normales en la cola (`IncidentsList`) respetando `tests/longLists.test.ts`.
+- **RNF-002 (Proyección ligera CQRS):** `incidents.list` y `incidents.paginatedList` omiten firmar `documents[].url` por defecto (`includeDocumentUrls?: boolean`), mientras que `incidents.detail({ incidentId })` resuelve las URLs de los documentos del expediente bajo demanda al abrir `IncidentDetailSheet`.
 
 ---
 

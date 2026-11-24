@@ -8,6 +8,7 @@ import {
   canChangeWorkshopTechnician,
   countIncidentsByStatus,
   incidentCloseStep,
+  incidentNeedsDocumentUrls,
   incidentStepBlocker,
   incidentStepStatus,
   incidentTakesPartRequests,
@@ -501,5 +502,23 @@ describe("el sitio donde está el equipo — lo que el estado no dice", () => {
       expect(STALE_WORK_CANDIDATE_STATUSES).not.toContain(status);
       expect(isIncidentInProgress(status), status).toBe(false);
     }
+  });
+
+  test("incidentNeedsDocumentUrls detecta documentos con archivo pendientes de firmar", () => {
+    expect(incidentNeedsDocumentUrls({})).toBe(false);
+    expect(incidentNeedsDocumentUrls({ documents: [] })).toBe(false);
+    expect(
+      incidentNeedsDocumentUrls({ documents: [{ url: null }] }),
+    ).toBe(false);
+    expect(
+      incidentNeedsDocumentUrls({
+        documents: [{ storageId: "st-1", url: "https://cdn.example/d.pdf" }],
+      }),
+    ).toBe(false);
+    expect(
+      incidentNeedsDocumentUrls({
+        documents: [{ storageId: "st-1", url: null }],
+      }),
+    ).toBe(true);
   });
 });

@@ -60,6 +60,7 @@ erDiagram
   - `partRequests` declara el índice `by_equipment` (`["equipmentId"]`) para desvinculación (`equipment.remove`) y consultas por equipo (`equipment.relatedSummary`) sin escaneo completo.
   - `dashboard.summary` consulta `dashboardStats` en paralelo con solo los estados en curso (`STALE_WORK_CANDIDATE_STATUSES`) mediante `incidents.by_lifecycle_status` (cubriendo `lifecycle: "active"` y filas legacy sin `lifecycle`), evitando leer incidencias cerradas, archivadas o en papelera.
   - `equipment.ts` vincula incidencias sin equipo usando `incidents.by_equipment_and_created` (`equipmentId === undefined`) en lugar de `.filter(...)`.
+  - Patrón de proyección ligera (CQRS): `manuals.list`, `partRequests.list`/`paginatedList` e `incidents.list`/`paginatedList` omiten firmar URLs secundarias de historial, adjuntos o documentos por defecto y delegan la firma bajo demanda a `manuals.detail`, `partRequests.detail` e `incidents.detail`.
 
 ---
 

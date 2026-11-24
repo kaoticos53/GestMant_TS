@@ -498,3 +498,12 @@ export function countIncidentsByStatus(
   }
   return counts;
 }
+
+/** ¿La incidencia tiene documentos con archivo cuya URL firmada falta? */
+export function incidentNeedsDocumentUrls(incident: {
+  documents?: readonly { storageId?: unknown; url?: string | null }[];
+}): boolean {
+  return (incident.documents ?? []).some(
+    (doc) => Boolean(doc.storageId) && !doc.url,
+  );
+}

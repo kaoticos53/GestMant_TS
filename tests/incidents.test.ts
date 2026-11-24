@@ -2783,12 +2783,23 @@ describe("archivo real de los documentos del expediente", () => {
 
     const updated = await firstIncident(coordinator);
     expect(updated.documents[0].storageId).toBe(storageId);
-    // El enlace del archivo viaja con la ficha: se abre sin otra consulta.
-    expect(updated.documents[0].url).toContain("api/storage/");
-    // Y es el mismo archivo para cualquiera con sesión que abra el expediente.
-    expect((await firstIncident(tech)).documents[0].url).toBe(
-      updated.documents[0].url,
-    );
+    // Proyección ligera en list: el documento viaja sin firmar URL hasta abrir detalle o pedir includeDocumentUrls.
+    expect(updated.documents[0].url).toBeNull();
+    expect((await firstIncident(tech)).documents[0].url).toBeNull();
+
+    const detalleCoord = await coordinator.query(api.incidents.detail, {
+      incidentId: incident._id,
+    });
+    const detalleTech = await tech.query(api.incidents.detail, {
+      incidentId: incident._id,
+    });
+    expect(detalleCoord?.documents[0].url).toContain("api/storage/");
+    expect(detalleTech?.documents[0].url).toBe(detalleCoord?.documents[0].url);
+
+    const conUrls = await coordinator.query(api.incidents.list, {
+      includeDocumentUrls: true,
+    });
+    expect(conUrls[0]?.documents[0].url).toBe(detalleCoord?.documents[0].url);
   });
 
   test("un documento sin archivo se queda con su nombre y sin enlace", async () => {
@@ -2863,10 +2874,14 @@ describe("archivo real de los documentos del expediente", () => {
       storageId: secondFile,
     });
 
-    // El documento pasa a apuntar al archivo nuevo, con su enlace resuelto...
+    // El documento pasa a apuntar al archivo nuevo sin firmar URL en la lista...
     const updated = await firstIncident(coordinator);
     expect(updated.documents[0].storageId).toBe(secondFile);
-    expect(updated.documents[0].url).toContain("api/storage/");
+    expect(updated.documents[0].url).toBeNull();
+    const detalle = await coordinator.query(api.incidents.detail, {
+      incidentId: incident._id,
+    });
+    expect(detalle?.documents[0].url).toContain("api/storage/");
     // ...y el anterior se va del almacén: reemplazarlo es dejarlo fuera.
     expect(await t.run((ctx) => ctx.storage.getUrl(firstFile))).toBeNull();
     expect(await t.run((ctx) => ctx.storage.getUrl(secondFile))).not.toBeNull();
@@ -2885,6 +2900,30 @@ describe("archivo real de los documentos del expediente", () => {
     expect(replaced.previousName).toBeUndefined();
     expect(replaced.byId).toBe(coordinatorId);
     expect(replaced.documentId).toBe(documentId);
+  });
+
+  test("incidents.detail oculta incidencias retiradas, inexistentes o sin sesión", async () => {
+    const { t, coordinator } = await setup();
+    await t.action(api.incidents.report, reportArgs);
+    const incident = await firstIncident(coordinator);
+
+    expect(
+      await t.query(api.incidents.detail, { incidentId: incident._id }),
+    ).toBeNull();
+
+    await t.run((ctx) => ctx.db.patch(incident._id, { deletedAt: Date.now() }));
+    expect(
+      await coordinator.query(api.incidents.detail, {
+        incidentId: incident._id,
+      }),
+    ).toBeNull();
+
+    await t.run((ctx) => ctx.db.delete(incident._id));
+    expect(
+      await coordinator.query(api.incidents.detail, {
+        incidentId: incident._id,
+      }),
+    ).toBeNull();
   });
 
   test("volver a mandar el mismo archivo no es un reemplazo ni deja rastro", async () => {
