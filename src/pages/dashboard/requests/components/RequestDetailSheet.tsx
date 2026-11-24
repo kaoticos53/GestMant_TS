@@ -67,11 +67,13 @@ export function RequestDetailSheet({
   resuming = false,
   showStock = true,
 }: RequestDetailSheetProps) {
+  const needsAttachmentUrls = requestNeedsAttachmentUrls(request);
   const detailed = useQuery(
     api.partRequests.detail,
-    requestNeedsAttachmentUrls(request) ? { requestId: request._id } : "skip",
+    needsAttachmentUrls ? { requestId: request._id } : "skip",
   );
-  const resolvedRequest = detailed ?? request;
+  const resolvedRequest =
+    needsAttachmentUrls && detailed ? detailed : request;
 
   const archivedAt = resolvedRequest.archivedAt;
   const withdrawnAt = request.deletedAt;

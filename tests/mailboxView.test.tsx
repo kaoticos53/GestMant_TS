@@ -321,21 +321,28 @@ describe("MailboxView", () => {
       'input[aria-label="Buscar en esta carpeta"]',
     );
     expect(search).not.toBeNull();
-    await act(async () => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value",
-      )?.set;
-      setValue?.call(search, "filtro");
-      search?.dispatchEvent(new Event("input", { bubbles: true }));
-      await settle();
-    });
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        const setValue = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        setValue?.call(search, "filtro");
+        search?.dispatchEvent(new Event("input", { bubbles: true }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
 
-    // El buscador aplica debounce de 200 ms: no dispara la búsqueda de inmediato
-    expect(listCalls().at(-1)?.search).toBeUndefined();
+      // El buscador aplica debounce de 200 ms: no dispara la búsqueda de inmediato
+      expect(listCalls().at(-1)?.search).toBeUndefined();
 
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(230);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 230));
       await settle();
     });
 

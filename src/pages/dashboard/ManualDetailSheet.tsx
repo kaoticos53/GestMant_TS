@@ -30,11 +30,12 @@ export function ManualDetailSheet({
   equipment,
   onClose,
 }: ManualDetailSheetProps) {
+  const needsHistoryUrls = manualNeedsHistoryUrls(manual);
   const detailed = useQuery(
     api.manuals.detail,
-    manualNeedsHistoryUrls(manual) ? { manualId: manual._id } : "skip",
+    needsHistoryUrls ? { manualId: manual._id } : "skip",
   );
-  const resolvedManual = detailed ?? manual;
+  const resolvedManual = needsHistoryUrls && detailed ? detailed : manual;
 
   const linked = findLinkedEquipment(equipment, resolvedManual.equipmentId);
   const [exporting, setExporting] = useState(false);

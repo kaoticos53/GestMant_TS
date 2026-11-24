@@ -46,11 +46,13 @@ export function IncidentDetailSheet({
   onOpenRequest,
   onClose,
 }: IncidentDetailSheetProps) {
+  const needsDocumentUrls = incidentNeedsDocumentUrls(incident);
   const detailed = useQuery(
     api.incidents.detail,
-    incidentNeedsDocumentUrls(incident) ? { incidentId: incident._id } : "skip",
+    needsDocumentUrls ? { incidentId: incident._id } : "skip",
   );
-  const resolvedIncident = detailed ?? incident;
+  const resolvedIncident =
+    needsDocumentUrls && detailed ? detailed : incident;
 
   const {
     equipmentOpen,
