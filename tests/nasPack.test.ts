@@ -53,5 +53,18 @@ describe("nas-pack-lib", () => {
     );
     expect(offline).toContain("image: pulso-taller-funciones:local\n    pull_policy: never");
     expect(offline).toContain("image: pulso-taller-relevo:local\n    pull_policy: never");
+    expect(offline).toContain(
+      "./codigo/scripts/mail-relay-sandbox.mjs:/app/mail-relay-sandbox.mjs:ro",
+    );
+  });
+
+  it("copia todos los módulos del relevo en la carpeta codigo/ del paquete", () => {
+    const packScript = readFileSync(
+      join(process.cwd(), "scripts", "nas-pack.mjs"),
+      "utf8",
+    );
+    expect(packScript).toContain("mail-relay.mjs");
+    expect(packScript).toContain("mail-relay-lib.mjs");
+    expect(packScript).toContain("mail-relay-sandbox.mjs");
   });
 });

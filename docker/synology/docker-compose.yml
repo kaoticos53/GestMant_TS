@@ -320,6 +320,7 @@ services:
     volumes:
       - ./codigo/scripts/mail-relay.mjs:/app/mail-relay.mjs:ro
       - ./codigo/scripts/mail-relay-lib.mjs:/app/mail-relay-lib.mjs:ro
+      - ./codigo/scripts/mail-relay-sandbox.mjs:/app/mail-relay-sandbox.mjs:ro
     environment:
       - MAIL_RELAY_PORT=8788
       - MAIL_RELAY_HOST=0.0.0.0

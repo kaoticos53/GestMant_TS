@@ -221,6 +221,10 @@ copyFileSync(
   join(root, "scripts", "mail-relay-lib.mjs"),
   join(codigoDir, "scripts", "mail-relay-lib.mjs"),
 );
+copyFileSync(
+  join(root, "scripts", "mail-relay-sandbox.mjs"),
+  join(codigoDir, "scripts", "mail-relay-sandbox.mjs"),
+);
 cpSync(join(root, "src", "convex"), join(codigoDir, "src", "convex"), {
   recursive: true,
 });
