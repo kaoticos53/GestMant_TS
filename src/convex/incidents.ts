@@ -749,13 +749,13 @@ export const verify = mutation({
       const equipmentId = args.equipmentId ?? incident.equipmentId;
       const maintenanceId = equipmentId
         ? await createHistorySheet(ctx, {
-            incident,
-            equipmentId,
-            status,
-            notes,
-            technician: name,
-            closedAt: now,
-          })
+          incident,
+          equipmentId,
+          status,
+          notes,
+          technician: name,
+          closedAt: now,
+        })
         : undefined;
 
       await ctx.db.patch(args.incidentId, {
@@ -944,13 +944,13 @@ export const close = mutation({
       const equipmentId = args.equipmentId ?? incident.equipmentId;
       const maintenanceId = equipmentId
         ? await createHistorySheet(ctx, {
-            incident,
-            equipmentId,
-            status,
-            notes,
-            technician: name,
-            closedAt: now,
-          })
+          incident,
+          equipmentId,
+          status,
+          notes,
+          technician: name,
+          closedAt: now,
+        })
         : undefined;
 
       await ctx.db.patch(args.incidentId, {
@@ -1372,27 +1372,22 @@ async function createHistorySheet(
     year: "numeric",
   });
   const lines = [
-    `Incidencia ${incident.reference}: notificada por ${incident.reporterName}${
-      incident.reporterRole ? ` (${incident.reporterRole})` : ""
+    `Incidencia ${incident.reference}: notificada por ${incident.reporterName}${incident.reporterRole ? ` (${incident.reporterRole})` : ""
     } el ${reported}${incident.location ? ` en ${incident.location}` : ""}.`,
-    `Equipo: ${incident.equipmentKind} ${incident.model}${
-      incident.serialNumber ? ` · S/N ${incident.serialNumber}` : ""
+    `Equipo: ${incident.equipmentKind} ${incident.model}${incident.serialNumber ? ` · S/N ${incident.serialNumber}` : ""
     }.`,
     `Avería descrita: ${richDocToPlainText(incident.description)}`,
     args.notes ? `Notas del técnico: ${args.notes}` : "",
     incident.externalRepair
-      ? `Reparación externa: ${incident.externalRepair.companyName}${
-          incident.externalRepair.repairNotes
-            ? ` · ${incident.externalRepair.repairNotes}`
-            : ""
-        }${
-          incident.externalRepair.cost !== undefined
-            ? ` · Coste: ${incident.externalRepair.cost} €`
-            : ""
-        }.`
+      ? `Reparación externa: ${incident.externalRepair.companyName}${incident.externalRepair.repairNotes
+        ? ` · ${incident.externalRepair.repairNotes}`
+        : ""
+      }${incident.externalRepair.cost !== undefined
+        ? ` · Coste: ${incident.externalRepair.cost} €`
+        : ""
+      }.`
       : "",
-    `Cierre: ${
-      args.status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución"
+    `Cierre: ${args.status === INCIDENT_STATUSES.RESOLVED ? "resuelta" : "sin resolución"
     } por ${args.technician} el ${closed}.`,
     linkedRequest ? `Material: petición ${linkedRequest.reference}.` : "",
   ].filter(Boolean);
