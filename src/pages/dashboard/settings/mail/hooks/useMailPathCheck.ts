@@ -1,6 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { MAIL_PROVIDER_META, usesMailRelay } from "@/lib/mail";
-import { formatDateTime, getErrorMessage } from "@/lib/workshop";
+import { formatDateTime, formatUiError, getErrorMessage } from "@/lib/workshop";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MailCheckState, MailServerSettingsDoc } from "../types";
@@ -97,7 +97,10 @@ export function useMailPathCheck(
     if (checkState.ok) {
       return `Camino de envío: el relevo responde y acepta las credenciales — ${checkState.detail ?? "conexión y autenticación correctas"} (${formatDateTime(checkState.at)}).`;
     }
-    return `Camino de envío: el relevo no supera la comprobación — ${checkState.error ?? "sin motivo apuntado"} (${formatDateTime(checkState.at)}).`;
+    return `Camino de envío: el relevo no supera la comprobación — ${formatUiError(
+      checkState.error,
+      { fallback: "sin motivo apuntado" },
+    )} (${formatDateTime(checkState.at)}).`;
   }, [savedPath, pathCheckable, checking, checkState]);
 
   return {

@@ -8,6 +8,10 @@ import {
   type MailOrigin,
   type MailTransport,
 } from "../../lib/mail";
+import {
+  formatBackendError,
+  isBackendDetailedErrors,
+} from "../../lib/workshop";
 import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 
@@ -150,6 +154,21 @@ export async function deliverMailLogged(
   options?: { skipOutbox?: boolean },
 ): Promise<MailDelivery> {
   const result = await deliverMail(config, message, what);
+  const rawError = result.error;
+  const exposedError =
+    !result.ok && rawError !== undefined
+      ? formatBackendError(rawError, {
+          appEnv: process.env.APP_ENV,
+          nodeEnv: process.env.NODE_ENV,
+        })
+      : rawError;
+  if (
+    !result.ok &&
+    rawError !== undefined &&
+    !isBackendDetailedErrors(process.env.APP_ENV, process.env.NODE_ENV)
+  ) {
+    console.error("[MailDeliveryError]", rawError);
+  }
   const bcc = config.bcc.trim().toLowerCase();
   const normalizedTo = normalizeRecipients(message.to);
   await ctx.runMutation(internal.mailLog.record, {
@@ -160,7 +179,7 @@ export async function deliverMailLogged(
     bcc: bcc === "" ? [] : [bcc],
     subject: message.subject,
     ok: result.ok,
-    ...(result.ok || result.error === undefined ? {} : { error: result.error }),
+    ...(result.ok || exposedError === undefined ? {} : { error: exposedError }),
     ...(relatedId === undefined ? {} : { relatedId }),
   });
   if (!result.ok && !options?.skipOutbox && origin !== "prueba") {
@@ -172,8 +191,8 @@ export async function deliverMailLogged(
       subject: message.subject,
       text: message.text,
       html: message.html,
-      ...(result.error === undefined ? {} : { lastError: result.error }),
+      ...(exposedError === undefined ? {} : { lastError: exposedError }),
     });
   }
-  return result;
+  return result.ok ? result : { ok: false, error: exposedError };
 }

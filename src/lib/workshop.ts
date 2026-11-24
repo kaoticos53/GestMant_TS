@@ -941,21 +941,114 @@ export function isDetailedErrorsEnabled(env?: ErrorVisibilityEnv): boolean {
   return source.DEV === true;
 }
 
+const TECHNICAL_ERROR_PATTERNS = [
+  /\[CONVEX\b/i,
+  /\bRequest ID:/i,
+  /\bServer Error\b/i,
+  /\bValidator error:/i,
+  /\bArgumentValidationError\b/i,
+  /\b(TypeError|ReferenceError|SyntaxError|RangeError):/i,
+  /\b(ECONNREFUSED|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|EACCES)\b/,
+  /\bfetch failed\b/i,
+  /\bsocket hang up\b/i,
+  /\bHTTP\s+5\d{2}\b/i,
+  /\bhost\.docker\.internal\b/i,
+  /\b127\.0\.0\.1:\d+/,
+  /\berror sending request for url\b/i,
+  /\btcp connect error\b/i,
+  /\bNetwork is unreachable\b/i,
+  /\bos error \d+\b/i,
+  /\n\s+at\s+/,
+];
+
+const CONNECTION_ERROR_PATTERNS = [
+  /\b(ECONNREFUSED|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN)\b/,
+  /\bfetch failed\b/i,
+  /\bsocket hang up\b/i,
+  /No se pudo hablar con el (servicio|relevo)/i,
+  /\berror sending request for url\b/i,
+  /\btcp connect error\b/i,
+  /\bNetwork is unreachable\b/i,
+  /\bHTTP\s+5\d{2}\b/i,
+];
+
+/**
+ * Reemplaza detalles técnicos internos por un mensaje legible y seguro para el usuario.
+ */
+export function sanitizeUserError(
+  message: string,
+  fallback = "Se ha producido un error inesperado. Inténtalo de nuevo.",
+): string {
+  const clean = message.trim();
+  if (!clean) return fallback;
+  const isTechnical = TECHNICAL_ERROR_PATTERNS.some((p) => p.test(clean));
+  if (!isTechnical) return clean;
+  if (CONNECTION_ERROR_PATTERNS.some((p) => p.test(clean))) {
+    return "No se pudo conectar con el servicio externo. Inténtalo de nuevo más tarde.";
+  }
+  return fallback;
+}
+
+/**
+ * Formatea un texto de error almacenado (p. ej. en base de datos) según el entorno.
+ */
+export function formatUiError(
+  message: string | null | undefined,
+  options?: { detailed?: boolean; fallback?: string },
+): string {
+  const fallback =
+    options?.fallback ?? "Se ha producido un error inesperado. Inténtalo de nuevo.";
+  if (!message || !message.trim()) return fallback;
+  const detailed = options?.detailed ?? isDetailedErrorsEnabled();
+  return detailed ? message : sanitizeUserError(message, fallback);
+}
+
+/**
+ * Determina en backend (`APP_ENV` / `NODE_ENV`) si se devuelven detalles técnicos.
+ * Si `APP_ENV=production` o `NODE_ENV=production` (sin `APP_ENV=development`),
+ * oculta detalles técnicos.
+ */
+export function isBackendDetailedErrors(
+  appEnv?: string,
+  nodeEnv?: string,
+): boolean {
+  const env = (appEnv ?? "").trim().toLowerCase();
+  if (env === "production" || env === "prod") return false;
+  if (env === "development" || env === "dev") return true;
+  return (nodeEnv ?? "").trim().toLowerCase() !== "production";
+}
+
+/**
+ * Formatea un error en el backend según `APP_ENV` / `NODE_ENV`.
+ */
+export function formatBackendError(
+  rawError: string,
+  options?: { appEnv?: string; nodeEnv?: string; fallback?: string },
+): string {
+  if (isBackendDetailedErrors(options?.appEnv, options?.nodeEnv)) {
+    return rawError;
+  }
+  return sanitizeUserError(rawError, options?.fallback);
+}
+
 /** Extrae un mensaje legible de un error de Convex para mostrarlo en un toast. */
 export function getErrorMessage(
   error: unknown,
   options?: { detailed?: boolean },
 ): string {
+  const detailed = options?.detailed ?? isDetailedErrorsEnabled();
   if (error instanceof ConvexError && typeof error.data === "string") {
-    return error.data;
+    return detailed ? error.data : sanitizeUserError(error.data);
   }
   if (error instanceof Error) {
     const match = /Uncaught ConvexError:\s*(.+?)(?:\n|$)/.exec(error.message);
-    if (match?.[1]) return match[1].replace(/["\\]+$/, "");
-    const detailed = options?.detailed ?? isDetailedErrorsEnabled();
+    if (match?.[1]) {
+      const extracted = match[1].replace(/["\\]+$/, "");
+      return detailed ? extracted : sanitizeUserError(extracted);
+    }
     if (detailed) return error.message;
     console.error("[AppError]", error);
-    return "Se ha producido un error inesperado. Inténtalo de nuevo.";
+    return sanitizeUserError(error.message);
   }
   return "Se ha producido un error. Inténtalo de nuevo.";
 }

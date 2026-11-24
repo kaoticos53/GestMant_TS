@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
-import { formatDateTime, getErrorMessage } from "@/lib/workshop";
+import { formatDateTime, formatUiError, getErrorMessage } from "@/lib/workshop";
 import { useAction } from "convex/react";
 import { Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +44,11 @@ export function MailTestSendSection({
       if (result.ok) {
         toast.success(`Correo de prueba enviado a ${to}`);
       } else {
-        toast.error(result.error ?? "El envío de prueba no salió");
+        toast.error(
+          formatUiError(result.error, {
+            fallback: "El envío de prueba no salió",
+          }),
+        );
       }
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -99,7 +103,9 @@ export function MailTestSendSection({
             ? `Última prueba correcta: ${formatDateTime(lastTestAt)} a ${lastTestTo ?? "—"}.`
             : `La última prueba falló el ${formatDateTime(
                 lastTestAt,
-              )}: ${lastTestError ?? "sin motivo apuntado"}`}
+              )}: ${formatUiError(lastTestError, {
+                fallback: "sin motivo apuntado",
+              })}`}
         </p>
       )}
     </div>

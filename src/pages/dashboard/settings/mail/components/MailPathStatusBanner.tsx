@@ -1,6 +1,6 @@
 import { MAIL_ORIGIN_LABELS, type MailOrigin } from "@/lib/mail";
 import { cn } from "@/lib/utils";
-import { formatDateTime } from "@/lib/workshop";
+import { formatDateTime, formatUiError } from "@/lib/workshop";
 import { Activity } from "lucide-react";
 
 export interface MailPathStatusBannerProps {
@@ -53,7 +53,9 @@ export function MailPathStatusBanner({
               ? `Último envío: no salió el ${formatDateTime(lastSend.at)} (${
                   MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
                   lastSend.what
-                }): ${lastSend.error ?? "el servicio no dijo por qué"}.`
+                }): ${formatUiError(lastSend.error, {
+                  fallback: "el servicio no dijo por qué",
+                })}.`
               : `Último envío: salió el ${formatDateTime(lastSend.at)} (${
                   MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
                   lastSend.what

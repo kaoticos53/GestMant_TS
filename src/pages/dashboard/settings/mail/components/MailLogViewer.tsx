@@ -12,7 +12,7 @@ import {
   type MailOutboxStatus,
 } from "@/lib/mailRetry";
 import { cn } from "@/lib/utils";
-import { formatDateTime, getErrorMessage } from "@/lib/workshop";
+import { formatDateTime, formatUiError, getErrorMessage } from "@/lib/workshop";
 
 export interface MailLogEntry {
   _id: string;
@@ -179,7 +179,7 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
                 )}
               {entry.lastError && (
                 <p className="mt-0.5 text-xs leading-5 text-destructive">
-                  {entry.lastError}
+                  {formatUiError(entry.lastError)}
                 </p>
               )}
             </li>
@@ -239,7 +239,9 @@ export function MailLogViewer({ history, outbox }: MailLogViewerProps) {
                 </p>
                 {!entry.ok && (
                   <p className="mt-0.5 text-xs leading-5 text-destructive">
-                    {entry.error ?? "El servicio no dijo por qué."}
+                    {formatUiError(entry.error, {
+                      fallback: "El servicio no dijo por qué.",
+                    })}
                   </p>
                 )}
               </li>
