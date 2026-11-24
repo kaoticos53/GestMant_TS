@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { Button } from "@/components/ui/button";
-import { isDetailedErrorsEnabled } from "@/lib/workshop";
 
 export interface ModuleErrorBoundaryProps {
   children: ReactNode;
@@ -81,15 +81,12 @@ export class ModuleErrorBoundary extends Component<
                 Puedes reintentar la acción o volver al panel principal.
               </p>
 
-              {this.state.error?.message && isDetailedErrorsEnabled() && (
-                <details className="mt-3 rounded-md bg-card/60 p-2.5 text-xs text-muted-foreground border border-border/60">
-                  <summary className="cursor-pointer font-medium hover:text-foreground">
-                    Detalles técnicos del error
-                  </summary>
-                  <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] text-destructive">
-                    {this.state.error.message}
-                  </pre>
-                </details>
+              {this.state.error?.message && (
+                <ErrorMessageWithDetails
+                  error={this.state.error}
+                  fallback="Error inesperado al renderizar el módulo."
+                  className="mt-3"
+                />
               )}
 
               <div className="mt-4 flex flex-wrap gap-2">

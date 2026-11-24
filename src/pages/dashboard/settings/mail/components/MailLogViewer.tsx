@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
@@ -12,7 +13,7 @@ import {
   type MailOutboxStatus,
 } from "@/lib/mailRetry";
 import { cn } from "@/lib/utils";
-import { formatDateTime, formatUiError, getErrorMessage } from "@/lib/workshop";
+import { formatDateTime, getErrorMessage } from "@/lib/workshop";
 
 export interface MailLogEntry {
   _id: string;
@@ -178,9 +179,10 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
                   </p>
                 )}
               {entry.lastError && (
-                <p className="mt-0.5 text-xs leading-5 text-destructive">
-                  {formatUiError(entry.lastError)}
-                </p>
+                <ErrorMessageWithDetails
+                  error={entry.lastError}
+                  className="mt-0.5"
+                />
               )}
             </li>
           );
@@ -238,11 +240,11 @@ export function MailLogViewer({ history, outbox }: MailLogViewerProps) {
                   {entry.subject}
                 </p>
                 {!entry.ok && (
-                  <p className="mt-0.5 text-xs leading-5 text-destructive">
-                    {formatUiError(entry.error, {
-                      fallback: "El servicio no dijo por qué.",
-                    })}
-                  </p>
+                  <ErrorMessageWithDetails
+                    error={entry.error}
+                    fallback="El servicio no dijo por qué."
+                    className="mt-0.5"
+                  />
                 )}
               </li>
             ))}

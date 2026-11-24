@@ -1,8 +1,8 @@
+import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/convex/_generated/api";
-import { cn } from "@/lib/utils";
 import { formatDateTime, formatUiError, getErrorMessage } from "@/lib/workshop";
 import { useAction } from "convex/react";
 import { Send } from "lucide-react";
@@ -92,22 +92,19 @@ export function MailTestSendSection({
           {testing ? "Enviando..." : "Enviar prueba"}
         </Button>
       </div>
-      {lastTestAt !== null && (
-        <p
-          className={cn(
-            "mt-2 text-xs leading-5",
-            lastTestOk ? "text-muted-foreground" : "text-destructive",
-          )}
-        >
-          {lastTestOk
-            ? `Última prueba correcta: ${formatDateTime(lastTestAt)} a ${lastTestTo ?? "—"}.`
-            : `La última prueba falló el ${formatDateTime(
-                lastTestAt,
-              )}: ${formatUiError(lastTestError, {
-                fallback: "sin motivo apuntado",
-              })}`}
-        </p>
-      )}
+      {lastTestAt !== null &&
+        (lastTestOk ? (
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            {`Última prueba correcta: ${formatDateTime(lastTestAt)} a ${lastTestTo ?? "—"}.`}
+          </p>
+        ) : (
+          <ErrorMessageWithDetails
+            error={lastTestError}
+            prefix={`La última prueba falló el ${formatDateTime(lastTestAt)}: `}
+            fallback="sin motivo apuntado"
+            className="mt-2"
+          />
+        ))}
     </div>
   );
 }

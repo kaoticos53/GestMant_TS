@@ -1031,24 +1031,33 @@ export function formatBackendError(
   return sanitizeUserError(rawError, options?.fallback);
 }
 
+/** Extrae el texto bruto de un error (ConvexError, Error o cadena) sin sanitizar. */
+export function extractRawErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof ConvexError && typeof error.data === "string") {
+    return error.data;
+  }
+  if (error instanceof Error) {
+    const match = /Uncaught ConvexError:\s*(.+?)(?:\n|$)/.exec(error.message);
+    if (match?.[1]) {
+      return match[1].replace(/["\\]+$/, "");
+    }
+    return error.message;
+  }
+  return "";
+}
+
 /** Extrae un mensaje legible de un error de Convex para mostrarlo en un toast. */
 export function getErrorMessage(
   error: unknown,
   options?: { detailed?: boolean },
 ): string {
   const detailed = options?.detailed ?? isDetailedErrorsEnabled();
-  if (error instanceof ConvexError && typeof error.data === "string") {
-    return detailed ? error.data : sanitizeUserError(error.data);
-  }
-  if (error instanceof Error) {
-    const match = /Uncaught ConvexError:\s*(.+?)(?:\n|$)/.exec(error.message);
-    if (match?.[1]) {
-      const extracted = match[1].replace(/["\\]+$/, "");
-      return detailed ? extracted : sanitizeUserError(extracted);
-    }
-    if (detailed) return error.message;
+  const raw = extractRawErrorMessage(error);
+  if (!raw) return "Se ha producido un error. Inténtalo de nuevo.";
+  if (detailed) return raw;
+  if (error instanceof Error && !(error instanceof ConvexError)) {
     console.error("[AppError]", error);
-    return sanitizeUserError(error.message);
   }
-  return "Se ha producido un error. Inténtalo de nuevo.";
+  return sanitizeUserError(raw);
 }

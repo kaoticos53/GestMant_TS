@@ -1,6 +1,7 @@
+import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { MAIL_ORIGIN_LABELS, type MailOrigin } from "@/lib/mail";
 import { cn } from "@/lib/utils";
-import { formatDateTime, formatUiError } from "@/lib/workshop";
+import { formatDateTime } from "@/lib/workshop";
 import { Activity } from "lucide-react";
 
 export interface MailPathStatusBannerProps {
@@ -40,37 +41,53 @@ export function MailPathStatusBanner({
         <Activity className="size-4" /> Estado del camino de envío
       </p>
       <ul className="mt-1 grid gap-0.5 text-xs leading-5">
-        <li
-          className={cn(
-            lastSendFailed
-              ? "font-medium text-destructive"
-              : "text-muted-foreground",
+        <li>
+          {lastSend === null ? (
+            <span className="text-muted-foreground">
+              Último envío: todavía no ha salido ninguno.
+            </span>
+          ) : lastSendFailed ? (
+            <ErrorMessageWithDetails
+              error={lastSend.error}
+              prefix={`Último envío: no salió el ${formatDateTime(lastSend.at)} (${
+                MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
+                lastSend.what
+              }): `}
+              suffix="."
+              fallback="el servicio no dijo por qué"
+              textClassName="font-medium"
+            />
+          ) : (
+            <span className="text-muted-foreground">
+              {`Último envío: salió el ${formatDateTime(lastSend.at)} (${
+                MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
+                lastSend.what
+              }).`}
+            </span>
           )}
-        >
-          {lastSend === null
-            ? "Último envío: todavía no ha salido ninguno."
-            : lastSendFailed
-              ? `Último envío: no salió el ${formatDateTime(lastSend.at)} (${
-                  MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
-                  lastSend.what
-                }): ${formatUiError(lastSend.error, {
-                  fallback: "el servicio no dijo por qué",
-                })}.`
-              : `Último envío: salió el ${formatDateTime(lastSend.at)} (${
-                  MAIL_ORIGIN_LABELS[lastSend.origin as MailOrigin] ??
-                  lastSend.what
-                }).`}
         </li>
-        <li
-          className={cn(
-            pathFailed
-              ? "font-medium text-destructive"
-              : pathCheckable && checkState?.ok === true
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-muted-foreground",
+        <li>
+          {pathFailed && checkState?.error ? (
+            <ErrorMessageWithDetails
+              error={checkState.error}
+              prefix="Camino de envío: el relevo no supera la comprobación — "
+              suffix={` (${formatDateTime(checkState.at)}).`}
+              fallback="no se pudo conectar con el servicio"
+              textClassName="font-medium"
+            />
+          ) : (
+            <span
+              className={cn(
+                pathFailed
+                  ? "font-medium text-destructive"
+                  : pathCheckable && checkState?.ok === true
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-muted-foreground",
+              )}
+            >
+              {pathLine}
+            </span>
           )}
-        >
-          {pathLine}
         </li>
       </ul>
       {lastSendFailed && (

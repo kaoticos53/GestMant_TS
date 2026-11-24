@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { CheckCircle2, Loader2, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,9 +97,17 @@ export function BackgroundJobsIndicator() {
                       )}
                       <span className="truncate">{job.title}</span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {job.error || job.detail || jobStatusLabel(job.status)}
-                    </p>
+                    {job.error ? (
+                      <ErrorMessageWithDetails
+                        error={job.error}
+                        className="mt-0.5"
+                        textClassName="text-[11px]"
+                      />
+                    ) : (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {job.detail || jobStatusLabel(job.status)}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Badge variant="secondary" className="text-[10px]">
