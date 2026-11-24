@@ -147,19 +147,33 @@ export async function deliverMailLogged(
   what: string,
   origin: MailOrigin,
   relatedId?: string,
+  options?: { skipOutbox?: boolean },
 ): Promise<MailDelivery> {
   const result = await deliverMail(config, message, what);
   const bcc = config.bcc.trim().toLowerCase();
+  const normalizedTo = normalizeRecipients(message.to);
   await ctx.runMutation(internal.mailLog.record, {
     what,
     origin,
     provider: config.provider,
-    to: normalizeRecipients(message.to),
+    to: normalizedTo,
     bcc: bcc === "" ? [] : [bcc],
     subject: message.subject,
     ok: result.ok,
     ...(result.ok || result.error === undefined ? {} : { error: result.error }),
     ...(relatedId === undefined ? {} : { relatedId }),
   });
+  if (!result.ok && !options?.skipOutbox && origin !== "prueba") {
+    await ctx.runMutation(internal.mailOutbox.enqueueFailure, {
+      what,
+      origin,
+      ...(relatedId === undefined ? {} : { relatedId }),
+      to: normalizedTo,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      ...(result.error === undefined ? {} : { lastError: result.error }),
+    });
+  }
   return result;
 }

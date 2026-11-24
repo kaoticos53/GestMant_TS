@@ -31,7 +31,8 @@
     "convex:dev": "convex dev",
     "convex:push": "convex dev --once",
     "auth:keys": "node scripts/generate-keys.mjs --set",
-    "mail:relay": "node scripts/mail-relay.mjs"
+    "mail:relay": "node scripts/mail-relay.mjs",
+    "mail:relay:test": "node scripts/mail-relay.mjs --test"
   },
   "dependencies": {
     "@casl/ability": "^7.0.2",

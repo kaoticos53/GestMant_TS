@@ -36,6 +36,7 @@ import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { connect as netConnect } from "node:net";
 import { connect as tlsConnect } from "node:tls";
+import { renderSandboxPage } from "./mail-relay-sandbox.mjs";
 
 /** Puerto por defecto del puente. No es el de ningún servicio ya usado. */
 export const DEFAULT_RELAY_PORT = 8788;
@@ -885,12 +886,19 @@ export function readRelayConfig(env = process.env) {
     }
   }
 
+  const rawMode = (env.MAIL_RELAY_MODE ?? "").trim().toLowerCase();
+  const sandbox =
+    readBoolean(env.MAIL_RELAY_SANDBOX, false, "MAIL_RELAY_SANDBOX") ||
+    rawMode === "sandbox" ||
+    rawMode === "log";
+
   return {
     port,
     host,
     path,
     token,
     maxBodyBytes,
+    sandbox,
     smtp: smtpHost === "" ? null : readDefaultSmtp(env, smtpHost),
   };
 }
@@ -1073,13 +1081,42 @@ export function createRelayServer({
   verify,
   log = () => {},
   now = () => Date.now(),
+  sandboxStore = null,
 }) {
   const server = createServer((req, res) => {
     const handle = async () => {
       const url = new URL(req.url ?? "/", "http://relevo.local");
       if (req.method === "GET" && url.pathname === "/salud") {
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 200, { ok: true, sandbox: Boolean(sandboxStore) });
         return;
+      }
+      if (sandboxStore) {
+        if (
+          req.method === "GET" &&
+          (url.pathname === "/" ||
+            url.pathname === "/bandeja" ||
+            url.pathname === "/logs")
+        ) {
+          const html = renderSandboxPage({ relayUrl: config.path });
+          res.writeHead(200, {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Length": Buffer.byteLength(html),
+            "Cache-Control": "no-store",
+          });
+          res.end(html);
+          return;
+        }
+        if (req.method === "GET" && url.pathname === "/api/logs") {
+          sendJson(res, 200, { ok: true, entries: sandboxStore.list() });
+          return;
+        }
+        if (
+          (req.method === "DELETE" && url.pathname === "/api/logs") ||
+          (req.method === "POST" && url.pathname === "/api/logs/clear")
+        ) {
+          sendJson(res, 200, { ok: true, ...sandboxStore.clear() });
+          return;
+        }
       }
       const check = isCheckPath(url.pathname, config);
       if (!check && url.pathname !== config.path) {

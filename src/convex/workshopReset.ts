@@ -61,6 +61,7 @@ const RESET_TABLES: TableNames[] = [
   "manuals",
   // Las copias de correo son trabajo del taller: se van con sus fichas.
   "mailShares",
+  "mailOutbox",
   "notifications",
   "messages",
   "reportUploads",

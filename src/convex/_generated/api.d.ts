@@ -63,6 +63,7 @@ import type * as mailBody from "../mailBody.js";
 import type * as mailCache from "../mailCache.js";
 import type * as mailHeaders from "../mailHeaders.js";
 import type * as mailLog from "../mailLog.js";
+import type * as mailOutbox from "../mailOutbox.js";
 import type * as mailSettings from "../mailSettings.js";
 import type * as mailShares from "../mailShares.js";
 import type * as mailSync from "../mailSync.js";
@@ -159,6 +160,7 @@ declare const fullApi: ApiFromModules<{
   mailCache: typeof mailCache;
   mailHeaders: typeof mailHeaders;
   mailLog: typeof mailLog;
+  mailOutbox: typeof mailOutbox;
   mailSettings: typeof mailSettings;
   mailShares: typeof mailShares;
   mailSync: typeof mailSync;

@@ -1496,6 +1496,37 @@ const schema = defineSchema({
     relatedId: v.optional(v.string()), // la incidencia, cuando la hay
   }).index("by_at", ["at"]),
 
+  // Cola de salida para reintentos automáticos y reenvío manual de correos fallidos.
+  mailOutbox: defineTable({
+    what: v.string(),
+    origin: v.union(
+      v.literal("incidencia"),
+      v.literal("equipo"),
+      v.literal("resumen"),
+      v.literal("prueba"),
+    ),
+    relatedId: v.optional(v.string()),
+    to: v.array(v.string()),
+    subject: v.string(),
+    text: v.string(),
+    html: v.string(),
+    status: v.union(
+      v.literal("retrying"),
+      v.literal("failed"),
+      v.literal("sent"),
+      v.literal("discarded"),
+    ),
+    attempts: v.number(),
+    maxAttempts: v.number(),
+    nextRetryAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    lastAttemptAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_related", ["relatedId"]),
+
   // Registro inmutable de auditoría de seguridad: registra cambios de roles,
   // activación/baja de cuentas, vaciado de taller e intentos de acceso no autorizados.
   securityAuditLog: defineTable({

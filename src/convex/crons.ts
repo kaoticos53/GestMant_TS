@@ -245,4 +245,12 @@ crons.daily(
   {},
 );
 
+/** Limpieza diaria de cola de correos salientes ya enviados o descartados. */
+crons.daily(
+  "purgar cola de correos salientes",
+  { hourUTC: 5, minuteUTC: 15 },
+  internal.mailOutbox.purgeOld,
+  {},
+);
+
 export default crons;

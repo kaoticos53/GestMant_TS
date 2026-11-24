@@ -22,11 +22,13 @@ import {
   sendSmtp,
   verifySmtp,
 } from "./mail-relay-lib.mjs";
+import { createSandboxMailLog } from "./mail-relay-sandbox.mjs";
 
 const HELP = `Relevo de correo del taller
 
 Uso:
   node scripts/mail-relay.mjs            (o: npm run mail:relay)
+  node scripts/mail-relay.mjs --test     (o: npm run mail:relay:test)
   node scripts/mail-relay.mjs --help
 
 Variables de entorno:
@@ -35,6 +37,7 @@ Variables de entorno:
   MAIL_RELAY_PATH            ruta del sobre (por defecto /enviar)
   MAIL_RELAY_TOKEN           testigo que debe traer el backend (recomendado)
   MAIL_RELAY_MAX_BODY_BYTES  tamaño máximo del sobre (por defecto 1 MB)
+  MAIL_RELAY_SANDBOX         true para modo pruebas (solo logs + tabla web, sin SMTP)
 
   SMTP_HOST                  servidor de correo al que entregar (opcional: sin él
                              solo se entregan los sobres que traen el suyo, como
@@ -130,18 +133,36 @@ function main() {
     return;
   }
 
+  const isSandbox =
+    config.sandbox ||
+    process.argv.includes("--test") ||
+    process.argv.includes("--sandbox");
+  const sandboxStore = isSandbox ? createSandboxMailLog() : null;
+
   const server = createRelayServer({
     config,
+    sandboxStore,
     // El servidor del sobre manda sobre el del entorno, pero solo en lo que es
     // suyo: el saludo, los tiempos y el certificado siguen siendo del relevo.
     // `resolveSmtp` decide qué servidor se usa y, si no hay ninguno —ni del
     // entorno ni en el sobre—, contesta con una frase que se puede leer en la
     // pantalla en vez de intentar conectar con un servidor vacío.
-    send: (envelope, smtp) =>
-      sendSmtp(resolveSmtp(config.smtp, smtp), envelope),
+    send: isSandbox
+      ? (envelope, smtp) => {
+          const entry = sandboxStore.record(envelope, smtp);
+          console.log(
+            `[PRUEBA] De: ${entry.from} · Para: ${entry.to.join(", ")}${
+              entry.bcc.length > 0 ? ` · CCO: ${entry.bcc.join(", ")}` : ""
+            } · Asunto: «${entry.subject}»`,
+          );
+          return { recipients: [...envelope.to, ...envelope.bcc] };
+        }
+      : (envelope, smtp) => sendSmtp(resolveSmtp(config.smtp, smtp), envelope),
     // La comprobación usa el mismo servidor que la entrega: el del sobre si lo
     // trae, el del entorno si no. Es lo que se pide desde Ajustes del taller.
-    verify: (smtp) => verifySmtp(resolveSmtp(config.smtp, smtp)),
+    verify: isSandbox
+      ? () => ({ tls: "none", auth: null, sandbox: true })
+      : (smtp) => verifySmtp(resolveSmtp(config.smtp, smtp)),
     log: (line) => console.log(line),
   });
 
@@ -157,9 +178,15 @@ function main() {
   });
 
   server.listen(config.port, config.host, () => {
-    const url = `http://${displayHost(config.host)}:${config.port}${config.path}`;
+    const baseUrl = `http://${displayHost(config.host)}:${config.port}`;
+    const url = `${baseUrl}${config.path}`;
     console.log(`Relevo de correo escuchando en ${url} (${config.host})`);
-    if (config.smtp === null) {
+    if (isSandbox) {
+      console.log(
+        "Modo pruebas (solo logs) activado: no se enviarán correos reales por SMTP.",
+      );
+      console.log(`Tabla de correos enviados: ${baseUrl}/`);
+    } else if (config.smtp === null) {
       console.log(
         "Sin servidor SMTP propio (falta SMTP_HOST): se entregan los sobres que traen el suyo, como Gmail y el buzón de pruebas. Un sobre sin servidor se rechaza diciendo qué falta.",
       );
@@ -182,7 +209,7 @@ function main() {
     console.log(
       "En Ajustes del taller → Servidor de correo → Relevo propio, pon esa dirección como URL.",
     );
-    if (config.smtp !== null) void checkSmtpOnce(config);
+    if (!isSandbox && config.smtp !== null) void checkSmtpOnce(config);
   });
 
   let closing = false;

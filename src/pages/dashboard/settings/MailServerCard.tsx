@@ -24,6 +24,8 @@ import { useMailServerForm } from "./mail/hooks/useMailServerForm";
 export function MailServerCard() {
   const settings = useQuery(api.mailSettings.settings);
   const history = useQuery(api.mailLog.history, { limit: 20 });
+  const listOutbox = api.mailOutbox?.list;
+  const outbox = useQuery(listOutbox, listOutbox ? { limit: 30 } : "skip");
 
   const {
     formData,
@@ -118,7 +120,7 @@ export function MailServerCard() {
             lastTestError={settings.lastTestError}
           />
 
-          <MailLogViewer history={history} />
+          <MailLogViewer history={history} outbox={outbox} />
 
           <MailNoticeFooter />
         </>
