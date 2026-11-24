@@ -127,3 +127,19 @@ export function groupMailHeadersByConversation<T extends MailHeaderSortable>(
 
   return result;
 }
+
+/**
+ * Indica si el listado puede leerse en una sola pasada directa sobre el índice
+ * ordenado por fecha (`by_user_folder_date`) sin clonar ni reordenar en RAM.
+ */
+export function canUseFastDateWindow(params: {
+  search?: string;
+  tag?: string;
+  groupByConversation?: boolean;
+  sortBy?: MailSortField;
+}): boolean {
+  if ((params.search ?? "").trim() !== "") return false;
+  if (params.tag) return false;
+  if (params.groupByConversation) return false;
+  return (params.sortBy ?? "date") === "date";
+}

@@ -137,7 +137,7 @@ src/lib/mailClient/
 src/convex/
   mailAccounts.ts    # alta, prueba, estado, ajustes y borrado de la cuenta
   mailSync.ts        # sincronización inicial/incremental, manual y programada
-  mailHeaders.ts     # consultas del listado, búsqueda y contadores
+  mailHeaders.ts     # consultas del listado (vía rápida por fecha + búsqueda) y contadores
   mailBody.ts        # descarga + verificación + parseo MIME + una sola copia en caché
   mailAttachments.ts # listado y URL de descarga con comprobación de propiedad
   mailCache.ts       # barrido diario y purga manual
@@ -274,7 +274,7 @@ La lógica de protocolo se implementa en `src/lib/mailClient/` con fixtures XML 
 
 1. Por carpeta: `Sync(token)` → ids cambiados, ids borrados, token nuevo y conteos. Los ids cambiados no traen metadatos: se usan solo como señal; el refresco real es el `Search` completo del punto 3.
 2. Los borrados se marcan `deletedRemoteAt` y se ocultan del listado; **no se borra la caché en el acto**: queda sujeta al LRU y a la caducidad de 30 días, para que un delta erróneo no destruya contenido ya descargado (criterio de la guía §5.3, adaptado a que la caché no guarda `.eml`).
-3. Se recorre la carpeta con `Search` **completo** (`sortBy="dateAsc"`, páginas de 500 mientras `more="1"` o la página venga llena); se compara con lo local y se escribe solo lo que cambia (upsert de las nuevas): asunto, remitente, fecha, tamaño, flags, `l` (posibles movimientos) y mensajes nuevos. Cada id devuelto por el recorrido se acumula como visto en esta pasada; si reaparece uno marcado, el upsert limpia `deletedRemoteAt`. No se descarga ningún cuerpo. La referencia mide 1 554 cabeceras de 9 carpetas en 5,4 s y ~13 peticiones.
+3. Se recorre la carpeta con `Search` **completo** (`sortBy="dateAsc"`, páginas de 500 mientras `more="1"` o la página venga llena); se compara con lo local mediante `hasMailHeaderChanged` y se omite `ctx.db.patch` cuando los campos persistidos de una cabecera no han cambiado (y `deletedRemoteAt` ya es `undefined`). Solo se escribe lo que cambia (upsert de nuevas o modificadas): asunto, remitente, fecha, tamaño, flags, `l` (posibles movimientos) y mensajes nuevos. Cada id devuelto por el recorrido se acumula como visto en esta pasada; si reaparece uno marcado, el upsert limpia `deletedRemoteAt`. No se descarga ningún cuerpo. La referencia mide 1 554 cabeceras de 9 carpetas en 5,4 s y ~13 peticiones.
 4. Solo si el recorrido completo termina se marcan como `deletedRemoteAt` las cabeceras de esa carpeta cuyos ids no estén en el conjunto visto en **esta** pasada (`MarkMissing` de la guía §5.1). Si el mensaje había cambiado de carpeta, el upsert de la carpeta destino limpia la marca; si la carpeta destino no se sincroniza, se queda oculto. Un corte no marca ausentes ni avanza el token.
 5. Si la respuesta de `Sync` trae `more="1"`, se itera (procesando también los ids de cada página) antes de dar la carpeta por sincronizada y guardar el token.
 6. El token **solo avanza** cuando la escritura de esa carpeta ha terminado. Un corte deja la carpeta como estaba y la siguiente pasada no duplica nada (upsert por `accountId + messageId`).
@@ -292,6 +292,8 @@ La lógica de protocolo se implementa en `src/lib/mailClient/` con fixtures XML 
 Cada pasada deja en la cuenta `lastSyncAt`, `lastSyncOkAt` y `lastSyncError`. La UI distingue «sin conexión», «credenciales caducadas» y «error del servidor».
 
 **Baja de usuario:** la baja es lógica (`users.active = false`) y no toca `mailAccounts`; por eso el cron y la sincronización bajo demanda comprueban `users.active` antes de nada. Una cuenta de un usuario de baja no se sincroniza, no renueva token y no hace peticiones. La caché queda inaccesible y sujeta al barrido de 0017, que sigue aplicando la caducidad aunque el usuario no pueda entrar; las copias compartidas no se modifican.
+
+- **Listado y búsqueda (`mailHeaders.list` + `MailboxView.tsx`):** cuando no hay texto de búsqueda, filtro por etiqueta ni agrupación por conversaciones y `sortBy === "date"`, `mailHeaders.list` recorre el índice `by_user_folder_date` en orden directo (`sortDir`) en una sola pasada evitando clones intermedios y ordenación $O(N \log N)$. El buscador de `MailboxView.tsx` aplica un *debounce* de 200 ms antes de consultar `api.mailHeaders.list`.
 
 ### 7.4 Límites de carga
 

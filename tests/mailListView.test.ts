@@ -1,9 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
+  canUseFastDateWindow,
   groupMailHeadersByConversation,
   sortMailHeaders,
   type MailHeaderSortable,
 } from "../src/lib/mailClient/listView";
+import {
+  hasMailHeaderChanged,
+  type MailHeaderComparable,
+} from "../src/lib/mailClient/sync";
 
 const SAMPLES: MailHeaderSortable[] = [
   {
@@ -73,5 +78,42 @@ describe("mailClient/listView — ordenación y agrupación por conversaciones",
 
     const convB = grouped.find((g) => g.conversationId === "conv-b");
     expect(convB?.threadCount).toBe(1);
+  });
+
+  test("canUseFastDateWindow solo se activa sin filtros/agrupación y ordenado por fecha", () => {
+    expect(canUseFastDateWindow({})).toBe(true);
+    expect(canUseFastDateWindow({ sortBy: "date", search: "   " })).toBe(true);
+    expect(canUseFastDateWindow({ search: "compresor" })).toBe(false);
+    expect(canUseFastDateWindow({ tag: "incidents" })).toBe(false);
+    expect(canUseFastDateWindow({ groupByConversation: true })).toBe(false);
+    expect(canUseFastDateWindow({ sortBy: "sender" })).toBe(false);
+  });
+
+  test("hasMailHeaderChanged evita escrituras cuando nada cambia y detecta modificaciones reales", () => {
+    const base: MailHeaderComparable = {
+      folderRemoteId: "2",
+      conversationId: "conv-1",
+      subject: "Presupuesto",
+      fromName: "SAT",
+      fromAddress: "sat@prov.es",
+      date: 1_700_000_000_000,
+      size: 2048,
+      flags: "u",
+      hasAttachments: true,
+      snippet: "Adjunto pdf",
+    };
+
+    expect(hasMailHeaderChanged(base, { ...base })).toBe(false);
+    expect(hasMailHeaderChanged(base, { ...base, flags: "" })).toBe(true);
+    expect(hasMailHeaderChanged(base, { ...base, folderRemoteId: "5" })).toBe(
+      true,
+    );
+    expect(hasMailHeaderChanged(base, { ...base, subject: "Otro" })).toBe(true);
+    expect(
+      hasMailHeaderChanged(base, { ...base, conversationId: undefined }),
+    ).toBe(true);
+    expect(
+      hasMailHeaderChanged({ ...base, deletedRemoteAt: 123 }, { ...base }),
+    ).toBe(true);
   });
 });

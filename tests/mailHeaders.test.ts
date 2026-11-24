@@ -107,4 +107,95 @@ describe("mailHeaders.list — límites de paginación", () => {
       ),
     ).toBe(true);
   });
+
+  test("vía rápida por fecha excluye tumbas deletedRemoteAt, respeta sortDir y mantiene conteos", async () => {
+    const t = backend();
+    const userId = await t.run((ctx) =>
+      ctx.db.insert("users", {
+        name: "Técnica rápida",
+        email: "rapida@taller.es",
+        role: "technician",
+      }),
+    );
+    const first = t.withIdentity({ subject: `${userId}|s-fastpath` });
+    await first.mutation(api.mailAccounts.save, DRAFT);
+    const account = await t.run((ctx) =>
+      ctx.db
+        .query("mailAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .first(),
+    );
+    if (!account) throw new Error("Falta cuenta");
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("mailHeaders", {
+        userId,
+        accountId: account._id,
+        folderRemoteId: "2",
+        messageId: "m-old",
+        subject: "Antiguo",
+        fromName: "A",
+        fromAddress: "a@t.es",
+        date: 1000,
+        size: 100,
+        flags: "u",
+        hasAttachments: false,
+        snippet: "",
+        bodyState: "none",
+      });
+      await ctx.db.insert("mailHeaders", {
+        userId,
+        accountId: account._id,
+        folderRemoteId: "2",
+        messageId: "m-deleted",
+        subject: "Borrado",
+        fromName: "B",
+        fromAddress: "b@t.es",
+        date: 2000,
+        size: 100,
+        flags: "u",
+        hasAttachments: false,
+        snippet: "",
+        bodyState: "none",
+        deletedRemoteAt: 9999,
+      });
+      await ctx.db.insert("mailHeaders", {
+        userId,
+        accountId: account._id,
+        folderRemoteId: "2",
+        messageId: "m-new",
+        subject: "Nuevo",
+        fromName: "C",
+        fromAddress: "c@t.es",
+        date: 3000,
+        size: 100,
+        flags: "",
+        hasAttachments: false,
+        snippet: "",
+        bodyState: "none",
+      });
+    });
+
+    const asc = await first.query(api.mailHeaders.list, {
+      folderRemoteId: "2",
+      sortBy: "date",
+      sortDir: "asc",
+      limit: 1,
+      offset: 0,
+    });
+    expect(asc.total).toBe(2);
+    expect(asc.unread).toBe(1);
+    expect(asc.headers.map((h) => h.messageId)).toEqual(["m-old"]);
+    expect(asc.headers[0]?.threadCount).toBe(1);
+
+    const descPage2 = await first.query(api.mailHeaders.list, {
+      folderRemoteId: "2",
+      sortBy: "date",
+      sortDir: "desc",
+      limit: 1,
+      offset: 1,
+    });
+    expect(descPage2.total).toBe(2);
+    expect(descPage2.headers.map((h) => h.messageId)).toEqual(["m-old"]);
+  });
 });

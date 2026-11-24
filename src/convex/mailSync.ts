@@ -27,7 +27,11 @@ import {
   buildSearchRequest,
   buildSyncRequest,
 } from "../lib/mailClient/soap";
-import { parseSyncResponse, shouldContinueSync } from "../lib/mailClient/sync";
+import {
+  hasMailHeaderChanged,
+  parseSyncResponse,
+  shouldContinueSync,
+} from "../lib/mailClient/sync";
 import type { MailFolder, MailHeader } from "../lib/mailClient/types";
 
 const PAGE_SIZE = 500;
@@ -173,10 +177,12 @@ export const saveFolder = internalMutation({
         snippet: header.snippet,
       };
       if (existing) {
-        await ctx.db.patch(existing._id, {
-          ...record,
-          deletedRemoteAt: undefined,
-        });
+        if (hasMailHeaderChanged(existing, record)) {
+          await ctx.db.patch(existing._id, {
+            ...record,
+            deletedRemoteAt: undefined,
+          });
+        }
       } else {
         await ctx.db.insert("mailHeaders", {
           ...record,

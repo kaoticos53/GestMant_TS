@@ -52,3 +52,45 @@ export function parseSyncResponse(xml: string): MailSyncPage {
 export function shouldContinueSync(more: boolean): boolean {
   return more;
 }
+
+/** Campos comparables para decidir si una cabecera persistida requiere escritura. */
+export interface MailHeaderComparable {
+  folderRemoteId: string;
+  conversationId?: string | null;
+  subject: string;
+  fromName: string;
+  fromAddress: string;
+  date: number;
+  size: number;
+  flags: string;
+  hasAttachments: boolean;
+  snippet: string;
+  deletedRemoteAt?: number;
+}
+
+/**
+ * Devuelve `true` si la cabecera recibida cambia respecto a la almacenada
+ * (o si había sido marcada como borrada remotamente y hay que resucitarla).
+ */
+export function hasMailHeaderChanged(
+  existing: MailHeaderComparable,
+  incoming: MailHeaderComparable,
+): boolean {
+  if (existing.deletedRemoteAt !== undefined) return true;
+  if (existing.folderRemoteId !== incoming.folderRemoteId) return true;
+  if (
+    (existing.conversationId ?? undefined) !==
+    (incoming.conversationId ?? undefined)
+  ) {
+    return true;
+  }
+  if (existing.subject !== incoming.subject) return true;
+  if (existing.fromName !== incoming.fromName) return true;
+  if (existing.fromAddress !== incoming.fromAddress) return true;
+  if (existing.date !== incoming.date) return true;
+  if (existing.size !== incoming.size) return true;
+  if (existing.flags !== incoming.flags) return true;
+  if (existing.hasAttachments !== incoming.hasAttachments) return true;
+  if (existing.snippet !== incoming.snippet) return true;
+  return false;
+}

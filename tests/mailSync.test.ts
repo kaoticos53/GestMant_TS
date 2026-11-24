@@ -555,4 +555,82 @@ describe("sincronización de cabeceras", () => {
     ).toEqual({ ok: false, reason: "busy" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test("re-sincronizar cabeceras sin cambios conserva las filas y sí actualiza si cambia flags", async () => {
+    const { first, t, firstId } = await setup();
+    const fetchMock = stubMailbox({
+      searchPages: [
+        searchResponse({ messageIds: ["17438", "17436"] }),
+        searchResponse({ messageIds: ["17438", "17436"] }),
+      ],
+      syncPages: [
+        syncResponse({ token: "tok-1" }),
+        syncResponse({ token: "tok-2" }),
+      ],
+    });
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    const account = await accountFor(t, firstId);
+    if (!account) throw new Error("falta la cuenta");
+
+    const beforeRows = await t.run((ctx) =>
+      ctx.db
+        .query("mailHeaders")
+        .withIndex("by_account", (q) => q.eq("accountId", account._id))
+        .collect(),
+    );
+    expect(beforeRows).toHaveLength(2);
+    const firstIdRow = beforeRows.find((r) => r.messageId === "17436")!._id;
+
+    await first.action(api.mailSync.syncNow, { folderRemoteId: "2" });
+    expect(fetchMock).toHaveBeenCalled();
+
+    const afterRows = await t.run((ctx) =>
+      ctx.db
+        .query("mailHeaders")
+        .withIndex("by_account", (q) => q.eq("accountId", account._id))
+        .collect(),
+    );
+    expect(afterRows).toHaveLength(2);
+    expect(afterRows.find((r) => r.messageId === "17436")?._id).toBe(firstIdRow);
+
+    await t.mutation(internal.mailSync.saveFolder, {
+      accountId: account._id,
+      folderRemoteId: "2",
+      headers: [
+        {
+          messageId: "17436",
+          folderRemoteId: "2",
+          conversationId: null,
+          subject: "Presupuesto actualizado",
+          fromName: "",
+          fromAddress: "sat@proveedor.es",
+          date: 1795179000000,
+          size: 1536,
+          flags: "",
+          hasAttachments: false,
+          snippet: "Adjuntamos el presupuesto.",
+        },
+        {
+          messageId: "17438",
+          folderRemoteId: "2",
+          conversationId: "17206",
+          subject: "Re: Afectación de apagado",
+          fromName: "JAVIER LOBO CASTRO",
+          fromAddress: "jlobo@rtva.es",
+          date: 1795179963000,
+          size: 2625302,
+          flags: "an",
+          hasAttachments: false,
+          snippet: "Buenos días. Revisamos el equipo.",
+        },
+      ],
+      deletedIds: [],
+      token: "tok-3",
+    });
+
+    const updated = await t.run((ctx) => ctx.db.get(firstIdRow));
+    expect(updated?.subject).toBe("Presupuesto actualizado");
+    expect(updated?.flags).toBe("");
+  });
 });

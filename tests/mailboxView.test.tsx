@@ -9,14 +9,16 @@ import { settle } from "./settle";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { mockUseQuery, mockUseAction } = vi.hoisted(() => ({
+const { mockUseQuery, mockUseAction, mockUseMutation } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
   mockUseAction: vi.fn(),
+  mockUseMutation: vi.fn(),
 }));
 
 vi.mock("convex/react", () => ({
   useQuery: mockUseQuery,
   useAction: mockUseAction,
+  useMutation: mockUseMutation,
 }));
 
 import { MailboxView } from "@/pages/dashboard/MailboxView";
@@ -135,18 +137,28 @@ function setupQueries({
     download?: ReturnType<typeof vi.fn>;
   };
 } = {}) {
-  // `api` es un proxy de Convex y cada acceso puede devolver una referencia
-  // distinta, así que se distingue por los argumentos y el orden de las dos
-  // consultas sin argumentos (cuenta y carpetas).
   let callsWithoutArgs = 0;
+  // `MailboxView` llama a:
+  //   1) `account` (sin args),
+  //   2) `folders` (`{}`),
+  //   3) `backgroundJobs.listMine` (`{}`),
+  //   4) `mailHeaders.list` (`{ folderRemoteId, ... }`).
   mockUseQuery.mockImplementation(
-    (_query: unknown, args?: Record<string, unknown>) => {
-      if (args && typeof args === "object") {
+    (_query: unknown, args?: Record<string, unknown> | "skip") => {
+      if (args === "skip") return undefined;
+      if (args && typeof args === "object" && "folderRemoteId" in args) {
         return headersForArgs ? headersForArgs(args) : headers;
       }
-      callsWithoutArgs += 1;
-      return callsWithoutArgs % 2 === 1 ? account : folders;
+      if (args && typeof args === "object") {
+        // `folders` tiene 0 keys y se llama antes que `backgroundJobs.listMine`
+        callsWithoutArgs += 1;
+        return callsWithoutArgs % 2 === 1 ? folders : [];
+      }
+      return account;
     },
+  );
+  mockUseMutation.mockReturnValue(
+    vi.fn().mockResolvedValue({ jobId: "j1", reused: false }),
   );
   const sync =
     actions?.sync ??
@@ -316,6 +328,14 @@ describe("MailboxView", () => {
       )?.set;
       setValue?.call(search, "filtro");
       search?.dispatchEvent(new Event("input", { bubbles: true }));
+      await settle();
+    });
+
+    // El buscador aplica debounce de 200 ms: no dispara la búsqueda de inmediato
+    expect(listCalls().at(-1)?.search).toBeUndefined();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 230));
       await settle();
     });
 

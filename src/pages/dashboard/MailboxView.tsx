@@ -47,7 +47,7 @@ import {
   Trash2,
   WifiOff,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { countLabel, MAILBOX_PAGE_SIZE } from "./mailbox/helpers";
 import { MessageList, MessageListSkeleton } from "./mailbox/MessageList";
@@ -107,6 +107,7 @@ export function MailboxView({
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<MailTagId | "all">("all");
   const [sortBy, setSortBy] = useState<MailSortField>("date");
   const [sortDir, setSortDir] = useState<MailSortDirection>("desc");
@@ -132,12 +133,25 @@ export function MailboxView({
     page: 1,
   });
 
+  useEffect(() => {
+    const next = search.trim();
+    const timer = window.setTimeout(
+      () => {
+        setDebouncedSearch(next);
+      },
+      next ? 200 : 0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const effectiveSearch = search.trim() ? debouncedSearch : "";
+
   const activeFolder =
     folders?.find((folder) => folder.remoteId === selectedFolderId) ??
     folders?.[0] ??
     null;
   const activeFolderId = activeFolder?.remoteId ?? null;
-  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${search.trim()}|${tagFilter}|${sortBy}|${sortDir}|${groupByConversation}`;
+  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${effectiveSearch}|${tagFilter}|${sortBy}|${sortDir}|${groupByConversation}`;
 
   // Al cambiar de carpeta o de búsqueda se vuelve a la primera página en el
   // mismo render. Así la consulta siguiente ya pide `offset: 0` y no llega a
@@ -153,7 +167,7 @@ export function MailboxView({
     activeFolderId
       ? {
           folderRemoteId: activeFolderId,
-          search: search.trim() || undefined,
+          search: effectiveSearch || undefined,
           tag: tagFilter === "all" ? undefined : tagFilter,
           sortBy,
           sortDir,
