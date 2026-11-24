@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isDetailedErrorsEnabled } from "@/lib/workshop";
 
 export interface ModuleErrorBoundaryProps {
   children: ReactNode;
@@ -80,7 +81,7 @@ export class ModuleErrorBoundary extends Component<
                 Puedes reintentar la acción o volver al panel principal.
               </p>
 
-              {this.state.error?.message && (
+              {this.state.error?.message && isDetailedErrorsEnabled() && (
                 <details className="mt-3 rounded-md bg-card/60 p-2.5 text-xs text-muted-foreground border border-border/60">
                   <summary className="cursor-pointer font-medium hover:text-foreground">
                     Detalles técnicos del error

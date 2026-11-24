@@ -905,15 +905,57 @@ export function workWithoutTraceDays(
   return days >= marginDays ? days : null;
 }
 
+export interface ErrorVisibilityEnv {
+  VITE_APP_ENV?: string;
+  VITE_ERROR_DETAILS?: string;
+  DEV?: boolean;
+  PROD?: boolean;
+}
+
+/**
+ * Determina si se deben mostrar detalles técnicos de errores inesperados.
+ * En builds de producción (`PROD`) se ocultan por defecto salvo que el entorno
+ * indique explícitamente `VITE_APP_ENV=development` o `VITE_ERROR_DETAILS=true`.
+ */
+export function isDetailedErrorsEnabled(env?: ErrorVisibilityEnv): boolean {
+  const source =
+    env ??
+    (typeof import.meta !== "undefined"
+      ? (import.meta as unknown as { env?: ErrorVisibilityEnv }).env
+      : undefined);
+  if (!source) return false;
+
+  const override = String(source.VITE_ERROR_DETAILS ?? "")
+    .trim()
+    .toLowerCase();
+  if (override === "true" || override === "1") return true;
+  if (override === "false" || override === "0") return false;
+
+  const appEnv = String(source.VITE_APP_ENV ?? "")
+    .trim()
+    .toLowerCase();
+  if (appEnv === "production" || appEnv === "prod") return false;
+  if (appEnv === "development" || appEnv === "dev") return true;
+
+  if (source.PROD === true && source.DEV !== true) return false;
+  return source.DEV === true;
+}
+
 /** Extrae un mensaje legible de un error de Convex para mostrarlo en un toast. */
-export function getErrorMessage(error: unknown): string {
+export function getErrorMessage(
+  error: unknown,
+  options?: { detailed?: boolean },
+): string {
   if (error instanceof ConvexError && typeof error.data === "string") {
     return error.data;
   }
   if (error instanceof Error) {
     const match = /Uncaught ConvexError:\s*(.+?)(?:\n|$)/.exec(error.message);
     if (match?.[1]) return match[1].replace(/["\\]+$/, "");
-    return error.message;
+    const detailed = options?.detailed ?? isDetailedErrorsEnabled();
+    if (detailed) return error.message;
+    console.error("[AppError]", error);
+    return "Se ha producido un error inesperado. Inténtalo de nuevo.";
   }
   return "Se ha producido un error. Inténtalo de nuevo.";
 }
