@@ -484,3 +484,10 @@ export function blockedRequestSteps(
   }
   return groups;
 }
+
+/** ¿La petición tiene adjuntos cuya URL firmada aún no se ha resuelto? */
+export function requestNeedsAttachmentUrls(request: {
+  attachments?: readonly { url?: string | null }[];
+}): boolean {
+  return (request.attachments ?? []).some((attachment) => !attachment.url);
+}

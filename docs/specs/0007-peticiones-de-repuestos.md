@@ -80,6 +80,7 @@ stateDiagram-v2
 ## 6. Requisitos No Funcionales
 
 - **RNF-001:** Validación de subidas de adjuntos por *magic bytes* (`uploads.ts`).
+- **RNF-002 (Proyección ligera CQRS):** `partRequests.list` y `partRequests.paginatedList` omiten firmar `attachments[].url` por defecto (`includeAttachmentUrls?: boolean`, devolviendo `url: null` y conservando metadatos), mientras que `partRequests.detail` resuelve las URLs bajo demanda al abrir `RequestDetailSheet`.
 
 ---
 

@@ -1,7 +1,13 @@
 import { useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
-import { canEditRequest, isRequestSettled } from "@/lib/requestFlow";
+import {
+  canEditRequest,
+  isRequestSettled,
+  requestNeedsAttachmentUrls,
+} from "@/lib/requestFlow";
 import {
   blockedJourneySteps,
   nextRequestAction,
@@ -61,7 +67,13 @@ export function RequestDetailSheet({
   resuming = false,
   showStock = true,
 }: RequestDetailSheetProps) {
-  const archivedAt = request.archivedAt;
+  const detailed = useQuery(
+    api.partRequests.detail,
+    requestNeedsAttachmentUrls(request) ? { requestId: request._id } : "skip",
+  );
+  const resolvedRequest = detailed ?? request;
+
+  const archivedAt = resolvedRequest.archivedAt;
   const withdrawnAt = request.deletedAt;
   const isWithdrawn = withdrawnAt !== undefined;
   const isArchived = archivedAt !== undefined;
@@ -164,7 +176,7 @@ export function RequestDetailSheet({
             notes={request.notes}
           />
 
-          <RequestAttachmentsCard attachments={request.attachments} />
+          <RequestAttachmentsCard attachments={resolvedRequest.attachments} />
 
           <RequestLinesCard
             enrichedLines={enrichedLines}

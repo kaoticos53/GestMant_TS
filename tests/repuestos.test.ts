@@ -1354,4 +1354,42 @@ describe("partRequests.detail — abrir una petición concreta, sin cargar la co
       await t.query(api.partRequests.detail, { requestId: id }),
     ).toBeNull();
   });
+
+  test("partRequests.list omite firmar adjuntos por defecto y partRequests.detail los resuelve bajo demanda", async () => {
+    const { t, authed, id } = await peticionInsertada();
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["foto adjunta"], { type: "image/png" })),
+    );
+    await t.run((ctx) =>
+      ctx.db.patch(id, {
+        status: "pending",
+        attachments: [
+          { storageId, name: "placa-averia.png", kind: "image" as const },
+        ],
+      }),
+    );
+
+    const listed = await authed.query(api.partRequests.list, {});
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.attachments).toHaveLength(1);
+    expect(listed[0]?.attachments[0]?.name).toBe("placa-averia.png");
+    expect(listed[0]?.attachments[0]?.storageId).toBe(storageId);
+    expect(listed[0]?.attachments[0]?.url).toBeNull();
+
+    const paginated = await authed.query(api.partRequests.paginatedList, {
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(paginated.page).toHaveLength(1);
+    expect(paginated.page[0]?.attachments[0]?.url).toBeNull();
+
+    const detailed = await authed.query(api.partRequests.detail, {
+      requestId: id,
+    });
+    expect(detailed?.attachments[0]?.url).toContain("api/storage/");
+
+    const listedWithUrls = await authed.query(api.partRequests.list, {
+      includeAttachmentUrls: true,
+    });
+    expect(listedWithUrls[0]?.attachments[0]?.url).toContain("api/storage/");
+  });
 });

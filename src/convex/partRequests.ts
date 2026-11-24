@@ -99,11 +99,33 @@ export const generateUploadUrl = mutation({
   ),
 });
 
+async function resolveAttachments(
+  ctx: QueryCtx,
+  attachments: Doc<"partRequests">["attachments"],
+  signUrls: boolean,
+) {
+  const list = attachments ?? [];
+  if (!signUrls) {
+    return list.map((attachment) => ({
+      ...attachment,
+      url: null as string | null,
+    }));
+  }
+  return await Promise.all(
+    list.map(async (attachment) => ({
+      ...attachment,
+      url: await ctx.storage.getUrl(attachment.storageId),
+    })),
+  );
+}
+
 export const list = query({
   args: {
     status: v.optional(requestStatusValidator),
     /** Incluir también lo archivado (para las fichas que enlazan con él). */
     includeArchived: v.optional(v.boolean()),
+    /** Resolver URLs firmadas de adjuntos en el listado (por defecto se firman en `detail`). */
+    includeAttachmentUrls: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     // Invitado o cuenta de baja: vacío en vez de error (el panel pide esta lista
@@ -127,16 +149,12 @@ export const list = query({
       ? live
       : live.filter((request) => request.archivedAt === undefined);
 
+    const signUrls = args.includeAttachmentUrls === true;
     const sorted = active.sort((a, b) => b.createdAt - a.createdAt);
     return await Promise.all(
       sorted.map(async (request) => ({
         ...request,
-        attachments: await Promise.all(
-          (request.attachments ?? []).map(async (attachment) => ({
-            ...attachment,
-            url: await ctx.storage.getUrl(attachment.storageId),
-          })),
-        ),
+        attachments: await resolveAttachments(ctx, request.attachments, signUrls),
       })),
     );
   },
@@ -159,6 +177,7 @@ export const paginatedList = query({
     paginationOpts: paginationOptsValidator,
     status: v.optional(requestStatusValidator),
     includeArchived: v.optional(v.boolean()),
+    includeAttachmentUrls: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     if ((await memberOrNull(ctx)) === null) {
@@ -185,17 +204,13 @@ export const paginatedList = query({
       ? live
       : live.filter((request) => request.archivedAt === undefined);
 
+    const signUrls = args.includeAttachmentUrls === true;
     return {
       ...paginated,
       page: await Promise.all(
         visible.map(async (request) => ({
           ...request,
-          attachments: await Promise.all(
-            (request.attachments ?? []).map(async (attachment) => ({
-              ...attachment,
-              url: await ctx.storage.getUrl(attachment.storageId),
-            })),
-          ),
+          attachments: await resolveAttachments(ctx, request.attachments, signUrls),
         })),
       ),
     };

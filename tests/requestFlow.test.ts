@@ -14,6 +14,7 @@ import {
   nextRequestStatus,
   requestDelivery,
   requestMaterialState,
+  requestNeedsAttachmentUrls,
   deliveryNote,
   requestStepBlocker,
   resumedStatus,
@@ -476,5 +477,25 @@ describe("por qué no se puede dar un paso — lo que explica la ficha", () => {
     for (const action of bloqueados) {
       expect(canRequestStep("pending", action), action).toBe(false);
     }
+  });
+
+  test("requestNeedsAttachmentUrls detecta adjuntos pendientes de firmar", () => {
+    expect(requestNeedsAttachmentUrls({})).toBe(false);
+    expect(requestNeedsAttachmentUrls({ attachments: [] })).toBe(false);
+    expect(
+      requestNeedsAttachmentUrls({
+        attachments: [{ url: "https://cdn.example/a.png" }],
+      }),
+    ).toBe(false);
+    expect(
+      requestNeedsAttachmentUrls({
+        attachments: [{ url: null }],
+      }),
+    ).toBe(true);
+    expect(
+      requestNeedsAttachmentUrls({
+        attachments: [{ url: "https://cdn.example/a.png" }, { url: undefined }],
+      }),
+    ).toBe(true);
   });
 });
