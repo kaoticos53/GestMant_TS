@@ -1,8 +1,50 @@
-import { useState } from "react";
+import { Component, type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { extractRawErrorMessage, formatUiError } from "@/lib/workshop";
+
+class SilentAdminBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+function AdminTechnicalDetail({ rawError }: { rawError: string }) {
+  const { user } = useAuth();
+  const [showTechnical, setShowTechnical] = useState(false);
+
+  if (user?.role !== "admin") return null;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-6 px-2 text-[11px] text-muted-foreground"
+        onClick={() => setShowTechnical((prev) => !prev)}
+      >
+        {showTechnical ? "Ocultar detalle técnico" : "Ver detalle técnico"}
+      </Button>
+      {showTechnical && (
+        <p className="basis-full rounded bg-muted/60 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground break-words">
+          {rawError}
+        </p>
+      )}
+    </>
+  );
+}
 
 export interface ErrorMessageWithDetailsProps {
   /** Texto de error (cadena, Error o ConvexError). */
@@ -29,10 +71,6 @@ export function ErrorMessageWithDetails({
   className,
   textClassName,
 }: ErrorMessageWithDetailsProps) {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const [showTechnical, setShowTechnical] = useState(false);
-
   const rawError = extractRawErrorMessage(error).trim();
   const safeError = rawError
     ? formatUiError(rawError, { fallback })
@@ -52,23 +90,12 @@ export function ErrorMessageWithDetails({
           {safeError}
           {suffix}
         </p>
-        {isAdmin && hasTechnicalDetail && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[11px] text-muted-foreground"
-            onClick={() => setShowTechnical((prev) => !prev)}
-          >
-            {showTechnical ? "Ocultar detalle técnico" : "Ver detalle técnico"}
-          </Button>
+        {hasTechnicalDetail && (
+          <SilentAdminBoundary>
+            <AdminTechnicalDetail rawError={rawError} />
+          </SilentAdminBoundary>
         )}
       </div>
-      {isAdmin && hasTechnicalDetail && showTechnical && (
-        <p className="rounded bg-muted/60 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground break-words">
-          {rawError}
-        </p>
-      )}
     </div>
   );
 }

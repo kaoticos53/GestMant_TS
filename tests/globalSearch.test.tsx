@@ -22,23 +22,40 @@ const { LISTAS } = vi.hoisted(() => ({
 
 vi.mock("@/convex/_generated/api", () => ({
   api: {
-    incidents: { list: { nombre: "incidents.list" } },
-    partRequests: { list: { nombre: "partRequests.list" } },
-    spareParts: { list: { nombre: "spareParts.list" } },
-    equipment: { list: { nombre: "equipment.list" } },
+    search: { global: { nombre: "search.global" } },
   },
 }));
 
 vi.mock("convex/react", async () => {
   const { api } = await import("@/convex/_generated/api");
+  const { filterSearchGroups } = await import(
+    "@/pages/dashboard/search/helpers"
+  );
   return {
-    useQuery: (query: unknown) => {
-      if (query === api.incidents.list) return LISTAS.incidents;
-      if (query === api.partRequests.list) return LISTAS.requests;
-      if (query === api.spareParts.list || query === api.equipment.list) {
-        return [];
-      }
-      return undefined;
+    useQuery: (query: unknown, args?: unknown) => {
+      if (args === "skip" || query !== api.search.global) return undefined;
+      const { query: queryText = "" } = (args ?? {}) as { query?: string };
+      const groups = filterSearchGroups({
+        query: queryText,
+        incidents: LISTAS.incidents as Parameters<
+          typeof filterSearchGroups
+        >[0]["incidents"],
+        requests: LISTAS.requests as Parameters<
+          typeof filterSearchGroups
+        >[0]["requests"],
+        parts: [],
+        equipment: [],
+        canSearchCatalog: false,
+      });
+      const hitsOf = (kind: string) =>
+        groups.find((group) => group.kind === kind)?.hits ?? [];
+      return {
+        incidents: hitsOf("incident"),
+        requests: hitsOf("request"),
+        archived: hitsOf("archive"),
+        parts: hitsOf("part"),
+        equipment: hitsOf("equipment"),
+      };
     },
   };
 });
@@ -55,6 +72,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.useFakeTimers();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -62,6 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  vi.useRealTimers();
   container.remove();
 });
 
@@ -133,6 +152,9 @@ function buscar(consulta: string) {
     )?.set;
     escribirValor?.call(campo, consulta);
     campo.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => {
+    vi.advanceTimersByTime(200);
   });
 }
 

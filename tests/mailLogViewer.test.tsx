@@ -23,6 +23,10 @@ vi.mock("@/convex/_generated/api", () => ({
   },
 }));
 
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { role: "admin" } }),
+}));
+
 vi.mock("convex/react", async () => {
   const { api } = await import("@/convex/_generated/api");
   return {
@@ -46,6 +50,7 @@ describe("MailLogViewer (Fase 3)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("VITE_APP_ENV", "production");
     mockRetryOne.mockResolvedValue(undefined);
     mockRetryAllFailed.mockResolvedValue({ scheduled: 2 });
     mockDiscard.mockResolvedValue(undefined);
@@ -58,6 +63,7 @@ describe("MailLogViewer (Fase 3)", () => {
     await act(async () => {
       root.unmount();
     });
+    vi.unstubAllEnvs();
     container.remove();
   });
 
@@ -99,7 +105,22 @@ describe("MailLogViewer (Fase 3)", () => {
     const text = document.body.textContent ?? "";
     expect(text).toContain("Cola de reintentos y fallidos (2)");
     expect(text).toContain("INC-001");
-    expect(text).toContain("HTTP 503 Service Unavailable");
+    expect(text).toContain(
+      "No se pudo conectar con el servicio externo. Inténtalo de nuevo más tarde.",
+    );
+    expect(text).not.toContain("HTTP 503 Service Unavailable");
+
+    const detailsBtn = Array.from(document.body.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Ver detalle técnico"),
+    );
+    expect(detailsBtn).toBeDefined();
+    await act(async () => {
+      detailsBtn?.click();
+      await settle();
+    });
+    expect(document.body.textContent ?? "").toContain(
+      "HTTP 503 Service Unavailable",
+    );
 
     const retryAllBtn = Array.from(document.body.querySelectorAll("button")).find(
       (b) => b.textContent?.includes("Reintentar todos"),

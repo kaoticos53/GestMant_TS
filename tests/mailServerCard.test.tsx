@@ -32,6 +32,10 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
 }));
 
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { role: "admin" } }),
+}));
+
 vi.mock("convex/react", async () => {
   const { getFunctionName } = await import("convex/server");
   return {
@@ -133,6 +137,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.stubEnv("VITE_APP_ENV", "production");
   STATE.settings = null;
   STATE.history = [];
   STATE.checks = [];
@@ -144,6 +149,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  vi.unstubAllEnvs();
   container.remove();
   document.body.innerHTML = "";
 });
@@ -183,8 +189,16 @@ describe("el estado del camino de envío", () => {
     // Nadie ha pulsado nada: la comprobación la lanzó el propio panel.
     expect(STATE.checkCalls).toBe(1);
     expect(texto()).toContain("Estado del camino de envío");
-    // El aviso del último envío, con el motivo que dejó el servicio.
+    // El aviso del último envío, sanitizado por defecto y con detalle para administración.
     expect(texto()).toContain("Último envío: no salió el");
+    expect(texto()).toContain(
+      "No se pudo conectar con el servicio externo. Inténtalo de nuevo más tarde.",
+    );
+    const detalleBtn = boton("Ver detalle técnico");
+    expect(detalleBtn).not.toBeNull();
+    await act(async () => {
+      detalleBtn?.click();
+    });
     expect(texto()).toContain("SMTP 535 en AUTH PLAIN");
     // Y el camino de ahora mismo, con lo que aceptó el relevo.
     expect(texto()).toContain("el relevo responde y acepta las credenciales");

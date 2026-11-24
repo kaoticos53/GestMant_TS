@@ -1095,8 +1095,9 @@ export function getErrorMessage(
   const raw = extractRawErrorMessage(error);
   if (!raw) return "Se ha producido un error. Inténtalo de nuevo.";
   if (detailed) return raw;
-  if (error instanceof Error && !(error instanceof ConvexError)) {
+  const sanitized = sanitizeUserError(raw);
+  if (error instanceof Error && !(error instanceof ConvexError) && sanitized !== raw.trim()) {
     console.error("[AppError]", error);
   }
-  return sanitizeUserError(raw);
+  return sanitized;
 }
