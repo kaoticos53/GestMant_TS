@@ -66,6 +66,7 @@ export const context = internalQuery({
       reportedAt: incident.reportedAt,
       assigneeName: incident.assigneeName ?? null,
       workshopAssigneeName: incident.workshopAssigneeName ?? null,
+      userNote: incident.userNote ?? null,
       // Cuándo se retiró, si está en la papelera: es lo que se le cuenta a quien
       // notificó —y lo que fecha ese aviso, para no repetirlo.
       deletedAt: incident.deletedAt ?? null,
@@ -182,6 +183,7 @@ export const staffContext = internalQuery({
       reportedAt: incident.reportedAt,
       assigneeName: incident.assigneeName ?? null,
       workshopAssigneeName: incident.workshopAssigneeName ?? null,
+      userNote: incident.userNote ?? null,
       // Lo último que se repartió, para no repetirlo si dos toques de la ficha
       // programaron el mismo aviso antes de que el primero se apuntara.
       staffNotifiedStatus: incident.staffNotifiedStatus ?? null,

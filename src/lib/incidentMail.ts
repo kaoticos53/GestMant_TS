@@ -230,6 +230,8 @@ export interface IncidentMailInput {
   /** Quién lo lleva ahora: el técnico y, si ha pasado por taller, su responsable. */
   assigneeName?: string | null;
   workshopAssigneeName?: string | null;
+  /** Nota pública para quien notificó la incidencia al resolverla/cerrarla. */
+  userNote?: string | null;
   /** La dirección pública de la app (`SITE_URL`), para el enlace de seguimiento. */
   appUrl?: string | null;
 }
@@ -275,6 +277,10 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
   const link = withdrawn
     ? null
     : incidentTrackingLink(input.code, input.appUrl);
+  const isClosedNotice = notice === "resolved" || notice === "unresolved";
+  const closedUserNote = isClosedNotice
+    ? input.userNote?.trim() || null
+    : null;
 
   const lines = [
     `Hola, ${reporterFirstName(input.reporterName)}:`,
@@ -287,6 +293,7 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
     "",
     ...(meta ? [`ESTADO: ${meta.label}`] : []),
     copy.what,
+    ...(closedUserNote ? ["", "Nota del taller:", closedUserNote] : []),
     "",
     ...(equipment ? [`Equipo: ${equipment}`] : []),
     ...(input.location ? [`Dónde: ${input.location}`] : []),
@@ -330,6 +337,11 @@ export function renderIncidentMail(input: IncidentMailInput): IncidentEmail {
         ]
       : []),
     `<p style="margin:0 0 16px">${escapeHtml(copy.what)}</p>`,
+    ...(closedUserNote
+      ? [
+          `<div style="margin:0 0 16px;padding:10px 12px;border-left:3px solid #10b981;background:#f0fdf4"><p style="margin:0 0 4px;font-weight:600">Nota del taller</p><p style="margin:0;white-space:pre-line">${escapeHtml(closedUserNote)}</p></div>`,
+        ]
+      : []),
     `<ul style="margin:0 0 16px;padding-left:18px">`,
     ...facts.map(
       ([label, value]) =>

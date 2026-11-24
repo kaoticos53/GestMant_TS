@@ -2,6 +2,7 @@ import { backend } from "./backend";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
 import { readIncidentIntake } from "../src/lib/incidentIntake";
+import { renderIncidentMail } from "../src/lib/incidentMail";
 import {
   DEFAULT_INCIDENT_PRIORITY,
   INCIDENT_PRIORITY_META,
@@ -89,5 +90,38 @@ describe("Prioridad de incidencias y notas públicas (lógica + backend)", () =>
     );
     // La nota interna del taller nunca viaja en trackingOf
     expect(JSON.stringify(tracking)).not.toContain("conector BNC flojo");
+
+    const mailCtx = await t.query(internal.incidentMail.context, {
+      incidentId: incident._id,
+    });
+    expect(mailCtx?.userNote).toBe(
+      "Se ha reajustado el conector y ya vuelve a haber señal.",
+    );
+  });
+
+  test("renderIncidentMail incluye userNote al resolverse o cerrarse si existe", () => {
+    const resolvedMail = renderIncidentMail({
+      code: "A7K2QX9M",
+      reporterName: "Marta",
+      notice: "resolved",
+      reportedAt: Date.now(),
+      userNote: "Se ha sustituido la fuente de alimentación.",
+    });
+    expect(resolvedMail.text).toContain("Nota del taller:");
+    expect(resolvedMail.text).toContain(
+      "Se ha sustituido la fuente de alimentación.",
+    );
+    expect(resolvedMail.html).toContain(
+      "Se ha sustituido la fuente de alimentación.",
+    );
+
+    const withoutNote = renderIncidentMail({
+      code: "A7K2QX9M",
+      reporterName: "Marta",
+      notice: "resolved",
+      reportedAt: Date.now(),
+      userNote: null,
+    });
+    expect(withoutNote.text).not.toContain("Nota del taller:");
   });
 });
