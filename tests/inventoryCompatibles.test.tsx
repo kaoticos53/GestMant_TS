@@ -267,9 +267,10 @@ describe("la ficha de un repuesto — Compatible con modelos", () => {
 
     await pulsar(
       document.querySelector<HTMLButtonElement>(
-        "button[aria-label='Editar ALI-24015']",
+        "button[aria-label='Ver detalle de ALI-24015']",
       )!,
     );
+    await pulsar(boton("Editar ficha")!);
 
     // El modelo asignado aparece en sus compatibles, por su código: la
     // designación («Cámara de estudio») no dice qué modelo es.

@@ -3,6 +3,7 @@ import { DetailTitleButton } from "@/components/DetailTitleButton";
 import {
   Eye,
   Minus,
+  MoreHorizontal,
   Pencil,
   Plus,
   Printer,
@@ -11,6 +12,13 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { RichText } from "@/components/RichText";
 import { STOCK_META, formatCurrency, stockState } from "@/lib/workshop";
@@ -123,21 +131,11 @@ export const PartRow = memo(function PartRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-10 text-muted-foreground hover:text-foreground"
+            className="size-9 text-muted-foreground hover:text-foreground"
             onClick={() => onOpenDetail(part)}
             aria-label={`Ver detalle de ${part.code}`}
           >
             <Eye className="size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-10 text-muted-foreground hover:text-foreground"
-            onClick={() => onPrintLabel(part)}
-            aria-label={`Imprimir la etiqueta de ${part.code}`}
-          >
-            <Printer className="size-4" />
           </Button>
           {canManage && (
             <>
@@ -145,7 +143,7 @@ export const PartRow = memo(function PartRow({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-10"
+                className="size-9"
                 onClick={() => onQuickAdjust(part, -1)}
                 disabled={part.stock <= 0}
                 aria-label={`Quitar una unidad de ${part.code}`}
@@ -156,44 +154,53 @@ export const PartRow = memo(function PartRow({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-10"
+                className="size-9"
                 onClick={() => onQuickAdjust(part, 1)}
                 aria-label={`Añadir una unidad de ${part.code}`}
               >
                 <Plus className="size-4" />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-10"
-                onClick={() => onEdit(part)}
-                aria-label={`Editar ${part.code}`}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-10 text-muted-foreground hover:text-destructive"
-                onClick={() => onStockAdjust(part)}
-                aria-label={`Ajustar stock de ${part.code}`}
-              >
-                <SlidersHorizontal className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-10 text-muted-foreground hover:text-destructive"
-                onClick={() => onDelete(part)}
-                aria-label={`Borrar ${part.code}`}
-              >
-                <Trash2 className="size-4" />
-              </Button>
             </>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 text-muted-foreground hover:text-foreground"
+                aria-label={`Más acciones para ${part.code}`}
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => onPrintLabel(part)}>
+                <Printer className="mr-2 size-4" />
+                Imprimir etiqueta
+              </DropdownMenuItem>
+              {canManage && (
+                <>
+                  <DropdownMenuItem onClick={() => onEdit(part)}>
+                    <Pencil className="mr-2 size-4" />
+                    Editar ficha
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onStockAdjust(part)}>
+                    <SlidersHorizontal className="mr-2 size-4" />
+                    Ajustar stock
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(part)}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Borrar repuesto
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </TableCell>
     </TableRow>

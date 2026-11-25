@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { api } from "@/convex/_generated/api";
 import { isPurchaseRequestUntreated } from "@/lib/purchaseFlow";
 import { PurchasingSectionTabs } from "./purchasing/components/PurchasingSectionTabs";
@@ -30,8 +31,10 @@ export function PurchasingView({
   // órdenes y las recepciones— más lo que necesita para nombrar lo que se pide:
   // el catálogo y las peticiones de repuesto de las que sale cada compra.
   const purchasing = useQuery(api.purchasing.listPurchaseRequests, {});
-  const orders = useQuery(api.purchasing.listOrders, {}) ?? [];
-  const receptions = useQuery(api.purchasing.listReceptions, {}) ?? [];
+  const rawOrders = useQuery(api.purchasing.listOrders, {});
+  const rawReceptions = useQuery(api.purchasing.listReceptions, {});
+  const orders = rawOrders ?? [];
+  const receptions = rawReceptions ?? [];
   const partRequests =
     useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
   const parts = useQuery(api.spareParts.list) ?? [];
@@ -43,6 +46,14 @@ export function PurchasingView({
   if (initialSection !== prevInitialSection) {
     setPrevInitialSection(initialSection);
     setSection(initialSection);
+  }
+
+  if (
+    purchasing === undefined ||
+    rawOrders === undefined ||
+    rawReceptions === undefined
+  ) {
+    return <ListViewSkeleton />;
   }
 
   // Sin tratar: lo que espera a que alguien monte la orden (`lib/purchaseFlow`).

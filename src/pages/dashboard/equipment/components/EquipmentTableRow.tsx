@@ -1,6 +1,13 @@
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
@@ -9,7 +16,15 @@ import {
 } from "@/lib/movements";
 import { equipmentLabel } from "@/lib/workshop";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
-import { BookOpen, Copy, Eye, Pencil, Printer, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  Copy,
+  Eye,
+  MoreHorizontal,
+  Pencil,
+  Printer,
+  Trash2,
+} from "lucide-react";
 import type { EquipmentDoc } from "../types";
 
 interface EquipmentTableRowProps {
@@ -73,7 +88,7 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
           </div>
         )}
         {reviewOverdue && (
-          <span className="block text-xs font-medium text-amber-700">
+          <span className="block text-xs font-medium text-status-warning-foreground">
             Revisión preventiva vencida
           </span>
         )}
@@ -117,58 +132,51 @@ export const EquipmentTableRow = memo(function EquipmentTableRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-9"
             onClick={() => onViewDetail(item)}
             aria-label={`Ver detalle de ${item.model}`}
           >
             <Eye className="size-4" />
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-foreground"
-            onClick={() => onPrintLabel(item)}
-            title={`Imprimir la etiqueta de ${item.code ?? item.model}`}
-            aria-label={`Imprimir la etiqueta de ${item.code ?? item.model}`}
-          >
-            <Printer className="size-4" />
-          </Button>
-          {canManage && (
-            <>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 text-muted-foreground hover:text-foreground"
-                onClick={() => onDuplicate(item)}
-                title={`Añadir otra unidad de ${item.model} (usar modelo como plantilla)`}
-                aria-label={`Añadir otra unidad de ${item.model}`}
+                className="size-9 text-muted-foreground hover:text-foreground"
+                aria-label={`Más acciones para ${item.model}`}
               >
-                <Copy className="size-4" />
+                <MoreHorizontal className="size-4" />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8"
-                onClick={() => onEdit(item)}
-                aria-label={`Editar ${item.model}`}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-destructive"
-                onClick={() => onDelete(item)}
-                aria-label={`Borrar ${item.model}`}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </>
-          )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => onPrintLabel(item)}>
+                <Printer className="mr-2 size-4" />
+                Imprimir etiqueta
+              </DropdownMenuItem>
+              {canManage && (
+                <>
+                  <DropdownMenuItem onClick={() => onDuplicate(item)}>
+                    <Copy className="mr-2 size-4" />
+                    Duplicar unidad
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onEdit(item)}>
+                    <Pencil className="mr-2 size-4" />
+                    Editar equipo
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(item)}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Borrar equipo
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </TableCell>
     </TableRow>

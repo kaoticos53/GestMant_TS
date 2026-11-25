@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { PartFormDialog } from "./inventory/dialogs/PartFormDialog";
@@ -40,6 +41,7 @@ export function InventoryView({
 
   const {
     parts,
+    loading,
     equipment,
     catalogModels,
     search,
@@ -77,6 +79,10 @@ export function InventoryView({
 
   const detailTarget =
     detailId === null ? null : (parts.find((part) => part._id === detailId) ?? null);
+
+  if (loading) {
+    return <ListViewSkeleton />;
+  }
 
   return (
     <div className="flex flex-col gap-4">

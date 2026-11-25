@@ -61,7 +61,7 @@ export const INCIDENT_PRIORITY_META: Record<
     label: "Alta",
     rank: 3,
     badgeClassName:
-      "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   urgent: {
     label: "Urgente",
@@ -139,8 +139,8 @@ export const STATUS_META: Record<
     label: "Pendiente",
     description: "Esperando revisión del responsable de repuestos",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    dotClassName: "bg-amber-500",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
+    dotClassName: "bg-status-warning",
   },
   approved: {
     label: "Aprobada",
@@ -158,8 +158,8 @@ export const STATUS_META: Record<
     label: "Entregada",
     description: "Material entregado al técnico",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
-    dotClassName: "bg-emerald-600",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
+    dotClassName: "bg-status-success",
   },
   onHold: {
     label: "En espera",
@@ -171,8 +171,8 @@ export const STATUS_META: Record<
     label: "Devuelta",
     description: "El material se ha devuelto del técnico",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    dotClassName: "bg-amber-500",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
+    dotClassName: "bg-status-warning",
   },
   cancelled: {
     label: "Cancelada",
@@ -184,16 +184,16 @@ export const STATUS_META: Record<
     label: "Presupuesto pendiente",
     description: "En espera de respuesta del proveedor",
     badgeClassName:
-      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
-    dotClassName: "bg-sky-500",
+      "border-status-info/30 bg-status-info-surface text-status-info-foreground",
+    dotClassName: "bg-status-info",
   },
   materialReceived: {
     label: "Material recibido",
     description:
       "Lo que faltaba se compró y ya ha entrado en el almacén: se puede resolver",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
-    dotClassName: "bg-emerald-600",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
+    dotClassName: "bg-status-success",
   },
 };
 
@@ -212,7 +212,7 @@ export const SEVERITY_META: Record<
   high: {
     label: "Alta",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   critical: {
     label: "Crítica",
@@ -364,12 +364,12 @@ export const STOCK_META: Record<
   low: {
     label: "Stock bajo",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   ok: {
     label: "Disponible",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
   },
 };
 
@@ -401,13 +401,13 @@ export const INCIDENT_STATUS_META: Record<
   workshop: {
     label: "En taller",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
     description: "Entrada de incidencia a taller abierta",
   },
   waitingParts: {
     label: "En espera de repuestos",
     badgeClassName:
-      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
+      "border-status-info/30 bg-status-info-surface text-status-info-foreground",
     description:
       "Con una petición de repuestos abierta: no se trabaja hasta que llegue el material",
   },
@@ -427,7 +427,7 @@ export const INCIDENT_STATUS_META: Record<
   resolved: {
     label: "Resuelta",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
     description: "Cerrada con resolución",
   },
   unresolved: {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
@@ -43,7 +44,8 @@ export function EquipmentView({
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
 
-  const equipment = useQuery(api.equipment.list, {}) ?? [];
+  const rawEquipment = useQuery(api.equipment.list, {});
+  const equipment = rawEquipment ?? [];
   const parts = useQuery(api.spareParts.list) ?? [];
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const requests =
@@ -96,6 +98,10 @@ export function EquipmentView({
 
   const canAddManual = canAddManualNotes(canWriteManuals, canManageManuals);
   const rights = getManualRights(canManageManuals, currentUserId);
+
+  if (rawEquipment === undefined) {
+    return <ListViewSkeleton />;
+  }
 
   return (
     <div className="flex flex-col gap-4">

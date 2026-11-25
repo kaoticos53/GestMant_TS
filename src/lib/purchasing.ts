@@ -33,17 +33,17 @@ export const PURCHASE_REQUEST_STATUS_META: Record<
   pending: {
     label: "Sin tratar",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   ordered: {
     label: "Pedido al proveedor",
     badgeClassName:
-      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
+      "border-status-info/30 bg-status-info-surface text-status-info-foreground",
   },
   received: {
     label: "Recibido",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
   },
   cancelled: {
     label: "Retirada",
@@ -59,19 +59,19 @@ export const PURCHASE_ORDER_STATUS_META: Record<
     label: "Pendiente",
     description: "Enviada al proveedor; todavía no ha llegado nada",
     badgeClassName:
-      "border-sky-600/25 bg-sky-600/10 text-sky-700 dark:text-sky-300",
+      "border-status-info/30 bg-status-info-surface text-status-info-foreground",
   },
   partial: {
     label: "Parcial",
     description: "Ha llegado parte del material",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   completed: {
     label: "Completada",
     description: "Ha llegado todo lo que se pidió",
     badgeClassName:
-      "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
   },
   cancelled: {
     label: "Anulada",

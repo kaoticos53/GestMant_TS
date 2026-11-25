@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -43,7 +44,8 @@ export function ManualsView({
   /** Manual concreto que se abre al entrar (desde el asistente IA). */
   initialDetailId?: Id<"manuals"> | null;
 }) {
-  const manuals = useQuery(api.manuals.list, {}) ?? [];
+  const rawManuals = useQuery(api.manuals.list, {});
+  const manuals = rawManuals ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
 
   const [formTarget, setFormTarget] = useState<{
@@ -93,6 +95,10 @@ export function ManualsView({
   const visible = rows.slice(paging.from - 1, paging.to);
 
   const { exportCsv } = useManualExport(rows, listState.equipmentOf);
+
+  if (rawManuals === undefined) {
+    return <ListViewSkeleton />;
+  }
 
   return (
     <div className="flex flex-col gap-4">

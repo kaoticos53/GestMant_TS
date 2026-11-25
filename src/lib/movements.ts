@@ -44,12 +44,12 @@ export const EQUIPMENT_OPERATIONAL_META: Record<
   operational: {
     label: "Operativo",
     badgeClassName:
-      "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      "border-status-success/30 bg-status-success-surface text-status-success-foreground",
   },
   in_workshop: {
     label: "En taller",
     badgeClassName:
-      "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      "border-status-warning/30 bg-status-warning-surface text-status-warning-foreground",
   },
   external_repair: {
     label: "En SAT externo",
@@ -96,12 +96,12 @@ export const STOCK_ADJUSTMENT_OPTIONS: ReadonlyArray<{
   value: StockAdjustmentKind;
   label: string;
 }> = [
-  { value: "manual_adjust", label: "Ajuste manual" },
-  { value: "loss", label: "Pérdida / extravío" },
-  { value: "damage", label: "Rotura / merma" },
-  { value: "inventory_count", label: "Recuento físico" },
-  { value: "salvage", label: "Recuperado de equipo" },
-];
+    { value: "manual_adjust", label: "Ajuste manual" },
+    { value: "loss", label: "Pérdida / extravío" },
+    { value: "damage", label: "Rotura / merma" },
+    { value: "inventory_count", label: "Recuento físico" },
+    { value: "salvage", label: "Recuperado de equipo" },
+  ];
 
 export const EQUIPMENT_MOVEMENT_META: Record<
   EquipmentMovementKind,
@@ -135,13 +135,13 @@ export function computeStockDelta(
 
 export type DetectedEquipmentChange =
   | {
-      kind: "location_change";
-      fromLocation?: string;
-      toLocation?: string;
-    }
+    kind: "location_change";
+    fromLocation?: string;
+    toLocation?: string;
+  }
   | {
-      kind: "decommission" | "reactivation";
-    };
+    kind: "decommission" | "reactivation";
+  };
 
 function normalizeLocation(value?: string): string | undefined {
   const trimmed = value?.trim();

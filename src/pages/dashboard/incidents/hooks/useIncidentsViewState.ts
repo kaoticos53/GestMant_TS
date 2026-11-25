@@ -13,7 +13,9 @@ export function useIncidentsViewState({
 }: {
   initialDetailId?: Id<"incidents"> | null;
 } = {}) {
-  const incidents = useQuery(api.incidents.list, {}) ?? [];
+  const rawIncidents = useQuery(api.incidents.list, {});
+  const incidents = rawIncidents ?? [];
+  const loading = rawIncidents === undefined;
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const requests =
     useQuery(api.partRequests.list, { includeArchived: true }) ?? [];
@@ -53,6 +55,7 @@ export function useIncidentsViewState({
 
   return {
     incidents,
+    loading,
     equipment,
     requests,
     reportsOpen,

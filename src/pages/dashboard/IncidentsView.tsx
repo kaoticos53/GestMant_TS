@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { IncidentAiAssistantDialog } from "./incidents/components/IncidentAiAssistantDialog";
@@ -42,6 +43,10 @@ export function IncidentsView({
     setAiOpen(false);
     state.setDetailId(match._id);
   };
+
+  if (state.loading) {
+    return <ListViewSkeleton />;
+  }
 
   return (
     <div className="flex flex-col gap-5">

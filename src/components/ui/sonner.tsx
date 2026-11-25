@@ -5,13 +5,31 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { useSyncExternalStore } from "react"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { isUpdateReady, subscribeUpdateReady } from "@/lib/pwaUpdate"
 
+function subscribeDocumentTheme(callback: () => void) {
+  if (typeof document === "undefined") return () => {}
+  const observer = new MutationObserver(callback)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  })
+  return () => observer.disconnect()
+}
+
+function getDocumentTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "light"
+  return document.documentElement.classList.contains("dark") ? "dark" : "light"
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const theme = useSyncExternalStore(
+    subscribeDocumentTheme,
+    getDocumentTheme,
+    () => "light" as const,
+  )
   // El aviso de versión nueva ocupa el ancho de abajo en móvil: mientras está
   // visible, los avisos de sonner suben para no quedar debajo (ver
   // `components/PwaUpdateBanner.tsx`). En escritorio no hace falta —el aviso va

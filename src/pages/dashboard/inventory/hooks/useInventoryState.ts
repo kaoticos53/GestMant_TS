@@ -23,7 +23,9 @@ export function useInventoryState({
   InventoryViewProps,
   "currentUserId" | "initialSearch" | "initialLowStockOnly"
 >) {
-  const parts = useQuery(api.spareParts.list) ?? [];
+  const rawParts = useQuery(api.spareParts.list);
+  const parts = rawParts ?? [];
+  const loading = rawParts === undefined;
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const catalogModels = useQuery(api.equipmentModels.list) ?? [];
   const adjustStock = useMutation(api.spareParts.adjustStock);
@@ -114,6 +116,7 @@ export function useInventoryState({
 
   return {
     parts,
+    loading,
     equipment,
     catalogModels,
     search,

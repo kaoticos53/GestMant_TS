@@ -1,4 +1,5 @@
 import type { Id } from "@/convex/_generated/dataModel";
+import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { QueueToolbar } from "./QueueToolbar";
 import { SORT_OPTIONS, type RequestFilterId } from "./requests/types";
 import { useRequestsState } from "./requests/hooks/useRequestsState";
@@ -41,6 +42,10 @@ export function RequestsView({
     initialDetailId,
     initialFilter,
   });
+
+  if (state.loading) {
+    return <ListViewSkeleton />;
+  }
 
   return (
     <div className="flex flex-col gap-5">

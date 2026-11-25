@@ -19,7 +19,9 @@ export function useRequestsState({
   initialDetailId?: Id<"partRequests"> | null;
   initialFilter?: RequestFilterId;
 }) {
-  const requests = useQuery(api.partRequests.list, {}) ?? [];
+  const rawRequests = useQuery(api.partRequests.list, {});
+  const requests = rawRequests ?? [];
+  const loading = rawRequests === undefined;
   const parts = useQuery(api.spareParts.list) ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const resume = useMutation(api.partRequests.resume);
@@ -103,6 +105,7 @@ export function useRequestsState({
 
   return {
     requests,
+    loading,
     parts,
     equipment,
     decision,

@@ -108,7 +108,7 @@ export function IncidentCard({
             </span>
           )}
           {incident.workshopAssigneeName && (
-            <span className="font-medium text-amber-700">
+            <span className="font-medium text-status-warning-foreground">
               · Taller: {incident.workshopAssigneeName}
             </span>
           )}
