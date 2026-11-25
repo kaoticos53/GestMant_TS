@@ -36,6 +36,10 @@ export function useRequestsState({
   const [associateTarget, setAssociateTarget] = useState<RequestDoc | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<Id<"partRequests">>>(
+    () => new Set(),
+  );
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   const filterState = useRequestFilters({
     requests,
@@ -70,10 +74,29 @@ export function useRequestsState({
     }
   };
 
+  const toggleSelect = (id: Id<"partRequests">) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
   const handleArchive = async (request: RequestDoc) => {
     setArchivingId(request._id);
     try {
       await archiveRequest({ requestId: request._id });
+      setSelectedIds((prev) => {
+        if (!prev.has(request._id)) return prev;
+        const next = new Set(prev);
+        next.delete(request._id);
+        return next;
+      });
       archiveWithUndoToast({
         reference: request.reference,
         noun: "petición",
@@ -90,6 +113,41 @@ export function useRequestsState({
       toast.error(getErrorMessage(error));
     } finally {
       setArchivingId(null);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkArchiving(true);
+    try {
+      const results = await Promise.allSettled(
+        ids.map((requestId) => archiveRequest({ requestId })),
+      );
+      let ok = 0;
+      const failedIds = new Set<Id<"partRequests">>();
+      results.forEach((res, idx) => {
+        if (res.status === "fulfilled") {
+          ok += 1;
+        } else {
+          failedIds.add(ids[idx]);
+        }
+      });
+      setSelectedIds(failedIds);
+      if (ok > 0) {
+        toast.success(
+          ok === 1
+            ? "1 petición archivada"
+            : `${ok} peticiones archivadas`,
+        );
+      }
+      if (failedIds.size > 0) {
+        toast.error(
+          `${failedIds.size} petición(es) no se pudieron archivar`,
+        );
+      }
+    } finally {
+      setBulkArchiving(false);
     }
   };
 
@@ -117,9 +175,14 @@ export function useRequestsState({
     newOpen,
     setNewOpen,
     archivingId,
+    selectedIds,
+    bulkArchiving,
+    toggleSelect,
+    clearSelection,
     openRequest,
     handleResume,
     handleArchive,
+    handleBulkArchive,
     handleExport,
     ...filterState,
   };

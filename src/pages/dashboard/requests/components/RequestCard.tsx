@@ -18,6 +18,8 @@ export interface RequestCardProps {
   compact?: boolean;
   /** Esta petición se está mandando al archivo ahora mismo. */
   archiving?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onOpen: () => void;
   onAssociate: () => void;
   onApprove: () => void;
@@ -30,6 +32,8 @@ export function RequestCard({
   request,
   compact = false,
   archiving = false,
+  selected = false,
+  onToggleSelect,
   onOpen,
   onAssociate,
   onApprove,
@@ -86,6 +90,8 @@ export function RequestCard({
         request={request}
         compact={compact}
         archiving={archiving}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
         onOpen={onOpen}
         onAssociate={onAssociate}
         onApprove={onApprove}

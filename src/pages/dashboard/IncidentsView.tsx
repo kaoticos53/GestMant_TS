@@ -105,12 +105,20 @@ export function IncidentsView({
           sections={state.sections}
           compact={state.compact}
           canAssign={canAssign}
+          canSelfAssign={Boolean(currentUserId)}
           archivingId={state.archivingId}
+          selfAssigningId={state.selfAssigningId}
+          selectedIds={state.selectedIds}
+          bulkArchiving={state.bulkArchiving}
           areaRef={state.areaRef}
           resetKey={`${state.search}|${state.sort}|${state.filter}|${state.paging.page}`}
           paging={state.paging}
           onOpen={(incident) => state.setDetailId(incident._id)}
+          onSelfAssign={(incident) => void state.handleSelfAssign(incident)}
           onArchive={(incident) => void state.handleArchive(incident)}
+          onToggleSelect={state.toggleSelect}
+          onClearSelection={state.clearSelection}
+          onBulkArchive={() => void state.handleBulkArchive()}
         />
       )}
 

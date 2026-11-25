@@ -1,6 +1,7 @@
 import { Archive, Check, PackageCheck, Wrench } from "lucide-react";
 import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { asRequest } from "@/lib/abilities";
 import { cn } from "@/lib/utils";
 import { getRequestActionFlags, getRequestUnitsSummary } from "./helpers";
@@ -10,6 +11,8 @@ export function RequestCardFooter({
   request,
   compact,
   archiving,
+  selected = false,
+  onToggleSelect,
   onOpen,
   onAssociate,
   onApprove,
@@ -86,19 +89,31 @@ export function RequestCardFooter({
         )}
         {flags.canArchive && (
           <Can I="archive" this={asRequest(request)}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              title={`Mandar ${request.reference} al archivo`}
-              aria-label={`Archivar ${request.reference}`}
-              disabled={archiving}
-              onClick={onArchive}
-            >
-              <Archive className="size-3.5" />
-              Archivar
-            </Button>
+            <div className="flex items-center gap-2">
+              {onToggleSelect && (
+                <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border/70 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                  <Checkbox
+                    checked={selected}
+                    onCheckedChange={() => onToggleSelect()}
+                    aria-label={`Seleccionar ${request.reference}`}
+                  />
+                  <span>Sel.</span>
+                </label>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                title={`Mandar ${request.reference} al archivo`}
+                aria-label={`Archivar ${request.reference}`}
+                disabled={archiving}
+                onClick={onArchive}
+              >
+                <Archive className="size-3.5" />
+                Archivar
+              </Button>
+            </div>
           </Can>
         )}
       </div>

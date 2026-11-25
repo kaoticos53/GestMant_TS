@@ -1,12 +1,6 @@
 import { FileDown, Plus } from "lucide-react";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { equipmentLabel } from "@/lib/workshop";
 import { FILTERS, type EquipmentDoc, type RequestFilterId } from "../types";
@@ -62,25 +56,23 @@ export function RequestsHeaderBar({
           ))}
         </div>
 
-        <Select
+        <SearchableSelect
           value={equipmentFilter}
           onValueChange={onEquipmentFilterChange}
-        >
-          <SelectTrigger
-            className="w-full sm:w-56"
-            aria-label="Filtrar peticiones por equipo"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los equipos</SelectItem>
-            {equipment.map((item) => (
-              <SelectItem key={item._id} value={item._id}>
-                {equipmentLabel(item)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={[
+            { value: "all", label: "Todos los equipos" },
+            ...equipment.map((item) => ({
+              value: item._id,
+              label: equipmentLabel(item),
+              keywords: `${item.code ?? ""} ${item.brand ?? ""} ${item.serialNumber ?? ""}`,
+            })),
+          ]}
+          placeholder="Todos los equipos"
+          searchPlaceholder="Buscar equipo…"
+          emptyMessage="Ningún equipo coincide"
+          ariaLabel="Filtrar peticiones por equipo"
+          className="w-full sm:w-56"
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -87,6 +87,8 @@ export function RequestsView({
           sections={state.sections}
           compact={state.compact}
           archivingId={state.archivingId}
+          selectedIds={state.selectedIds}
+          bulkArchiving={state.bulkArchiving}
           areaRef={state.areaRef}
           resetKey={`${state.search}|${state.sort}|${state.filter}|${state.paging.page}`}
           paging={state.paging}
@@ -94,6 +96,9 @@ export function RequestsView({
           onAssociate={(request) => state.setAssociateTarget(request)}
           onDecision={state.openDecision}
           onArchive={(request) => void state.handleArchive(request)}
+          onToggleSelect={state.toggleSelect}
+          onClearSelection={state.clearSelection}
+          onBulkArchive={() => void state.handleBulkArchive()}
         />
       )}
 

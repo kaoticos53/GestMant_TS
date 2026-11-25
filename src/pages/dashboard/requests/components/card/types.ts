@@ -39,6 +39,8 @@ export interface RequestCardFooterProps {
   request: RequestDoc;
   compact: boolean;
   archiving: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onOpen: () => void;
   onAssociate: () => void;
   onApprove: () => void;

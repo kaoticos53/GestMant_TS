@@ -1,5 +1,8 @@
+import { Archive } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { useTablePagination } from "@/hooks/use-table-pagination";
 import { RequestCard } from "./RequestCard";
 import type { DecisionMode, RequestDoc, RequestSection } from "../types";
@@ -8,6 +11,8 @@ export function RequestsList({
   sections,
   compact,
   archivingId,
+  selectedIds,
+  bulkArchiving = false,
   areaRef,
   resetKey,
   paging,
@@ -15,10 +20,15 @@ export function RequestsList({
   onAssociate,
   onDecision,
   onArchive,
+  onToggleSelect,
+  onClearSelection,
+  onBulkArchive,
 }: {
   sections: RequestSection[];
   compact: boolean;
   archivingId: string | null;
+  selectedIds?: Set<Id<"partRequests">>;
+  bulkArchiving?: boolean;
   areaRef: (element: HTMLDivElement | null) => void;
   resetKey: string;
   paging: ReturnType<typeof useTablePagination>;
@@ -26,9 +36,48 @@ export function RequestsList({
   onAssociate: (request: RequestDoc) => void;
   onDecision: (request: RequestDoc, mode: DecisionMode) => void;
   onArchive: (request: RequestDoc) => void;
+  onToggleSelect?: (id: Id<"partRequests">) => void;
+  onClearSelection?: () => void;
+  onBulkArchive?: () => void;
 }) {
+  const selectedCount = selectedIds?.size ?? 0;
+
   return (
     <div className="flex flex-col gap-5">
+      {selectedCount > 0 && onBulkArchive && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal/30 bg-signal/5 px-4 py-2.5 text-sm">
+          <span className="font-medium tabular-nums">
+            {selectedCount === 1
+              ? "1 petición seleccionada"
+              : `${selectedCount} peticiones seleccionadas`}
+          </span>
+          <div className="flex items-center gap-2">
+            {onClearSelection && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onClearSelection}
+                disabled={bulkArchiving}
+              >
+                Limpiar selección
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onBulkArchive}
+              disabled={bulkArchiving}
+            >
+              <Archive className="size-3.5" />
+              {bulkArchiving ? "Archivando…" : "Archivar seleccionadas"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       <ListArea ref={areaRef} resetKey={resetKey}>
         <div className="flex flex-col gap-5">
           {sections.map((section) => (
@@ -50,6 +99,12 @@ export function RequestsList({
                     key={request._id}
                     request={request}
                     compact={compact}
+                    selected={selectedIds?.has(request._id) ?? false}
+                    onToggleSelect={
+                      onToggleSelect
+                        ? () => onToggleSelect(request._id)
+                        : undefined
+                    }
                     onOpen={() => onOpen(request)}
                     onAssociate={() => onAssociate(request)}
                     onApprove={() => onDecision(request, "approve")}

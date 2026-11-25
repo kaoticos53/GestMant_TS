@@ -1,14 +1,8 @@
 import { Plus, X } from "lucide-react";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { EquipmentDoc, PartDoc } from "../../types";
@@ -83,21 +77,21 @@ export function RequestPartsSection({
       )}
 
       <div className="flex gap-2">
-        <Select
+        <SearchableSelect
           value={selectedId}
           onValueChange={onSelectIdChange}
-        >
-          <SelectTrigger className="w-full" disabled={disabled}>
-            <SelectValue placeholder="Buscar repuesto en el catálogo" />
-          </SelectTrigger>
-          <SelectContent>
-            {visibleParts.map((part) => (
-              <SelectItem key={part._id} value={part._id}>
-                {part.code} — {part.name} (stock {part.stock})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={visibleParts.map((part) => ({
+            value: part._id,
+            label: `${part.code} — ${part.name}`,
+            hint: `stock ${part.stock}`,
+            keywords: `${part.code} ${part.name} ${part.partNumber ?? ""}`,
+          }))}
+          placeholder="Buscar repuesto en el catálogo"
+          searchPlaceholder="Buscar por código o nombre…"
+          emptyMessage="Sin repuestos que coincidan"
+          ariaLabel="Seleccionar repuesto del catálogo"
+          disabled={disabled}
+        />
         <Button
           type="button"
           variant="outline"
