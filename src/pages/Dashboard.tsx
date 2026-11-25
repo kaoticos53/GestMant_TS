@@ -17,6 +17,7 @@ import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
 import { DashboardInactiveNotice } from "./dashboard/components/DashboardInactiveNotice";
 import { KeyboardShortcutsDialog } from "./dashboard/components/KeyboardShortcutsDialog";
+import { MobileBottomNav } from "./dashboard/components/MobileBottomNav";
 import { AbilityProvider } from "@/components/AbilityProvider";
 import { BackgroundJobsToastBridge } from "@/components/jobs/BackgroundJobsToastBridge";
 import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
@@ -82,6 +83,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [aiTables, setAiTables] = useState<AiResultTable[] | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const quickActions = useMemo<QuickAction[]>(() => {
     const allowed = new Set(navItems.map((item) => item.id));
@@ -322,12 +324,14 @@ export default function Dashboard() {
             onSignOut={() => void handleSignOut()}
             navItems={navItems}
             navBadges={navBadges}
+            mobileMenuOpen={mobileMenuOpen}
+            onMobileMenuOpenChange={setMobileMenuOpen}
           />
 
           <main
             id="contenido"
             tabIndex={-1}
-            className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-1 pt-4 sm:px-6 sm:pt-5"
+            className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-20 pt-4 sm:px-6 sm:pt-5 lg:pb-1"
           >
             <PageHeader
               title={heading.title}
@@ -397,6 +401,15 @@ export default function Dashboard() {
             onOpenChange={setShortcutsOpen}
           />
         </div>
+
+        <MobileBottomNav
+          navItems={navItems}
+          navBadges={navBadges}
+          activeTab={activeTab}
+          isGuest={isGuest}
+          onSelectTab={goToTab}
+          onOpenMenu={() => setMobileMenuOpen(true)}
+        />
       </div>
     </AbilityProvider>
   );

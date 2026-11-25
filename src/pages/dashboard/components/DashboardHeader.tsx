@@ -38,6 +38,8 @@ export interface DashboardHeaderProps {
   onSignOut: () => void;
   navItems: NavItem[];
   navBadges: Record<NavId, number>;
+  mobileMenuOpen?: boolean;
+  onMobileMenuOpenChange?: (open: boolean) => void;
 }
 
 export function DashboardHeader({
@@ -56,9 +58,14 @@ export function DashboardHeader({
   onSignOut,
   navItems,
   navBadges,
+  mobileMenuOpen: controlledMobileMenuOpen,
+  onMobileMenuOpenChange,
 }: DashboardHeaderProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [internalMobileMenuOpen, setInternalMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const mobileMenuOpen = controlledMobileMenuOpen ?? internalMobileMenuOpen;
+  const setMobileMenuOpen =
+    onMobileMenuOpenChange ?? setInternalMobileMenuOpen;
 
   return (
     <>
