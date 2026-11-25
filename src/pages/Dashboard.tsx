@@ -3,6 +3,7 @@ import { useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { AiResultsDialog } from "@/components/ai/AiResultsDialog";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import type { AiResultTable } from "@/lib/ai/types";
 import {
   subscribeAiOpenReference,
@@ -13,12 +14,14 @@ import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
 import { DashboardInactiveNotice } from "./dashboard/components/DashboardInactiveNotice";
+import { KeyboardShortcutsDialog } from "./dashboard/components/KeyboardShortcutsDialog";
 import { AbilityProvider } from "@/components/AbilityProvider";
 import { BackgroundJobsToastBridge } from "@/components/jobs/BackgroundJobsToastBridge";
 import { DashboardSidebar } from "./dashboard/components/DashboardSidebar";
 import { DashboardStats } from "./dashboard/components/DashboardStats";
 import { PageHeader } from "./dashboard/components/PageHeader";
 import { useDashboardState } from "./dashboard/hooks/useDashboardState";
+import type { NavId } from "./dashboard/types";
 
 const WeeklyReportDialog = lazy(() =>
   import("./dashboard/WeeklyReportDialog").then((m) => ({
@@ -75,6 +78,33 @@ export default function Dashboard() {
 
   const convex = useConvex();
   const [aiTables, setAiTables] = useState<AiResultTable[] | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const navigateIfAllowed = (tab: NavId) => {
+    if (navItems.some((item) => item.id === tab)) {
+      goToTab(tab);
+    }
+  };
+
+  useKeyboardShortcuts({
+    active: !accountDeactivated,
+    shortcuts: [
+      {
+        key: "?",
+        onTrigger: () => setShortcutsOpen((prev) => !prev),
+      },
+    ],
+    chords: [
+      { prefix: "g", key: "i", onTrigger: () => navigateIfAllowed("incidents") },
+      { prefix: "g", key: "p", onTrigger: () => navigateIfAllowed("requests") },
+      { prefix: "g", key: "r", onTrigger: () => navigateIfAllowed("inventory") },
+      { prefix: "g", key: "e", onTrigger: () => navigateIfAllowed("equipment") },
+      { prefix: "g", key: "m", onTrigger: () => navigateIfAllowed("manuals") },
+      { prefix: "g", key: "c", onTrigger: () => navigateIfAllowed("purchasing") },
+      { prefix: "g", key: "a", onTrigger: () => navigateIfAllowed("analytics") },
+      { prefix: "g", key: "o", onTrigger: () => navigateIfAllowed("mailbox") },
+    ],
+  });
 
   useEffect(() => {
     const unsubTables = subscribeAiShowTables(setAiTables);
@@ -260,6 +290,11 @@ export default function Dashboard() {
               onClose={() => setAiTables(null)}
             />
           )}
+
+          <KeyboardShortcutsDialog
+            open={shortcutsOpen}
+            onOpenChange={setShortcutsOpen}
+          />
         </div>
       </div>
     </AbilityProvider>
