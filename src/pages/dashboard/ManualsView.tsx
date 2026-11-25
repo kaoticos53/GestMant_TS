@@ -46,12 +46,14 @@ export function ManualsView({
   const [formTarget, setFormTarget] = useState<{
     manual: ManualDoc | null;
   } | null>(null);
-  const [detail, setDetail] = useState<ManualDoc | null>(null);
+  const [detailId, setDetailId] = useState<Id<"manuals"> | null>(null);
   const [dismissedInitial, setDismissedInitial] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ManualDoc | null>(null);
 
   const openedDetail =
-    detail ??
+    (detailId !== null
+      ? (manuals.find((m) => m._id === detailId) ?? null)
+      : null) ??
     (!dismissedInitial && initialDetailId
       ? (manuals.find((m) => m._id === initialDetailId) ?? null)
       : null);
@@ -128,7 +130,7 @@ export function ManualsView({
             visibleManuals={visible}
             equipmentOf={listState.equipmentOf}
             rights={rights}
-            onOpenDetail={setDetail}
+            onOpenDetail={(target) => setDetailId(target._id)}
             onEdit={(target) => setFormTarget({ manual: target })}
             onDelete={setDeleteTarget}
           />
@@ -151,7 +153,7 @@ export function ManualsView({
       <ManualsModals
         detail={openedDetail}
         onCloseDetail={() => {
-          setDetail(null);
+          setDetailId(null);
           setDismissedInitial(true);
         }}
         formTarget={formTarget}

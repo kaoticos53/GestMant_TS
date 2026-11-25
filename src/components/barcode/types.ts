@@ -26,11 +26,13 @@ export interface ScannerViewportProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   hasTorch: boolean;
   torchOn: boolean;
+  detectorSupported?: boolean;
   onToggleTorch: () => void;
 }
 
 export interface ScannerCameraUnavailableProps {
   errorMessage: string | null;
+  onRetry?: () => void;
 }
 
 export interface ScannerManualFallbackProps {

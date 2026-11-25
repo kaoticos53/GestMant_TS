@@ -173,7 +173,7 @@ export function HtmlFrame({
   );
 
   return (
-    <div className="relative h-full min-h-[18rem] overflow-hidden rounded-lg border border-border/60 bg-white">
+    <div className="relative flex h-full min-h-[18rem] flex-col overflow-hidden rounded-lg border border-border/60 bg-card">
       {hasRemote && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
@@ -194,17 +194,19 @@ export function HtmlFrame({
           </Button>
         </div>
       )}
-      <iframe
-        ref={iframe}
-        title="Contenido del mensaje"
-        sandbox="allow-same-origin"
-        referrerPolicy="no-referrer"
-        srcDoc={document}
-        onLoad={() => {
-          if (iframe.current) applyReadableContrast(iframe.current);
-        }}
-        className="h-full min-h-[18rem] w-full border-0"
-      />
+      <div className="min-h-0 flex-1 bg-white">
+        <iframe
+          ref={iframe}
+          title="Contenido del mensaje"
+          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          referrerPolicy="no-referrer"
+          srcDoc={document}
+          onLoad={() => {
+            if (iframe.current) applyReadableContrast(iframe.current);
+          }}
+          className="h-full w-full border-0"
+        />
+      </div>
     </div>
   );
 }

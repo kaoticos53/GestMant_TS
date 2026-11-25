@@ -2,6 +2,7 @@ import type { PointerEvent, RefObject } from "react";
 
 export interface SignaturePadCanvasProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
+  hasDrawn?: boolean;
   onPointerDown: (e: PointerEvent<HTMLCanvasElement>) => void;
   onPointerMove: (e: PointerEvent<HTMLCanvasElement>) => void;
   onPointerUp: (e: PointerEvent<HTMLCanvasElement>) => void;
@@ -12,6 +13,7 @@ export interface SignaturePadCanvasProps {
  */
 export function SignaturePadCanvas({
   canvasRef,
+  hasDrawn = false,
   onPointerDown,
   onPointerMove,
   onPointerUp,
@@ -20,6 +22,8 @@ export function SignaturePadCanvas({
     <div className="relative touch-none overflow-hidden rounded-lg border-2 border-dashed border-border/80 bg-white">
       <canvas
         ref={canvasRef}
+        role="img"
+        aria-label="Área de firma manuscrita"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -28,12 +32,14 @@ export function SignaturePadCanvas({
       />
 
       {/* Línea base y marca de agua sutil de orientación */}
-      <div className="pointer-events-none absolute inset-x-8 bottom-8 flex flex-col items-center">
-        <div className="h-px w-full bg-zinc-300" />
-        <span className="mt-1 text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-          Firma sobre esta línea
-        </span>
-      </div>
+      {!hasDrawn && (
+        <div className="pointer-events-none absolute inset-x-8 bottom-8 flex flex-col items-center">
+          <div className="h-px w-full bg-zinc-300" />
+          <span className="mt-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Firma sobre esta línea
+          </span>
+        </div>
+      )}
     </div>
   );
 }

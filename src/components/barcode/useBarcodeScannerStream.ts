@@ -12,6 +12,25 @@ export interface UseBarcodeScannerStreamParams {
   onClose: () => void;
 }
 
+function formatCameraError(err: unknown): string {
+  if (err instanceof DOMException || err instanceof Error) {
+    switch (err.name) {
+      case "NotAllowedError":
+      case "PermissionDeniedError":
+        return "Permiso de cámara denegado. Autoriza el acceso en tu navegador o escribe el código manualmente.";
+      case "NotFoundError":
+      case "DevicesNotFoundError":
+        return "No se ha encontrado ninguna cámara disponible en este dispositivo.";
+      case "NotReadableError":
+      case "TrackStartError":
+        return "Otra aplicación está usando la cámara en este momento.";
+      default:
+        return err.message || "No se pudo acceder a la cámara del dispositivo.";
+    }
+  }
+  return "No se pudo acceder a la cámara del dispositivo.";
+}
+
 export function useBarcodeScannerStream({
   open,
   onScan,
@@ -19,10 +38,27 @@ export function useBarcodeScannerStream({
 }: UseBarcodeScannerStreamParams) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
+
   const [hasCamera, setHasCamera] = useState<boolean>(true);
   const [torchOn, setTorchOn] = useState<boolean>(false);
   const [hasTorch, setHasTorch] = useState<boolean>(false);
+  const [detectorSupported] = useState<boolean>(
+    () => createBarcodeDetector() !== null,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState<number>(0);
+
+  const retryCamera = () => {
+    setHasCamera(true);
+    setErrorMessage(null);
+    setRetryKey((prev) => prev + 1);
+  };
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -107,8 +143,8 @@ export function useBarcodeScannerStream({
                 const code = cleanScannedCode(barcodes[0].rawValue);
                 if (code) {
                   triggerScanHapticFeedback();
-                  onScan(code);
-                  onClose();
+                  onScanRef.current(code);
+                  onCloseRef.current();
                   return;
                 }
               }
@@ -126,11 +162,7 @@ export function useBarcodeScannerStream({
       } catch (err: unknown) {
         if (!active) return;
         setHasCamera(false);
-        setErrorMessage(
-          err instanceof Error
-            ? err.message
-            : "No se pudo acceder a la cámara del dispositivo.",
-        );
+        setErrorMessage(formatCameraError(err));
       }
     }
 
@@ -141,14 +173,16 @@ export function useBarcodeScannerStream({
       cancelAnimationFrame(animationFrameId);
       stopCamera();
     };
-  }, [open, onScan, onClose]);
+  }, [open, retryKey]);
 
   return {
     videoRef,
     hasCamera,
     hasTorch,
     torchOn,
+    detectorSupported,
     errorMessage,
     toggleTorch,
+    retryCamera,
   };
 }

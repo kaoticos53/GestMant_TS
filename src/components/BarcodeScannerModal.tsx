@@ -31,8 +31,10 @@ export function BarcodeScannerModal({
     hasCamera,
     hasTorch,
     torchOn,
+    detectorSupported,
     errorMessage,
     toggleTorch,
+    retryCamera,
   } = useBarcodeScannerStream({
     open,
     onScan,
@@ -70,10 +72,14 @@ export function BarcodeScannerModal({
               videoRef={videoRef}
               hasTorch={hasTorch}
               torchOn={torchOn}
+              detectorSupported={detectorSupported}
               onToggleTorch={toggleTorch}
             />
           ) : (
-            <ScannerCameraUnavailable errorMessage={errorMessage} />
+            <ScannerCameraUnavailable
+              errorMessage={errorMessage}
+              onRetry={retryCamera}
+            />
           )}
         </div>
 

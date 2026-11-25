@@ -48,6 +48,7 @@ export function SignaturePad({
 
       <SignaturePadCanvas
         canvasRef={canvasRef}
+        hasDrawn={hasDrawn}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

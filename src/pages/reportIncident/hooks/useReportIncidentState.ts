@@ -17,6 +17,7 @@ import {
 } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { getTodayInputDate, validateReportIncidentForm } from "../helpers";
 import { useHumanChallenge } from "./useHumanChallenge";
 
@@ -131,6 +132,21 @@ export function useReportIncidentState() {
             for (const draftId of res.committedDraftIds) {
               await deleteOfflineDraft(draftId);
             }
+            if (res.committedDraftIds.length > 0 && active) {
+              const codes = res.results
+                .map((item) => item.code)
+                .filter((c) => c.trim() !== "");
+              const count = res.committedDraftIds.length;
+              const prefix =
+                count === 1
+                  ? "1 aviso pendiente enviado"
+                  : `${count} avisos pendientes enviados`;
+              toast.success(
+                codes.length > 0
+                  ? `${prefix} · Código de seguimiento: ${codes.join(", ")}`
+                  : prefix,
+              );
+            }
             if (res.errorMessage && active) {
               setError(res.errorMessage);
             }
@@ -176,7 +192,12 @@ export function useReportIncidentState() {
       setBusy(true);
       const saved = await stashDraft(validation.payload);
       setBusy(false);
-      if (saved) reset();
+      if (saved) {
+        reset({ preserveOfflineNotice: true });
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      }
       return;
     }
 
@@ -197,7 +218,12 @@ export function useReportIncidentState() {
       // se hace lo mismo que si nunca hubiera habido red.
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         const saved = await stashDraft(validation.payload);
-        if (saved) reset();
+        if (saved) {
+          reset({ preserveOfflineNotice: true });
+          if (typeof window !== "undefined") {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        }
       } else {
         setError(getErrorMessage(err));
       }
@@ -206,7 +232,7 @@ export function useReportIncidentState() {
     }
   };
 
-  const reset = () => {
+  const reset = (options?: { preserveOfflineNotice?: boolean }) => {
     setCode(null);
     setSentTo(null);
     setName(null);
@@ -221,7 +247,9 @@ export function useReportIncidentState() {
     setDescription("");
     setWebsite("");
     setError(null);
-    setOfflineNotice(null);
+    if (!options?.preserveOfflineNotice) {
+      setOfflineNotice(null);
+    }
   };
 
   return {

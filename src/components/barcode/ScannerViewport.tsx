@@ -5,6 +5,7 @@ export function ScannerViewport({
   videoRef,
   hasTorch,
   torchOn,
+  detectorSupported = true,
   onToggleTorch,
 }: ScannerViewportProps) {
   return (
@@ -30,17 +31,29 @@ export function ScannerViewport({
         </div>
       </div>
 
+      {!detectorSupported && (
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/80 px-3 py-2 text-center text-xs text-white backdrop-blur-sm"
+        >
+          Este navegador no admite lectura automática de códigos. Escríbelo
+          manualmente abajo.
+        </div>
+      )}
+
       {/* Botón linterna si está disponible */}
       {hasTorch && (
         <button
           type="button"
           onClick={onToggleTorch}
-          className={`absolute top-4 right-4 p-2.5 rounded-full backdrop-blur-md transition-colors ${
+          aria-pressed={torchOn}
+          className={`absolute top-4 right-4 p-2.5 rounded-full backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             torchOn
               ? "bg-amber-400 text-black shadow-lg"
               : "bg-black/60 text-white hover:bg-black/80"
           }`}
           aria-label="Alternar linterna"
+          title="Alternar linterna"
         >
           <Flashlight className="size-5" />
         </button>

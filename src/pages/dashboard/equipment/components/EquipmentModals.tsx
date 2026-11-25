@@ -30,16 +30,20 @@ export function EquipmentModals({
   closeForm,
   setDeleteTarget,
 }: EquipmentModalsProps) {
+  const liveDetailItem = detail
+    ? (equipment.find((entry) => entry._id === detail.item._id) ?? detail.item)
+    : null;
+
   return (
     <>
-      {detail && (
+      {detail && liveDetailItem && (
         <EquipmentDetailSheet
-          item={detail.item}
+          item={liveDetailItem}
           openedAt={detail.openedAt}
           parts={parts}
           requests={requests}
-          maintenance={maintenanceRecordsFor(detail.item)}
-          manuals={manualsOf(detail.item)}
+          maintenance={maintenanceRecordsFor(liveDetailItem)}
+          manuals={manualsOf(liveDetailItem)}
           canManage={canManage}
           canAddManual={canAddManual}
           rights={rights}

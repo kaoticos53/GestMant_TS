@@ -264,7 +264,13 @@ export function MailboxView({
         onOpenSettings={onOpenSettings}
       />
 
-      <PanelGroup direction="horizontal" className="min-h-0 min-w-0 flex-1">
+      <PanelGroup
+        direction="horizontal"
+        className={cn(
+          "min-h-0 min-w-0 flex-1",
+          mobilePane === "folders" ? "hidden lg:flex" : "flex",
+        )}
+      >
         <Panel
           defaultSize={52}
           minSize={30}
@@ -523,18 +529,25 @@ export function MailboxView({
             mobilePane === "message" ? "flex" : "hidden lg:flex",
           )}
         >
-          {selectedMessage ? (
-            <MessageViewer
-              key={selectedMessage.messageId}
-              header={selectedMessage}
-              folderName={activeFolder?.name ?? "Correo"}
-              onSelectMessage={handleSelectMessage}
-              onClose={handleCloseMessage}
-              onOpenSettings={onOpenSettings}
-            />
-          ) : (
-            <MessageViewerPlaceholder />
-          )}
+          {(() => {
+            const activeSelectedMessage = selectedMessage
+              ? (headersResult?.headers.find(
+                  (h) => h.messageId === selectedMessage.messageId,
+                ) ?? selectedMessage)
+              : null;
+            return activeSelectedMessage ? (
+              <MessageViewer
+                key={activeSelectedMessage.messageId}
+                header={activeSelectedMessage}
+                folderName={activeFolder?.name ?? "Correo"}
+                onSelectMessage={handleSelectMessage}
+                onClose={handleCloseMessage}
+                onOpenSettings={onOpenSettings}
+              />
+            ) : (
+              <MessageViewerPlaceholder />
+            );
+          })()}
         </Panel>
       </PanelGroup>
     </div>

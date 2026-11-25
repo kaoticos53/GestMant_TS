@@ -28,15 +28,25 @@ export function useSignatureCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef<boolean>(false);
   const lastPointRef = useRef<Point | null>(null);
+  const hasDrawnRef = useRef<boolean>(false);
+  const lastSizeRef = useRef<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
   const [hasDrawn, setHasDrawn] = useState<boolean>(false);
+
+  const setDrawnState = useCallback((next: boolean) => {
+    hasDrawnRef.current = next;
+    setHasDrawn(next);
+  }, []);
 
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     clearCanvasBackground(canvas);
-    setHasDrawn(false);
+    setDrawnState(false);
     onClear?.();
-  }, [onClear]);
+  }, [onClear, setDrawnState]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -46,12 +56,37 @@ export function useSignatureCanvas({
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
 
+      const roundedW = Math.round(rect.width);
+      const roundedH = Math.round(rect.height);
+      if (
+        roundedW === lastSizeRef.current.width &&
+        roundedH === lastSizeRef.current.height
+      ) {
+        return;
+      }
+
+      let snapshot: HTMLCanvasElement | null = null;
+      if (hasDrawnRef.current && canvas.width > 0 && canvas.height > 0) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = canvas.width;
+        snapshot.height = canvas.height;
+        snapshot.getContext("2d")?.drawImage(canvas, 0, 0);
+      }
+
+      lastSizeRef.current = { width: roundedW, height: roundedH };
       const dpr = window.devicePixelRatio || 1;
-      initializeCanvasDpr(canvas, rect.width, rect.height, dpr);
-      setHasDrawn(false);
+      const ctx = initializeCanvasDpr(canvas, rect.width, rect.height, dpr);
+      if (snapshot && ctx) {
+        ctx.drawImage(snapshot, 0, 0, rect.width, rect.height);
+      }
     };
 
     resize();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => resize());
+      observer.observe(canvas);
+      return () => observer.disconnect();
+    }
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
@@ -63,6 +98,8 @@ export function useSignatureCanvas({
   };
 
   const handlePointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    if (!e.isPrimary) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -75,7 +112,7 @@ export function useSignatureCanvas({
     if (!ctx) return;
 
     drawCirclePoint(ctx, coords, strokeWidth / 2, strokeColor);
-    setHasDrawn(true);
+    setDrawnState(true);
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLCanvasElement>) => {
@@ -89,7 +126,7 @@ export function useSignatureCanvas({
     drawStrokeSegment(ctx, lastPointRef.current, coords, strokeWidth, strokeColor);
 
     lastPointRef.current = coords;
-    setHasDrawn(true);
+    setDrawnState(true);
   };
 
   const handlePointerUp = (e: PointerEvent<HTMLCanvasElement>) => {
