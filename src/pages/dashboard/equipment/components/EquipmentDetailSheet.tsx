@@ -2,8 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetFooter } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
-import { ClipboardList } from "lucide-react";
+import { ArchiveX, ClipboardList, Undo2 } from "lucide-react";
 import { MaintenanceDialog } from "../dialogs/MaintenanceDialog";
+import {
+  DecommissionEquipmentDialog,
+  ReturnLoanDialog,
+} from "../dialogs/DecommissionEquipmentDialog";
 import { useEquipmentDerivedData } from "../hooks/useEquipmentDerivedData";
 import { useEquipmentPdfExport } from "../hooks/useEquipmentPdfExport";
 import type { EquipmentDetailSheetProps, RecordDoc } from "../types";
@@ -43,6 +47,8 @@ export function EquipmentDetailSheet({
     record: RecordDoc | null;
   } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RecordDoc | null>(null);
+  const [decommOpen, setDecommOpen] = useState(false);
+  const [returnLoanOpen, setReturnLoanOpen] = useState(false);
 
   const { related, shownRequests, compatible, review } =
     useEquipmentDerivedData({
@@ -135,6 +141,30 @@ export function EquipmentDetailSheet({
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
             </Button>
+            {canManage && item.currentLoan && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setReturnLoanOpen(true)}
+              >
+                <Undo2 className="size-4" />
+                Devolver préstamo
+              </Button>
+            )}
+            {canManage &&
+              item.decommissionDate === undefined &&
+              !item.currentLoan && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setDecommOpen(true)}
+                >
+                  <ArchiveX className="size-4" />
+                  Dar de baja
+                </Button>
+              )}
             {related.length > 0 && (
               <Button
                 type="button"
@@ -147,6 +177,17 @@ export function EquipmentDetailSheet({
             )}
           </div>
         </SheetFooter>
+        <DecommissionEquipmentDialog
+          open={decommOpen}
+          onOpenChange={setDecommOpen}
+          item={item}
+          parts={parts}
+        />
+        <ReturnLoanDialog
+          open={returnLoanOpen}
+          onOpenChange={setReturnLoanOpen}
+          item={item}
+        />
         {children}
         <SharedMailSection
           destinationType="equipment"

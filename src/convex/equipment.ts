@@ -15,10 +15,19 @@ import {
   requestMatchesEquipment,
 } from "../lib/workshop";
 import { detectEquipmentChanges } from "../lib/movements";
-import { recordEquipmentMovement } from "./_inventory/movements";
+import { isClosedIncident } from "../lib/incidentFlow";
+import { INCIDENT_PRIORITIES } from "./schema";
+import { registerIncidentIntake } from "./incidentIntake";
+import {
+  recordEquipmentMovement,
+  recordStockMovement,
+} from "./_inventory/movements";
 import { syncEquipmentOperationalState } from "./_inventory/equipmentState";
 import { resolveCatalogId } from "./_catalogs/resolve";
-import { adjustDashboardStats } from "./_stats/dashboardStats";
+import {
+  adjustDashboardStats,
+  syncDashboardStatsIfPresent,
+} from "./_stats/dashboardStats";
 import { markDestinationDeleted } from "./_mailShares/orphans";
 
 /** El inventario de equipos requiere sesión iniciada. */
@@ -517,6 +526,9 @@ export const loanOut = mutation({
 const returnLoanArgs = {
   id: v.id("equipment"),
   notes: v.optional(v.string()),
+  condition: v.optional(v.union(v.literal("ok"), v.literal("damaged"))),
+  openIncident: v.optional(v.boolean()),
+  damageDescription: v.optional(v.string()),
 };
 
 /** Registra la devolución de un equipo prestado temporalmente. */
@@ -542,6 +554,8 @@ export const returnLoan = mutation({
       const now = Date.now();
       const previousLoan = item.currentLoan;
       const notes = args.notes?.trim() || undefined;
+      const actorDisplay =
+        actor.name?.trim() || actor.email?.trim() || "Técnico";
 
       await ctx.db.patch(args.id, {
         currentLoan: undefined,
@@ -560,11 +574,161 @@ export const returnLoan = mutation({
         borrowerName: previousLoan.borrowerName,
         ...(notes ? { note: notes } : {}),
         actorId: actor._id,
-        actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
+        actorName: actorDisplay,
         createdAt: now,
       });
 
+      let incidentReference: string | undefined;
+      if (args.condition === "damaged" && args.openIncident) {
+        const description =
+          args.damageDescription?.trim() ||
+          notes ||
+          `Equipo devuelto de préstamo con daños (${item.code}).`;
+        const created = await registerIncidentIntake(
+          ctx,
+          {
+            reporterName: actorDisplay,
+            equipmentKind: item.name,
+            model: item.model,
+            serialNumber: item.serialNumber,
+            location: item.location,
+            description,
+            reportedAt: now,
+            priority: INCIDENT_PRIORITIES.HIGH,
+          },
+          { isAuthenticatedMember: true },
+        );
+        incidentReference = created.reference;
+        const inc = await ctx.db
+          .query("incidents")
+          .withIndex("by_reference", (q) => q.eq("reference", created.reference))
+          .unique();
+        if (inc) {
+          await ctx.db.patch(inc._id, { equipmentId: item._id });
+        }
+      }
+
       await syncEquipmentOperationalState(ctx, args.id, now);
+      return { incidentReference };
+    },
+  ),
+});
+
+/** Da de baja definitiva un equipo y recupera opcionalmente piezas útiles al stock. */
+const decommissionArgs = {
+  id: v.id("equipment"),
+  reason: v.optional(v.string()),
+  salvagedParts: v.optional(
+    v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        quantity: v.number(),
+      }),
+    ),
+  ),
+};
+
+export const decommission = mutation({
+  args: decommissionArgs,
+  handler: secureMutation(
+    {
+      capability: "manageEquipment",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar los equipos.",
+      ),
+      denyMessage:
+        "No tienes permisos para dar de baja equipos. Revisa la configuración de tu rol con el administrador.",
+    },
+    decommissionArgs,
+    async (ctx, args, actor) => {
+      const item = await ctx.db.get(args.id);
+      if (!item) throw new ConvexError("El equipo ya no existe.");
+      if (item.decommissionDate !== undefined) {
+        throw new ConvexError(`El equipo ${item.code} ya está dado de baja.`);
+      }
+      if (item.currentLoan) {
+        throw new ConvexError(
+          `El equipo ${item.code} tiene un préstamo activo: regístralo como devuelto antes de darlo de baja.`,
+        );
+      }
+
+      const linkedIncidents = await ctx.db
+        .query("incidents")
+        .withIndex("by_equipment_and_created", (q) => q.eq("equipmentId", args.id))
+        .collect();
+      const openIncidents = linkedIncidents.filter(
+        (inc) => inc.deletedAt === undefined && !isClosedIncident(inc.status),
+      );
+      if (openIncidents.length > 0) {
+        throw new ConvexError(
+          `El equipo ${item.code} tiene ${openIncidents.length} incidencia(s) abierta(s). Ciérralas antes de darlo de baja.`,
+        );
+      }
+
+      const now = Date.now();
+      const actorDisplay =
+        actor.name?.trim() || actor.email?.trim() || "Técnico";
+      const reason = args.reason?.trim() || undefined;
+
+      await ctx.db.patch(args.id, {
+        decommissionDate: now,
+        operationalState: "decommissioned",
+        ...(reason
+          ? {
+              description: item.description
+                ? `${item.description}\nBaja: ${reason}`
+                : `Baja: ${reason}`,
+            }
+          : {}),
+        updatedAt: now,
+      });
+
+      await recordEquipmentMovement(ctx, {
+        equipmentId: args.id,
+        equipmentCode: item.code,
+        equipmentName: item.name,
+        kind: "decommission",
+        ...(reason ? { note: reason } : {}),
+        actorId: actor._id,
+        actorName: actorDisplay,
+        createdAt: now,
+      });
+
+      let salvagedUnits = 0;
+      for (const entry of args.salvagedParts ?? []) {
+        const qty = Math.floor(entry.quantity);
+        if (!Number.isFinite(entry.quantity) || qty < 1) {
+          throw new ConvexError(
+            "Cada repuesto recuperado debe tener al menos 1 unidad.",
+          );
+        }
+        const part = await ctx.db.get(entry.sparePartId);
+        if (!part) continue;
+        const nextStock = part.stock + qty;
+        await ctx.db.patch(part._id, {
+          stock: nextStock,
+          updatedAt: now,
+        });
+        await recordStockMovement(ctx, {
+          sparePartId: part._id,
+          partCode: part.code,
+          partName: part.name,
+          kind: "salvage",
+          previousStock: part.stock,
+          nextStock,
+          reference: item.code,
+          reason: reason
+            ? `Pieza recuperada en baja de ${item.code}: ${reason}`
+            : `Pieza recuperada en baja de ${item.code}`,
+          actorId: actor._id,
+          actorName: actorDisplay,
+          createdAt: now,
+        });
+        salvagedUnits += qty;
+      }
+
+      await syncDashboardStatsIfPresent(ctx);
+      return { salvagedUnits };
     },
   ),
 });
