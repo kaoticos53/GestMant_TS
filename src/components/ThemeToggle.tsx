@@ -23,8 +23,10 @@ export function ThemeToggle({
       role="group"
       aria-label="Tema de la interfaz"
       className={cn(
-        "inline-flex items-center rounded-lg border border-border/70 bg-muted/40 p-0.5",
-        !compact && "w-full",
+        "rounded-lg border border-border/70 bg-muted/40 p-0.5",
+        compact
+          ? "inline-flex shrink-0 items-center"
+          : "@container grid w-full min-w-0 grid-cols-3 overflow-hidden",
         className,
       )}
     >
@@ -39,17 +41,19 @@ export function ThemeToggle({
             aria-label={title}
             title={title}
             className={cn(
-              "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "inline-flex min-w-0 items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               compact
-                ? "size-8"
-                : "min-h-8 flex-1 px-2 py-1 text-xs",
+                ? "size-8 gap-1.5"
+                : "min-h-8 gap-1 px-1.5 py-1 text-xs",
               active
                 ? "bg-signal/15 text-foreground shadow-2xs"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
             <Icon className="size-3.5 shrink-0" />
-            {!compact && <span>{label}</span>}
+            {!compact && (
+              <span className="hidden truncate @[210px]:inline">{label}</span>
+            )}
           </button>
         );
       })}

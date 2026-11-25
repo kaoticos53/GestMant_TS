@@ -10,7 +10,7 @@ export function SidebarHeader({
   canSendMessages,
 }: SidebarHeaderProps) {
   return (
-    <div className="flex h-16 items-center justify-between gap-1.5 border-b border-border/70 px-3">
+    <div className="@container flex h-16 shrink-0 items-center justify-between gap-1.5 border-b border-border/70 px-3">
       <img
         src={logo}
         alt="Pulso Taller"
@@ -20,11 +20,11 @@ export function SidebarHeader({
         <span className="truncate text-sm font-semibold tracking-tight">
           Pulso Taller
         </span>
-        <span className="truncate text-xs text-muted-foreground">
+        <span className="hidden truncate text-xs text-muted-foreground @[235px]:block">
           Equipo audiovisual
         </span>
       </span>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5">
         <NotificationBell onOpen={onOpenNotification} />
         <MessagesCenter canSend={canSendMessages} />
         <BackgroundJobsIndicator />

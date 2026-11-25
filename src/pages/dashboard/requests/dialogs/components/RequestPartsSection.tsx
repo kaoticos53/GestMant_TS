@@ -76,7 +76,7 @@ export function RequestPartsSection({
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
         <SearchableSelect
           value={selectedId}
           onValueChange={onSelectIdChange}
@@ -91,6 +91,7 @@ export function RequestPartsSection({
           emptyMessage="Sin repuestos que coincidan"
           ariaLabel="Seleccionar repuesto del catálogo"
           disabled={disabled}
+          className="min-w-0 flex-1"
         />
         <Button
           type="button"

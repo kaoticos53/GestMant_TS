@@ -23,14 +23,14 @@ export function SidebarFooter({
 
   return (
     <>
-      <div className="border-t border-border/70 p-3">
+      <div className="shrink-0 border-t border-border/70 p-2.5">
         <button
           type="button"
           onClick={() => onSelectTab("profile")}
           aria-label="Ver mi perfil"
           aria-current={activeTab === "profile" ? "page" : undefined}
           className={cn(
-            "flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors",
+            "flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors",
             activeTab === "profile"
               ? "bg-signal/10 ring-1 ring-signal/30"
               : "bg-muted/50 hover:bg-muted",
@@ -59,17 +59,17 @@ export function SidebarFooter({
           aria-expanded={!sidebarCollapsed}
           aria-controls="menu-lateral"
           title="Plegar el menú lateral"
-          className="mt-2.5 w-full justify-start gap-2 border-border/70 text-muted-foreground hover:text-foreground"
+          className="mt-2 w-full justify-start gap-2 border-border/70 text-muted-foreground hover:text-foreground"
         >
           <PanelLeftClose className="size-4" />
           Plegar menú
         </Button>
 
-        <div className="mt-2.5">
+        <div className="mt-2">
           <ThemeToggle />
         </div>
 
-        <div className="mt-2.5 flex items-center justify-between gap-2 px-1">
+        <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between gap-1.5 px-1">
           {roleBadge}
           <Button
             type="button"

@@ -68,7 +68,7 @@ export function DashboardSidebar({
         inert={sidebarCollapsed}
         style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden bg-card/60 lg:flex",
+          "sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden bg-card/60 lg:flex",
           !sidebarResizing && "transition-[width] duration-200 ease-out",
         )}
       >
@@ -81,7 +81,7 @@ export function DashboardSidebar({
             así que buscar ahí no encontraría ni la incidencia que sí puede
             seguir; su puerta es la consulta por código. */}
         {!isGuest && (
-          <div className="border-b border-border/70 p-3">
+          <div className="shrink-0 border-b border-border/70 p-3">
             <GlobalSearch
               canSearchCatalog={canSearchCatalog}
               onSelect={onSearchSelect}

@@ -67,12 +67,12 @@ export function SearchableSelect({
           aria-label={ariaLabel}
           disabled={disabled}
           className={cn(
-            "w-full justify-between font-normal",
+            "w-full min-w-0 max-w-full justify-between overflow-hidden font-normal",
             !selected && "text-muted-foreground",
             className,
           )}
         >
-          <span className="truncate">
+          <span className="min-w-0 flex-1 truncate text-left">
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
@@ -80,7 +80,7 @@ export function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-0"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] p-0"
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
