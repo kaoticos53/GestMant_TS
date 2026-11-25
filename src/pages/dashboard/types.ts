@@ -45,6 +45,7 @@ export interface SidebarLayoutProfile {
 export interface NavigationTarget {
   tab: NavId;
   incidentId?: Id<"incidents"> | null;
+  incidentsFilter?: import("@/lib/workshop").IncidentStatus | "all";
   requestId?: Id<"partRequests"> | null;
   requestsEquipmentFilter?: string;
   requestsFilter?: RequestFilterId;

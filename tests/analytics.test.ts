@@ -102,4 +102,40 @@ describe("Analítica del taller (Dominio puro)", () => {
     const sum = res.weeklyTrend.reduce((acc, w) => acc + w.reported, 0);
     expect(sum).toBe(2);
   });
+
+  it("filtra incidencias y movimientos cuando se especifica periodDays", () => {
+    const res = buildWorkshopAnalytics({
+      now,
+      periodDays: 7,
+      incidents: [
+        { status: "reported", reportedAt: now - 2 * DAY, model: "HDC-3500" },
+        {
+          status: "resolved",
+          reportedAt: now - 20 * DAY,
+          closedAt: now - 15 * DAY,
+          model: "OPM-4250",
+        },
+      ],
+      requests: [],
+      parts: [],
+      equipment: [],
+      stockMovements: [
+        { kind: "purchase_reception", delta: 4, createdAt: now - 3 * DAY },
+        { kind: "request_reserve", delta: -1, createdAt: now - 14 * DAY },
+      ],
+      pendingPurchaseRequests: 0,
+    });
+
+    expect(res.kpis.totalIncidents).toBe(1);
+    expect(res.kpis.activeIncidents).toBe(1);
+    expect(res.kpis.resolvedLast30d).toBe(0);
+    expect(
+      res.stockMovementsSummary.find((m) => m.kind === "purchase_reception")
+        ?.entries,
+    ).toBe(1);
+    expect(
+      res.stockMovementsSummary.find((m) => m.kind === "request_reserve")
+        ?.entries,
+    ).toBe(0);
+  });
 });

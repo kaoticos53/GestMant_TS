@@ -288,8 +288,12 @@ export const summary = query({
 
 /** Métricas y series temporales para el dashboard analítico del taller. */
 export const analytics = query({
-  args: {},
-  handler: async (ctx): Promise<WorkshopAnalyticsResult | null> => {
+  args: {
+    periodDays: v.optional(
+      v.union(v.literal(7), v.literal(30), v.literal(90)),
+    ),
+  },
+  handler: async (ctx, args): Promise<WorkshopAnalyticsResult | null> => {
     const member = await memberOrNull(ctx);
     if (!member) return null;
 
@@ -341,6 +345,7 @@ export const analytics = query({
 
     return buildWorkshopAnalytics({
       now: Date.now(),
+      periodDays: args.periodDays,
       incidents: rawIncidents
         .filter((i) => i.deletedAt === undefined && i.archivedAt === undefined)
         .map((i) => ({

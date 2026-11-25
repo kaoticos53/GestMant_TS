@@ -18,6 +18,7 @@ export function IncidentsView({
   currentUserName = "Técnico",
   canAssign = false,
   initialDetailId = null,
+  initialFilter = "all",
   canOpenRequests = false,
   onOpenRequest,
 }: {
@@ -28,12 +29,14 @@ export function IncidentsView({
   canAssign?: boolean;
   /** Incidencia abierta al montar (la elige el aviso del panel). */
   initialDetailId?: Id<"incidents"> | null;
+  /** Filtro inicial de estado (p. ej. al pulsar una barra en Analítica). */
+  initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
   /** Puede ver el módulo de peticiones, así que puede saltar a una. */
   canOpenRequests?: boolean;
   /** Abrir una petición concreta en su módulo. */
   onOpenRequest?: (id: Id<"partRequests">) => void;
 }) {
-  const state = useIncidentsViewState({ initialDetailId });
+  const state = useIncidentsViewState({ initialDetailId, initialFilter });
   const aiAvailability = useQuery(api.ai.availability, {});
   const [aiOpen, setAiOpen] = useState(false);
 

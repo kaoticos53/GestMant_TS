@@ -52,11 +52,13 @@ function inQueueOrder(items: IncidentDoc[]): IncidentDoc[] {
 export function useIncidentFilters({
   incidents,
   initialDetailId = null,
+  initialFilter = "all",
 }: {
   incidents: IncidentDoc[];
   initialDetailId?: Id<"incidents"> | null;
+  initialFilter?: IncidentStatus | "all";
 }) {
-  const [filter, setFilter] = useState<IncidentStatus | "all">("all");
+  const [filter, setFilter] = useState<IncidentStatus | "all">(initialFilter);
   const [detailId, setDetailId] = useState<Id<"incidents"> | null>(
     initialDetailId ?? null,
   );

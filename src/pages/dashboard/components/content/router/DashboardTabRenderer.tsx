@@ -62,6 +62,42 @@ export function DashboardTabRenderer({
           onOpenRequests={() => goToTab("requests")}
           onOpenInventoryLowStock={() => openInventory(true)}
           onOpenEquipment={() => goToTab("equipment")}
+          onOpenPurchasingPending={
+            canSeePurchasing
+              ? () =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "purchasing",
+                    purchasingSection: "pending",
+                    purchaseOrderId: null,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
+          }
+          onSelectIncidentStatus={
+            can("viewIncidents")
+              ? (status) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "incidents",
+                    incidentsFilter: status,
+                    incidentId: null,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
+          }
+          onSelectPartCategory={
+            can("viewInventory")
+              ? (category) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "inventory",
+                    inventorySearch: category,
+                    inventoryLowStockOnly: false,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
+          }
           onSelectEquipment={(label) =>
             setTarget((prev) => ({
               ...prev,
@@ -94,11 +130,12 @@ export function DashboardTabRenderer({
     case "incidents":
       return (
         <IncidentsView
-          key={`incidents-${viewKeys.incidents}`}
+          key={`incidents-${viewKeys.incidents}-${target.incidentsFilter ?? "all"}`}
           currentUserId={user?._id ?? null}
           currentUserName={displayName}
           canAssign={can("manageIncidents")}
           initialDetailId={target.incidentId ?? null}
+          initialFilter={target.incidentsFilter ?? "all"}
           canOpenRequests={can("viewRequests")}
           onOpenRequest={openRequest}
         />

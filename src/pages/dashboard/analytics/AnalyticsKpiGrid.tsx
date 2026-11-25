@@ -7,22 +7,27 @@ import {
   Siren,
   Wrench,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { WorkshopAnalyticsResult } from "@/lib/analytics";
 
 interface AnalyticsKpiGridProps {
   kpis: WorkshopAnalyticsResult["kpis"];
+  periodLabel?: string;
   onOpenIncidents: () => void;
   onOpenRequests: () => void;
   onOpenInventoryLowStock: () => void;
   onOpenEquipment: () => void;
+  onOpenPurchasingPending?: () => void;
 }
 
 export function AnalyticsKpiGrid({
   kpis,
+  periodLabel = "30d",
   onOpenIncidents,
   onOpenRequests,
   onOpenInventoryLowStock,
   onOpenEquipment,
+  onOpenPurchasingPending,
 }: AnalyticsKpiGridProps) {
   const avgResolutionLabel =
     kpis.avgResolutionHours === null
@@ -30,7 +35,14 @@ export function AnalyticsKpiGrid({
       : `${kpis.avgResolutionHours} h media`;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div
+      className={cn(
+        "grid gap-4 sm:grid-cols-2",
+        onOpenPurchasingPending
+          ? "lg:grid-cols-3 xl:grid-cols-5"
+          : "xl:grid-cols-4",
+      )}
+    >
       <button
         type="button"
         data-testid="kpi-incidents"
@@ -54,7 +66,7 @@ export function AnalyticsKpiGrid({
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <Clock3 className="size-3.5 shrink-0" />
           <span>
-            {kpis.resolvedLast30d} cerradas (30d) · {avgResolutionLabel}
+            {kpis.resolvedLast30d} cerradas ({periodLabel}) · {avgResolutionLabel}
           </span>
         </p>
       </button>
@@ -81,9 +93,36 @@ export function AnalyticsKpiGrid({
         </div>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <ShoppingCart className="size-3.5 shrink-0" />
-          <span>{kpis.pendingPurchases} compras pendientes</span>
+          <span>{kpis.pendingPurchases} compras sin tratar</span>
         </p>
       </button>
+
+      {onOpenPurchasingPending && (
+        <button
+          type="button"
+          data-testid="kpi-purchasing"
+          onClick={onOpenPurchasingPending}
+          className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              Compras sin tratar
+            </span>
+            <ShoppingCart className="size-4 text-status-warning-foreground" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between gap-2">
+            <span className="text-2xl font-bold tracking-tight tabular-nums">
+              {kpis.pendingPurchases}
+            </span>
+            <span className="text-xs font-medium text-signal">
+              Cola de compras
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Pendientes de agrupar en orden
+          </p>
+        </button>
+      )}
 
       <button
         type="button"
@@ -107,7 +146,7 @@ export function AnalyticsKpiGrid({
         </div>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <Boxes className="size-3.5 shrink-0" />
-          <span>{kpis.totalParts} repuestos en inventario</span>
+          <span>{kpis.totalParts} repuestos en catálogo</span>
         </p>
       </button>
 

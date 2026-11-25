@@ -6,6 +6,8 @@ import { INCIDENT_STATUS_META, type IncidentStatus } from "./workshop";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
+export type AnalyticsPeriodDays = 7 | 30 | 90;
+
 export interface AnalyticsIncidentInput {
   status: string;
   reportedAt: number;
@@ -102,6 +104,7 @@ function formatShortDay(ts: number): string {
 
 export function buildWorkshopAnalytics(input: {
   now: number;
+  periodDays?: AnalyticsPeriodDays;
   incidents: readonly AnalyticsIncidentInput[];
   requests: readonly AnalyticsRequestInput[];
   parts: readonly AnalyticsPartInput[];
@@ -109,8 +112,18 @@ export function buildWorkshopAnalytics(input: {
   stockMovements: readonly AnalyticsMovementInput[];
   pendingPurchaseRequests: number;
 }): WorkshopAnalyticsResult {
-  const { now, incidents, requests, parts, equipment, stockMovements } = input;
-  const cutoff30d = now - 30 * DAY_MS;
+  const { now, periodDays, requests, parts, equipment, stockMovements } = input;
+  const periodCutoff =
+    periodDays !== undefined ? now - periodDays * DAY_MS : null;
+  const incidents =
+    periodCutoff !== null
+      ? input.incidents.filter(
+          (inc) =>
+            inc.reportedAt >= periodCutoff ||
+            (inc.closedAt !== undefined && inc.closedAt >= periodCutoff),
+        )
+      : input.incidents;
+  const cutoff30d = periodCutoff ?? now - 30 * DAY_MS;
 
   let activeIncidents = 0;
   let resolvedTotal = 0;

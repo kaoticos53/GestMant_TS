@@ -10,8 +10,10 @@ import type { IncidentDoc } from "../types";
 
 export function useIncidentsViewState({
   initialDetailId = null,
+  initialFilter = "all",
 }: {
   initialDetailId?: Id<"incidents"> | null;
+  initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
 } = {}) {
   const rawIncidents = useQuery(api.incidents.list, {});
   const incidents = rawIncidents ?? [];
@@ -28,6 +30,7 @@ export function useIncidentsViewState({
   const filterState = useIncidentFilters({
     incidents,
     initialDetailId,
+    initialFilter,
   });
 
   const handleArchive = async (incident: IncidentDoc) => {

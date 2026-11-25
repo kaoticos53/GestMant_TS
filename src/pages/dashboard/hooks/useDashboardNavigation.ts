@@ -60,6 +60,7 @@ export function useDashboardNavigation(
       ...prev,
       tab: id,
       incidentId: null,
+      incidentsFilter: "all",
       requestId: null,
       archiveEntry: null,
       inventorySearch: "",

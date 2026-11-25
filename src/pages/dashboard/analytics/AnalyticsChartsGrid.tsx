@@ -23,9 +23,13 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import type { WorkshopAnalyticsResult } from "@/lib/analytics";
+import type { IncidentStatus } from "@/lib/workshop";
 
 interface AnalyticsChartsGridProps {
   analytics: WorkshopAnalyticsResult;
+  periodLabel?: string;
+  onSelectIncidentStatus?: (status: IncidentStatus) => void;
+  onSelectPartCategory?: (category: string) => void;
 }
 
 const INCIDENTS_STATUS_CONFIG = {
@@ -37,7 +41,7 @@ const INCIDENTS_STATUS_CONFIG = {
 
 const WEEKLY_TREND_CONFIG = {
   reported: {
-    label: "Reportadas",
+    label: "Notificadas",
     color: "var(--chart-1)",
   },
   resolved: {
@@ -59,12 +63,17 @@ const PARTS_CATEGORY_CONFIG = {
 
 const MOVEMENTS_CONFIG = {
   entries: {
-    label: "Movimientos (30d)",
+    label: "Movimientos",
     color: "var(--chart-3)",
   },
 } satisfies ChartConfig;
 
-export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
+export function AnalyticsChartsGrid({
+  analytics,
+  periodLabel = "30d",
+  onSelectIncidentStatus,
+  onSelectPartCategory,
+}: AnalyticsChartsGridProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
@@ -72,6 +81,7 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
           <CardTitle className="text-base">Incidencias por estado</CardTitle>
           <CardDescription>
             Distribución actual de las incidencias registradas
+            {onSelectIncidentStatus ? " · haz clic en una barra para filtrar" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -80,25 +90,43 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
           ) : (
             <ChartContainer
               config={INCIDENTS_STATUS_CONFIG}
-              className="h-[240px] w-full"
+              className="h-[260px] w-full"
             >
               <BarChart
+                layout="vertical"
                 data={analytics.incidentsByStatus}
-                margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
               >
-                <CartesianGrid vertical={false} />
+                <CartesianGrid horizontal={false} />
                 <XAxis
-                  dataKey="label"
+                  type="number"
+                  allowDecimals={false}
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
                 />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  width={132}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={4}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="count"
                   fill="var(--color-count)"
-                  radius={[6, 6, 0, 0]}
+                  radius={[0, 6, 6, 0]}
+                  className={onSelectIncidentStatus ? "cursor-pointer" : undefined}
+                  onClick={(entry) => {
+                    if (!onSelectIncidentStatus) return;
+                    const row = (
+                      entry && "payload" in entry && entry.payload
+                        ? entry.payload
+                        : entry
+                    ) as WorkshopAnalyticsResult["incidentsByStatus"][number] | undefined;
+                    if (row?.status) onSelectIncidentStatus(row.status);
+                  }}
                 />
               </BarChart>
             </ChartContainer>
@@ -110,7 +138,7 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Tendencia semanal</CardTitle>
           <CardDescription>
-            Incidencias reportadas frente a resueltas (últimas 8 semanas)
+            Incidencias notificadas frente a resueltas (últimas 8 semanas)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -160,6 +188,7 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
           <CardTitle className="text-base">Repuestos por categoría</CardTitle>
           <CardDescription>
             Comparativa de stock normal vs. stock bajo por familia
+            {onSelectPartCategory ? " · haz clic para ver esa categoría" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -189,12 +218,32 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
                   stackId="stock"
                   fill="var(--color-normal)"
                   radius={[0, 0, 0, 0]}
+                  className={onSelectPartCategory ? "cursor-pointer" : undefined}
+                  onClick={(entry) => {
+                    if (!onSelectPartCategory) return;
+                    const row = (
+                      entry && "payload" in entry && entry.payload
+                        ? entry.payload
+                        : entry
+                    ) as WorkshopAnalyticsResult["partsByCategory"][number] | undefined;
+                    if (row?.category) onSelectPartCategory(row.category);
+                  }}
                 />
                 <Bar
                   dataKey="lowStock"
                   stackId="stock"
                   fill="var(--color-lowStock)"
                   radius={[6, 6, 0, 0]}
+                  className={onSelectPartCategory ? "cursor-pointer" : undefined}
+                  onClick={(entry) => {
+                    if (!onSelectPartCategory) return;
+                    const row = (
+                      entry && "payload" in entry && entry.payload
+                        ? entry.payload
+                        : entry
+                    ) as WorkshopAnalyticsResult["partsByCategory"][number] | undefined;
+                    if (row?.category) onSelectPartCategory(row.category);
+                  }}
                 />
               </BarChart>
             </ChartContainer>
@@ -204,33 +253,43 @@ export function AnalyticsChartsGrid({ analytics }: AnalyticsChartsGridProps) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Movimientos de stock (30d)</CardTitle>
+          <CardTitle className="text-base">
+            Movimientos de stock ({periodLabel})
+          </CardTitle>
           <CardDescription>
-            Operaciones registradas en inventario durante el último mes
+            Operaciones registradas en catálogo durante el periodo seleccionado
           </CardDescription>
         </CardHeader>
         <CardContent>
           {analytics.stockMovementsSummary.length === 0 ? (
-            <EmptyChartMessage message="Sin movimientos de stock en los últimos 30 días." />
+            <EmptyChartMessage message="Sin movimientos de stock en el periodo." />
           ) : (
-            <ChartContainer config={MOVEMENTS_CONFIG} className="h-[240px] w-full">
+            <ChartContainer config={MOVEMENTS_CONFIG} className="h-[280px] w-full">
               <BarChart
+                layout="vertical"
                 data={analytics.stockMovementsSummary}
-                margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                margin={{ top: 4, right: 16, left: 4, bottom: 4 }}
               >
-                <CartesianGrid vertical={false} />
+                <CartesianGrid horizontal={false} />
                 <XAxis
-                  dataKey="label"
+                  type="number"
+                  allowDecimals={false}
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
                 />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  width={136}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={4}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="entries"
                   fill="var(--color-entries)"
-                  radius={[6, 6, 0, 0]}
+                  radius={[0, 6, 6, 0]}
                 />
               </BarChart>
             </ChartContainer>
