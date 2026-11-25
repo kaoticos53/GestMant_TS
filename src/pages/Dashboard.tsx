@@ -87,7 +87,13 @@ export default function Dashboard() {
         return;
       }
       if (detail.kind === "manuals") {
-        goToTab("manuals");
+        navigation.setTarget((prev) => ({
+          ...prev,
+          tab: "manuals",
+          manualId: detail.id ? (detail.id as Id<"manuals">) : null,
+          manualsSearch: detail.id ? "" : detail.reference,
+          timestamp: Date.now(),
+        }));
         return;
       }
       if (detail.kind === "parts") {

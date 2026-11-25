@@ -46,5 +46,7 @@ export interface NavigationTarget {
   inventorySearch?: string;
   inventoryLowStockOnly?: boolean;
   equipmentSearch?: string;
+  manualId?: Id<"manuals"> | null;
+  manualsSearch?: string;
   timestamp?: number;
 }

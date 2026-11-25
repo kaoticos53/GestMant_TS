@@ -15,6 +15,8 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   inventorySearch: "",
   inventoryLowStockOnly: false,
   equipmentSearch: "",
+  manualId: null,
+  manualsSearch: "",
   timestamp: Date.now(),
 };
 
@@ -41,6 +43,7 @@ export function useDashboardNavigation(
     mailbox: 0,
     inventory: 0,
     equipment: 0,
+    manuals: 0,
   });
 
   const activeAllowed =
@@ -59,6 +62,8 @@ export function useDashboardNavigation(
       archiveEntry: null,
       inventorySearch: "",
       equipmentSearch: "",
+      manualId: null,
+      manualsSearch: "",
       requestsFilter: "all",
       inventoryLowStockOnly: false,
       timestamp: Date.now(),

@@ -357,6 +357,7 @@ export const queryManuals = internalQuery({
       )
       .slice(0, MAX_TOOL_RESULTS)
       .map((m) => ({
+        id: m._id,
         title: m.title,
         type: m.type,
         brand: m.brand ?? null,

@@ -142,8 +142,11 @@ export function DashboardTabRenderer({
     case "manuals":
       return (
         <ManualsView
+          key={`manuals-${viewKeys.manuals}-${target.manualId ?? ""}-${target.manualsSearch ?? ""}`}
           canManage={can("manageManuals")}
           currentUserId={user?._id ?? null}
+          initialSearch={target.manualsSearch ?? ""}
+          initialDetailId={target.manualId ?? null}
         />
       );
 

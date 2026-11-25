@@ -149,6 +149,7 @@ export function buildToolResultTable(
           { key: "model", label: "Modelo" },
         ],
         rows: items.map((row) => ({
+          id: typeof row.id === "string" ? row.id : undefined,
           ref: typeof row.title === "string" ? row.title : undefined,
           cells: {
             title: str(row.title),

@@ -40,6 +40,19 @@ describe("Tablas estructuradas y puente de navegación del asistente IA", () => 
 
     expect(buildToolResultTable("search_incidents", [])).toBeNull();
     expect(buildToolResultTable("get_workshop_stats", { ok: true })).toBeNull();
+
+    const manualsTable = buildToolResultTable("search_manuals", [
+      {
+        id: "man_123",
+        title: "Manual Sony FX6",
+        type: "Manual de usuario",
+        brand: "Sony",
+        model: "FX6",
+      },
+    ]);
+    expect(manualsTable?.kind).toBe("manuals");
+    expect(manualsTable?.rows[0].id).toBe("man_123");
+    expect(manualsTable?.rows[0].ref).toBe("Manual Sony FX6");
   });
 
   test("aiBridge emite y recibe eventos de apertura de fichas y tablas", () => {

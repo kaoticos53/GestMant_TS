@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import { useTableSort } from "@/hooks/use-table-sort";
@@ -28,6 +29,7 @@ export function ManualsView({
   canManage = false,
   currentUserId = null,
   initialSearch = "",
+  initialDetailId = null,
 }: {
   /** Solo responsable/admin suben, cambian y borran manuales (fail-closed). */
   canManage?: boolean;
@@ -35,6 +37,8 @@ export function ManualsView({
   currentUserId?: string | null;
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
+  /** Manual concreto que se abre al entrar (desde el asistente IA). */
+  initialDetailId?: Id<"manuals"> | null;
 }) {
   const manuals = useQuery(api.manuals.list, {}) ?? [];
   const equipment = useQuery(api.equipment.list, {}) ?? [];
@@ -43,7 +47,14 @@ export function ManualsView({
     manual: ManualDoc | null;
   } | null>(null);
   const [detail, setDetail] = useState<ManualDoc | null>(null);
+  const [dismissedInitial, setDismissedInitial] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ManualDoc | null>(null);
+
+  const openedDetail =
+    detail ??
+    (!dismissedInitial && initialDetailId
+      ? (manuals.find((m) => m._id === initialDetailId) ?? null)
+      : null);
 
   const listState = useManualsListState(manuals, equipment, initialSearch);
   const rights = useMemo(
@@ -138,8 +149,11 @@ export function ManualsView({
       </div>
 
       <ManualsModals
-        detail={detail}
-        onCloseDetail={() => setDetail(null)}
+        detail={openedDetail}
+        onCloseDetail={() => {
+          setDetail(null);
+          setDismissedInitial(true);
+        }}
         formTarget={formTarget}
         onCloseForm={() => setFormTarget(null)}
         deleteTarget={deleteTarget}
