@@ -48,5 +48,7 @@ export interface NavigationTarget {
   equipmentSearch?: string;
   manualId?: Id<"manuals"> | null;
   manualsSearch?: string;
+  purchasingSection?: "pending" | "orders" | "movements" | "history";
+  purchaseOrderId?: Id<"purchaseOrders"> | null;
   timestamp?: number;
 }

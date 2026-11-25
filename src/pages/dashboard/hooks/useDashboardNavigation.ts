@@ -17,6 +17,8 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   equipmentSearch: "",
   manualId: null,
   manualsSearch: "",
+  purchasingSection: "pending",
+  purchaseOrderId: null,
   timestamp: Date.now(),
 };
 

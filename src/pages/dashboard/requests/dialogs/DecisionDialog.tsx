@@ -67,6 +67,7 @@ export function DecisionDialog({
         ) : isApprove ? (
           <DecisionStockApprovalPanel
             lines={request.lines}
+            requestStatus={request.status}
             partById={partById}
             shortages={shortages}
             compradas={compradas}

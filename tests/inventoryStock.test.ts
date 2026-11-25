@@ -295,4 +295,48 @@ describe("stock reservado en backend (Fase 3)", () => {
     expect(part?.stock).toBe(1);
     expect(part?.reservedStock).toBe(2);
   });
+
+  test("requestPurchase tras entrega parcial solo pide las unidades pendientes", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const sparePartId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "REV-03",
+        name: "Relé térmico",
+        category: "Eléctrica",
+        unit: "ud",
+        stock: 5,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Elena",
+      priority: "normal",
+      description: "Cuadro principal",
+      lines: [{ sparePartId, quantity: 5 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    await authed.mutation(api.partRequests.revertApproval, {
+      requestId: request._id,
+      deliverLines: [{ sparePartId, quantity: 2 }],
+      stockAdjustments: [{ sparePartId, targetStock: 0 }],
+    });
+
+    const res = await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: request._id,
+    });
+    expect(res.references.length).toBe(1);
+
+    const linked = await authed.query(api.purchasing.byRequest, {
+      requestId: request._id,
+    });
+    expect(linked.requests.length).toBe(1);
+    expect(linked.requests[0].quantity).toBe(3);
+  });
 });

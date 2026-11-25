@@ -53,7 +53,7 @@ export function useDecisionDialogState({
   const DecisionIcon = DECISION_ICON[mode];
 
   const partById = new Map(parts.map((part) => [part._id, part]));
-  const shortages = calculateShortages(request.lines, parts);
+  const shortages = calculateShortages(request.lines, parts, request.status);
 
   const isApprove = mode === "approve";
   const isIssue = mode === "issue";

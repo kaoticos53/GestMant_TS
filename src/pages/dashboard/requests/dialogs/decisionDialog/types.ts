@@ -18,6 +18,7 @@ export interface DecisionDialogProps {
 
 export interface DecisionStockApprovalPanelProps {
   lines: RequestLine[];
+  requestStatus: RequestStatus;
   partById: Map<string, PartDoc>;
   shortages: RequestLine[];
   compradas: number;

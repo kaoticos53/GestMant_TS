@@ -1,11 +1,13 @@
 import { CircleAlert, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { lineDelivered, lineRemaining } from "@/lib/requestFlow";
 import { cn } from "@/lib/utils";
 import { formatShortagePurchasesHint } from "../helpers";
 import type { DecisionStockApprovalPanelProps } from "../types";
 
 export function DecisionStockApprovalPanel({
   lines,
+  requestStatus,
   partById,
   shortages,
   compradas,
@@ -21,8 +23,10 @@ export function DecisionStockApprovalPanel({
       <ul className="mt-2 space-y-1.5">
         {lines.map((line) => {
           const part = partById.get(line.sparePartId);
-          const remaining = (part?.stock ?? 0) - line.quantity;
-          const hasShortage = !part || remaining < 0;
+          const delivered = lineDelivered(line, requestStatus);
+          const needed = lineRemaining(line, requestStatus);
+          const remaining = (part?.stock ?? 0) - needed;
+          const hasShortage = needed > 0 && (!part || remaining < 0);
           return (
             <li
               key={line.sparePartId}
@@ -31,6 +35,11 @@ export function DecisionStockApprovalPanel({
               <span className="truncate">
                 <span className="font-mono text-xs">{line.code}</span>{" "}
                 <span className="text-muted-foreground">{line.name}</span>
+                {delivered > 0 && (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    ({delivered} ya entregadas)
+                  </span>
+                )}
               </span>
               <span
                 className={cn(
@@ -40,7 +49,7 @@ export function DecisionStockApprovalPanel({
                     : "text-muted-foreground",
                 )}
               >
-                {part?.stock ?? 0} − {line.quantity} ={" "}
+                {part?.stock ?? 0} − {needed} ={" "}
                 <span className="font-semibold text-foreground">
                   {Math.max(remaining, 0)}
                 </span>

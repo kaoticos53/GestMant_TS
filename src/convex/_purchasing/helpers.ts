@@ -1,5 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
+import { lineRemaining } from "../../lib/requestFlow";
+import { REQUEST_STATUSES } from "../schema";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { hasAnyCapability, hasCapability } from "../permissions";
@@ -305,7 +307,12 @@ export type MissingLine = {
 export async function missingLines(
   ctx: QueryCtx,
   request: {
-    lines: { sparePartId: Id<"spareParts">; quantity: number }[];
+    status?: string;
+    lines: {
+      sparePartId: Id<"spareParts">;
+      quantity: number;
+      deliveredQuantity?: number;
+    }[];
   },
   only?: Id<"spareParts">[],
 ): Promise<MissingLine[]> {
@@ -319,7 +326,9 @@ export async function missingLines(
         `El repuesto ${line.sparePartId} ya no está en el catálogo: no se puede comprar.`,
       );
     }
-    const falta = line.quantity - part.stock;
+    const needed = lineRemaining(line, request.status ?? REQUEST_STATUSES.PENDING);
+    if (needed <= 0) continue;
+    const falta = needed - part.stock;
     if (falta <= 0) continue;
     missing.push({
       sparePartId: part._id,

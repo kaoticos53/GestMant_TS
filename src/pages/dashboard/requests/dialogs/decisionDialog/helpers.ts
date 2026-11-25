@@ -8,11 +8,14 @@ import type { PartDoc, RequestLine } from "./types";
 export function calculateShortages(
   lines: RequestLine[],
   parts: PartDoc[],
+  status: RequestStatus = "pending",
 ): RequestLine[] {
   const partById = new Map(parts.map((part) => [part._id, part]));
   return lines.filter((line) => {
+    const needed = lineRemaining(line, status);
+    if (needed <= 0) return false;
     const part = partById.get(line.sparePartId);
-    return !part || part.stock < line.quantity;
+    return !part || part.stock < needed;
   });
 }
 

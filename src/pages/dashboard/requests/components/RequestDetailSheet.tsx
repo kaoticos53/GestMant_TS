@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { RevertApprovalDialog } from "../dialogs/RevertApprovalDialog";
+import { LinkedPurchasesCard } from "./LinkedPurchasesCard";
 import {
   canEditRequest,
   isRequestSettled,
@@ -50,6 +52,11 @@ export interface RequestDetailSheetProps {
   onResume?: () => void;
   resuming?: boolean;
   showStock?: boolean;
+  canPurchase?: boolean;
+  onOpenPurchasing?: (
+    section: "pending" | "orders",
+    orderId?: Id<"purchaseOrders"> | null,
+  ) => void;
 }
 
 export function RequestDetailSheet({
@@ -67,6 +74,8 @@ export function RequestDetailSheet({
   onResume,
   resuming = false,
   showStock = true,
+  canPurchase = false,
+  onOpenPurchasing,
 }: RequestDetailSheetProps) {
   const needsAttachmentUrls = requestNeedsAttachmentUrls(request);
   const detailed = useQuery(
@@ -190,6 +199,13 @@ export function RequestDetailSheet({
             canEdit={canEditRequest(request.status)}
             showStock={showStock}
             onAssociate={onAssociate}
+          />
+
+          <LinkedPurchasesCard
+            request={resolvedRequest}
+            hasShortage={enrichedLines.some((line) => line.hasShortage)}
+            canPurchase={canPurchase}
+            onOpenPurchasing={onOpenPurchasing}
           />
 
           <DeliveryTrail requestId={request._id} />

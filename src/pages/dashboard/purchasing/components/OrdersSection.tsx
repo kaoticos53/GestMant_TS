@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
@@ -20,8 +20,15 @@ export function OrdersSection({
   orders,
   receptions,
   canManage,
+  initialOrderId = null,
 }: OrdersSectionProps) {
   const [abierta, setAbierta] = useState<PurchaseOrderDoc | null>(null);
+
+  useEffect(() => {
+    if (!initialOrderId) return;
+    const match = orders.find((order) => order._id === initialOrderId);
+    if (match) setAbierta(match);
+  }, [initialOrderId, orders]);
   const [recibiendo, setRecibiendo] = useState<PurchaseOrderDoc | null>(null);
   const [anulando, setAnulando] = useState<PurchaseOrderDoc | null>(null);
   const cancelar = useMutation(api.purchasing.cancelOrder);

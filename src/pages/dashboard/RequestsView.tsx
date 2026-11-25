@@ -14,6 +14,7 @@ export function RequestsView({
   canPurchase = false,
   initialDetailId = null,
   initialFilter = "all",
+  onOpenPurchasing,
 }: {
   /** Modelo del inventario por el que se filtra la cola ("all" = sin filtro). */
   equipmentFilter?: string;
@@ -26,6 +27,11 @@ export function RequestsView({
   initialDetailId?: Id<"partRequests"> | null;
   /** Estado con el que se abre la cola (lo eligen las tarjetas del resumen). */
   initialFilter?: RequestFilterId;
+  /** Navega al módulo de Compras (pendientes u orden concreta). */
+  onOpenPurchasing?: (
+    section: "pending" | "orders",
+    orderId?: Id<"purchaseOrders"> | null,
+  ) => void;
 }) {
   const state = useRequestsState({
     equipmentFilter,
@@ -100,6 +106,7 @@ export function RequestsView({
         equipment={state.equipment}
         canManage={canManage}
         canPurchase={canPurchase}
+        onOpenPurchasing={onOpenPurchasing}
       />
     </div>
   );

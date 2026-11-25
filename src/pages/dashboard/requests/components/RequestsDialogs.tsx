@@ -1,3 +1,4 @@
+import type { Id } from "@/convex/_generated/dataModel";
 import { AssociateDialog } from "../dialogs/AssociateDialog";
 import { DecisionDialog } from "../dialogs/DecisionDialog";
 import { NewRequestDialog } from "../dialogs/NewRequestDialog";
@@ -26,6 +27,7 @@ export function RequestsDialogs({
   equipment,
   canManage,
   canPurchase,
+  onOpenPurchasing,
 }: {
   decision: { request: RequestDoc; mode: DecisionMode } | null;
   onCloseDecision: () => void;
@@ -43,6 +45,10 @@ export function RequestsDialogs({
   equipment: EquipmentDoc[];
   canManage: boolean;
   canPurchase: boolean;
+  onOpenPurchasing?: (
+    section: "pending" | "orders",
+    orderId?: Id<"purchaseOrders"> | null,
+  ) => void;
 }) {
   return (
     <>
@@ -84,6 +90,8 @@ export function RequestsDialogs({
           onCancel={() => onOpenDecision(openRequest, "cancel")}
           onResume={() => onResumeRequest(openRequest)}
           resuming={resumingId === openRequest._id}
+          canPurchase={canPurchase}
+          onOpenPurchasing={onOpenPurchasing}
         />
       )}
 

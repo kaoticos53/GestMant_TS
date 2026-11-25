@@ -1,4 +1,4 @@
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import type { Truck } from "lucide-react";
 
 export type PartRequestDoc = Doc<"partRequests">;
@@ -16,4 +16,6 @@ export interface PurchasingSectionItem {
 
 export interface PurchasingViewProps {
   canManage: boolean;
+  initialSection?: PurchasingSection;
+  initialOrderId?: Id<"purchaseOrders"> | null;
 }

@@ -20,7 +20,11 @@ export type { PurchasingViewProps } from "./purchasing/types";
  * ha llegado de cada una, los movimientos de recepción con su albarán y el
  * histórico interactivo en formato hoja de cálculo.
  */
-export function PurchasingView({ canManage }: PurchasingViewProps) {
+export function PurchasingView({
+  canManage,
+  initialSection = "pending",
+  initialOrderId = null,
+}: PurchasingViewProps) {
   // El módulo carga las tres listas que enseña —lo que espera por proveedor, las
   // órdenes y las recepciones— más lo que necesita para nombrar lo que se pide:
   // el catálogo y las peticiones de repuesto de las que sale cada compra.
@@ -32,7 +36,7 @@ export function PurchasingView({ canManage }: PurchasingViewProps) {
   const parts = useQuery(api.spareParts.list) ?? [];
   const purchaseRequests = purchasing?.requests ?? [];
 
-  const [section, setSection] = useState<PurchasingSection>("pending");
+  const [section, setSection] = useState<PurchasingSection>(initialSection);
 
   // Sin tratar: lo que espera a que alguien monte la orden (`lib/purchaseFlow`).
   const sinTratar = purchaseRequests.filter((row) =>
@@ -64,6 +68,7 @@ export function PurchasingView({ canManage }: PurchasingViewProps) {
           orders={orders}
           receptions={receptions}
           canManage={canManage}
+          initialOrderId={initialOrderId}
         />
       )}
       {section === "movements" && <MovementsSection receptions={receptions} />}

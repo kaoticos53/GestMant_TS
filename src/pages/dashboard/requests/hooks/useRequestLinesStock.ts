@@ -54,9 +54,9 @@ export function useRequestLinesStock(
   const enrichedLines = useMemo<EnrichedRequestLine[]>(() => {
     return lines.map((line) => {
       const part = partById.get(line.sparePartId);
-      const hasShortage = !part || part.stock < line.quantity;
       const delivered = lineDelivered(line, status);
       const remaining = lineRemaining(line, status);
+      const hasShortage = remaining > 0 && (!part || part.stock < remaining);
 
       return {
         sparePartId: line.sparePartId,

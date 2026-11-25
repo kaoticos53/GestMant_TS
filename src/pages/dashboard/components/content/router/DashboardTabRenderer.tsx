@@ -114,11 +114,30 @@ export function DashboardTabRenderer({
           canPurchase={can("managePurchasing") && can("viewPurchasing")}
           initialDetailId={target.requestId ?? null}
           initialFilter={target.requestsFilter ?? "all"}
+          onOpenPurchasing={
+            can("viewPurchasing")
+              ? (section, orderId) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "purchasing",
+                    purchasingSection: section,
+                    purchaseOrderId: orderId ?? null,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
+          }
         />
       );
 
     case "purchasing":
-      return <PurchasingView canManage={can("managePurchasing")} />;
+      return (
+        <PurchasingView
+          key={`purchasing-${target.purchasingSection ?? "pending"}-${target.purchaseOrderId ?? ""}-${target.timestamp ?? 0}`}
+          canManage={can("managePurchasing")}
+          initialSection={target.purchasingSection ?? "pending"}
+          initialOrderId={target.purchaseOrderId ?? null}
+        />
+      );
 
     case "inventory":
       return (
