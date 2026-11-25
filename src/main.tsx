@@ -10,6 +10,7 @@ import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { registerSW } from "virtual:pwa-register";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { ThemeProvider } from "next-themes";
 import "./index.css";
 
 // Lazy load route components for better code splitting
@@ -94,39 +95,46 @@ createRoot(document.getElementById("root")!).render(
           </Suspense>
         </ModuleErrorBoundary>
       )}
-      <ConvexAuthProvider client={convex}>
-        {/* Va aquí, fuera de las rutas y del `RequireAuth`: si la dirección
-            pública de la API no responde, quien se queda fuera es justo quien no
-            llega al panel, y es ahí donde hace falta la explicación. */}
-        <ApiAddressNotice />
-        <BrowserRouter>
-          <RouteSyncer />
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route path="/reportar" element={<ReportIncident />} />
-              {/* La dirección del enlace del correo: pública, sin sesión. */}
-              <Route path="/seguimiento" element={<FollowIncident />} />
-              <Route path="/seguimiento/:codigo" element={<FollowIncident />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <Dashboard />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Toaster />
-        <PwaUpdateBanner />
-      </ConvexAuthProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <ConvexAuthProvider client={convex}>
+          {/* Va aquí, fuera de las rutas y del `RequireAuth`: si la dirección
+              pública de la API no responde, quien se queda fuera es justo quien no
+              llega al panel, y es ahí donde hace falta la explicación. */}
+          <ApiAddressNotice />
+          <BrowserRouter>
+            <RouteSyncer />
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route
+                  path="/auth"
+                  element={<AuthPage redirectAfterAuth="/dashboard" />}
+                />
+                <Route path="/reportar" element={<ReportIncident />} />
+                {/* La dirección del enlace del correo: pública, sin sesión. */}
+                <Route path="/seguimiento" element={<FollowIncident />} />
+                <Route path="/seguimiento/:codigo" element={<FollowIncident />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <RequireAuth>
+                      <Dashboard />
+                    </RequireAuth>
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+          <Toaster />
+          <PwaUpdateBanner />
+        </ConvexAuthProvider>
+      </ThemeProvider>
     </ModuleErrorBoundary>
   </StrictMode>,
 );

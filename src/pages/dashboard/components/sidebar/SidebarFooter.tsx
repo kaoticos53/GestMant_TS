@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, History, LogOut, PanelLeftClose } from "lucide-react";
 import { ChangelogDialog } from "@/components/changelog/ChangelogDialog";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DETAILED_VERSION, FULL_VERSION } from "@/version";
@@ -63,6 +64,10 @@ export function SidebarFooter({
           <PanelLeftClose className="size-4" />
           Plegar menú
         </Button>
+
+        <div className="mt-2.5">
+          <ThemeToggle />
+        </div>
 
         <div className="mt-2.5 flex items-center justify-between gap-2 px-1">
           {roleBadge}

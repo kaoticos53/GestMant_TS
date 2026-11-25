@@ -3,6 +3,7 @@ import { WorkshopAiChatButton } from "@/components/ai/WorkshopAiChatButton";
 import { BackgroundJobsIndicator } from "@/components/jobs/BackgroundJobsIndicator";
 import { MessagesCenter } from "@/components/MessagesCenter";
 import { NotificationBell } from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -85,8 +86,9 @@ export function DashboardHeader({
               />
             </div>
           )}
-          {/* Lo que vivía en el menú: avisos, mensajes y el rol en uso. */}
+          {/* Lo que vivía en el menú: tema, avisos, mensajes y el rol en uso. */}
           <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle compact />
             {roleBadge}
             <NotificationBell onOpen={onOpenNotification} />
             <MessagesCenter canSend={canSendMessages} />
@@ -199,21 +201,24 @@ export function DashboardHeader({
             }}
           />
 
-          <div className="flex items-center justify-between gap-2 border-t border-border/70 p-3">
-            {roleBadge}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-muted-foreground"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onSignOut();
-              }}
-            >
-              <LogOut className="size-4" />
-              Salir
-            </Button>
+          <div className="flex flex-col gap-2.5 border-t border-border/70 p-3">
+            <ThemeToggle />
+            <div className="flex items-center justify-between gap-2">
+              {roleBadge}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onSignOut();
+                }}
+              >
+                <LogOut className="size-4" />
+                Salir
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
