@@ -1,7 +1,7 @@
 import type React from "react";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
-import { GlobalSearch, type SearchHit } from "../GlobalSearch";
+import { GlobalSearch, type QuickAction, type SearchHit } from "../GlobalSearch";
 import type { NavId, NavItem } from "../types";
 import {
   SidebarFooter,
@@ -21,6 +21,7 @@ export interface DashboardSidebarProps {
   canSearchCatalog: boolean;
   canSendMessages: boolean;
   onSearchSelect: (hit: SearchHit) => void;
+  quickActions?: QuickAction[];
   onOpenNotification: (notification: { incidentId?: Id<"incidents"> | null }) => void;
   navItems: NavItem[];
   navBadges: Record<NavId, number>;
@@ -44,6 +45,7 @@ export function DashboardSidebar({
   canSearchCatalog,
   canSendMessages,
   onSearchSelect,
+  quickActions,
   onOpenNotification,
   navItems,
   navBadges,
@@ -83,6 +85,7 @@ export function DashboardSidebar({
             <GlobalSearch
               canSearchCatalog={canSearchCatalog}
               onSelect={onSearchSelect}
+              quickActions={quickActions}
               shortcutEnabled={!sidebarCollapsed}
             />
           </div>

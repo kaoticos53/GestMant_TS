@@ -18,7 +18,7 @@ import type React from "react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { MODULE_META } from "../constants/navConfig";
-import { GlobalSearch, type SearchHit } from "../GlobalSearch";
+import { GlobalSearch, type QuickAction, type SearchHit } from "../GlobalSearch";
 import type { NavId, NavItem } from "../types";
 import { SidebarNavList } from "./sidebar/SidebarNavList";
 
@@ -31,6 +31,7 @@ export interface DashboardHeaderProps {
   isGuest: boolean;
   canSearchCatalog: boolean;
   onSearchSelect: (hit: SearchHit) => void;
+  quickActions?: QuickAction[];
   activeTab: NavId;
   goToTab: (id: NavId) => void;
   initial: string;
@@ -48,6 +49,7 @@ export function DashboardHeader({
   isGuest,
   canSearchCatalog,
   onSearchSelect,
+  quickActions,
   activeTab,
   goToTab,
   initial,
@@ -82,6 +84,7 @@ export function DashboardHeader({
               <GlobalSearch
                 canSearchCatalog={canSearchCatalog}
                 onSelect={onSearchSelect}
+                quickActions={quickActions}
                 shortcutEnabled={sidebarCollapsed}
               />
             </div>
@@ -167,6 +170,7 @@ export function DashboardHeader({
                 setMobileSearchOpen(false);
                 onSearchSelect(hit);
               }}
+              quickActions={quickActions}
               shortcutEnabled={false}
             />
           </div>

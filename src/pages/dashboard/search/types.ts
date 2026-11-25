@@ -52,10 +52,20 @@ export interface SearchGroup {
   hits: SearchHit[];
 }
 
+export interface QuickAction {
+  id: string;
+  label: string;
+  subtitle: string;
+  keywords?: string[];
+  shortcut?: string;
+  onRun: () => void;
+}
+
 export interface GlobalSearchProps {
   /** Solo responsable/admin acceden al catálogo: no se busca lo que no ven. */
   canSearchCatalog?: boolean;
   onSelect: (hit: SearchHit) => void;
+  quickActions?: QuickAction[];
   className?: string;
   /** Solo la instancia visible en escritorio debe registrar el atajo Ctrl/Cmd+K. */
   shortcutEnabled?: boolean;

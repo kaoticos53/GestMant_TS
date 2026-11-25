@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { GlobalSearchProps, SearchHit } from "../types";
+import type { GlobalSearchProps, QuickAction } from "../types";
 import { buildSearchGroupsFromResponse } from "../helpers";
+
+function normalizeSearchText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
 export function useGlobalSearch({
   onSelect,
+  quickActions = [],
   shortcutEnabled = true,
-}: Pick<GlobalSearchProps, "canSearchCatalog" | "onSelect" | "shortcutEnabled">) {
+}: Pick<
+  GlobalSearchProps,
+  "canSearchCatalog" | "onSelect" | "quickActions" | "shortcutEnabled"
+>) {
   const [engaged, setEngaged] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -75,11 +86,34 @@ export function useGlobalSearch({
   );
 
   const trimmed = query.trim();
-  const safeIndex =
-    flatHits.length > 0 ? Math.min(activeIndex, flatHits.length - 1) : 0;
+  const filteredActions = useMemo(() => {
+    if (quickActions.length === 0) return [];
+    if (trimmed === "") return quickActions;
+    const needle = normalizeSearchText(trimmed);
+    return quickActions.filter((action) => {
+      const haystack = [
+        action.label,
+        action.subtitle,
+        ...(action.keywords ?? []),
+      ]
+        .map(normalizeSearchText)
+        .join(" ");
+      return haystack.includes(needle);
+    });
+  }, [quickActions, trimmed]);
 
-  const selectHit = (hit: SearchHit) => {
+  const totalNavigable = flatHits.length + filteredActions.length;
+  const safeIndex =
+    totalNavigable > 0 ? Math.min(activeIndex, totalNavigable - 1) : 0;
+
+  const selectHit = (hit: (typeof flatHits)[number]) => {
     onSelect(hit);
+    setQuery("");
+    setOpen(false);
+  };
+
+  const runAction = (action: QuickAction) => {
+    action.onRun();
     setQuery("");
     setOpen(false);
   };
@@ -89,18 +123,23 @@ export function useGlobalSearch({
       setOpen(false);
       return;
     }
-    if (flatHits.length === 0) return;
+    if (totalNavigable === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex(Math.min(safeIndex + 1, flatHits.length - 1));
+      setActiveIndex(Math.min(safeIndex + 1, totalNavigable - 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex(Math.max(safeIndex - 1, 0));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const hit = flatHits[safeIndex] ?? flatHits[0];
-      if (hit) selectHit(hit);
+      if (safeIndex < flatHits.length) {
+        const hit = flatHits[safeIndex];
+        if (hit) selectHit(hit);
+      } else {
+        const action = filteredActions[safeIndex - flatHits.length];
+        if (action) runAction(action);
+      }
     }
   };
 
@@ -134,6 +173,7 @@ export function useGlobalSearch({
     open,
     trimmed,
     groups,
+    filteredActions,
     safeIndex,
     scannerOpen,
     containerRef,
@@ -141,6 +181,7 @@ export function useGlobalSearch({
     setActiveIndex,
     setScannerOpen,
     selectHit,
+    runAction,
     handleKeyDown,
     handleFocus,
     handleChangeQuery,

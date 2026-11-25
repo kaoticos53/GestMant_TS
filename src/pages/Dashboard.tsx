@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -9,6 +10,7 @@ import {
   subscribeAiOpenReference,
   subscribeAiShowTables,
 } from "@/lib/aiBridge";
+import { type QuickAction } from "./dashboard/GlobalSearch";
 import { buildSearchGroupsFromResponse } from "./dashboard/search/helpers";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { DashboardContent } from "./dashboard/components/DashboardContent";
@@ -77,8 +79,105 @@ export default function Dashboard() {
   } = useDashboardState();
 
   const convex = useConvex();
+  const navigate = useNavigate();
   const [aiTables, setAiTables] = useState<AiResultTable[] | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  const quickActions = useMemo<QuickAction[]>(() => {
+    const allowed = new Set(navItems.map((item) => item.id));
+    const tabMeta: {
+      tab: NavId;
+      label: string;
+      subtitle: string;
+      shortcut: string;
+      keywords: string[];
+    }[] = [
+      {
+        tab: "incidents",
+        label: "Ir a Incidencias",
+        subtitle: "Abrir la cola de incidencias del taller",
+        shortcut: "g i",
+        keywords: ["incidencias", "averias", "cola"],
+      },
+      {
+        tab: "requests",
+        label: "Ir a Peticiones de repuesto",
+        subtitle: "Abrir la cola de peticiones de material",
+        shortcut: "g p",
+        keywords: ["peticiones", "repuestos", "solicitudes"],
+      },
+      {
+        tab: "inventory",
+        label: "Ir a Repuestos",
+        subtitle: "Abrir el inventario y existencias",
+        shortcut: "g r",
+        keywords: ["repuestos", "inventario", "almacen", "stock"],
+      },
+      {
+        tab: "equipment",
+        label: "Ir a Equipos",
+        subtitle: "Abrir el parque de equipos",
+        shortcut: "g e",
+        keywords: ["equipos", "parque", "alta"],
+      },
+      {
+        tab: "purchasing",
+        label: "Ir a Compras",
+        subtitle: "Abrir compras y órdenes de compra",
+        shortcut: "g c",
+        keywords: ["compras", "ordenes", "pedidos", "proveedores"],
+      },
+      {
+        tab: "analytics",
+        label: "Ir a Analítica",
+        subtitle: "Abrir indicadores y gráficas del taller",
+        shortcut: "g a",
+        keywords: ["analitica", "metricas", "kpi", "estadisticas"],
+      },
+      {
+        tab: "mailbox",
+        label: "Ir a Correo",
+        subtitle: "Abrir el buzón de correo",
+        shortcut: "g o",
+        keywords: ["correo", "buzon", "zimbra", "mensajes"],
+      },
+    ];
+
+    const actions: QuickAction[] = [
+      {
+        id: "report-incident",
+        label: "Notificar incidencia",
+        subtitle: "Abrir el formulario público de nueva incidencia",
+        keywords: ["nueva", "incidencia", "averia", "reportar"],
+        onRun: () => {
+          void navigate("/reportar");
+        },
+      },
+    ];
+
+    for (const item of tabMeta) {
+      if (!allowed.has(item.tab)) continue;
+      actions.push({
+        id: `go-${item.tab}`,
+        label: item.label,
+        subtitle: item.subtitle,
+        keywords: item.keywords,
+        shortcut: item.shortcut,
+        onRun: () => goToTab(item.tab),
+      });
+    }
+
+    actions.push({
+      id: "keyboard-shortcuts",
+      label: "Ver atajos de teclado",
+      subtitle: "Mostrar los atajos de navegación y correo",
+      keywords: ["atajos", "teclado", "ayuda"],
+      shortcut: "?",
+      onRun: () => setShortcutsOpen(true),
+    });
+
+    return actions;
+  }, [goToTab, navItems, navigate]);
 
   const navigateIfAllowed = (tab: NavId) => {
     if (navItems.some((item) => item.id === tab)) {
@@ -192,6 +291,7 @@ export default function Dashboard() {
           canSearchCatalog={can("viewInventory")}
           canSendMessages={can("sendMessages")}
           onSearchSelect={handleSearchSelect}
+          quickActions={quickActions}
           onOpenNotification={openNotification}
           navItems={navItems}
           navBadges={navBadges}
@@ -215,6 +315,7 @@ export default function Dashboard() {
             isGuest={isGuest}
             canSearchCatalog={can("viewInventory")}
             onSearchSelect={handleSearchSelect}
+            quickActions={quickActions}
             activeTab={activeTab}
             goToTab={goToTab}
             initial={initial}

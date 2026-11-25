@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { BarcodeScannerModal } from "@/components/BarcodeScannerModal";
-import type { GlobalSearchProps, SearchHit } from "./search/types";
+import type { GlobalSearchProps, QuickAction, SearchHit } from "./search/types";
 import { useGlobalSearch } from "./search/hooks/useGlobalSearch";
 import { SearchInput } from "./search/components/SearchInput";
 import { SearchResultsDropdown } from "./search/components/SearchResultsDropdown";
 
-export type { SearchHit };
+export type { QuickAction, SearchHit };
 
 /**
  * Buscador global del taller: incidencias y peticiones (siempre) y, para quien
@@ -19,6 +19,7 @@ export type { SearchHit };
 export function GlobalSearch({
   canSearchCatalog = false,
   onSelect,
+  quickActions,
   className,
   shortcutEnabled = true,
 }: GlobalSearchProps) {
@@ -27,6 +28,7 @@ export function GlobalSearch({
     open,
     trimmed,
     groups,
+    filteredActions,
     safeIndex,
     scannerOpen,
     containerRef,
@@ -34,12 +36,18 @@ export function GlobalSearch({
     setActiveIndex,
     setScannerOpen,
     selectHit,
+    runAction,
     handleKeyDown,
     handleFocus,
     handleChangeQuery,
     handleScan,
     handleOpenScanner,
-  } = useGlobalSearch({ canSearchCatalog, onSelect, shortcutEnabled });
+  } = useGlobalSearch({
+    canSearchCatalog,
+    onSelect,
+    quickActions,
+    shortcutEnabled,
+  });
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -62,9 +70,11 @@ export function GlobalSearch({
         open={open}
         trimmedQuery={trimmed}
         groups={groups}
+        quickActions={filteredActions}
         safeIndex={safeIndex}
         onHoverIndex={setActiveIndex}
         onSelectHit={selectHit}
+        onRunAction={runAction}
       />
     </div>
   );
