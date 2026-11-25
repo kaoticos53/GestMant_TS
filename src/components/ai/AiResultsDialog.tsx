@@ -53,7 +53,7 @@ export function AiResultsDialog({ tables, onClose }: AiResultsDialogProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-5xl">
+      <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Table2 className="size-4 text-primary" />

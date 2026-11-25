@@ -74,7 +74,7 @@ export function OrderSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <OrderSheetHeader order={order} meta={meta} total={total} />
 
-        <div className="grid gap-4 px-4 pb-6">
+        <div className="grid min-w-0 gap-4 px-4 pb-6 [&>*]:min-w-0">
           <JourneySummary
             label="Recorrido de la orden de compra"
             stages={stages}

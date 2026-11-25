@@ -53,7 +53,7 @@ export function BarcodeScannerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0 overflow-hidden sm:rounded-2xl">
+      <DialogContent className="p-0 overflow-hidden sm:max-w-md sm:rounded-2xl">
         <DialogHeader className="p-4 pb-2 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2 text-base font-semibold">

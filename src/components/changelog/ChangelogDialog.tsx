@@ -36,7 +36,7 @@ export function ChangelogDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-[88vw] lg:w-[60vw] sm:max-w-[60vw] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-3xl lg:max-w-4xl max-h-[90dvh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-xl">
         <ChangelogHeader
           fullVersion={FULL_VERSION}
           searchQuery={searchQuery}
@@ -45,7 +45,7 @@ export function ChangelogDialog({
           onSelectCategory={setSelectedCategory}
         />
 
-        <ScrollArea className="flex-1 p-6 overflow-y-auto">
+        <ScrollArea className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {filteredReleases.length === 0 ? (
             <ChangelogEmptyState />
           ) : (

@@ -52,7 +52,7 @@ export function EquipmentModelDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? "Editar modelo de equipo" : "Nuevo modelo de equipo"}

@@ -57,7 +57,7 @@ export function ManualDetailSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <ManualDetailHeader manual={resolvedManual} linked={linked} />
 
-        <div className="grid gap-4 px-4 pb-4 sm:px-6">
+        <div className="grid min-w-0 gap-4 px-4 pb-4 sm:px-6 [&>*]:min-w-0">
           <ManualExportCard
             exporting={exporting}
             onExport={() => void handleExport()}

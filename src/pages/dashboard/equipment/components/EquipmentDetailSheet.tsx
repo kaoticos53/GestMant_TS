@@ -77,7 +77,7 @@ export function EquipmentDetailSheet({
           reviewState={review.state}
         />
 
-        <div className="grid gap-4 px-4 pb-4 sm:px-6">
+        <div className="grid min-w-0 gap-4 px-4 pb-4 sm:px-6 [&>*]:min-w-0">
           <EquipmentOperationalSection
             item={item}
             canManage={canManage}

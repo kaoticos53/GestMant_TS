@@ -265,7 +265,7 @@ export function MailboxView({
     : null;
 
   return (
-    <div className="flex min-h-[32rem] flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:h-[calc(100dvh_-_20rem)] lg:min-h-[30rem] lg:flex-row">
+    <div className="flex min-h-[32rem] flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:h-[calc(100dvh_-_17rem)] lg:max-h-[calc(100dvh_-_11rem)] lg:min-h-[24rem] lg:flex-row">
       <MailboxSidebar
         account={account}
         folders={folders}

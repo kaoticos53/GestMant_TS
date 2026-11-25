@@ -111,7 +111,7 @@ export function PartDetailSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="grid gap-4 px-4 pb-6 sm:px-6">
+            <div className="grid min-w-0 gap-4 px-4 pb-6 sm:px-6 [&>*]:min-w-0">
               <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Ficha del repuesto

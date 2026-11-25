@@ -109,7 +109,7 @@ export function DashboardHeader({
       )}
 
       {/* Cabecera móvil compacta + Drawer lateral de módulos */}
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-md lg:hidden">
+      <header className="sticky top-0 z-30 overflow-x-hidden border-b border-border/70 bg-background/85 backdrop-blur-md lg:hidden">
         <div className="flex h-14 items-center justify-between gap-2 px-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button
@@ -187,9 +187,9 @@ export function DashboardHeader({
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetContent
           side="left"
-          className="flex w-[min(85vw,20rem)] flex-col gap-0 p-0 lg:hidden"
+          className="flex h-dvh w-[min(85vw,20rem)] flex-col gap-0 overflow-hidden p-0 lg:hidden"
         >
-          <SheetHeader className="border-b border-border/70 px-4 py-3 text-left">
+          <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-3 pr-12 text-left">
             <SheetTitle className="flex items-center gap-2 text-base">
               <img
                 src={logo}
@@ -212,7 +212,7 @@ export function DashboardHeader({
             }}
           />
 
-          <div className="flex flex-col gap-2.5 border-t border-border/70 p-3">
+          <div className="flex shrink-0 flex-col gap-2.5 border-t border-border/70 p-3">
             <ThemeToggle />
             <div className="flex items-center justify-between gap-2">
               {roleBadge}

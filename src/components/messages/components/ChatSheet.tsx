@@ -115,15 +115,17 @@ export function ChatSheet({
         {canSend ? (
           <form
             onSubmit={handleSend}
-            className="flex items-end gap-2 border-t border-border/70 pt-3"
+            className="flex min-w-0 items-end gap-2 border-t border-border/70 px-4 pb-4 pt-3"
           >
-            <RichTextEditor
-              value={text}
-              onChange={setText}
-              placeholder={`Escribe a ${resolvedName}...`}
-              disabled={busy}
-              compact
-            />
+            <div className="min-w-0 flex-1">
+              <RichTextEditor
+                value={text}
+                onChange={setText}
+                placeholder={`Escribe a ${resolvedName}...`}
+                disabled={busy}
+                compact
+              />
+            </div>
             <Button
               type="submit"
               size="icon"
@@ -135,7 +137,7 @@ export function ChatSheet({
             </Button>
           </form>
         ) : (
-          <p className="border-t border-border/70 pt-3 text-xs text-muted-foreground">
+          <p className="border-t border-border/70 px-4 pb-4 pt-3 text-xs text-muted-foreground">
             Tu rol no tiene permiso para enviar mensajes: aquí solo puedes leer
             la conversación.
           </p>

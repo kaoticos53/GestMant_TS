@@ -51,7 +51,7 @@ function ShortcutSection({
             key={item.label}
             className="flex items-center justify-between gap-4 px-3 py-2 text-sm"
           >
-            <span className="text-foreground">{item.label}</span>
+            <span className="min-w-0 break-words text-foreground">{item.label}</span>
             <span className="flex shrink-0 items-center gap-1">
               {item.keys.map((key, idx) => (
                 <span key={key} className="inline-flex items-center gap-1">
@@ -78,7 +78,7 @@ export function KeyboardShortcutsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Atajos de teclado</DialogTitle>
           <DialogDescription>

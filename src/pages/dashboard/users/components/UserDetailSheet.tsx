@@ -52,7 +52,7 @@ export function UserDetailSheet({
 
   return (
     <Sheet open={member !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-5 overflow-y-auto sm:max-w-lg">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-lg">
         {member && (
           <>
             <SheetHeader className="space-y-2 border-b pb-4">
@@ -73,20 +73,27 @@ export function UserDetailSheet({
               </SheetDescription>
             </SheetHeader>
 
-            <div className="space-y-2 rounded-xl border bg-muted/20 p-3.5 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Mail className="size-3.5 shrink-0" />
-                <span>{member.email ?? "Sin correo de acceso"}</span>
+            <div className="grid min-w-0 gap-5 px-4 py-4 pb-6 sm:px-6 [&>*]:min-w-0">
+              <div className="space-y-2 rounded-xl border bg-muted/20 p-3.5 text-xs text-muted-foreground">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Mail className="size-3.5 shrink-0" />
+                  <span className="min-w-0 break-all">
+                    {member.email ?? "Sin correo de acceso"}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <MapPin className="size-3.5 shrink-0" />
+                  <span className="min-w-0 break-words">
+                    {member.location ?? "Sin ubicación"}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Phone className="size-3.5 shrink-0" />
+                  <span className="min-w-0 break-all">
+                    {member.phone ?? "Sin teléfono"}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="size-3.5 shrink-0" />
-                <span>{member.location ?? "Sin ubicación"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="size-3.5 shrink-0" />
-                <span>{member.phone ?? "Sin teléfono"}</span>
-              </div>
-            </div>
 
             <div className="flex flex-wrap gap-2">
               <Button
@@ -232,6 +239,7 @@ export function UserDetailSheet({
                 </section>
               </>
             )}
+            </div>
           </>
         )}
       </SheetContent>

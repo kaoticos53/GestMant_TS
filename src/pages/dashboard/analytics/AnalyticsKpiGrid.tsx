@@ -47,15 +47,15 @@ export function AnalyticsKpiGrid({
         type="button"
         data-testid="kpi-incidents"
         onClick={onOpenIncidents}
-        className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+        className="group min-w-0 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
       >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs font-medium text-muted-foreground">
             Incidencias activas
           </span>
-          <Siren className="size-4 text-amber-600 dark:text-amber-400" />
+          <Siren className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-2xl font-bold tracking-tight tabular-nums">
             {kpis.activeIncidents}
           </span>
@@ -75,15 +75,15 @@ export function AnalyticsKpiGrid({
         type="button"
         data-testid="kpi-requests"
         onClick={onOpenRequests}
-        className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+        className="group min-w-0 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
       >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs font-medium text-muted-foreground">
             Peticiones activas
           </span>
-          <ClipboardList className="size-4 text-blue-600 dark:text-blue-400" />
+          <ClipboardList className="size-4 shrink-0 text-blue-600 dark:text-blue-400" />
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-2xl font-bold tracking-tight tabular-nums">
             {kpis.activeRequests}
           </span>
@@ -102,15 +102,15 @@ export function AnalyticsKpiGrid({
           type="button"
           data-testid="kpi-purchasing"
           onClick={onOpenPurchasingPending}
-          className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+          className="group min-w-0 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-medium text-muted-foreground">
               Compras sin tratar
             </span>
-            <ShoppingCart className="size-4 text-status-warning-foreground" />
+            <ShoppingCart className="size-4 shrink-0 text-status-warning-foreground" />
           </div>
-          <div className="mt-2 flex items-baseline justify-between gap-2">
+          <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-2xl font-bold tracking-tight tabular-nums">
               {kpis.pendingPurchases}
             </span>
@@ -128,15 +128,15 @@ export function AnalyticsKpiGrid({
         type="button"
         data-testid="kpi-inventory"
         onClick={onOpenInventoryLowStock}
-        className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+        className="group min-w-0 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
       >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs font-medium text-muted-foreground">
             Stock bajo / agotado
           </span>
-          <AlertTriangle className="size-4 text-rose-600 dark:text-rose-400" />
+          <AlertTriangle className="size-4 shrink-0 text-rose-600 dark:text-rose-400" />
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-2xl font-bold tracking-tight tabular-nums">
             {kpis.lowStockParts}
           </span>
@@ -154,15 +154,15 @@ export function AnalyticsKpiGrid({
         type="button"
         data-testid="kpi-equipment"
         onClick={onOpenEquipment}
-        className="group rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
+        className="group min-w-0 rounded-xl border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/30"
       >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-xs font-medium text-muted-foreground">
             Equipos registrados
           </span>
-          <Wrench className="size-4 text-slate-600 dark:text-slate-400" />
+          <Wrench className="size-4 shrink-0 text-slate-600 dark:text-slate-400" />
         </div>
-        <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-2xl font-bold tracking-tight tabular-nums">
             {kpis.totalEquipment}
           </span>
