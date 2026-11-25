@@ -527,6 +527,11 @@ async function montarIncidencia(
       persona.sesion.mutation(api.partRequests.cancel, {
         requestId: vinculada!,
       }),
+    reopen: () =>
+      persona.sesion.mutation(api.incidents.reopen, {
+        incidentId,
+        note: "Reapertura controlada por error de cierre",
+      }),
   };
 
   return {

@@ -58,8 +58,8 @@ const DESDE: Record<IncidentStatus, readonly IncidentAction[]> = {
     "closeResolved",
     "closeUnresolved",
   ],
-  resolved: [],
-  unresolved: [],
+  resolved: ["reopen"],
+  unresolved: ["reopen"],
 };
 
 /**
@@ -80,6 +80,7 @@ const DESTINOS: Record<IncidentAction, IncidentStatus | "keptStatus"> = {
   partsSettledWorkshop: "workshop",
   closeResolved: "resolved",
   closeUnresolved: "unresolved",
+  reopen: "workshop",
 };
 
 const ACCIONES = Object.keys(DESTINOS) as IncidentAction[];
@@ -105,7 +106,7 @@ describe("la máquina de la incidencia — qué se puede hacer desde cada estado
       // La tabla no puede decir «assign lleva a assigned» y luego dejar darlo
       // desde un estado cerrado.
       for (const status of Object.keys(DESDE) as IncidentStatus[]) {
-        if (canAdvanceIncident(status, action)) {
+        if (canAdvanceIncident(status, action) && action !== "reopen") {
           expect(isClosedIncident(status), `${action} desde ${status}`).toBe(
             false,
           );
@@ -114,10 +115,12 @@ describe("la máquina de la incidencia — qué se puede hacer desde cada estado
     }
   });
 
-  test("desde una incidencia cerrada no se mueve nada", () => {
+  test("desde una incidencia cerrada solo cabe reapertura controlada", () => {
     for (const status of ["resolved", "unresolved"] as IncidentStatus[]) {
       for (const action of ACCIONES) {
-        expect(canAdvanceIncident(status, action), `${action}`).toBe(false);
+        expect(canAdvanceIncident(status, action), `${action}`).toBe(
+          action === "reopen",
+        );
       }
     }
   });

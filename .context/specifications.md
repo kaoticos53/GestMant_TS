@@ -61,6 +61,8 @@ stateDiagram-v2
   repairing --> resolved : closeResolved
   workshop --> unresolved : closeUnresolved
   repairing --> unresolved : closeUnresolved
+  resolved --> workshop : reopen
+  unresolved --> workshop : reopen
   resolved --> [*]
   unresolved --> [*]
 ```
@@ -125,6 +127,8 @@ quién lo da. Las que comparten paso se leen juntas: `waitParts`, `sendExternal`
 | `workshop`       | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
 | `repairing`      | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
 | `externalRepair` | `closeUnresolved` Cerrar sin resolución                          | `unresolved`     | El técnico que lleva el caso                                                    |
+| `resolved`       | `reopen` Reabrir incidencia                                    | `workshop`       | El coordinador, por cierre erróneo con motivo obligatorio                       |
+| `unresolved`     | `reopen` Reabrir incidencia                                    | `workshop`       | El coordinador, por cierre erróneo con motivo obligatorio                       |
 
 **Regla:** un paso solo se da si `INCIDENT_STEPS` lo admite desde el estado en el
 que está la incidencia, y desde un estado cerrado no sale ninguno. La tabla de

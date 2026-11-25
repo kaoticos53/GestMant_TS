@@ -43,7 +43,8 @@ export type IncidentAction =
   | "sendExternal" // derivada a empresa o SAT externo
   | "returnExternal" // recibida de vuelta en el taller
   | "closeResolved" // trabajo terminado: resuelta
-  | "closeUnresolved"; // trabajo terminado: sin resolución
+  | "closeUnresolved" // trabajo terminado: sin resolución
+  | "reopen"; // reapertura controlada por error de cierre
 
 /**
  * Un paso: desde qué estados se puede dar y a cuál lleva.
@@ -110,6 +111,7 @@ export const INCIDENT_STEPS = {
     from: ["workshop", "repairing", "externalRepair"],
     to: "unresolved",
   },
+  reopen: { from: ["resolved", "unresolved"], to: "workshop" },
 } as const satisfies Record<IncidentAction, IncidentStep>;
 
 /** Los estados en los que la incidencia ya no se mueve. */
@@ -324,6 +326,7 @@ export const INCIDENT_STEP_LABELS: Record<IncidentAction, string> = {
   returnExternal: "Retornar al taller",
   closeResolved: "Cerrar como resuelta",
   closeUnresolved: "Cerrar sin resolución",
+  reopen: "Reabrir incidencia",
 };
 
 /**
@@ -360,6 +363,7 @@ const INCIDENT_STEP_NEEDS: Record<IncidentAction, string> = {
   returnExternal: "se registra la llegada al taller de un equipo enviado fuera",
   closeResolved: "se cierra un trabajo terminado",
   closeUnresolved: "se cierra un trabajo terminado",
+  reopen: "se reabre una incidencia cerrada por error",
 };
 
 /**

@@ -87,6 +87,8 @@ stateDiagram-v2
     externalRepair --> workshop: returnExternal — asignado o coordinador
     externalRepair --> resolved: closeResolved — técnico de taller o coordinador
     externalRepair --> unresolved: closeUnresolved — técnico de taller o coordinador
+    resolved --> workshop: reopen — coordinador
+    unresolved --> workshop: reopen — coordinador
     resolved --> [*]
     unresolved --> [*]
 ```
@@ -148,6 +150,8 @@ Cuatro cosas que no son de estilo:
 | `externalRepair` En reparación externa| `returnExternal` Retornar al taller                              | `workshop` En taller                  | `manageIncidents` o **el técnico asignado o el de taller**                            |
 | `externalRepair` En reparación externa| `closeResolved` Cerrar como resuelta                             | `resolved` Resuelta                   | `manageIncidents` o **el técnico asignado o el de taller**                            |
 | `externalRepair` En reparación externa| `closeUnresolved` Cerrar sin resolución                          | `unresolved` Sin resolución           | `manageIncidents` o **el técnico asignado o el de taller**                            |
+| `resolved` Resuelta                   | `reopen` Reabrir incidencia                                    | `workshop` En taller                  | `manageIncidents` el coordinador o administrador (con motivo obligatorio)             |
+| `unresolved` Sin resolución           | `reopen` Reabrir incidencia                                    | `workshop` En taller                  | `manageIncidents` el coordinador o administrador (con motivo obligatorio)             |
 
 La segunda puerta no es una capacidad sino una pregunta —«¿la tengo yo?»— y por
 eso va en negrita: el técnico asignado verifica y cierra **su** incidencia sin

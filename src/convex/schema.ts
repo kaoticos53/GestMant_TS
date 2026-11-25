@@ -252,6 +252,12 @@ export type PurchaseOrderStatus = Infer<typeof purchaseOrderStatusValidator>;
  * su fecha de solicitud—, que es lo que lleva el documento que se manda al
  * proveedor y lo que permite volver de una orden a la petición de la que salió.
  */
+export const externalQuoteStatusValidator = v.union(
+  v.literal("awaiting_quote"),
+  v.literal("accepted"),
+  v.literal("declined"),
+);
+
 export const purchaseOrderLineValidator = v.object({
   purchaseRequestId: v.id("purchaseRequests"),
   requestId: v.optional(v.id("partRequests")),
@@ -526,8 +532,14 @@ const schema = defineSchema({
         cost: v.optional(v.number()), // Coste de la reparación (€)
         deliveryNoteNumber: v.optional(v.string()), // Nº de albarán o factura externa
         deliveryNoteStorageId: v.optional(v.id("_storage")), // Archivo del albarán externo adjunto
+        // Seguimiento RMA / presupuesto
+        rmaNumber: v.optional(v.string()),
+        quoteStatus: v.optional(externalQuoteStatusValidator),
+        estimatedCost: v.optional(v.number()),
+        expectedReturnAt: v.optional(v.number()),
       }),
     ),
+    parentIncidentId: v.optional(v.id("incidents")),
     // Datos aportados por el técnico al cerrar
     notes: v.optional(v.string()),
     resolvedNote: v.optional(v.string()),

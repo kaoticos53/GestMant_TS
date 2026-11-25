@@ -195,6 +195,7 @@ const STAGE_OF_STEP: Record<IncidentAction, JourneyStageKey> = {
   partsSettledWorkshop: "workshop",
   closeResolved: "workshop",
   closeUnresolved: "workshop",
+  reopen: "closed",
 };
 
 /** El orden del recorrido: los motivos se enseñan en ese mismo orden. */

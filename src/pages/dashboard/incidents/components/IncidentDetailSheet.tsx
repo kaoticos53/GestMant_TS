@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
+import { IncidentLifecycleExtras } from "./IncidentLifecycleExtras";
 import { JourneySummary } from "@/components/JourneySummary";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { incidentNeedsDocumentUrls } from "@/lib/incidentFlow";
@@ -173,6 +174,14 @@ export function IncidentDetailSheet({
           withdrawn={derived.withdrawn}
           trailPending={trailPending}
           onClose={onClose}
+        />
+
+        <IncidentLifecycleExtras
+          incident={resolvedIncident}
+          canCoordinate={derived.canCoordinate}
+          canWork={derived.canWork}
+          archived={derived.archived}
+          withdrawn={derived.withdrawn}
         />
 
         {priorityOpen && (

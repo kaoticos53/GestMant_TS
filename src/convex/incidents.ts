@@ -40,6 +40,7 @@ import {
 import {
   INCIDENT_PRIORITIES,
   INCIDENT_STATUSES,
+  externalQuoteStatusValidator,
   incidentPriorityValidator,
   incidentStatusValidator,
 } from "./schema";
@@ -1499,6 +1500,186 @@ export const changePriority = mutation({
             note
               ? `Prioridad cambiada de ${prevLabel} a ${nextLabel} · ${note}`
               : `Prioridad cambiada de ${prevLabel} a ${nextLabel}`,
+          ),
+        ],
+      });
+    },
+  ),
+});
+
+/** Reabre una incidencia cerrada por error (solo coordinador/admin, con motivo). */
+const reopenArgs = {
+  incidentId: v.id("incidents"),
+  note: v.string(),
+};
+
+export const reopen = mutation({
+  args: reopenArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
+      denyMessage:
+        "Solo el coordinador o administrador puede reabrir una incidencia cerrada.",
+    },
+    reopenArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      const nextStatus = requireIncidentStep(
+        incident,
+        "reopen",
+        () => "Solo se pueden reabrir incidencias ya cerradas.",
+      );
+      const note = args.note.trim();
+      if (!note) {
+        throw new ConvexError("Indica el motivo de la reapertura.");
+      }
+
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        status: nextStatus,
+        closedAt: undefined,
+        resolvedNote: undefined,
+        updatedAt: now,
+        history: [
+          ...incident.history,
+          historyEntry(nextStatus, now, name, `Reabierta por error de cierre: ${note}`),
+        ],
+      });
+
+      if (incident.equipmentId) {
+        await syncEquipmentOperationalState(ctx, incident.equipmentId);
+      }
+    },
+  ),
+});
+
+/** Crea una incidencia de reincidencia vinculada a una incidencia cerrada. */
+const createRecurrenceArgs = {
+  parentIncidentId: v.id("incidents"),
+  description: v.optional(v.string()),
+  priority: v.optional(incidentPriorityValidator),
+};
+
+export const createRecurrence = mutation({
+  args: createRecurrenceArgs,
+  handler: secureMutation(
+    {
+      capability: "manageIncidents",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
+      denyMessage:
+        "No tienes permisos para abrir incidencias de reincidencia.",
+    },
+    createRecurrenceArgs,
+    async (ctx, args, actor) => {
+      const parent = await getIncident(ctx, args.parentIncidentId);
+      const description =
+        args.description?.trim() ||
+        `Reincidencia de ${parent.reference}: ${parent.description}`;
+
+      const now = Date.now();
+      const created = await registerIncidentIntake(
+        ctx,
+        {
+          reporterName: actorName(actor),
+          equipmentKind: parent.equipmentKind,
+          model: parent.model,
+          serialNumber: parent.serialNumber,
+          location: parent.location,
+          description,
+          reportedAt: now,
+          priority: args.priority ?? parent.priority ?? INCIDENT_PRIORITIES.MEDIUM,
+        },
+        { isAuthenticatedMember: true },
+      );
+
+      const newIncident = await ctx.db
+        .query("incidents")
+        .withIndex("by_reference", (q) => q.eq("reference", created.reference))
+        .unique();
+      if (newIncident) {
+        await ctx.db.patch(newIncident._id, {
+          parentIncidentId: parent._id,
+          ...(parent.equipmentId ? { equipmentId: parent.equipmentId } : {}),
+        });
+        if (parent.equipmentId) {
+          await syncEquipmentOperationalState(ctx, parent.equipmentId);
+        }
+      }
+
+      return created;
+    },
+  ),
+});
+
+/** Actualiza los datos de seguimiento SAT externo (RMA, presupuesto, fecha prevista). */
+const updateExternalRepairArgs = {
+  incidentId: v.id("incidents"),
+  rmaNumber: v.optional(v.string()),
+  quoteStatus: v.optional(externalQuoteStatusValidator),
+  estimatedCost: v.optional(v.number()),
+  expectedReturnAt: v.optional(v.number()),
+};
+
+export const updateExternalRepair = mutation({
+  args: updateExternalRepairArgs,
+  handler: secureMutation(
+    {
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar incidencias.",
+      ),
+      authorize: incidentWorkerPolicy(
+        "Solo el técnico asignado, el técnico de taller o el coordinador pueden actualizar el seguimiento externo.",
+      ),
+    },
+    updateExternalRepairArgs,
+    async (ctx, args, actor) => {
+      const incident = await getIncident(ctx, args.incidentId);
+      if (
+        incident.status !== INCIDENT_STATUSES.EXTERNAL_REPAIR ||
+        !incident.externalRepair
+      ) {
+        throw new ConvexError(
+          "La incidencia no está actualmente en reparación externa.",
+        );
+      }
+      if (args.estimatedCost !== undefined && args.estimatedCost < 0) {
+        throw new ConvexError("El coste estimado no puede ser negativo.");
+      }
+
+      const now = Date.now();
+      const name = actorName(actor);
+      await ctx.db.patch(args.incidentId, {
+        updatedAt: now,
+        externalRepair: {
+          ...incident.externalRepair,
+          ...(args.rmaNumber !== undefined
+            ? { rmaNumber: args.rmaNumber.trim() || undefined }
+            : {}),
+          ...(args.quoteStatus !== undefined
+            ? { quoteStatus: args.quoteStatus }
+            : {}),
+          ...(args.estimatedCost !== undefined
+            ? { estimatedCost: args.estimatedCost }
+            : {}),
+          ...(args.expectedReturnAt !== undefined
+            ? { expectedReturnAt: args.expectedReturnAt }
+            : {}),
+        },
+        history: [
+          ...incident.history,
+          historyEntry(
+            incident.status,
+            now,
+            name,
+            `Actualizado seguimiento SAT externo${
+              args.rmaNumber?.trim() ? ` (RMA ${args.rmaNumber.trim()})` : ""
+            }`,
           ),
         ],
       });
