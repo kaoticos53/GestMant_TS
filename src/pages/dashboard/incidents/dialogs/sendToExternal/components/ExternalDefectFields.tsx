@@ -29,7 +29,7 @@ export function ExternalDefectFields({
 
       <div className="grid gap-2">
         <Label htmlFor="defectNotes">
-          Descripción de la avería / Trabajos a realizar{" "}
+          Descripción de la incidencia / Trabajos a realizar{" "}
           <span className="text-destructive">*</span>
         </Label>
         <Textarea

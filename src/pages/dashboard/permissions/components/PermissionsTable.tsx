@@ -24,7 +24,7 @@ export interface PermissionsTableProps {
 }
 
 const ICON_BUTTON_CLASS =
-  "flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50";
+  "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50";
 
 const CAPABILITY_CELL_CLASS =
   "sticky left-0 z-10 w-60 min-w-60 max-w-60 whitespace-normal border-r border-border/70 bg-card align-top group-hover:bg-muted/50";

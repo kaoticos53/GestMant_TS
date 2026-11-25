@@ -14,14 +14,20 @@ export function AuthHeader({
   return (
     <CardHeader className="text-center">
       <div className="flex justify-center">
-        <img
-          src={logo}
-          alt="Pulso Taller"
-          width={64}
-          height={64}
-          className="rounded-lg mb-4 mt-4 cursor-pointer"
+        <button
+          type="button"
           onClick={onLogoClick}
-        />
+          aria-label="Volver al inicio"
+          className="mb-4 mt-4 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <img
+            src={logo}
+            alt="Pulso Taller"
+            width={64}
+            height={64}
+            className="rounded-lg"
+          />
+        </button>
       </div>
       <CardTitle className="text-xl">Accede a Pulso Taller</CardTitle>
       <CardDescription>

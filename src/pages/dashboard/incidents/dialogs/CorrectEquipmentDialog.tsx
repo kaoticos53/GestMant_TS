@@ -87,7 +87,7 @@ export function CorrectEquipmentDialog({
         <DialogHeader>
           <DialogTitle>Datos del equipo de {incident.reference}</DialogTitle>
           <DialogDescription>
-            Escribe el modelo y el nº de serie tal y como figuran en la máquina.
+            Escribe el modelo y el nº de serie tal y como figuran en el equipo.
             Si el dato que llegó con la notificación era erróneo se corrige aquí
             —también se puede vaciar—, y el cambio queda en el historial de la
             incidencia.
@@ -124,7 +124,7 @@ export function CorrectEquipmentDialog({
               )}
             >
               {modelEmpty
-                ? "El modelo identifica la máquina: no puede quedarse en blanco."
+                ? "El modelo identifica al equipo: no puede quedarse en blanco."
                 : incident.model
                   ? `Lo notificado: ${incident.model}`
                   : "Lo notificado: sin modelo."}

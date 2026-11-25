@@ -78,7 +78,7 @@ export function ErrorMessageWithDetails({
   const hasTechnicalDetail = Boolean(rawError && rawError !== safeError);
 
   return (
-    <div className={cn("min-w-0 space-y-1.5", className)}>
+    <div role="alert" className={cn("min-w-0 space-y-1.5", className)}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <p
           className={cn(

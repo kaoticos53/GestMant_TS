@@ -16,7 +16,7 @@ export function validateSendToExternalForm(values: {
     return "Indica el nombre de la empresa externa o SAT.";
   }
   if (!values.defectNotes.trim()) {
-    return "Describe la avería o el motivo del envío.";
+    return "Describe la incidencia o el motivo del envío.";
   }
   return null;
 }

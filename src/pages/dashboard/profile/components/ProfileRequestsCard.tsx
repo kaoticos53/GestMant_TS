@@ -27,7 +27,7 @@ export function ProfileRequestsCard({
       </header>
       {requests.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground">
-          Todavía no has creado ninguna petición de material.
+          Todavía no has creado ninguna petición de repuesto.
         </p>
       ) : (
         <ul className="divide-y divide-border/60">

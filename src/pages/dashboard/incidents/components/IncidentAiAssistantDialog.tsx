@@ -76,7 +76,7 @@ export function IncidentAiAssistantDialog({
               rows={3}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ej. ¿Qué averías repetidas hemos tenido en cámaras o fuentes?"
+              placeholder="Ej. ¿Qué incidencias repetidas hemos tenido en cámaras o fuentes?"
               disabled={loading}
             />
           </div>

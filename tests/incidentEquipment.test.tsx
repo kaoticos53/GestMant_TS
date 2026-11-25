@@ -244,7 +244,7 @@ describe("ficha de la incidencia — corregir los datos del equipo", () => {
     escribir(modelo, "   ");
 
     expect(document.body.textContent).toContain(
-      "El modelo identifica la máquina",
+      "El modelo identifica al equipo",
     );
     expect(boton("Guardar")!.disabled).toBe(true);
     expect(CORRECCIONES).toEqual([]);

@@ -39,40 +39,40 @@ export function DashboardStats({ loading, hidden, stats }: DashboardStatsProps) 
     >
       {loading
         ? Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[68px] rounded-lg" />
-          ))
+          <Skeleton key={i} className="h-[68px] rounded-lg" />
+        ))
         : stats.map((stat) => (
-            <button
-              key={stat.label}
-              type="button"
-              onClick={stat.go}
-              aria-label={`Ver ${stat.label.toLowerCase()}: ${stat.hint}`}
-              title={`Ir a ${stat.label.toLowerCase()} · ${stat.hint}`}
-              className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-left shadow-xs transition-colors hover:border-signal/40 hover:bg-signal/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <button
+            key={stat.label}
+            type="button"
+            onClick={stat.go}
+            aria-label={`Ver ${stat.label.toLowerCase()}: ${stat.value}. ${stat.hint}`}
+            title={`Ir a ${stat.label.toLowerCase()} · ${stat.hint}`}
+            className="group flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/70 bg-card px-3 py-2 text-left shadow-xs transition-colors hover:border-signal/40 hover:bg-signal/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span
+              className={`flex size-7 shrink-0 items-center justify-center rounded-md ${stat.iconClassName}`}
             >
-              <span
-                className={`flex size-7 shrink-0 items-center justify-center rounded-md ${stat.iconClassName}`}
-              >
-                <stat.icon className="size-3.5" />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                {/* En el móvil el nombre va debajo de la cifra: al lado se
+              <stat.icon className="size-3.5" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              {/* En el móvil el nombre va debajo de la cifra: al lado se
                     quedaba en «Petici…». */}
-                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-1.5">
-                  <span className="text-xl font-semibold tabular-nums tracking-tight">
-                    {stat.value}
-                  </span>
-                  <span className="line-clamp-2 text-xs font-medium text-muted-foreground sm:truncate">
-                    {stat.label}
-                  </span>
+              <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-1.5">
+                <span className="text-xl font-semibold tabular-nums tracking-tight">
+                  {stat.value}
                 </span>
-                <span className="truncate text-[11px] text-muted-foreground/80">
-                  {stat.hint}
+                <span className="line-clamp-2 text-xs font-medium text-muted-foreground sm:truncate">
+                  {stat.label}
                 </span>
               </span>
-              <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5" />
-            </button>
-          ))}
+              <span className="truncate text-[11px] text-muted-foreground/80">
+                {stat.hint}
+              </span>
+            </span>
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5" />
+          </button>
+        ))}
     </section>
   );
 }

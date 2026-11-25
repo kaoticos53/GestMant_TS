@@ -70,11 +70,11 @@ describe("users helpers", () => {
       expect(columns.role.value(baseMember)).toBe("Técnico de Mantenimiento");
     });
 
-    it("extrae el valor de la columna state distinguiendo activo y de baja", () => {
+    it("extrae el valor de la columna state distinguiendo activo e inactivo", () => {
       expect(columns.state.value(baseMember)).toBe("Activo");
 
       const inactiveMember: Member = { ...baseMember, active: false };
-      expect(columns.state.value(inactiveMember)).toBe("De baja");
+      expect(columns.state.value(inactiveMember)).toBe("Inactivo");
     });
   });
 

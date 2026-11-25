@@ -25,7 +25,7 @@ describe("dashboardSidebarHelpers", () => {
     it("devuelve fondo signal y texto contrastado cuando active es true", () => {
       const className = getNavPillClass(true);
       expect(className).toContain("bg-signal");
-      expect(className).toContain("text-primary-foreground");
+      expect(className).toContain("text-signal-foreground");
     });
 
     it("devuelve fondo muted y texto secundario cuando active es false", () => {

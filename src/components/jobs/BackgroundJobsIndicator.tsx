@@ -118,7 +118,8 @@ export function BackgroundJobsIndicator() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-6"
+                        className="size-8"
+                        aria-label="Cancelar tarea"
                         title="Cancelar"
                         onClick={() =>
                           void cancelJob({ jobId: job._id }).catch((e) =>
@@ -126,18 +127,19 @@ export function BackgroundJobsIndicator() {
                           )
                         }
                       >
-                        <X className="size-3" />
+                        <X className="size-3.5" />
                       </Button>
                     ) : (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-6"
+                        className="size-8"
+                        aria-label="Ocultar tarea"
                         title="Ocultar"
                         onClick={() => void dismissJob({ jobId: job._id })}
                       >
-                        <X className="size-3" />
+                        <X className="size-3.5" />
                       </Button>
                     )}
                   </div>

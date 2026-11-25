@@ -31,7 +31,7 @@ export function InlineNotice({
   const Component = as;
   return (
     <Component
-      role="status"
+      role={tone === "destructive" ? "alert" : "status"}
       className={cn(
         "flex w-full flex-col gap-1.5 rounded-lg px-3 py-2.5 text-xs leading-5",
         TONE_CLASSES[tone],

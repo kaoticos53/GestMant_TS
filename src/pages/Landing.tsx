@@ -16,9 +16,11 @@ export default function Landing() {
       className="min-h-screen bg-background bg-tech-grid text-foreground antialiased selection:bg-signal/20 selection:text-signal"
     >
       <LandingHeader />
-      <LandingHero />
-      <LandingStatsSection />
-      <WorkshopDoorsSection />
+      <main>
+        <LandingHero />
+        <LandingStatsSection />
+        <WorkshopDoorsSection />
+      </main>
       <LandingFooter />
     </div>
   );

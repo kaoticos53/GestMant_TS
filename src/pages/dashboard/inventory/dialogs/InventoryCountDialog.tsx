@@ -132,12 +132,14 @@ export function InventoryCountDialog({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Filtrar por código, nombre, ubicación o categoría…"
+              aria-label="Filtrar repuestos"
               disabled={submitting}
             />
             <Input
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Nota del recuento (opcional)…"
+              aria-label="Nota del recuento"
               maxLength={160}
               disabled={submitting}
             />

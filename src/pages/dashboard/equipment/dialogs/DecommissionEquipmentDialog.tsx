@@ -129,13 +129,14 @@ export function DecommissionEquipmentDialog({
                 disabled={busy || activeParts.length === 0}
               >
                 <Plus className="size-3.5" />
-                Añadir pieza
+                Añadir repuesto
               </Button>
             </div>
 
             {salvaged.map((row, idx) => (
               <div key={idx} className="flex items-center gap-2">
                 <select
+                  aria-label={`Repuesto recuperado ${idx + 1}`}
                   value={row.sparePartId}
                   onChange={(e) =>
                     setSalvaged((prev) =>
@@ -159,6 +160,7 @@ export function DecommissionEquipmentDialog({
                   type="number"
                   min={1}
                   step={1}
+                  aria-label={`Cantidad recuperada ${idx + 1}`}
                   value={row.quantity}
                   onChange={(e) =>
                     setSalvaged((prev) =>
@@ -176,6 +178,7 @@ export function DecommissionEquipmentDialog({
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label={`Quitar repuesto ${idx + 1}`}
                   className="size-9 text-muted-foreground hover:text-destructive"
                   onClick={() =>
                     setSalvaged((prev) => prev.filter((_, i) => i !== idx))

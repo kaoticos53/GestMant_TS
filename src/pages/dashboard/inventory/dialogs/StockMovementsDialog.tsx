@@ -78,6 +78,7 @@ export function StockMovementsDialog({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por código, repuesto, referencia (PET-/OC-) o técnico..."
+          aria-label="Buscar movimientos de stock"
         />
 
         {rows === undefined ? (

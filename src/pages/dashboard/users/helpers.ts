@@ -33,7 +33,7 @@ export function createUserColumns(roleOptions: RoleOption[]) {
     },
     state: {
       label: "Estado",
-      value: (member: Member) => (member.active ? "Activo" : "De baja"),
+      value: (member: Member) => (member.active ? "Activo" : "Inactivo"),
     },
   } as const;
 }

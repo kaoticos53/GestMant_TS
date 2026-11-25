@@ -39,6 +39,7 @@ export function OtpEmailForm({
                 name="email"
                 placeholder="nombre@empresa.com"
                 type="email"
+                aria-label="Correo electrónico"
                 className="pl-9"
                 disabled={isLoading}
                 required
@@ -48,6 +49,7 @@ export function OtpEmailForm({
               type="submit"
               variant="outline"
               size="icon"
+              aria-label="Enviar código de acceso"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -57,7 +59,11 @@ export function OtpEmailForm({
               )}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
         </CardContent>
       </form>
     );

@@ -17,14 +17,14 @@ describe("sendToExternalDialog helpers", () => {
       ).toBe("Indica el nombre de la empresa externa o SAT.");
     });
 
-    it("exige la descripción del defecto o avería", () => {
+    it("exige la descripción del defecto o incidencia", () => {
       expect(
         validateSendToExternalForm({ companyName: "SAT Central", defectNotes: "" }),
-      ).toBe("Describe la avería o el motivo del envío.");
+      ).toBe("Describe la incidencia o el motivo del envío.");
 
       expect(
         validateSendToExternalForm({ companyName: "SAT Central", defectNotes: "   " }),
-      ).toBe("Describe la avería o el motivo del envío.");
+      ).toBe("Describe la incidencia o el motivo del envío.");
     });
 
     it("retorna null si ambos campos obligatorios tienen contenido", () => {

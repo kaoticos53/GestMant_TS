@@ -332,11 +332,24 @@ function escalera(): { nombre: string; elemento: HTMLElement }[] {
   }
 
   for (let indice = 0; indice < bloques.length - 1; indice += 1) {
+    const actual = bloques[indice].elemento!;
     const siguiente = bloques[indice + 1];
-    expect(
-      bloques[indice].elemento.nextElementSibling,
-      `${bloques[indice].nombre} y ${siguiente.nombre} deberían ser hermanos seguidos`,
-    ).toBe(siguiente.elemento);
+    const main = actual.closest("main");
+    if (siguiente.nombre === "pie" && main) {
+      expect(
+        actual.nextElementSibling,
+        `${bloques[indice].nombre} debería cerrar <main>`,
+      ).toBeNull();
+      expect(
+        main.nextElementSibling,
+        `<main> y ${siguiente.nombre} deberían ser hermanos seguidos`,
+      ).toBe(siguiente.elemento);
+    } else {
+      expect(
+        actual.nextElementSibling,
+        `${bloques[indice].nombre} y ${siguiente.nombre} deberían ser hermanos seguidos`,
+      ).toBe(siguiente.elemento);
+    }
   }
 
   return bloques as { nombre: string; elemento: HTMLElement }[];

@@ -30,10 +30,18 @@ export const HistoryCell = memo(function HistoryCell({
 
   return (
     <TableCell
+      tabIndex={0}
+      aria-selected={isSelected}
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
       title={title ?? "Haz clic para señalar/deseleccionar esta celda"}
       className={cn(
-        "cursor-pointer select-text transition-colors",
+        "cursor-pointer select-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         isSelected
           ? "bg-primary/20 font-semibold text-foreground shadow-xs ring-2 ring-primary ring-inset"
           : "hover:bg-muted/60",

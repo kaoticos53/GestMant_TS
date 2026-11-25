@@ -340,15 +340,16 @@ function EditorSurface({
     onClick: () => void,
     icon: ReactNode,
     extraDisabled = false,
+    toggleable = true,
   ) => (
     <Button
       key={label}
       type="button"
       variant="ghost"
       size="icon"
-      className={cn("size-7", active && "bg-muted text-foreground")}
+      className={cn("size-8", active && "bg-muted text-foreground")}
       aria-label={label}
-      aria-pressed={active}
+      aria-pressed={toggleable ? active : undefined}
       title={label}
       disabled={disabled || extraDisabled}
       onMouseDown={(event) => event.preventDefault()}
@@ -414,7 +415,7 @@ function EditorSurface({
           type="button"
           variant="ghost"
           size="icon"
-          className="size-7"
+          className="size-8"
           aria-label={
             uploadingImage ? "Subiendo la imagen…" : "Insertar imagen"
           }
@@ -436,6 +437,7 @@ function EditorSurface({
           () => editor?.chain().focus().undo().run(),
           <Undo2 className="size-3.5" />,
           !canRun("undo"),
+          false,
         )}
         {tool(
           "Rehacer",
@@ -443,6 +445,7 @@ function EditorSurface({
           () => editor?.chain().focus().redo().run(),
           <Redo2 className="size-3.5" />,
           !canRun("redo"),
+          false,
         )}
         {onExpand && (
           <>
@@ -451,7 +454,7 @@ function EditorSurface({
               type="button"
               variant="ghost"
               size="icon"
-              className="ml-auto size-7"
+              className="ml-auto size-8"
               aria-label="Escribir en grande"
               title="Escribir en grande"
               onMouseDown={(event) => event.preventDefault()}

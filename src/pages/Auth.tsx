@@ -11,7 +11,7 @@ function Auth(props: AuthProps = {}) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <div className="flex-1 flex items-center justify-center p-4">
+      <main className="flex-1 flex items-center justify-center p-4">
         <div className="flex items-center justify-center h-full flex-col w-full">
           <Card className="w-full max-w-[380px] pb-0 border shadow-md">
             <AuthHeader
@@ -53,7 +53,7 @@ function Auth(props: AuthProps = {}) {
             </div>
           </Card>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -64,6 +64,17 @@ export function WorkshopAiChatButton() {
 
   useEffect(() => {
     if (!open) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop =
         scrollContainerRef.current.scrollHeight;
@@ -224,7 +235,7 @@ export function WorkshopAiChatButton() {
                 onClick={() => setDebugMode((prev) => !prev)}
               >
                 <Bug className="mr-1 size-3.5" />
-                Debug
+                Traza
               </Button>
               {entries.length > 0 && (
                 <Button
@@ -289,6 +300,7 @@ export function WorkshopAiChatButton() {
             >
             <Textarea
               id="workshop-ai-input"
+              aria-label="Consulta para el asistente de IA"
               rows={2}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}

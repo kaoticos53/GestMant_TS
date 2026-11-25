@@ -118,7 +118,7 @@ export const UserTableRow = memo(function UserTableRow({
               : "border-destructive/25 bg-destructive/10 text-destructive"
           }
         >
-          {member.active ? "Activo" : "De baja"}
+          {member.active ? "Activo" : "Inactivo"}
         </Badge>
       </TableCell>
       <TableCell className="text-right">
