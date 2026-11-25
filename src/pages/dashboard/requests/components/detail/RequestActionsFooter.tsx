@@ -39,7 +39,7 @@ export function RequestActionsFooter({
     request.status,
     noReference,
     readOnly,
-    delivery.deliveredUnits,
+    delivery.pendingUnits,
   );
 
   return (

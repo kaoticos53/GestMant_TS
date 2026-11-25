@@ -877,27 +877,30 @@ export const approve = mutation({
         );
       }
 
-      const parts = [];
+      const linesToReserve: Array<{
+        part: Doc<"spareParts">;
+        quantity: number;
+      }> = [];
       for (const line of request.lines) {
+        const qty = lineRemaining(line, request.status);
+        if (qty <= 0) continue;
         const part = await ctx.db.get(line.sparePartId);
         if (!part) {
           throw new ConvexError(
             `El repuesto ${line.code} ya no está en el catálogo. Rechaza la petición o restáuralo.`,
           );
         }
-        if (part.stock < line.quantity) {
+        if (part.stock < qty) {
           throw new ConvexError(
-            `Stock insuficiente de ${part.code} (${part.name}): hay ${part.stock} ${part.unit} y se solicitan ${line.quantity}.`,
+            `Stock insuficiente de ${part.code} (${part.name}): hay ${part.stock} ${part.unit} y se solicitan ${qty}.`,
           );
         }
-        parts.push(part);
+        linesToReserve.push({ part, quantity: qty });
       }
 
       const now = Date.now();
       const approverName = await actorName(ctx, userId);
-      for (let i = 0; i < request.lines.length; i++) {
-        const part = parts[i];
-        const qty = request.lines[i].quantity;
+      for (const { part, quantity: qty } of linesToReserve) {
         const nextStock = part.stock - qty;
         await ctx.db.patch(part._id, {
           stock: nextStock,
@@ -933,11 +936,28 @@ export const approve = mutation({
 });
 
 /**
- * Revierte una petición aprobada sin entregas de vuelta a `pending`, liberando
- * el stock reservado y, opcionalmente, ajustando el stock real del catálogo a 0.
+ * Revierte una petición aprobada de vuelta a `pending` por falta de stock real,
+ * permitiendo entregar antes las unidades disponibles (`deliverLines`), liberar
+ * la reserva pendiente y ajustar el stock del catálogo a 0 o a un valor dado.
  */
 const revertApprovalArgs = {
   requestId: v.id("partRequests"),
+  deliverLines: v.optional(
+    v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        quantity: v.number(),
+      }),
+    ),
+  ),
+  stockAdjustments: v.optional(
+    v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        targetStock: v.number(),
+      }),
+    ),
+  ),
   adjustCatalogStockToZero: v.optional(v.boolean()),
   note: v.optional(v.string()),
 };
@@ -964,10 +984,10 @@ export const revertApproval = mutation({
           `Solo se pueden revertir peticiones aprobadas (la ${request.reference} está en ${status}).`,
       );
 
-      const delivery = requestDelivery(request.lines, request.status);
-      if (delivery.deliveredUnits > 0) {
+      const initialDelivery = requestDelivery(request.lines, request.status);
+      if (initialDelivery.pendingUnits <= 0) {
         throw new ConvexError(
-          `La petición ${request.reference} ya tiene ${delivery.deliveredUnits} unidad(es) entregada(s) y no puede revertirse a pendiente.`,
+          `La petición ${request.reference} ya está entregada por completo y no puede revertirse a pendiente.`,
         );
       }
 
@@ -975,16 +995,62 @@ export const revertApproval = mutation({
       const name = await actorName(ctx, actor._id);
       const reason = decisionReason(args.note);
 
+      // Entrega parcial opcional antes de revertir lo que falta.
+      if (args.deliverLines && args.deliverLines.length > 0) {
+        const entregas = new Map<Id<"spareParts">, number>();
+        for (const entry of args.deliverLines) {
+          const line = request.lines.find(
+            (candidate) => candidate.sparePartId === entry.sparePartId,
+          );
+          if (!line) {
+            throw new ConvexError(
+              "Uno de los repuestos indicados para entrega parcial no forma parte de esta petición.",
+            );
+          }
+          const quantity = Math.floor(entry.quantity);
+          if (!Number.isFinite(entry.quantity) || quantity < 0) {
+            throw new ConvexError(
+              `Cantidad de entrega parcial no válida para ${line.code}.`,
+            );
+          }
+          if (quantity === 0) continue;
+          const remaining = lineRemaining(line, request.status);
+          const already = entregas.get(line.sparePartId) ?? 0;
+          if (quantity + already > remaining) {
+            throw new ConvexError(
+              `De ${line.code} (${line.name}) quedan ${remaining} por entregar y se indican ${quantity + already}.`,
+            );
+          }
+          entregas.set(line.sparePartId, already + quantity);
+        }
+        if (entregas.size > 0) {
+          await deliverMaterial(ctx, request, entregas, name, args.note);
+        }
+      }
+
+      const currentRequest = await ctx.db.get(args.requestId);
+      if (!currentRequest) throw new ConvexError("La petición ya no existe.");
+
+      // Si la entrega parcial completó toda la petición, ya pasó a `issued`.
+      const updatedDelivery = requestDelivery(
+        currentRequest.lines,
+        currentRequest.status,
+      );
+      if (updatedDelivery.pendingUnits <= 0) {
+        await syncDashboardStatsIfPresent(ctx);
+        return;
+      }
+
       const touchedParts = new Set<Id<"spareParts">>();
-      for (const line of request.lines) {
-        const qty = line.quantity;
-        if (qty <= 0) continue;
+      for (const line of currentRequest.lines) {
+        const remaining = lineRemaining(line, currentRequest.status);
+        if (remaining <= 0) continue;
         const part = await ctx.db.get(line.sparePartId);
         if (!part) continue;
-        const nextStock = part.stock + qty;
+        const nextStock = part.stock + remaining;
         const nextReserved = Math.max(
           0,
-          reservedUnits(part.reservedStock) - qty,
+          reservedUnits(part.reservedStock) - remaining,
         );
         await ctx.db.patch(part._id, {
           stock: nextStock,
@@ -998,10 +1064,10 @@ export const revertApproval = mutation({
           kind: "request_return",
           previousStock: part.stock,
           nextStock,
-          reference: request.reference,
+          reference: currentRequest.reference,
           reason: reason
-            ? `Reversión de aprobación ${request.reference}: ${reasonOneLine(reason)}`
-            : `Reversión de aprobación ${request.reference}`,
+            ? `Reversión de aprobación ${currentRequest.reference}: ${reasonOneLine(reason)}`
+            : `Reversión de aprobación ${currentRequest.reference}`,
           actorId: actor._id,
           actorName: name,
           createdAt: now,
@@ -1009,7 +1075,38 @@ export const revertApproval = mutation({
         touchedParts.add(part._id);
       }
 
-      if (args.adjustCatalogStockToZero) {
+      if (args.stockAdjustments && args.stockAdjustments.length > 0) {
+        for (const adjustment of args.stockAdjustments) {
+          const part = await ctx.db.get(adjustment.sparePartId);
+          if (!part) continue;
+          const target = Math.floor(adjustment.targetStock);
+          if (!Number.isFinite(adjustment.targetStock) || target < 0) {
+            throw new ConvexError(
+              `El stock objetivo para ${part.code} debe ser cero o positivo.`,
+            );
+          }
+          if (part.stock === target) continue;
+          await ctx.db.patch(part._id, {
+            stock: target,
+            updatedAt: now,
+          });
+          await recordStockMovement(ctx, {
+            sparePartId: part._id,
+            partCode: part.code,
+            partName: part.name,
+            kind: "manual_adjust",
+            previousStock: part.stock,
+            nextStock: target,
+            reference: currentRequest.reference,
+            reason: reason
+              ? `Ajuste de stock real a ${target} (${currentRequest.reference}): ${reasonOneLine(reason)}`
+              : `Ajuste de stock real a ${target} (${currentRequest.reference})`,
+            actorId: actor._id,
+            actorName: name,
+            createdAt: now,
+          });
+        }
+      } else if (args.adjustCatalogStockToZero) {
         for (const sparePartId of touchedParts) {
           const part = await ctx.db.get(sparePartId);
           if (!part || part.stock <= 0) continue;
@@ -1024,10 +1121,10 @@ export const revertApproval = mutation({
             kind: "manual_adjust",
             previousStock: part.stock,
             nextStock: 0,
-            reference: request.reference,
+            reference: currentRequest.reference,
             reason: reason
-              ? `Ajuste a 0 por falta de stock real (${request.reference}): ${reasonOneLine(reason)}`
-              : `Ajuste a 0 por falta de stock real (${request.reference})`,
+              ? `Ajuste a 0 por falta de stock real (${currentRequest.reference}): ${reasonOneLine(reason)}`
+              : `Ajuste a 0 por falta de stock real (${currentRequest.reference})`,
             actorId: actor._id,
             actorName: name,
             createdAt: now,
@@ -1042,12 +1139,15 @@ export const revertApproval = mutation({
         decisionNote: reason || undefined,
       });
 
+      const hasStockAdjustment =
+        (args.stockAdjustments && args.stockAdjustments.length > 0) ||
+        Boolean(args.adjustCatalogStockToZero);
       await recordDecision(ctx, args.requestId, name, {
         reason: REJECTION_REASONS.STOCK_PENDING,
         note:
           reasonOneLine(reason) ||
-          (args.adjustCatalogStockToZero
-            ? "Aprobación revertida por falta de stock real; stock del catálogo ajustado a 0."
+          (hasStockAdjustment
+            ? "Aprobación revertida por falta de stock real; stock del catálogo ajustado."
             : "Aprobación revertida por falta de stock real."),
       });
 

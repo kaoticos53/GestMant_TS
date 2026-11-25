@@ -15,7 +15,7 @@ export function computeRequestActionFlags(
   status: RequestDoc["status"],
   noReference: boolean,
   readOnly = false,
-  deliveredUnits = 0,
+  pendingUnits = 1,
 ): RequestActionFlags {
   if (readOnly) {
     return {
@@ -44,7 +44,7 @@ export function computeRequestActionFlags(
     canReturnMaterial: canRequestStep(status, "returnMaterial"),
     canCancel: canRequestStep(status, "cancel"),
     canRevertApproval:
-      canRequestStep(status, "revertApproval") && deliveredUnits === 0,
+      canRequestStep(status, "revertApproval") && pendingUnits > 0,
     canArchive: !isRequestInMotion(status),
     canWithdraw: true,
   };

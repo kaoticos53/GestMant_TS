@@ -217,7 +217,7 @@ describe("stock reservado en backend (Fase 3)", () => {
     expect(part?.reservedStock).toBe(0);
   });
 
-  test("revertApproval con adjustCatalogStockToZero ajusta el stock real a 0 y bloquea si ya hubo entregas", async () => {
+  test("revertApproval con adjustCatalogStockToZero ajusta el stock real a 0 y permite entrega parcial + ajuste a Y", async () => {
     const { t, authed } = await authedTest();
     const now = Date.now();
     const sparePartId = await t.run((ctx) =>
@@ -226,7 +226,7 @@ describe("stock reservado en backend (Fase 3)", () => {
         name: "Válvula solenoide",
         category: "Neumática",
         unit: "ud",
-        stock: 4,
+        stock: 5,
         minStock: 1,
         createdAt: now,
         updatedAt: now,
@@ -237,7 +237,7 @@ describe("stock reservado en backend (Fase 3)", () => {
       requesterName: "Mario",
       priority: "urgent",
       description: "Fallo neumático",
-      lines: [{ sparePartId, quantity: 2 }],
+      lines: [{ sparePartId, quantity: 4 }],
     });
     const [request] = await authed.query(api.partRequests.list, {});
     await authed.mutation(api.partRequests.approve, {
@@ -250,10 +250,10 @@ describe("stock reservado en backend (Fase 3)", () => {
       note: "No quedan unidades reales en estantería",
     });
 
-    const reverted = await t.run((ctx) => ctx.db.get(request._id));
+    let reverted = await t.run((ctx) => ctx.db.get(request._id));
     expect(reverted?.status).toBe("pending");
 
-    const part = await t.run((ctx) => ctx.db.get(sparePartId));
+    let part = await t.run((ctx) => ctx.db.get(sparePartId));
     expect(part?.stock).toBe(0);
     expect(part?.reservedStock).toBe(0);
 
@@ -266,20 +266,33 @@ describe("stock reservado en backend (Fase 3)", () => {
     expect(movements.map((m) => m.kind)).toContain("request_return");
     expect(movements.map((m) => m.kind)).toContain("manual_adjust");
 
-    // Si reponemos stock, aprobamos y entregamos 1 unidad parcial, no debe dejar revertir
-    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 4 }));
+    // Reponemos 5, aprobamos y entregamos 2 en el propio revertApproval dejando stock en 1
+    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 5 }));
     await authed.mutation(api.partRequests.approve, {
       requestId: request._id,
     });
-    await authed.mutation(api.partRequests.issueLines, {
+    await authed.mutation(api.partRequests.revertApproval, {
       requestId: request._id,
-      lines: [{ sparePartId, quantity: 1 }],
+      deliverLines: [{ sparePartId, quantity: 2 }],
+      stockAdjustments: [{ sparePartId, targetStock: 1 }],
+      note: "Entregadas 2 unidades; 1 reservada en almacén",
     });
 
-    await expect(
-      authed.mutation(api.partRequests.revertApproval, {
-        requestId: request._id,
-      }),
-    ).rejects.toThrow(/entregada/i);
+    reverted = await t.run((ctx) => ctx.db.get(request._id));
+    expect(reverted?.status).toBe("pending");
+    expect(reverted?.lines[0].deliveredQuantity).toBe(2);
+
+    part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(1);
+    expect(part?.reservedStock).toBe(0);
+
+    // Al volver a aprobar tras reponer 2, solo debe reservar las 2 unidades restantes
+    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 3 }));
+    await authed.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(1);
+    expect(part?.reservedStock).toBe(2);
   });
 });
