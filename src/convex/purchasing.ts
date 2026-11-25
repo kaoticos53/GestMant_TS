@@ -14,8 +14,10 @@ import {
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
   planOrderCancellation,
+  planOrderLineRemoval,
   planReceptionReversal,
 } from "../lib/purchaseFlow";
+import { isPartPurchasable } from "../lib/partLifecycle";
 import { canBuyForRequest } from "../lib/requestFlow";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_REQUEST_STATUSES } from "./schema";
 
@@ -461,7 +463,7 @@ export const createOrder = mutation({
         ].sort((a, b) => a.requestedAt - b.requestedAt),
         lines: rows.map((row) => ({
           purchaseRequestId: row._id,
-          requestId: row.requestId,
+          ...(row.requestId ? { requestId: row.requestId } : {}),
           requestReference: row.requestReference,
           requestDate: row.requestDate,
           sparePartId: row.sparePartId,
@@ -838,6 +840,186 @@ export const cancelOrder = mutation({
       });
 
       return { returned };
+    },
+  ),
+});
+
+/**
+ * Retira una sola línea pendiente de una orden `OC-...` (por ejemplo, si el
+ * proveedor deja de servir ese artículo), devolviéndola a pendientes (`requeue`)
+ * o marcándola sin suministro (`noSupply`) sin tumbar el resto de la orden.
+ */
+const cancelOrderLineArgs = {
+  orderId: v.id("purchaseOrders"),
+  purchaseRequestId: v.id("purchaseRequests"),
+  mode: v.union(v.literal("requeue"), v.literal("noSupply")),
+  note: v.string(),
+};
+
+export const cancelOrderLine = mutation({
+  args: cancelOrderLineArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
+      denyMessage:
+        "No tienes permisos para modificar órdenes de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    cancelOrderLineArgs,
+    async (ctx, args) => {
+      const order = await ctx.db.get(args.orderId);
+      if (!order) throw new ConvexError("La orden ya no existe.");
+      if (!canAdvancePurchaseOrder(order.status, "cancel")) {
+        throw new ConvexError(
+          `La orden ${order.reference} ya está cerrada y no permite retirar líneas.`,
+        );
+      }
+
+      const note = args.note.trim();
+      if (!note) {
+        throw new ConvexError("Indica el motivo por el que retiras la línea.");
+      }
+
+      let plan;
+      try {
+        plan = planOrderLineRemoval(order.lines, args.purchaseRequestId);
+      } catch (error) {
+        throw new ConvexError(
+          error instanceof Error ? error.message : "No se pudo retirar la línea.",
+        );
+      }
+
+      const now = Date.now();
+      await ctx.db.patch(order._id, {
+        lines: plan.nextLines,
+        status: plan.nextOrderStatus,
+        ...(plan.nextOrderStatus === PURCHASE_ORDER_STATUSES.COMPLETED
+          ? { completedAt: now }
+          : {}),
+        ...(plan.nextOrderStatus === PURCHASE_ORDER_STATUSES.CANCELLED
+          ? { cancelledAt: now, cancelNote: note }
+          : {}),
+        updatedAt: now,
+      });
+
+      const pr = await ctx.db.get(args.purchaseRequestId);
+      if (pr) {
+        if (args.mode === "requeue") {
+          const pending = nextPurchaseRequestStatus(pr.status, "unorder");
+          if (pending !== null) {
+            const detail = `Retirada de ${order.reference} para reasignar: ${note}`;
+            await ctx.db.patch(pr._id, {
+              status: pending,
+              quantity: plan.remainingQuantity,
+              orderId: undefined,
+              orderedAt: undefined,
+              notes: pr.notes ? `${pr.notes}\n${detail}` : detail,
+            });
+          }
+        } else {
+          await ctx.db.patch(pr._id, {
+            status: PURCHASE_REQUEST_STATUSES.CANCELLED,
+            cancelledAt: now,
+            cancelNote: `Sin suministro (${order.reference}): ${note}`,
+          });
+        }
+      }
+
+      return {
+        orderStatus: plan.nextOrderStatus,
+        remainingQuantity: plan.remainingQuantity,
+      };
+    },
+  ),
+});
+
+/**
+ * Crea una petición de compra directa (`PC-...`) para reposición de stock
+ * mínimo desde Inventario, sin necesidad de una petición de taller previa.
+ */
+const requestRestockArgs = {
+  sparePartId: v.id("spareParts"),
+  quantity: v.optional(v.number()),
+  supplier: v.optional(v.string()),
+  notes: v.optional(v.string()),
+};
+
+export const requestRestock = mutation({
+  args: requestRestockArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
+      denyMessage:
+        "No tienes permisos para generar reposiciones de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    requestRestockArgs,
+    async (ctx, args, actor) => {
+      const part = await ctx.db.get(args.sparePartId);
+      if (!part) throw new ConvexError("El repuesto ya no existe.");
+      if (!isPartPurchasable(part.lifecycleStatus)) {
+        throw new ConvexError(
+          `El repuesto ${part.code} (${part.name}) está descatalogado y no admite reposición.`,
+        );
+      }
+
+      const qty =
+        args.quantity !== undefined
+          ? Math.floor(args.quantity)
+          : Math.max(1, part.minStock - part.stock);
+      if (!Number.isFinite(qty) || qty < 1) {
+        throw new ConvexError("La cantidad a reponer debe ser al menos 1.");
+      }
+
+      const existing = await ctx.db.query("purchaseRequests").collect();
+      const already = existing.find(
+        (row) =>
+          row.sparePartId === part._id &&
+          row.requestId === undefined &&
+          isPurchaseRequestAwaitingDelivery(row),
+      );
+      if (already) {
+        throw new ConvexError(
+          `Ya existe una reposición pendiente (${already.reference}) para ${part.code}.`,
+        );
+      }
+
+      const now = Date.now();
+      const by = await actorName(ctx, actor._id);
+      const reference = await freeReference(ctx, "purchaseRequest");
+      const effectiveSupplier =
+        args.supplier?.trim() || part.supplier?.trim() || "Sin proveedor";
+      const supplierId = await resolveCatalogId(
+        ctx,
+        "supplier",
+        effectiveSupplier,
+      );
+
+      await ctx.db.insert("purchaseRequests", {
+        reference,
+        requestReference: "REPOSICIÓN",
+        requestDate: now,
+        requesterName: by,
+        sparePartId: part._id,
+        code: part.code,
+        name: part.name,
+        unit: part.unit,
+        quantity: qty,
+        supplier: effectiveSupplier,
+        ...(supplierId ? { supplierId } : {}),
+        status: PURCHASE_REQUEST_STATUSES.PENDING,
+        reason: "minStock",
+        ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
+        requestedAt: now,
+        requestedBy: by,
+        createdAt: now,
+      });
+
+      return { reference };
     },
   ),
 });

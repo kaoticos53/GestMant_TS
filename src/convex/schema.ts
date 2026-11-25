@@ -254,8 +254,8 @@ export type PurchaseOrderStatus = Infer<typeof purchaseOrderStatusValidator>;
  */
 export const purchaseOrderLineValidator = v.object({
   purchaseRequestId: v.id("purchaseRequests"),
-  requestId: v.id("partRequests"),
-  requestReference: v.string(), // "PET-0007"
+  requestId: v.optional(v.id("partRequests")),
+  requestReference: v.string(), // "PET-0007" o "REPOSICIÓN"
   requestDate: v.number(), // fecha de solicitud de esa petición
   sparePartId: v.id("spareParts"),
   code: v.string(),
@@ -929,9 +929,9 @@ const schema = defineSchema({
   // para poder volver a ella sin cruzar dos tablas.
   purchaseRequests: defineTable({
     reference: v.string(), // "PC-0001"
-    requestId: v.id("partRequests"), // la petición de repuesto que la origina
-    requestReference: v.string(), // "PET-0007", copiado
-    requestDate: v.number(), // fecha de solicitud de esa petición
+    requestId: v.optional(v.id("partRequests")), // petición de repuesto (opcional si es reposición directa)
+    requestReference: v.string(), // "PET-0007" o "REPOSICIÓN"
+    requestDate: v.number(), // fecha de solicitud
     requesterName: v.string(), // quién pidió el repuesto (copiado)
     sparePartId: v.id("spareParts"),
     code: v.string(),
@@ -942,10 +942,11 @@ const schema = defineSchema({
     supplierId: v.optional(v.id("catalogs")),
     status: purchaseRequestStatusValidator,
     // Motivo por el que se compra, tal y como lo ve el responsable: no había
-    // stock, el repuesto es nuevo (no estaba en el catálogo), etc.
+    // stock, reposición de stock mínimo, repuesto nuevo, etc.
     reason: v.union(
       v.literal("noStock"),
       v.literal("newPart"),
+      v.literal("minStock"),
       v.literal("other"),
     ),
     notes: v.optional(v.string()),

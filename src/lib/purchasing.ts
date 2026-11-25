@@ -87,6 +87,7 @@ export const PURCHASE_REASON_META: Record<
 > = {
   noStock: "No hay existencias suficientes",
   newPart: "Repuesto nuevo: no estaba en el almacén",
+  minStock: "Reposición de stock mínimo",
   other: "Otro motivo",
 };
 

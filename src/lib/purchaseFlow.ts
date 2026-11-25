@@ -284,6 +284,53 @@ export function planReceptionReversal<
   };
 }
 
+export interface OrderLineRemovalPlan<
+  T extends PurchaseLineProgress & { purchaseRequestId: string },
+> {
+  nextLines: T[];
+  nextOrderStatus: PurchaseOrderStatus;
+  remainingQuantity: number;
+}
+
+/**
+ * Retira una línea pendiente de una orden de compra (`OC-...`) y recalcula el
+ * estado resultante: `cancelled` si la orden queda vacía, `completed` si el
+ * resto de líneas ya llegaron o `partial`/`pending` según lo recibido.
+ */
+export function planOrderLineRemoval<
+  T extends PurchaseLineProgress & { purchaseRequestId: string },
+>(
+  orderLines: readonly T[],
+  purchaseRequestId: string,
+): OrderLineRemovalPlan<T> {
+  const target = orderLines.find(
+    (line) => line.purchaseRequestId === purchaseRequestId,
+  );
+  if (!target) {
+    throw new Error("La línea indicada no forma parte de esta orden.");
+  }
+  const remainingQuantity = purchaseOrderLinePending(target);
+  if (remainingQuantity <= 0) {
+    throw new Error(
+      "Esta línea ya está recibida por completo y no puede retirarse de la orden.",
+    );
+  }
+
+  const nextLines = orderLines.filter(
+    (line) => line.purchaseRequestId !== purchaseRequestId,
+  );
+  const nextOrderStatus: PurchaseOrderStatus =
+    nextLines.length === 0
+      ? "cancelled"
+      : purchaseOrderStatusAfterReversal(nextLines);
+
+  return {
+    nextLines,
+    nextOrderStatus,
+    remainingQuantity,
+  };
+}
+
 /** Unidades que faltan por recibir en una línea de orden de compra. */
 export function purchaseOrderLinePending(
   line: PurchaseLineProgress,

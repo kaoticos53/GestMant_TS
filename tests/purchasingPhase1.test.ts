@@ -186,4 +186,76 @@ describe("Compras Fase 1 (Sub-fase 1.2 y 1.3)", () => {
       }),
     ).rejects.toThrow(/ya fue revertida/i);
   });
+
+  test("cancelOrderLine retira línea individual (requeue/noSupply) y requestRestock crea compra directa (Sub-fase 2.3)", async () => {
+    const { t, authed } = await authedPurchasingTest();
+    const now = Date.now();
+    const p1 = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "SUB-01",
+        name: "Conector RJ45",
+        category: "Conectores",
+        unit: "ud",
+        stock: 0,
+        minStock: 10,
+        supplier: "Moncada",
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const p2 = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "SUB-02",
+        name: "Cable apantallado",
+        category: "Conectores",
+        unit: "m",
+        stock: 1,
+        minStock: 5,
+        supplier: "Moncada",
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    // Reposición directa sin petición de taller
+    const restock = await authed.mutation(api.purchasing.requestRestock, {
+      sparePartId: p2,
+    });
+    expect(restock.reference).toMatch(/^PC-/);
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Laura",
+      priority: "normal",
+      description: "Cableado rack",
+      lines: [{ sparePartId: p1, quantity: 3 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: request._id,
+    });
+
+    const prList = await authed.query(api.purchasing.listPurchaseRequests, {});
+    const pendingPrs = prList.requests.filter((r) => r.status === "pending");
+    expect(pendingPrs).toHaveLength(2);
+
+    const { orderId } = await authed.mutation(api.purchasing.createOrder, {
+      purchaseRequestIds: pendingPrs.map((r) => r._id),
+    });
+
+    const prToRemove = pendingPrs.find((r) => r.sparePartId === p1)!;
+    const lineRes = await authed.mutation(api.purchasing.cancelOrderLine, {
+      orderId,
+      purchaseRequestId: prToRemove._id,
+      mode: "requeue",
+      note: "Cambiar a otro proveedor",
+    });
+    expect(lineRes.orderStatus).toBe("pending");
+    expect(lineRes.remainingQuantity).toBe(3);
+
+    const orderAfter = await t.run((ctx) => ctx.db.get(orderId));
+    expect(orderAfter?.lines).toHaveLength(1);
+    const requeuedPr = await t.run((ctx) => ctx.db.get(prToRemove._id));
+    expect(requeuedPr?.status).toBe("pending");
+    expect(requeuedPr?.orderId).toBeUndefined();
+  });
 });

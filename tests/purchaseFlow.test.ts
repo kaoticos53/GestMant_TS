@@ -14,6 +14,7 @@ import {
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
   planOrderCancellation,
+  planOrderLineRemoval,
   planReceptionReversal,
   purchaseOrderLinePending,
   purchaseOrderStatusAfterReceiving,
@@ -294,5 +295,27 @@ describe("planReceptionReversal (Sub-fase 1.3)", () => {
     expect(plan.nextLines[0].receivedQuantity).toBe(0);
     expect(plan.nextLines[1].receivedQuantity).toBe(2);
     expect(plan.reopenPurchaseRequestIds).toEqual(["pc-1"]);
+  });
+});
+
+describe("planOrderLineRemoval (Sub-fase 2.3)", () => {
+  test("retira línea pendiente, cierra orden si el resto ya llegó o la anula si queda vacía", () => {
+    const partialToCompleted = planOrderLineRemoval(
+      [
+        { purchaseRequestId: "pc-1", quantity: 3, receivedQuantity: 3 },
+        { purchaseRequestId: "pc-2", quantity: 2, receivedQuantity: 0 },
+      ],
+      "pc-2",
+    );
+    expect(partialToCompleted.remainingQuantity).toBe(2);
+    expect(partialToCompleted.nextLines).toHaveLength(1);
+    expect(partialToCompleted.nextOrderStatus).toBe("completed");
+
+    const lastLineRemoved = planOrderLineRemoval(
+      [{ purchaseRequestId: "pc-1", quantity: 4, receivedQuantity: 0 }],
+      "pc-1",
+    );
+    expect(lastLineRemoved.nextLines).toHaveLength(0);
+    expect(lastLineRemoved.nextOrderStatus).toBe("cancelled");
   });
 });

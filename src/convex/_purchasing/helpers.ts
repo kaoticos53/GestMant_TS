@@ -246,7 +246,9 @@ export async function applyReception(
     const settled = recibido ? purchaseRequestReceivedStatus(row.status) : null;
     if (settled !== null) {
       await ctx.db.patch(row._id, { status: settled, receivedAt: now });
-      if (!closed.includes(row.requestId)) closed.push(row.requestId);
+      if (row.requestId && !closed.includes(row.requestId)) {
+        closed.push(row.requestId);
+      }
     }
   }
 

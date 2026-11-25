@@ -5,6 +5,7 @@ import {
   MapPin,
   Pencil,
   Printer,
+  ShoppingCart,
   SlidersHorizontal,
   Tag,
   Wrench,
@@ -25,6 +26,7 @@ import { STOCK_META, formatCurrency, getErrorMessage, stockState } from "@/lib/w
 import { physicalStock, reservedUnits } from "@/lib/inventoryStock";
 import {
   PART_LIFECYCLE_META,
+  isPartPurchasable,
   type PartLifecycleStatus,
 } from "@/lib/partLifecycle";
 import { modelLabel } from "../helpers";
@@ -55,7 +57,9 @@ export function PartDetailSheet({
   onSelectModel,
 }: PartDetailSheetProps) {
   const updatePart = useMutation(api.spareParts.update);
+  const requestRestock = useMutation(api.purchasing.requestRestock);
   const [savingLifecycle, setSavingLifecycle] = useState(false);
+  const [requestingRestock, setRequestingRestock] = useState(false);
   const movements = useQuery(
     api.stockMovements.listByPart,
     part ? { sparePartId: part._id, limit: 15 } : "skip",
@@ -277,6 +281,32 @@ export function PartDetailSheet({
                         <Pencil className="mr-1.5 size-4" />
                         Editar ficha
                       </Button>
+                      {isPartPurchasable(part.lifecycleStatus) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={requestingRestock}
+                          onClick={async () => {
+                            setRequestingRestock(true);
+                            try {
+                              const res = await requestRestock({
+                                sparePartId: part._id,
+                              });
+                              toast.success(
+                                `Reposición ${res.reference} enviada a Compras → Pendientes.`,
+                              );
+                            } catch (err) {
+                              toast.error(getErrorMessage(err));
+                            } finally {
+                              setRequestingRestock(false);
+                            }
+                          }}
+                        >
+                          <ShoppingCart className="mr-1.5 size-4" />
+                          {requestingRestock ? "Pidiendo..." : "Pedir reposición"}
+                        </Button>
+                      )}
                     </>
                   )}
                   <Button
