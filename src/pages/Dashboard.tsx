@@ -207,6 +207,8 @@ export default function Dashboard() {
     ],
   });
 
+  const { setTarget } = navigation;
+
   useEffect(() => {
     const unsubTables = subscribeAiShowTables(setAiTables);
     const unsubOpen = subscribeAiOpenReference((detail) => {
@@ -218,7 +220,7 @@ export default function Dashboard() {
         return;
       }
       if (detail.kind === "manuals") {
-        navigation.setTarget((prev) => ({
+        setTarget((prev) => ({
           ...prev,
           tab: "manuals",
           manualId: detail.id ? (detail.id as Id<"manuals">) : null,
@@ -267,7 +269,7 @@ export default function Dashboard() {
       unsubTables();
       unsubOpen();
     };
-  }, [convex, goToTab, handleSearchSelect]);
+  }, [convex, goToTab, handleSearchSelect, setTarget]);
 
   if (accountDeactivated) {
     return <DashboardInactiveNotice onSignOut={() => void handleSignOut()} />;
