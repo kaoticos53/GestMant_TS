@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { FileText, RotateCcw, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
+import { DataTableToolbar } from "@/components/DataTableToolbar";
+import { TablePagination } from "@/components/TablePagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +17,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useTablePagination } from "@/hooks/use-table-pagination";
 import { formatDateTime, getErrorMessage } from "@/lib/workshop";
 import type { ReceptionDoc } from "../types";
 
@@ -23,6 +33,8 @@ export interface MovementsSectionProps {
   receptions: ReceptionDoc[];
   canManage?: boolean;
 }
+
+type MovementStatusFilter = "all" | "active" | "reversed";
 
 /** Movimientos de recepción: cada entrada de un proveedor con su albarán. */
 export function MovementsSection({
@@ -33,6 +45,42 @@ export function MovementsSection({
   const [reversing, setReversing] = useState<ReceptionDoc | null>(null);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<MovementStatusFilter>("all");
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return receptions.filter((row) => {
+      const isReversed = row.reversedAt !== undefined;
+      if (statusFilter === "active" && isReversed) return false;
+      if (statusFilter === "reversed" && !isReversed) return false;
+      if (!needle) return true;
+      return (
+        row.orderReference.toLowerCase().includes(needle) ||
+        row.supplier.toLowerCase().includes(needle) ||
+        row.receivedBy.toLowerCase().includes(needle) ||
+        row.deliveryNote.name.toLowerCase().includes(needle) ||
+        (row.note ?? "").toLowerCase().includes(needle) ||
+        row.lines.some(
+          (line) =>
+            line.code.toLowerCase().includes(needle) ||
+            line.name.toLowerCase().includes(needle),
+        )
+      );
+    });
+  }, [receptions, search, statusFilter]);
+
+  const paging = useTablePagination({
+    total: filtered.length,
+    rowsFit: 12,
+    resetKey: `${search}|${statusFilter}`,
+  });
+  const visible = filtered.slice(paging.from - 1, paging.to);
+  const hasActiveFilters = search.trim() !== "" || statusFilter !== "all";
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
 
   if (receptions.length === 0) {
     return (
@@ -80,77 +128,139 @@ export function MovementsSection({
   return (
     <>
       <div className="grid gap-3">
-        {receptions.map((row) => {
-          const isReversed = row.reversedAt !== undefined;
-          return (
-            <Card key={row._id}>
-              <CardContent className="grid gap-2 pt-6">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium">
-                      {row.orderReference} · {row.supplier}
+        <DataTableToolbar
+          className="rounded-xl border border-border/70 bg-card shadow-sm"
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar por orden, proveedor, artículo, albarán o usuario…"
+          searchAriaLabel="Buscar movimientos"
+          filters={
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(value as MovementStatusFilter)
+              }
+            >
+              <SelectTrigger
+                className="w-full sm:w-44"
+                aria-label="Filtrar por estado"
+              >
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                <SelectItem value="active">Activos</SelectItem>
+                <SelectItem value="reversed">Revertidos</SelectItem>
+              </SelectContent>
+            </Select>
+          }
+          hasActiveFilters={hasActiveFilters}
+          onResetFilters={clearFilters}
+        />
+
+        {filtered.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center shadow-sm">
+            <p className="text-sm font-medium">
+              Ningún movimiento coincide con los filtros actuales
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={clearFilters}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+        ) : (
+          visible.map((row) => {
+            const isReversed = row.reversedAt !== undefined;
+            return (
+              <Card key={row._id}>
+                <CardContent className="grid gap-2 pt-6">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium">
+                        {row.orderReference} · {row.supplier}
+                      </p>
+                      {isReversed && (
+                        <Badge variant="outline" className="text-xs">
+                          Revertida
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateTime(row.receivedAt)} · {row.receivedBy}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {row.lines
+                      .map(
+                        (line) =>
+                          `${line.code} · ${line.name} × ${line.quantity}`,
+                      )
+                      .join(" · ")}
+                  </p>
+                  {row.note && (
+                    <p className="text-xs text-muted-foreground">{row.note}</p>
+                  )}
+                  {isReversed && (
+                    <p className="rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
+                      Revertida el {formatDateTime(row.reversedAt!)} por{" "}
+                      {row.reversedBy ?? "Sistema"}
+                      {row.reversalNote ? `: ${row.reversalNote}` : ""}
                     </p>
-                    {isReversed && (
-                      <Badge variant="outline" className="text-xs">
-                        Revertida
-                      </Badge>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    {row.deliveryNoteUrl ? (
+                      <a
+                        href={row.deliveryNoteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex w-fit items-center gap-1 text-xs text-signal underline"
+                      >
+                        <FileText className="size-3" />
+                        {row.deliveryNote.name}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {row.deliveryNote.name} (ya no está disponible)
+                      </span>
+                    )}
+
+                    {canManage && !isReversed && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => setReversing(row)}
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Revertir recepción
+                      </Button>
                     )}
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDateTime(row.receivedAt)} · {row.receivedBy}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {row.lines
-                    .map(
-                      (line) => `${line.code} · ${line.name} × ${line.quantity}`,
-                    )
-                    .join(" · ")}
-                </p>
-                {row.note && (
-                  <p className="text-xs text-muted-foreground">{row.note}</p>
-                )}
-                {isReversed && (
-                  <p className="rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
-                    Revertida el {formatDateTime(row.reversedAt!)} por{" "}
-                    {row.reversedBy ?? "Sistema"}
-                    {row.reversalNote ? `: ${row.reversalNote}` : ""}
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                  {row.deliveryNoteUrl ? (
-                    <a
-                      href={row.deliveryNoteUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex w-fit items-center gap-1 text-xs text-signal underline"
-                    >
-                      <FileText className="size-3" />
-                      {row.deliveryNote.name}
-                    </a>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {row.deliveryNote.name} (ya no está disponible)
-                    </span>
-                  )}
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
 
-                  {canManage && !isReversed && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={() => setReversing(row)}
-                    >
-                      <RotateCcw className="size-3.5" />
-                      Revertir recepción
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {filtered.length > 0 && (
+          <TablePagination
+            className="rounded-xl border border-border/70 bg-card shadow-sm"
+            paging={paging}
+            singular="movimiento"
+            plural="movimientos"
+            detail={
+              hasActiveFilters
+                ? `${receptions.length} en total`
+                : undefined
+            }
+          />
+        )}
       </div>
 
       <Dialog

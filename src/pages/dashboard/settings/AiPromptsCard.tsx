@@ -45,6 +45,11 @@ export function AiPromptsCard() {
   const [selectedTask, setSelectedTask] = useState<AiTaskId>("workshop_chat");
   const [draftOverrides, setDraftOverrides] =
     useState<Record<AiTaskId, AiTaskParamConfig> | null>(null);
+  const [rawInputs, setRawInputs] = useState<{
+    task?: AiTaskId;
+    temperature?: string;
+    maxTokens?: string;
+  }>({});
   const [saving, setSaving] = useState(false);
 
   const taskParams = draftOverrides ?? settings?.taskParams ?? DEFAULT_PARAMS;
@@ -99,13 +104,33 @@ export function AiPromptsCard() {
   };
 
   const restoreDefault = () => {
+    setRawInputs({});
     updateCurrent({
       ...DEFAULT_PARAMS[selectedTask],
       customPrompt: undefined,
     });
   };
 
+  const clampTemperature = (value: number) => Math.min(1, Math.max(0, value));
+  const clampMaxTokens = (value: number) =>
+    Math.min(4096, Math.max(100, Math.trunc(value)));
+
   const handleSave = async () => {
+    const sanitizedParams = Object.fromEntries(
+      (Object.keys(taskParams) as AiTaskId[]).map((taskId) => [
+        taskId,
+        {
+          ...taskParams[taskId],
+          temperature: Number.isFinite(taskParams[taskId].temperature)
+            ? clampTemperature(taskParams[taskId].temperature)
+            : DEFAULT_PARAMS[taskId].temperature,
+          maxTokens: Number.isFinite(taskParams[taskId].maxTokens)
+            ? clampMaxTokens(taskParams[taskId].maxTokens)
+            : DEFAULT_PARAMS[taskId].maxTokens,
+        },
+      ]),
+    ) as Record<AiTaskId, AiTaskParamConfig>;
+
     setSaving(true);
     try {
       await save({
@@ -117,8 +142,9 @@ export function AiPromptsCard() {
         rateLimitPerHour: settings.rateLimitPerHour,
         allowedRoles: settings.allowedRoles,
         enabledModules: settings.enabledModules,
-        taskParams,
+        taskParams: sanitizedParams,
       });
+      setRawInputs({});
       toast.success("Prompts y parámetros de IA guardados");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -126,6 +152,16 @@ export function AiPromptsCard() {
       setSaving(false);
     }
   };
+
+  const tempDisplay =
+    rawInputs.task === selectedTask && rawInputs.temperature !== undefined
+      ? rawInputs.temperature
+      : String(current.temperature);
+
+  const tokensDisplay =
+    rawInputs.task === selectedTask && rawInputs.maxTokens !== undefined
+      ? rawInputs.maxTokens
+      : String(current.maxTokens);
 
   return (
     <Card>
@@ -149,7 +185,10 @@ export function AiPromptsCard() {
               type="button"
               size="sm"
               variant={selectedTask === task.id ? "default" : "outline"}
-              onClick={() => setSelectedTask(task.id)}
+              onClick={() => {
+                setRawInputs({});
+                setSelectedTask(task.id);
+              }}
             >
               {task.label}
             </Button>
@@ -162,18 +201,41 @@ export function AiPromptsCard() {
             <Input
               id="ai-prompt-temperature"
               type="number"
+              inputMode="decimal"
               step="0.05"
               min="0"
               max="1"
-              value={current.temperature}
-              onChange={(e) =>
-                updateCurrent({
-                  temperature: Math.min(
-                    1,
-                    Math.max(0, Number(e.target.value) || 0),
-                  ),
-                })
-              }
+              value={tempDisplay}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setRawInputs((prev) => ({
+                  ...prev,
+                  task: selectedTask,
+                  temperature: raw,
+                }));
+                const parsed = Number(raw);
+                if (
+                  raw.trim() !== "" &&
+                  Number.isFinite(parsed) &&
+                  parsed >= 0 &&
+                  parsed <= 1
+                ) {
+                  updateCurrent({ temperature: parsed });
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number(tempDisplay);
+                const clamped =
+                  tempDisplay.trim() !== "" && Number.isFinite(parsed)
+                    ? clampTemperature(parsed)
+                    : current.temperature;
+                updateCurrent({ temperature: clamped });
+                setRawInputs((prev) =>
+                  prev.task === selectedTask
+                    ? { ...prev, temperature: undefined }
+                    : prev,
+                );
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -181,17 +243,40 @@ export function AiPromptsCard() {
             <Input
               id="ai-prompt-max-tokens"
               type="number"
+              inputMode="numeric"
               min={100}
               max={4096}
-              value={current.maxTokens}
-              onChange={(e) =>
-                updateCurrent({
-                  maxTokens: Math.min(
-                    4096,
-                    Math.max(100, Number(e.target.value) || 900),
-                  ),
-                })
-              }
+              value={tokensDisplay}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setRawInputs((prev) => ({
+                  ...prev,
+                  task: selectedTask,
+                  maxTokens: raw,
+                }));
+                const parsed = Number.parseInt(raw, 10);
+                if (
+                  raw.trim() !== "" &&
+                  Number.isFinite(parsed) &&
+                  parsed >= 100 &&
+                  parsed <= 4096
+                ) {
+                  updateCurrent({ maxTokens: parsed });
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number.parseInt(tokensDisplay, 10);
+                const clamped =
+                  tokensDisplay.trim() !== "" && Number.isFinite(parsed)
+                    ? clampMaxTokens(parsed)
+                    : current.maxTokens;
+                updateCurrent({ maxTokens: clamped });
+                setRawInputs((prev) =>
+                  prev.task === selectedTask
+                    ? { ...prev, maxTokens: undefined }
+                    : prev,
+                );
+              }}
             />
           </div>
         </div>

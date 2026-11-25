@@ -140,8 +140,6 @@ export function HistorySection({
         onCloseCancel={dialogs.closeCancel}
         motivo={dialogs.motivo}
         onMotivoChange={dialogs.setMotivo}
-        guardando={dialogs.guardando}
-        onConfirmCancel={dialogs.confirmCancel}
       />
     </div>
   );

@@ -1,3 +1,11 @@
+import { DataTableToolbar } from "@/components/DataTableToolbar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
@@ -35,6 +43,9 @@ export function UsersView() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
   const [detailTarget, setDetailTarget] = useState<Member | null>(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const {
     deactivating,
@@ -52,10 +63,37 @@ export function UsersView() {
     userId: currentUser?._id ?? null,
   });
 
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    const needle = search.trim().toLowerCase();
+    return users.filter((member) => {
+      if (roleFilter !== "all" && member.role !== roleFilter) return false;
+      if (statusFilter === "active" && !member.active) return false;
+      if (statusFilter === "inactive" && member.active) return false;
+      if (!needle) return true;
+      return (
+        (member.name ?? "").toLowerCase().includes(needle) ||
+        (member.email ?? "").toLowerCase().includes(needle) ||
+        (member.position ?? "").toLowerCase().includes(needle) ||
+        (member.location ?? "").toLowerCase().includes(needle) ||
+        getRoleLabel(roleOptions, member.role).toLowerCase().includes(needle)
+      );
+    });
+  }, [users, search, roleFilter, statusFilter, roleOptions]);
+
+  const hasActiveFilters =
+    search.trim() !== "" || roleFilter !== "all" || statusFilter !== "all";
+  const clearFilters = () => {
+    setSearch("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+  };
+
   const { areaRef, rowsFit } = useRowsThatFit();
   const paging = useTablePagination({
-    total: users?.length ?? 0,
+    total: filteredUsers.length,
     rowsFit,
+    resetKey: `${search}|${roleFilter}|${statusFilter}`,
   });
 
   if (users === undefined) {
@@ -64,7 +102,7 @@ export function UsersView() {
 
   const activeCount = users.filter((member) => member.active).length;
   const rows = sortRows(
-    users,
+    filteredUsers,
     (member, column) => columns[column].value(member),
     sort,
   );
@@ -73,6 +111,54 @@ export function UsersView() {
   return (
     <div className="flex flex-col gap-4">
       <UsersHeader onCreateUser={() => setCreateOpen(true)} />
+
+      <DataTableToolbar
+        className="rounded-xl border border-border/70 bg-card shadow-sm"
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar por nombre, correo, puesto o ubicación…"
+        searchAriaLabel="Buscar usuarios"
+        filters={
+          <>
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger
+                className="w-full sm:w-44"
+                aria-label="Filtrar por rol"
+              >
+                <SelectValue placeholder="Rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los roles</SelectItem>
+                {roleOptions.map((role) => (
+                  <SelectItem key={role.key} value={role.key}>
+                    {role.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(value as "all" | "active" | "inactive")
+              }
+            >
+              <SelectTrigger
+                className="w-full sm:w-40"
+                aria-label="Filtrar por estado"
+              >
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                <SelectItem value="active">Activos</SelectItem>
+                <SelectItem value="inactive">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
+        }
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={clearFilters}
+      />
 
       <UsersTable
         columns={columns}

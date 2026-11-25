@@ -27,12 +27,15 @@ export type { ManualChangeDoc, ManualDoc, EquipmentDoc };
  */
 export function ManualsView({
   canManage = false,
+  canWriteNotes = canManage,
   currentUserId = null,
   initialSearch = "",
   initialDetailId = null,
 }: {
   /** Solo responsable/admin suben, cambian y borran manuales (fail-closed). */
   canManage?: boolean;
+  /** Permite escribir notas del taller incluso sin gestionar ficheros. */
+  canWriteNotes?: boolean;
   /** Quién mira: es lo que permite corregir su propia nota del taller. */
   currentUserId?: string | null;
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
@@ -109,6 +112,9 @@ export function ManualsView({
           models={listState.models}
           equipment={equipment}
           canManage={canManage}
+          canWriteNotes={canWriteNotes}
+          hasActiveFilters={listState.isFiltering}
+          onClearFilters={listState.clearFilters}
           onExportCsv={exportCsv}
           onNewManual={() => setFormTarget({ manual: null })}
         />
@@ -117,6 +123,7 @@ export function ManualsView({
           <ManualsEmptyState
             totalManuals={manuals.length}
             canManage={canManage}
+            canWriteNotes={canWriteNotes}
             onNewManual={() => setFormTarget({ manual: null })}
             onClearFilters={listState.clearFilters}
           />

@@ -1,6 +1,6 @@
-import { FileDown, FileUp, Search } from "lucide-react";
+import { BookOpen, FileDown, FileUp } from "lucide-react";
+import { DataTableToolbar } from "@/components/DataTableToolbar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,6 +28,9 @@ export interface ManualsFilterBarProps {
   models: string[];
   equipment: EquipmentDoc[];
   canManage?: boolean;
+  canWriteNotes?: boolean;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
   onExportCsv: () => void;
   onNewManual: () => void;
 }
@@ -51,47 +54,60 @@ export function ManualsFilterBar({
   models,
   equipment,
   canManage = false,
+  canWriteNotes = canManage,
+  hasActiveFilters = false,
+  onClearFilters,
   onExportCsv,
   onNewManual,
 }: ManualsFilterBarProps) {
   return (
-    <div className="flex flex-col gap-3 border-b border-border/70 p-4">
-      <div className="flex flex-row flex-wrap items-center justify-between gap-3">
-        <div className="relative min-w-[14rem] flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar por título, marca, modelo o nota"
-            className="pl-9"
-            aria-label="Buscar manual"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={onExportCsv}
-          >
-            <FileDown className="size-4" />
-            CSV
-          </Button>
-          {canManage && (
+    <div className="flex flex-col border-b border-border/70">
+      <DataTableToolbar
+        className="border-b-0 pb-3"
+        search={search}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Buscar por título, marca, modelo o nota"
+        searchAriaLabel="Buscar manual"
+        hasActiveFilters={hasActiveFilters}
+        onResetFilters={onClearFilters}
+        actions={
+          <>
             <Button
               type="button"
-              className="gap-2"
-              onClick={onNewManual}
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onExportCsv}
             >
-              <FileUp className="size-4" />
-              Subir manual
+              <FileDown className="size-4" />
+              CSV
             </Button>
-          )}
-        </div>
-      </div>
+            {canManage ? (
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={onNewManual}
+              >
+                <FileUp className="size-4" />
+                Subir manual
+              </Button>
+            ) : (
+              canWriteNotes && (
+                <Button
+                  type="button"
+                  className="gap-2"
+                  onClick={onNewManual}
+                >
+                  <BookOpen className="size-4" />
+                  Escribir nota
+                </Button>
+              )
+            )}
+          </>
+        }
+      />
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-4">
         <Select value={type} onValueChange={onTypeChange}>
           <SelectTrigger aria-label="Filtrar por tipo">
             <SelectValue placeholder="Tipo" />

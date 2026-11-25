@@ -103,11 +103,12 @@ export function MailboxCard() {
     );
   }
 
-  // El editor se remonta cuando la cuenta guardada cambia: así el formulario
-  // nace de los datos del servidor sin un efecto que copie estado.
+  // El editor solo se remonta al crear/eliminar la cuenta o cambiar su correo:
+  // así las actualizaciones en segundo plano (p. ej. updatedAt o estado de caché)
+  // no borran cambios locales sin guardar.
   return (
     <MailboxEditor
-      key={account === null ? "empty" : account.updatedAt}
+      key={account === null ? "empty" : account.email}
       account={account}
       folders={folders}
     />

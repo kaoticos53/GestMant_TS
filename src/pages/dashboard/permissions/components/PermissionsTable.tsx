@@ -30,7 +30,7 @@ const CAPABILITY_CELL_CLASS =
   "sticky left-0 z-10 w-60 min-w-60 max-w-60 whitespace-normal border-r border-border/70 bg-card align-top group-hover:bg-muted/50";
 
 const CAPABILITY_HEAD_CLASS =
-  "sticky left-0 z-20 w-60 min-w-60 max-w-60 whitespace-normal border-r border-border/70 bg-card";
+  "sticky left-0 top-0 z-30 w-60 min-w-60 max-w-60 whitespace-normal border-r border-border/70 bg-card";
 
 /**
  * Tabla matricial bidimensional con cabecera y columna izquierda fijas (sticky),
@@ -73,13 +73,16 @@ export function PermissionsTable({
 
   return (
     <div className="rounded-xl border border-border/70 bg-card shadow-sm">
-      <div className="overflow-x-auto">
+      <div className="max-h-[70vh] overflow-auto">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-card">
             <TableRow>
               <TableHead className={CAPABILITY_HEAD_CLASS}>Capacidad</TableHead>
               {roles.map((role) => (
-                <TableHead key={role.key} className="min-w-44 align-bottom">
+                <TableHead
+                  key={role.key}
+                  className="min-w-44 bg-card align-bottom"
+                >
                   <span className="flex items-center gap-1.5 text-sm font-semibold">
                     {role.label}
                     {role.key === ADMIN_KEY && (

@@ -32,6 +32,7 @@ export interface UsePermissionsMatrixReturn {
   saving: boolean;
   toggle: (roleKey: string, id: Capability) => void;
   restoreDefaults: () => void;
+  discardChanges: () => void;
   saveChanges: () => Promise<void>;
   removeRoleFromDraft: (roleKey: string) => void;
   setDraft: React.Dispatch<React.SetStateAction<Draft | null>>;
@@ -76,6 +77,10 @@ export function usePermissionsMatrix({
     setDraft(restoreSystemDefaults(current));
   }, [current]);
 
+  const discardChanges = useCallback(() => {
+    setDraft(null);
+  }, []);
+
   const saveChanges = useCallback(async () => {
     if (!draft || !saved) return;
     const changes = pendingChanges(draft, saved);
@@ -114,6 +119,7 @@ export function usePermissionsMatrix({
     saving,
     toggle,
     restoreDefaults,
+    discardChanges,
     saveChanges,
     removeRoleFromDraft,
     setDraft,

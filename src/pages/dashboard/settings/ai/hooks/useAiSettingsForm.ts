@@ -85,7 +85,13 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
         ...(trimmedKey ? { apiKey: trimmedKey } : {}),
         clearApiKey: formData.clearApiKey,
         tasks: formData.tasks,
-        rateLimitPerHour: formData.rateLimitPerHour,
+        rateLimitPerHour: Math.min(
+          500,
+          Math.max(
+            1,
+            Math.trunc(formData.rateLimitPerHour) || AI_MAX_CALLS_PER_USER_HOUR,
+          ),
+        ),
         allowedRoles: formData.allowedRoles,
         enabledModules: formData.enabledModules,
       });

@@ -18,6 +18,7 @@ import {
   type AiKeySource,
   type AiToolModule,
 } from "@/lib/ai";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import {
   CheckCircle2,
@@ -52,8 +53,10 @@ const ROLE_OPTIONS: Array<{ key: string; label: string }> = [
 
 export function AiSettingsCard() {
   const settings = useQuery(api.aiSettings.settings);
+  const liveRoles = useQuery(api.permissions.listRoles);
   const { formData, setFormData, saving, testing, handleSave, handleTest } =
     useAiSettingsForm(settings);
+  const [rateLimitInput, setRateLimitInput] = useState<string | null>(null);
 
   if (settings === undefined) {
     return (
@@ -68,6 +71,11 @@ export function AiSettingsCard() {
       </Card>
     );
   }
+
+  const roleOptions =
+    Array.isArray(liveRoles) && liveRoles.length > 0
+      ? liveRoles.map((r) => ({ key: r.key, label: r.label }))
+      : ROLE_OPTIONS;
 
   const sourceMeta = KEY_SOURCE_LABELS[settings.keySource];
 
@@ -274,22 +282,46 @@ export function AiSettingsCard() {
               <Input
                 id="ai-rate-limit"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={500}
-                value={formData.rateLimitPerHour}
-                onChange={(e) =>
+                value={rateLimitInput ?? String(formData.rateLimitPerHour)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setRateLimitInput(raw);
+                  const parsed = Number.parseInt(raw, 10);
+                  if (
+                    raw.trim() !== "" &&
+                    Number.isFinite(parsed) &&
+                    parsed >= 1 &&
+                    parsed <= 500
+                  ) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      rateLimitPerHour: parsed,
+                    }));
+                  }
+                }}
+                onBlur={() => {
+                  const raw = rateLimitInput ?? String(formData.rateLimitPerHour);
+                  const parsed = Number.parseInt(raw, 10);
+                  const clamped =
+                    raw.trim() !== "" && Number.isFinite(parsed)
+                      ? Math.min(500, Math.max(1, parsed))
+                      : 40;
                   setFormData((prev) => ({
                     ...prev,
-                    rateLimitPerHour: Number(e.target.value) || 40,
-                  }))
-                }
+                    rateLimitPerHour: clamped,
+                  }));
+                  setRateLimitInput(null);
+                }}
               />
             </div>
 
             <div className="space-y-1.5">
               <Label>Roles con acceso a la IA (vacío = todos activos)</Label>
               <div className="flex flex-wrap gap-3 pt-1">
-                {ROLE_OPTIONS.map((role) => (
+                {roleOptions.map((role) => (
                   <label
                     key={role.key}
                     className="flex items-center gap-1.5 text-xs"

@@ -1,7 +1,8 @@
-import { Plus, RotateCcw, Save, ShieldCheck } from "lucide-react";
+import { Plus, RotateCcw, Save, ShieldCheck, X } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 
 import { DeleteRoleDialog } from "./permissions/components/DeleteRoleDialog";
 import { PermissionsStats } from "./permissions/components/PermissionsStats";
@@ -34,6 +35,8 @@ export function PermissionsView() {
     deleteRoleMutation: deleteRole,
     onRoleDeleted: matrix.removeRoleFromDraft,
   });
+
+  useUnsavedChangesGuard(matrix.dirty);
 
   if (!matrix.current || !roles) {
     return (
@@ -121,6 +124,41 @@ export function PermissionsView() {
       />
 
       <PermissionsStats roles={roles} current={matrix.current} />
+
+      {matrix.dirty && (
+        <div
+          role="region"
+          aria-label="Cambios de permisos sin guardar"
+          className="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal/30 bg-background/95 px-4 py-3 shadow-lg backdrop-blur-sm"
+        >
+          <p className="text-sm font-medium">
+            Tienes cambios sin guardar en los permisos
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={matrix.discardChanges}
+              disabled={matrix.saving}
+            >
+              <X className="size-4" />
+              Descartar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5"
+              onClick={matrix.saveChanges}
+              disabled={matrix.saving}
+            >
+              <Save className="size-4" />
+              {matrix.saving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {roleMgmt.dialog && (
         <RoleDialog

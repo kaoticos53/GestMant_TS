@@ -5,6 +5,7 @@ import { MANUAL_FILE_FORMAT } from "@/lib/manuals";
 export interface ManualsEmptyStateProps {
   totalManuals: number;
   canManage?: boolean;
+  canWriteNotes?: boolean;
   onNewManual: () => void;
   onClearFilters: () => void;
 }
@@ -17,6 +18,7 @@ export interface ManualsEmptyStateProps {
 export function ManualsEmptyState({
   totalManuals,
   canManage = false,
+  canWriteNotes = canManage,
   onNewManual,
   onClearFilters,
 }: ManualsEmptyStateProps) {
@@ -34,7 +36,7 @@ export function ManualsEmptyState({
           nota del taller con lo que conviene saber de un modelo. Tanto vale
           un manual de un modelo suelto como el de un equipo concreto.
         </p>
-        {canManage && (
+        {canManage ? (
           <Button
             type="button"
             className="mt-5 gap-2"
@@ -43,6 +45,17 @@ export function ManualsEmptyState({
             <FileUp className="size-4" />
             Subir manual
           </Button>
+        ) : (
+          canWriteNotes && (
+            <Button
+              type="button"
+              className="mt-5 gap-2"
+              onClick={onNewManual}
+            >
+              <BookOpen className="size-4" />
+              Escribir nota
+            </Button>
+          )
         )}
       </div>
     );
