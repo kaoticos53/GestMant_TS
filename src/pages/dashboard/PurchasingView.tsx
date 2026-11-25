@@ -24,6 +24,7 @@ export function PurchasingView({
   canManage,
   initialSection = "pending",
   initialOrderId = null,
+  onOpenRequest,
 }: PurchasingViewProps) {
   // El módulo carga las tres listas que enseña —lo que espera por proveedor, las
   // órdenes y las recepciones— más lo que necesita para nombrar lo que se pide:
@@ -37,6 +38,12 @@ export function PurchasingView({
   const purchaseRequests = purchasing?.requests ?? [];
 
   const [section, setSection] = useState<PurchasingSection>(initialSection);
+  const [prevInitialSection, setPrevInitialSection] =
+    useState<PurchasingSection>(initialSection);
+  if (initialSection !== prevInitialSection) {
+    setPrevInitialSection(initialSection);
+    setSection(initialSection);
+  }
 
   // Sin tratar: lo que espera a que alguien monte la orden (`lib/purchaseFlow`).
   const sinTratar = purchaseRequests.filter((row) =>
@@ -61,6 +68,8 @@ export function PurchasingView({
           purchaseRequests={purchaseRequests}
           partRequests={partRequests}
           parts={parts}
+          canManage={canManage}
+          onOpenRequest={onOpenRequest}
         />
       )}
       {section === "orders" && (
@@ -69,13 +78,19 @@ export function PurchasingView({
           receptions={receptions}
           canManage={canManage}
           initialOrderId={initialOrderId}
+          onOpenRequest={onOpenRequest}
         />
       )}
       {section === "movements" && (
         <MovementsSection receptions={receptions} canManage={canManage} />
       )}
       {section === "history" && (
-        <HistorySection orders={orders} receptions={receptions} />
+        <HistorySection
+          orders={orders}
+          receptions={receptions}
+          canManage={canManage}
+          onOpenRequest={onOpenRequest}
+        />
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Can } from "@/components/AbilityProvider";
 import { groupBySupplier, type PurchaseRequestDoc } from "@/lib/purchasing";
@@ -17,20 +18,20 @@ export interface PendingSectionProps {
   purchaseRequests: PurchaseRequestDoc[];
   partRequests: PartRequestDoc[];
   parts: PartDoc[];
+  canManage?: boolean;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /**
  * Sección de compras pendientes: peticiones de repuesto sin existencias en almacén
  * y peticiones de compra abiertas agrupadas por proveedor para generar órdenes.
- *
- * No recibe un booleano de permisos: cada control pregunta a `<Can>` por el paso
- * que da y por la ficha que lo recibe (apartar una petición de repuesto, montar
- * una orden).
  */
 export function PendingSection({
   purchaseRequests,
   partRequests,
   parts,
+  canManage = false,
+  onOpenRequest,
 }: PendingSectionProps) {
   const missingStock = useMissingStockActions({
     partRequests,
@@ -107,6 +108,7 @@ export function PendingSection({
           onToggleItem={selection.toggleItem}
           onToggleGroup={() => selection.toggleGroup(group.items)}
           onAction={setActionTarget}
+          onOpenRequest={onOpenRequest}
         />
       ))}
 
@@ -135,7 +137,7 @@ export function PendingSection({
             })),
           }}
           parts={parts}
-          canManage={false}
+          canManage={canManage}
           showStock={true}
           onClose={() => setOpenRequest(null)}
         />

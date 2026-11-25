@@ -1,16 +1,11 @@
-import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
-import { toast } from "sonner";
-import { api } from "@/convex/_generated/api";
-import type { PurchaseOrderDoc } from "@/lib/purchasing";
-import { getErrorMessage } from "@/lib/workshop";
+import { useState } from "react";
+import type { Id } from "@/convex/_generated/dataModel";
 import { OrderSheet } from "../dialogs/OrderSheet";
-import { ReceiveDialog } from "../dialogs/ReceiveDialog";
+import { useOrderActionDialogs } from "../hooks/useOrderActionDialogs";
 import {
-  CancelOrderDialog,
+  OrderActionDialogs,
   OrdersEmptyState,
   PurchaseOrderCard,
-  formatCancelSuccessDescription,
 } from "./orders";
 import type { OrdersSectionProps } from "./orders";
 
@@ -21,48 +16,42 @@ export function OrdersSection({
   receptions,
   canManage,
   initialOrderId = null,
+  onOpenRequest,
 }: OrdersSectionProps) {
-  const [abierta, setAbierta] = useState<PurchaseOrderDoc | null>(null);
+  const [selectedOrderId, setSelectedOrderId] =
+    useState<Id<"purchaseOrders"> | null>(null);
+  const [dismissedInitialId, setDismissedInitialId] =
+    useState<Id<"purchaseOrders"> | null>(null);
+  const [prevInitialOrderId, setPrevInitialOrderId] =
+    useState<Id<"purchaseOrders"> | null>(initialOrderId);
 
-  useEffect(() => {
-    if (!initialOrderId) return;
-    const match = orders.find((order) => order._id === initialOrderId);
-    if (match) setAbierta(match);
-  }, [initialOrderId, orders]);
-  const [recibiendo, setRecibiendo] = useState<PurchaseOrderDoc | null>(null);
-  const [anulando, setAnulando] = useState<PurchaseOrderDoc | null>(null);
-  const cancelar = useMutation(api.purchasing.cancelOrder);
-  const [motivo, setMotivo] = useState("");
-  const [guardando, setGuardando] = useState(false);
+  if (initialOrderId !== prevInitialOrderId) {
+    setPrevInitialOrderId(initialOrderId);
+    setSelectedOrderId(null);
+    setDismissedInitialId(null);
+  }
+
+  const dialogs = useOrderActionDialogs();
+
+  const activeOrderId =
+    selectedOrderId ??
+    (initialOrderId && initialOrderId !== dismissedInitialId
+      ? initialOrderId
+      : null);
 
   // La orden abierta se refresca con la última versión que llega del backend.
-  const actual = abierta
-    ? (orders.find((order) => order._id === abierta._id) ?? abierta)
+  const actual = activeOrderId
+    ? (orders.find((order) => order._id === activeOrderId) ?? null)
     : null;
+
+  const closeOpenOrder = () => {
+    setSelectedOrderId(null);
+    if (initialOrderId) setDismissedInitialId(initialOrderId);
+  };
 
   if (orders.length === 0) {
     return <OrdersEmptyState />;
   }
-
-  const anular = async () => {
-    if (!anulando) return;
-    setGuardando(true);
-    try {
-      const { returned } = await cancelar({
-        orderId: anulando._id,
-        note: motivo,
-      });
-      toast.success(`Orden ${anulando.reference} anulada`, {
-        description: formatCancelSuccessDescription(returned),
-      });
-      setAnulando(null);
-      setMotivo("");
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setGuardando(false);
-    }
-  };
 
   return (
     <div className="grid gap-3">
@@ -70,12 +59,10 @@ export function OrdersSection({
         <PurchaseOrderCard
           key={order._id}
           order={order}
-          onOpenOrder={setAbierta}
-          onReceiveOrder={setRecibiendo}
-          onCancelOrder={(ord) => {
-            setMotivo("");
-            setAnulando(ord);
-          }}
+          onOpenOrder={(ord) => setSelectedOrderId(ord._id)}
+          onReceiveOrder={dialogs.setRecibiendo}
+          onCancelOrder={dialogs.startCancel}
+          onOpenRequest={onOpenRequest}
         />
       ))}
 
@@ -84,34 +71,28 @@ export function OrdersSection({
           order={actual}
           receptions={receptions.filter((row) => row.orderId === actual._id)}
           canManage={canManage}
-          onClose={() => setAbierta(null)}
+          onClose={closeOpenOrder}
           onReceive={() => {
-            setRecibiendo(actual);
-            setAbierta(null);
+            dialogs.setRecibiendo(actual);
+            closeOpenOrder();
           }}
           onCancel={() => {
-            setMotivo("");
-            setAnulando(actual);
-            setAbierta(null);
+            dialogs.startCancel(actual);
+            closeOpenOrder();
           }}
+          onOpenRequest={onOpenRequest}
         />
       )}
 
-      {recibiendo && (
-        <ReceiveDialog
-          open={recibiendo !== null}
-          onOpenChange={(open) => !open && setRecibiendo(null)}
-          order={recibiendo}
-        />
-      )}
-
-      <CancelOrderDialog
-        order={anulando}
-        onClose={() => setAnulando(null)}
-        motivo={motivo}
-        onMotivoChange={setMotivo}
-        guardando={guardando}
-        onConfirmCancel={anular}
+      <OrderActionDialogs
+        recibiendo={dialogs.recibiendo}
+        onCloseReceive={() => dialogs.setRecibiendo(null)}
+        anulando={dialogs.anulando}
+        onCloseCancel={dialogs.closeCancel}
+        motivo={dialogs.motivo}
+        onMotivoChange={dialogs.setMotivo}
+        guardando={dialogs.guardando}
+        onConfirmCancel={dialogs.confirmCancel}
       />
     </div>
   );

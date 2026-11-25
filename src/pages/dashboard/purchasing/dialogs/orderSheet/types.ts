@@ -1,3 +1,4 @@
+import type { Id } from "@/convex/_generated/dataModel";
 import type {
   PurchaseOrderDoc,
   PurchaseOrderLine,
@@ -32,6 +33,7 @@ export interface OrderLinesListProps {
   onStartEditingNote: (purchaseRequestId: string, initialNote: string) => void;
   onChangeNote: (value: string) => void;
   onSaveNote: (line: PurchaseOrderLine) => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 export interface OrderReceptionsListProps {

@@ -7,6 +7,7 @@ export interface OrdersSectionProps {
   receptions: ReceptionDoc[];
   canManage: boolean;
   initialOrderId?: Id<"purchaseOrders"> | null;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 export interface PurchaseOrderCardProps {
@@ -14,6 +15,7 @@ export interface PurchaseOrderCardProps {
   onOpenOrder: (order: PurchaseOrderDoc) => void;
   onReceiveOrder: (order: PurchaseOrderDoc) => void;
   onCancelOrder: (order: PurchaseOrderDoc) => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 export interface CancelOrderDialogProps {

@@ -1,3 +1,5 @@
+import { DetailTitleButton } from "@/components/DetailTitleButton";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { RequestDelivery } from "@/lib/requestFlow";
 import { formatDateTime } from "@/lib/workshop";
 
@@ -11,6 +13,8 @@ export interface RequestInfoCardProps {
   issuedAt?: number;
   delivery: RequestDelivery;
   lastDeliveredAt: number | null;
+  incidentId?: Id<"incidents">;
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }
 
 export function RequestInfoCard({
@@ -23,6 +27,8 @@ export function RequestInfoCard({
   issuedAt,
   delivery,
   lastDeliveredAt,
+  incidentId,
+  onOpenIncident,
 }: RequestInfoCardProps) {
   const deliveryValue = issuedAt
     ? formatDateTime(issuedAt)
@@ -59,6 +65,23 @@ export function RequestInfoCard({
           <dd className="mt-0.5 text-sm font-medium">{detail.value}</dd>
         </div>
       ))}
+      {incidentId && (
+        <div className="col-span-2 border-t border-border/60 pt-2">
+          <dt className="text-xs text-muted-foreground">Origen</dt>
+          <dd className="mt-0.5 text-sm font-medium">
+            {onOpenIncident ? (
+              <DetailTitleButton
+                onClick={() => onOpenIncident(incidentId)}
+                className="text-sm font-medium text-signal"
+              >
+                Incidencia vinculada
+              </DetailTitleButton>
+            ) : (
+              "Incidencia vinculada"
+            )}
+          </dd>
+        </div>
+      )}
     </dl>
   );
 }

@@ -9,7 +9,8 @@ import { asPurchaseOrder } from "@/lib/abilities";
 import { canAdvancePurchaseOrder } from "@/lib/purchaseFlow";
 import { PURCHASE_ORDER_STATUS_META, orderTotals } from "@/lib/purchasing";
 import { Truck, Undo2 } from "lucide-react";
-import { formatOrderRequestRefs, formatOrderSubtitle } from "./helpers";
+import { formatDate } from "@/lib/workshop";
+import { formatOrderSubtitle } from "./helpers";
 import type { PurchaseOrderCardProps } from "./types";
 
 export function PurchaseOrderCard({
@@ -17,10 +18,10 @@ export function PurchaseOrderCard({
   onOpenOrder,
   onReceiveOrder,
   onCancelOrder,
+  onOpenRequest,
 }: PurchaseOrderCardProps) {
   const meta = PURCHASE_ORDER_STATUS_META[order.status];
   const total = orderTotals(order);
-  const requestRefsText = formatOrderRequestRefs(order.requestRefs);
 
   return (
     <Card>
@@ -43,9 +44,31 @@ export function PurchaseOrderCard({
             <p className="text-sm text-muted-foreground">
               {formatOrderSubtitle(order, total.received, total.quantity)}
             </p>
-            {requestRefsText && (
+            {order.requestRefs.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                Desde {requestRefsText}
+                Desde{" "}
+                {order.requestRefs.map((ref, idx) => {
+                  const linkedLine = order.lines.find(
+                    (line) =>
+                      line.requestReference === ref.reference && line.requestId,
+                  );
+                  const label = `${ref.reference} (${formatDate(ref.requestedAt)})`;
+                  return (
+                    <span key={ref.reference}>
+                      {idx > 0 && " · "}
+                      {onOpenRequest && linkedLine?.requestId ? (
+                        <DetailTitleButton
+                          onClick={() => onOpenRequest(linkedLine.requestId!)}
+                          className="inline text-xs font-medium text-signal"
+                        >
+                          {label}
+                        </DetailTitleButton>
+                      ) : (
+                        label
+                      )}
+                    </span>
+                  );
+                })}
               </p>
             )}
           </div>

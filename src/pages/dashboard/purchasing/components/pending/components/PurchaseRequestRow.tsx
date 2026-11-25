@@ -1,4 +1,6 @@
+import type { Id } from "@/convex/_generated/dataModel";
 import { Can } from "@/components/AbilityProvider";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +23,7 @@ export interface PurchaseRequestRowProps {
   selected: boolean;
   onToggle: () => void;
   onAction: (target: PurchaseActionTarget) => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /**
@@ -35,6 +38,7 @@ export function PurchaseRequestRow({
   selected,
   onToggle,
   onAction,
+  onOpenRequest,
 }: PurchaseRequestRowProps) {
   const comoPeticion = asPurchaseRequest(row);
   const meta = PURCHASE_REQUEST_STATUS_META[row.status];
@@ -67,8 +71,17 @@ export function PurchaseRequestRow({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           {row.quantity} {row.unit} · {PURCHASE_REASON_META[row.reason]} · desde{" "}
-          {row.requestReference} ({row.requesterName},{" "}
-          {formatDate(row.requestDate)})
+          {onOpenRequest && row.requestId ? (
+            <DetailTitleButton
+              onClick={() => onOpenRequest(row.requestId!)}
+              className="inline text-xs font-medium text-signal"
+            >
+              {row.requestReference}
+            </DetailTitleButton>
+          ) : (
+            row.requestReference
+          )}{" "}
+          ({row.requesterName}, {formatDate(row.requestDate)})
         </p>
         <p className="text-xs text-muted-foreground">
           {row.reference} · apartada por {row.requestedBy} el{" "}

@@ -59,6 +59,7 @@ export interface RequestDetailSheetProps {
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
   ) => void;
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }
 
 export function RequestDetailSheet({
@@ -71,13 +72,13 @@ export function RequestDetailSheet({
   onReject,
   onIssue,
   onHold,
-  onReturn: _onReturn,
   onCancel,
   onResume,
   resuming = false,
   showStock = true,
   canPurchase = false,
   onOpenPurchasing,
+  onOpenIncident,
 }: RequestDetailSheetProps) {
   const needsAttachmentUrls = requestNeedsAttachmentUrls(request);
   const detailed = useQuery(
@@ -187,6 +188,15 @@ export function RequestDetailSheet({
             issuedAt={request.issuedAt}
             delivery={delivery}
             lastDeliveredAt={lastDeliveredAt}
+            incidentId={resolvedRequest.incidentId}
+            onOpenIncident={
+              onOpenIncident
+                ? (id) => {
+                    onClose();
+                    onOpenIncident(id);
+                  }
+                : undefined
+            }
           />
 
           <RequestNotesSection

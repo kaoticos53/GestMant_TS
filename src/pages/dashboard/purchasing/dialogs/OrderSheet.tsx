@@ -35,6 +35,7 @@ export interface OrderSheetProps {
   onClose: () => void;
   onReceive: () => void;
   onCancel: () => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /** La orden entera: sus artículos, sus notas y lo que ha entrado. */
@@ -45,6 +46,7 @@ export function OrderSheet({
   onClose,
   onReceive,
   onCancel,
+  onOpenRequest,
 }: OrderSheetProps) {
   const {
     meta,
@@ -115,6 +117,14 @@ export function OrderSheet({
             onStartEditingNote={handleStartEditingNote}
             onChangeNote={setNota}
             onSaveNote={(line) => void handleSaveNota(line)}
+            onOpenRequest={
+              onOpenRequest
+                ? (id) => {
+                    onClose();
+                    onOpenRequest(id);
+                  }
+                : undefined
+            }
           />
 
           <OrderLineRemovalControl order={order} canManage={canManage} />

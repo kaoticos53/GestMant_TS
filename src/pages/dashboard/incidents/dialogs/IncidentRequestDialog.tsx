@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { PackagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { api } from "@/convex/_generated/api";
 import { PRIORITY_META, getErrorMessage, type Priority } from "@/lib/workshop";
 import { richDocToStore } from "@/lib/richDoc";
+import { RequestPartsSection } from "../../requests/dialogs/components/RequestPartsSection";
+import { useRequestPartsSelection } from "../../requests/hooks/useRequestPartsSelection";
 import type { IncidentDoc } from "../types";
 
 export function IncidentRequestDialog({
@@ -36,16 +38,31 @@ export function IncidentRequestDialog({
   onClose: () => void;
 }) {
   const createRequest = useMutation(api.partRequests.create);
-  const [priority, setPriority] = useState<Priority>("normal");
+  const parts = useQuery(api.spareParts.list) ?? [];
+  const equipment = useQuery(api.equipment.list) ?? [];
+  const catalogModels = useQuery(api.equipmentModels.list) ?? [];
+
+  const [priority, setPriority] = useState<Priority>(
+    (incident.priority as Priority | undefined) ?? "normal",
+  );
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const partsSelection = useRequestPartsSelection({
+    parts,
+    equipment,
+    catalogModels,
+    equipmentChoice: incident.equipmentId ?? "",
+  });
+
   const handleSubmit = async () => {
     const requested = richDocToStore(description);
-    if (!requested) {
-      setError("Describe qué material hace falta.");
+    if (!requested && partsSelection.lines.length === 0) {
+      setError(
+        "Indica qué material hace falta o añade al menos un repuesto del catálogo.",
+      );
       return;
     }
     setBusy(true);
@@ -58,9 +75,10 @@ export function IncidentRequestDialog({
         equipment: equipmentText,
         equipmentId: incident.equipmentId,
         priority,
-        description: requested,
+        description: requested || undefined,
         notes: notes.trim() || undefined,
         incidentId: incident._id,
+        lines: partsSelection.lines.length > 0 ? partsSelection.lines : undefined,
       });
       toast.success(`${reference} creada para ${incident.reference}`);
       onClose();
@@ -72,15 +90,15 @@ export function IncidentRequestDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PackagePlus className="size-4" />
             Petición de repuestos
           </DialogTitle>
           <DialogDescription>
-            {incident.reference} · el encargado de repuestos la gestionará en la
+            {incident.reference} · el responsable de repuestos la gestionará en la
             cola de peticiones.
           </DialogDescription>
         </DialogHeader>
@@ -105,13 +123,32 @@ export function IncidentRequestDialog({
             </Select>
           </div>
 
+          <RequestPartsSection
+            parts={parts}
+            visibleParts={partsSelection.visibleParts}
+            compatibleParts={partsSelection.compatibleParts}
+            partById={partsSelection.partById}
+            selectedEquipment={partsSelection.selectedEquipment}
+            showOnly={partsSelection.showOnly}
+            onToggleOnlyCompatible={() =>
+              partsSelection.setOnlyCompatible((prev) => !prev)
+            }
+            selectedId={partsSelection.selectedId}
+            onSelectIdChange={partsSelection.setSelectedId}
+            onAddLine={partsSelection.addLine}
+            lines={partsSelection.lines}
+            onUpdateQuantity={partsSelection.updateQuantity}
+            onRemoveLine={partsSelection.removeLine}
+            disabled={busy}
+          />
+
           <div className="grid gap-2">
-            <Label htmlFor="req-description">¿Qué material hace falta? *</Label>
+            <Label htmlFor="req-description">¿Qué material hace falta?</Label>
             <RichTextEditor
               id="req-description"
               value={description}
               onChange={setDescription}
-              placeholder="Repuestos, cantidades, plazos... el responsable asociará los del catálogo."
+              placeholder="Repuestos, cantidades, plazos... opcional si ya has añadido referencias del catálogo."
               disabled={busy}
             />
           </div>
@@ -128,7 +165,11 @@ export function IncidentRequestDialog({
           </div>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         <DialogFooter>
           <Button

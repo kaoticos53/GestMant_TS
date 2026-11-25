@@ -15,6 +15,7 @@ export function RequestsView({
   initialDetailId = null,
   initialFilter = "all",
   onOpenPurchasing,
+  onOpenIncident,
 }: {
   /** Modelo del inventario por el que se filtra la cola ("all" = sin filtro). */
   equipmentFilter?: string;
@@ -32,6 +33,8 @@ export function RequestsView({
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
   ) => void;
+  /** Navega a la incidencia vinculada a la petición. */
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }) {
   const state = useRequestsState({
     equipmentFilter,
@@ -107,6 +110,7 @@ export function RequestsView({
         canManage={canManage}
         canPurchase={canPurchase}
         onOpenPurchasing={onOpenPurchasing}
+        onOpenIncident={onOpenIncident}
       />
     </div>
   );

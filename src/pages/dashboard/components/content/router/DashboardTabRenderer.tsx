@@ -126,6 +126,7 @@ export function DashboardTabRenderer({
                   }))
               : undefined
           }
+          onOpenIncident={can("viewIncidents") ? openIncident : undefined}
         />
       );
 
@@ -136,6 +137,7 @@ export function DashboardTabRenderer({
           canManage={can("managePurchasing")}
           initialSection={target.purchasingSection ?? "pending"}
           initialOrderId={target.purchaseOrderId ?? null}
+          onOpenRequest={can("viewRequests") ? openRequest : undefined}
         />
       );
 

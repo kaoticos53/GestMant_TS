@@ -28,6 +28,7 @@ export function RequestsDialogs({
   canManage,
   canPurchase,
   onOpenPurchasing,
+  onOpenIncident,
 }: {
   decision: { request: RequestDoc; mode: DecisionMode } | null;
   onCloseDecision: () => void;
@@ -49,6 +50,7 @@ export function RequestsDialogs({
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
   ) => void;
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }) {
   return (
     <>
@@ -92,6 +94,7 @@ export function RequestsDialogs({
           resuming={resumingId === openRequest._id}
           canPurchase={canPurchase}
           onOpenPurchasing={onOpenPurchasing}
+          onOpenIncident={onOpenIncident}
         />
       )}
 

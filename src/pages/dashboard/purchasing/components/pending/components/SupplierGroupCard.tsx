@@ -1,3 +1,4 @@
+import type { Id } from "@/convex/_generated/dataModel";
 import { Can } from "@/components/AbilityProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ export interface SupplierGroupCardProps {
   onToggleItem: (id: string) => void;
   onToggleGroup: () => void;
   onAction: (target: PurchaseActionTarget) => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /**
@@ -30,6 +32,7 @@ export function SupplierGroupCard({
   onToggleItem,
   onToggleGroup,
   onAction,
+  onOpenRequest,
 }: SupplierGroupCardProps) {
   return (
     <Card>
@@ -57,6 +60,7 @@ export function SupplierGroupCard({
               selected={selectedIds.has(row._id)}
               onToggle={() => onToggleItem(row._id)}
               onAction={onAction}
+              onOpenRequest={onOpenRequest}
             />
             <SharedMailSection
               destinationType="purchaseRequest"

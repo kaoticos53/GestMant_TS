@@ -1,10 +1,13 @@
 import { useState } from "react";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { PurchaseOrderDoc } from "@/lib/purchasing";
 import type { ReceptionDoc } from "../types";
 import { OrderSheet } from "../dialogs/OrderSheet";
+import { useOrderActionDialogs } from "../hooks/useOrderActionDialogs";
 import { useCellSelection } from "../hooks/useCellSelection";
 import { useHistoryExport } from "../hooks/useHistoryExport";
 import { useHistoryFilters } from "../hooks/useHistoryFilters";
+import { OrderActionDialogs } from "./orders";
 import { HistoryEmptyState } from "./history/HistoryEmptyState";
 import { HistoryFilterDrawer } from "./history/HistoryFilterDrawer";
 import { HistoryTable } from "./history/HistoryTable";
@@ -13,11 +16,22 @@ import { HistoryToolbar } from "./history/HistoryToolbar";
 export interface HistorySectionProps {
   orders: PurchaseOrderDoc[];
   receptions: ReceptionDoc[];
+  canManage?: boolean;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /** Histórico de compras en formato tabla tipo Excel / Hoja de cálculo interactiva */
-export function HistorySection({ orders, receptions }: HistorySectionProps) {
+export function HistorySection({
+  orders,
+  receptions,
+  canManage = false,
+  onOpenRequest,
+}: HistorySectionProps) {
   const [openOrder, setOpenOrder] = useState<PurchaseOrderDoc | null>(null);
+  const dialogs = useOrderActionDialogs();
+  const actualOrder = openOrder
+    ? (orders.find((o) => o._id === openOrder._id) ?? openOrder)
+    : null;
   const {
     filters,
     setFilters,
@@ -99,16 +113,36 @@ export function HistorySection({ orders, receptions }: HistorySectionProps) {
         selectedCount={selectedCount}
       />
 
-      {openOrder && (
+      {actualOrder && (
         <OrderSheet
-          order={openOrder}
-          receptions={receptions.filter((row) => row.orderId === openOrder._id)}
-          canManage={false}
+          order={actualOrder}
+          receptions={receptions.filter(
+            (row) => row.orderId === actualOrder._id,
+          )}
+          canManage={canManage}
           onClose={() => setOpenOrder(null)}
-          onReceive={() => setOpenOrder(null)}
-          onCancel={() => setOpenOrder(null)}
+          onReceive={() => {
+            dialogs.setRecibiendo(actualOrder);
+            setOpenOrder(null);
+          }}
+          onCancel={() => {
+            dialogs.startCancel(actualOrder);
+            setOpenOrder(null);
+          }}
+          onOpenRequest={onOpenRequest}
         />
       )}
+
+      <OrderActionDialogs
+        recibiendo={dialogs.recibiendo}
+        onCloseReceive={() => dialogs.setRecibiendo(null)}
+        anulando={dialogs.anulando}
+        onCloseCancel={dialogs.closeCancel}
+        motivo={dialogs.motivo}
+        onMotivoChange={dialogs.setMotivo}
+        guardando={dialogs.guardando}
+        onConfirmCancel={dialogs.confirmCancel}
+      />
     </div>
   );
 }

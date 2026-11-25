@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isPurchaseOrderClosed } from "@/lib/purchaseFlow";
@@ -15,6 +16,7 @@ export function OrderLinesList({
   onStartEditingNote,
   onChangeNote,
   onSaveNote,
+  onOpenRequest,
 }: OrderLinesListProps) {
   const isClosed = isPurchaseOrderClosed(orderStatus);
 
@@ -40,7 +42,18 @@ export function OrderLinesList({
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Desde {line.requestReference} · {formatDate(line.requestDate)}
+              Desde{" "}
+              {onOpenRequest && line.requestId ? (
+                <DetailTitleButton
+                  onClick={() => onOpenRequest(line.requestId!)}
+                  className="inline text-xs font-medium text-signal"
+                >
+                  {line.requestReference}
+                </DetailTitleButton>
+              ) : (
+                line.requestReference
+              )}{" "}
+              · {formatDate(line.requestDate)}
             </p>
             {isEditingThisLine ? (
               <div className="flex gap-2">
@@ -53,6 +66,7 @@ export function OrderLinesList({
                 <Button
                   type="button"
                   size="sm"
+                  aria-label="Guardar nota"
                   onClick={() => onSaveNote(line)}
                 >
                   <Check className="size-4" />

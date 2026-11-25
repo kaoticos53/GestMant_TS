@@ -18,4 +18,5 @@ export interface PurchasingViewProps {
   canManage: boolean;
   initialSection?: PurchasingSection;
   initialOrderId?: Id<"purchaseOrders"> | null;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
