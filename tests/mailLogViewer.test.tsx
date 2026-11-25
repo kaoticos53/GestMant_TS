@@ -148,6 +148,13 @@ describe("MailLogViewer (Fase 3)", () => {
       discardBtn?.click();
       await settle();
     });
+    const confirmDiscardBtn = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((b) => b.textContent?.trim() === "Descartar envío");
+    await act(async () => {
+      confirmDiscardBtn?.click();
+      await settle();
+    });
     expect(mockDiscard).toHaveBeenCalledWith({ outboxId: "out_1" });
   });
 });

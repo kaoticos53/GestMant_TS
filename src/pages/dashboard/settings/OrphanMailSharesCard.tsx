@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { downloadFileFromUrl } from "@/lib/downloadFile";
@@ -31,6 +32,10 @@ export function OrphanMailSharesCard() {
   const purge = useMutation(api.mailShares.purgeOrphaned);
   const download = useAction(api.mailShares.downloadOrphaned);
   const [purging, setPurging] = useState<string | null>(null);
+  const [purgeTarget, setPurgeTarget] = useState<{
+    shareId: Id<"mailShares">;
+    subject: string;
+  } | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const handleDownload = async (
@@ -57,6 +62,7 @@ export function OrphanMailSharesCard() {
     setPurging(shareId);
     try {
       await purge({ shareId });
+      setPurgeTarget(null);
       toast.success("Copia huérfana purgada.");
     } catch (reason) {
       toast.error(getErrorMessage(reason));
@@ -133,9 +139,14 @@ export function OrphanMailSharesCard() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="gap-2 text-destructive hover:text-destructive"
                   disabled={purging === row.shareId}
-                  onClick={() => void handlePurge(row.shareId)}
+                  onClick={() =>
+                    setPurgeTarget({
+                      shareId: row.shareId,
+                      subject: row.subject || "(sin asunto)",
+                    })
+                  }
                 >
                   {purging === row.shareId ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -148,6 +159,18 @@ export function OrphanMailSharesCard() {
             </li>
           ))}
         </ul>
+      )}
+
+      {purgeTarget && (
+        <DestructiveConfirmDialog
+          onClose={() => setPurgeTarget(null)}
+          busy={purging === purgeTarget.shareId}
+          title="¿Purgar copia de correo huérfana?"
+          description={`Se borrará definitivamente «${purgeTarget.subject}» y todos sus adjuntos. Esta acción no se puede deshacer.`}
+          confirmLabel="Purgar ahora"
+          busyLabel="Purgando..."
+          onConfirm={() => handlePurge(purgeTarget.shareId)}
+        />
       )}
     </div>
   );

@@ -78,7 +78,11 @@ export function EquipmentDetailSheet({
         />
 
         <div className="grid gap-4 px-4 pb-4 sm:px-6">
-          <EquipmentOperationalSection item={item} canManage={canManage} />
+          <EquipmentOperationalSection
+            item={item}
+            canManage={canManage}
+            onRequestReturnLoan={() => setReturnLoanOpen(true)}
+          />
 
           <EquipmentDataSection
             item={item}

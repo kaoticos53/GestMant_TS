@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
 import {
@@ -56,6 +57,10 @@ export function MailboxTagRulesCard() {
     rule: EditableRule | null;
   }>({ open: false, rule: null });
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: NonNullable<typeof rules>[number]["_id"];
+    name: string;
+  } | null>(null);
 
   const handleApplyPreset = async (
     preset: (typeof MAIL_TAG_RULE_PRESETS)[number],
@@ -210,9 +215,15 @@ export function MailboxTagRulesCard() {
                   checked={rule.enabled}
                   disabled={busy}
                   aria-label={`Activar regla ${rule.name}`}
-                  onCheckedChange={(checked) =>
-                    void toggleRule({ id: rule._id, enabled: checked })
-                  }
+                  onCheckedChange={(checked) => {
+                    void (async () => {
+                      try {
+                        await toggleRule({ id: rule._id, enabled: checked });
+                      } catch (err) {
+                        toast.error(getErrorMessage(err));
+                      }
+                    })();
+                  }}
                 />
                 <Button
                   type="button"
@@ -265,7 +276,9 @@ export function MailboxTagRulesCard() {
                   className="size-7 text-muted-foreground hover:text-destructive"
                   disabled={busy}
                   aria-label={`Eliminar regla ${rule.name}`}
-                  onClick={() => void deleteRule({ id: rule._id })}
+                  onClick={() =>
+                    setDeleteTarget({ id: rule._id, name: rule.name })
+                  }
                 >
                   <Trash2 className="size-3.5" />
                 </Button>
@@ -273,6 +286,28 @@ export function MailboxTagRulesCard() {
             </li>
           ))}
         </ul>
+      )}
+
+      {deleteTarget && (
+        <DestructiveConfirmDialog
+          onClose={() => setDeleteTarget(null)}
+          busy={busy}
+          title={`¿Borrar la regla «${deleteTarget.name}»?`}
+          description="Dejará de aplicarse en futuras sincronizaciones del buzón. Esta acción no se puede deshacer."
+          confirmLabel="Borrar regla"
+          onConfirm={async () => {
+            setBusy(true);
+            try {
+              await deleteRule({ id: deleteTarget.id });
+              setDeleteTarget(null);
+              toast.success("Regla de etiquetado eliminada.");
+            } catch (err) {
+              toast.error(getErrorMessage(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
       )}
 
       {editorState.open && (

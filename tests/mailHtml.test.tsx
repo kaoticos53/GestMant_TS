@@ -72,7 +72,10 @@ describe("HTML del visor", () => {
     expect(srcdoc).not.toContain("<script");
     expect(srcdoc).not.toContain("tracker.example");
     expect(srcdoc).toContain("https://storage.example/logo");
-    expect(frame?.getAttribute("sandbox")).toBe("allow-same-origin");
+    expect(frame?.getAttribute("sandbox")).toBe(
+      "allow-same-origin allow-popups allow-popups-to-escape-sandbox",
+    );
+    expect(frame?.getAttribute("sandbox")).not.toContain("allow-scripts");
 
     const show = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("Mostrar imágenes remotas"),

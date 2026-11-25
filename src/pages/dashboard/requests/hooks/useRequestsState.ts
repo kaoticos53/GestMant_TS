@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { archiveWithUndoToast, unarchiveSuccessToast } from "@/lib/archiveToasts";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/export";
 import { getErrorMessage } from "@/lib/workshop";
 import { buildRequestsCsvData } from "../helpers";
@@ -23,6 +24,7 @@ export function useRequestsState({
   const equipment = useQuery(api.equipment.list, {}) ?? [];
   const resume = useMutation(api.partRequests.resume);
   const archiveRequest = useMutation(api.partRequests.archive);
+  const unarchiveRequest = useMutation(api.partRequests.unarchive);
 
   const [decision, setDecision] = useState<{
     request: RequestDoc;
@@ -70,9 +72,18 @@ export function useRequestsState({
     setArchivingId(request._id);
     try {
       await archiveRequest({ requestId: request._id });
-      toast.success(
-        `${request.reference} al archivo · puedes recuperarla desde Archivo`,
-      );
+      archiveWithUndoToast({
+        reference: request.reference,
+        noun: "petición",
+        onUndo: async () => {
+          try {
+            await unarchiveRequest({ requestId: request._id });
+            unarchiveSuccessToast({ reference: request.reference });
+          } catch (err) {
+            toast.error(getErrorMessage(err));
+          }
+        },
+      });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

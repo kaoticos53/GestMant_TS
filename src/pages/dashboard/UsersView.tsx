@@ -105,6 +105,8 @@ export function UsersView() {
         onCreateClose={() => setCreateOpen(false)}
         editing={editing}
         onEditClose={() => setEditing(null)}
+        roleOptions={roleOptions}
+        currentUserId={currentUser?._id}
         deactivating={deactivating}
         onDeactivateClose={() => setDeactivating(null)}
         onConfirmDeactivate={handleConfirmDeactivate}

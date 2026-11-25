@@ -5,6 +5,16 @@ import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -39,6 +49,7 @@ export function IncidentLifecycleExtras({
   const updateExternal = useMutation(api.incidents.updateExternalRepair);
 
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [confirmRecurrenceOpen, setConfirmRecurrenceOpen] = useState(false);
   const [reopenNote, setReopenNote] = useState("");
   const [extOpen, setExtOpen] = useState(false);
   const [rmaNumber, setRmaNumber] = useState(
@@ -84,6 +95,7 @@ export function IncidentLifecycleExtras({
     setBusy(true);
     try {
       const res = await createRecurrence({ parentIncidentId: incident._id });
+      setConfirmRecurrenceOpen(false);
       toast.success(`Reincidencia ${res.reference} creada.`);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -141,7 +153,7 @@ export function IncidentLifecycleExtras({
               size="sm"
               className="gap-1.5"
               disabled={busy}
-              onClick={() => void handleRecurrence()}
+              onClick={() => setConfirmRecurrenceOpen(true)}
             >
               <CopyPlus className="size-3.5" />
               Abrir reincidencia
@@ -274,6 +286,37 @@ export function IncidentLifecycleExtras({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={confirmRecurrenceOpen}
+        onOpenChange={(open) => {
+          if (!open && !busy) setConfirmRecurrenceOpen(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Abrir una nueva incidencia por reincidencia?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se creará una nueva incidencia vinculada a {incident.reference}{" "}
+              con los datos del equipo y del caso original.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleRecurrence();
+              }}
+            >
+              {busy ? "Creando..." : "Abrir reincidencia"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

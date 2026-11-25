@@ -12,6 +12,7 @@ const { mockUseQuery } = vi.hoisted(() => ({
 
 vi.mock("convex/react", () => ({
   useQuery: mockUseQuery,
+  useMutation: () => vi.fn(),
 }));
 
 import { PartDetailSheet } from "@/pages/dashboard/inventory/components/PartDetailSheet";

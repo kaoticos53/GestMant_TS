@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { Eye, EyeOff, Inbox, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
@@ -39,6 +40,7 @@ export function MailSandboxViewer({ inbox }: MailSandboxViewerProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"html" | "text">("html");
   const [clearing, setClearing] = useState(false);
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!inbox) return [];
@@ -64,6 +66,7 @@ export function MailSandboxViewer({ inbox }: MailSandboxViewerProps) {
     try {
       const res = await clearInbox({});
       setExpandedId(null);
+      setConfirmClearOpen(false);
       toast.success(
         res.deleted === 0
           ? "El buzón interno ya estaba vacío."
@@ -101,7 +104,7 @@ export function MailSandboxViewer({ inbox }: MailSandboxViewerProps) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void handleClear()}
+            onClick={() => setConfirmClearOpen(true)}
             disabled={clearing}
             className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
           >
@@ -110,6 +113,18 @@ export function MailSandboxViewer({ inbox }: MailSandboxViewerProps) {
           </Button>
         )}
       </div>
+
+      {confirmClearOpen && (
+        <DestructiveConfirmDialog
+          onClose={() => setConfirmClearOpen(false)}
+          busy={clearing}
+          title="¿Vaciar el buzón interno de pruebas?"
+          description="Se borrarán todos los correos guardados en la base de datos de pruebas. Esta acción no se puede deshacer."
+          confirmLabel="Vaciar buzón"
+          busyLabel="Vaciando..."
+          onConfirm={() => handleClear()}
+        />
+      )}
 
       {inbox === undefined ? (
         <Skeleton className="mt-2 h-16 rounded-lg" />

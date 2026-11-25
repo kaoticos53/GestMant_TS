@@ -133,13 +133,20 @@ describe("MailSandboxViewer", () => {
       "Detalle en texto plano de INC-0042",
     );
 
-    // Vaciar buzón
+    // Vaciar buzón (abre confirmación y luego confirma)
     const clearBtn = Array.from(container.querySelectorAll("button")).find(
       (b) => b.textContent?.includes("Vaciar buzón"),
     );
     expect(clearBtn).toBeDefined();
     await act(async () => {
       clearBtn?.click();
+      await settle();
+    });
+    const confirmClearBtn = Array.from(
+      document.body.querySelectorAll("button"),
+    ).filter((b) => b.textContent?.trim() === "Vaciar buzón");
+    await act(async () => {
+      confirmClearBtn.at(-1)?.click();
       await settle();
     });
     expect(mockClear).toHaveBeenCalledTimes(1);

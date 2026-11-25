@@ -29,12 +29,14 @@ interface UseEditUserFormOptions {
  */
 export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
   const updateUser = useMutation(api.members.updateUser);
+  const setUserRole = useMutation(api.members.setRole);
   const catalogPositions = useQuery(api.catalogs.list, { kind: "position" }) ?? [];
   const catalogLocations =
     useQuery(api.catalogs.list, { kind: "equipmentLocation" }) ?? [];
   const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
   const [name, setName] = useState(member.name ?? "");
+  const [role, setRole] = useState(member.role ?? "");
   const [position, setPosition] = useState(member.position ?? "");
   const [location, setLocation] = useState(member.location ?? "");
   const [phone, setPhone] = useState(member.phone ?? "");
@@ -60,6 +62,10 @@ export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
         location,
         phone,
       });
+
+      if (role && role !== (member.role ?? "")) {
+        await setUserRole({ userId: member._id, role });
+      }
 
       // Registro transparente en catálogos
       const catalogTasks: Promise<unknown>[] = [];
@@ -94,6 +100,8 @@ export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
   return {
     name,
     setName,
+    role,
+    setRole,
     position,
     setPosition,
     location,

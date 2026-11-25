@@ -48,6 +48,7 @@ export function useUsersOperations({ roleLabelOf }: UseUsersOperationsOptions) {
       setDeactivating(null);
     } catch (error) {
       toast.error(getErrorMessage(error));
+      throw error;
     }
   };
 

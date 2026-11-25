@@ -4,6 +4,7 @@ import { RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorMessageWithDetails } from "@/components/ErrorMessageWithDetails";
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -53,6 +54,9 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
   const discard = useMutation(api.mailOutbox.discard);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [retryingAll, setRetryingAll] = useState(false);
+  const [discardTarget, setDiscardTarget] = useState<MailOutboxEntry | null>(
+    null,
+  );
 
   const failedCount = outbox.filter((item) => item.status === "failed").length;
 
@@ -88,6 +92,7 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
     setBusyId(outboxId);
     try {
       await discard({ outboxId });
+      setDiscardTarget(null);
       toast.success("Envío descartado de la cola.");
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -160,7 +165,7 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    onClick={() => void handleDiscard(entry._id)}
+                    onClick={() => setDiscardTarget(entry)}
                     disabled={busy}
                     className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
                   >
@@ -188,6 +193,18 @@ function MailOutboxQueue({ outbox }: { outbox: MailOutboxEntry[] }) {
           );
         })}
       </ul>
+
+      {discardTarget && (
+        <DestructiveConfirmDialog
+          onClose={() => setDiscardTarget(null)}
+          busy={busyId === discardTarget._id}
+          title="¿Descartar este envío fallido?"
+          description={`El correo «${discardTarget.subject}» para ${discardTarget.to.join(", ")} saldrá de la cola y no se volverá a reintentar.`}
+          confirmLabel="Descartar envío"
+          busyLabel="Descartando..."
+          onConfirm={() => handleDiscard(discardTarget._id)}
+        />
+      )}
     </div>
   );
 }

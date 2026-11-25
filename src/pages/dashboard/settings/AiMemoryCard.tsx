@@ -4,6 +4,7 @@ import { Brain, Database, Mail, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import {
   Card,
   CardContent,
@@ -34,6 +35,11 @@ export function AiMemoryCard() {
   const [title, setTitle] = useState("");
   const [factText, setFactText] = useState("");
   const [savingFact, setSavingFact] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: NonNullable<typeof facts>[number]["_id"];
+    title: string;
+  } | null>(null);
+  const [deletingFact, setDeletingFact] = useState(false);
 
   const rebuilding =
     startingWorkshop ||
@@ -240,13 +246,37 @@ export function AiMemoryCard() {
                     size="icon"
                     className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                     aria-label={`Eliminar hecho ${fact.title}`}
-                    onClick={() => void deleteFact({ id: fact._id })}
+                    onClick={() =>
+                      setDeleteTarget({ id: fact._id, title: fact.title })
+                    }
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
                 </li>
               ))}
             </ul>
+          )}
+
+          {deleteTarget && (
+            <DestructiveConfirmDialog
+              onClose={() => setDeleteTarget(null)}
+              busy={deletingFact}
+              title={`¿Borrar el hecho «${deleteTarget.title}»?`}
+              description="La IA dejará de recordar este conocimiento permanente. Esta acción no se puede deshacer."
+              confirmLabel="Borrar hecho"
+              onConfirm={async () => {
+                setDeletingFact(true);
+                try {
+                  await deleteFact({ id: deleteTarget.id });
+                  setDeleteTarget(null);
+                  toast.success("Hecho eliminado de la memoria IA.");
+                } catch (err) {
+                  toast.error(getErrorMessage(err));
+                } finally {
+                  setDeletingFact(false);
+                }
+              }}
+            />
           )}
         </div>
       </CardContent>

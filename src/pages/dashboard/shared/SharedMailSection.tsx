@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,7 @@ export function SharedMailSection({
   const purge = useMutation(api.mailShares.purge);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [purging, setPurging] = useState(false);
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false);
 
   if (rows === undefined || rows.length === 0) return null;
 
@@ -257,9 +259,9 @@ export function SharedMailSection({
               type="button"
               variant="outline"
               size="sm"
-              className="justify-self-start gap-1.5"
+              className="justify-self-start gap-1.5 text-destructive hover:text-destructive"
               disabled={purging}
-              onClick={() => void handlePurge(detail.id)}
+              onClick={() => setConfirmPurgeOpen(true)}
             >
               {purging ? (
                 <Loader2 className="size-3.5 animate-spin" />
@@ -271,6 +273,21 @@ export function SharedMailSection({
           )}
         </DialogContent>
       </Dialog>
+
+      {confirmPurgeOpen && detail && (
+        <DestructiveConfirmDialog
+          onClose={() => setConfirmPurgeOpen(false)}
+          busy={purging}
+          title="¿Retirar permanentemente el contenido?"
+          description="Se eliminará el cuerpo y los adjuntos de esta copia compartida dejando solo constancia de la retirada. Esta acción no se puede deshacer."
+          confirmLabel="Retirar contenido"
+          busyLabel="Retirando..."
+          onConfirm={async () => {
+            await handlePurge(detail.id);
+            setConfirmPurgeOpen(false);
+          }}
+        />
+      )}
     </section>
   );
 }

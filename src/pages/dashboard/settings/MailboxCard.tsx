@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -132,6 +133,9 @@ function MailboxEditor({
   const [busy, setBusy] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [deleteCache, setDeleteCache] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<
+    "disconnect" | "emptyCache" | "remove" | null
+  >(null);
 
   const handleSave = async () => {
     setSaving(true);
@@ -172,6 +176,7 @@ function MailboxEditor({
     setBusy(true);
     try {
       await disconnect({ deleteCache });
+      setConfirmAction(null);
       toast.success("Buzón desconectado");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -181,16 +186,10 @@ function MailboxEditor({
   };
 
   const handleEmptyCache = async () => {
-    if (
-      !window.confirm(
-        "Se borrarán los cuerpos y adjuntos descargados. Las cabeceras y el buzón remoto no se tocan.",
-      )
-    ) {
-      return;
-    }
     setClearingCache(true);
     try {
       const result = await emptyCache({});
+      setConfirmAction(null);
       toast.success(
         `Caché vaciada: ${result.messages} ${
           result.messages === 1 ? "mensaje" : "mensajes"
@@ -204,16 +203,10 @@ function MailboxEditor({
   };
 
   const handleRemove = async () => {
-    if (
-      !window.confirm(
-        "Se borrarán la cuenta y sus carpetas locales. Esta acción no se puede deshacer.",
-      )
-    ) {
-      return;
-    }
     setBusy(true);
     try {
       await remove({});
+      setConfirmAction(null);
       toast.success("Cuenta del buzón borrada");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -426,7 +419,7 @@ function MailboxEditor({
               size="sm"
               className="mt-1 w-fit"
               disabled={clearingCache || account.cacheBytes === 0}
-              onClick={() => void handleEmptyCache()}
+              onClick={() => setConfirmAction("emptyCache")}
             >
               {clearingCache ? "Vaciando..." : "Vaciar caché"}
             </Button>
@@ -452,7 +445,7 @@ function MailboxEditor({
                 type="button"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void handleDisconnect()}
+                onClick={() => setConfirmAction("disconnect")}
               >
                 Desconectar
               </Button>
@@ -460,13 +453,57 @@ function MailboxEditor({
                 type="button"
                 variant="destructive"
                 disabled={busy}
-                onClick={() => void handleRemove()}
+                onClick={() => setConfirmAction("remove")}
               >
                 Borrar cuenta
               </Button>
             </div>
           </div>
         </>
+      )}
+
+      {confirmAction && (
+        <DestructiveConfirmDialog
+          onClose={() => setConfirmAction(null)}
+          busy={busy || clearingCache}
+          title={
+            confirmAction === "emptyCache"
+              ? "¿Vaciar la caché local del buzón?"
+              : confirmAction === "disconnect"
+                ? "¿Desconectar el buzón de correo?"
+                : "¿Borrar la cuenta de correo?"
+          }
+          description={
+            confirmAction === "emptyCache"
+              ? "Se borrarán los cuerpos y adjuntos descargados localmente. Las cabeceras y el buzón remoto no se tocan."
+              : confirmAction === "disconnect"
+                ? deleteCache
+                  ? "Se cerrará la conexión y se eliminará también la caché local descargada."
+                  : "Se cerrará la conexión del buzón. Las carpetas descargadas se conservarán salvo que marques el borrado de caché."
+                : "Se borrarán la cuenta y sus carpetas locales de esta aplicación. Esta acción no se puede deshacer."
+          }
+          confirmLabel={
+            confirmAction === "emptyCache"
+              ? "Vaciar caché"
+              : confirmAction === "disconnect"
+                ? "Desconectar"
+                : "Borrar cuenta"
+          }
+          busyLabel={
+            confirmAction === "emptyCache"
+              ? "Vaciando..."
+              : confirmAction === "disconnect"
+                ? "Desconectando..."
+                : "Borrando..."
+          }
+          onConfirm={() =>
+            confirmAction === "emptyCache"
+              ? handleEmptyCache()
+              : confirmAction === "disconnect"
+                ? handleDisconnect()
+                : handleRemove()
+          }
+        />
       )}
     </section>
   );

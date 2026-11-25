@@ -17,6 +17,7 @@ import type { EquipmentDoc } from "../../types";
 interface EquipmentOperationalSectionProps {
   item: EquipmentDoc;
   canManage: boolean;
+  onRequestReturnLoan?: () => void;
 }
 
 /**
@@ -26,6 +27,7 @@ interface EquipmentOperationalSectionProps {
 export function EquipmentOperationalSection({
   item,
   canManage,
+  onRequestReturnLoan,
 }: EquipmentOperationalSectionProps) {
   const returnLoan = useMutation(api.equipment.returnLoan);
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
@@ -87,7 +89,13 @@ export function EquipmentOperationalSection({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={handleReturnLoan}
+                  onClick={() => {
+                    if (onRequestReturnLoan) {
+                      onRequestReturnLoan();
+                    } else {
+                      void handleReturnLoan();
+                    }
+                  }}
                   disabled={returning}
                   className="gap-1.5"
                 >

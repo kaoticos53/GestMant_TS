@@ -24,6 +24,7 @@ export function DeleteRoleDialog({
     <DestructiveConfirmDialog
       onClose={onCancel}
       busy={deleteBusy}
+      hideConfirm={deleting.userCount > 0}
       title={`¿Borrar el rol «${deleting.label}»?`}
       description={
         deleting.userCount > 0

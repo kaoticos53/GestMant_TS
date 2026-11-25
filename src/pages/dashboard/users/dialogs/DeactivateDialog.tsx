@@ -43,7 +43,7 @@ export function DeactivateDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -57,7 +57,11 @@ export function DeactivateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         <DialogFooter>
           <Button
