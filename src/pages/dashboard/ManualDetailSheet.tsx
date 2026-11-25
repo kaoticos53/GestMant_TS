@@ -65,11 +65,11 @@ export function ManualDetailSheet({
           <ManualFileCard manual={resolvedManual} />
           <ManualNotesCard notes={resolvedManual.notes} />
           <ManualHistoryCard manual={resolvedManual} />
+          <SharedMailSection
+            destinationType="manual"
+            destinationId={resolvedManual._id}
+          />
         </div>
-        <SharedMailSection
-          destinationType="manual"
-          destinationId={resolvedManual._id}
-        />
       </SheetContent>
     </Sheet>
   );

@@ -155,6 +155,11 @@ export function IncidentDetailSheet({
             canWork={derived.canWork}
             canAssign={canAssign}
           />
+
+          <SharedMailSection
+            destinationType="incident"
+            destinationId={resolvedIncident._id}
+          />
         </div>
 
         {/* Barra fija de acciones y modales subordinados */}
@@ -197,10 +202,6 @@ export function IncidentDetailSheet({
           createEquipmentOpen={createEquipmentOpen}
           onCloseEquipment={() => setEquipmentOpen(false)}
           onCloseCreateEquipment={() => setCreateEquipmentOpen(false)}
-        />
-        <SharedMailSection
-          destinationType="incident"
-          destinationId={resolvedIncident._id}
         />
       </SheetContent>
     </Sheet>

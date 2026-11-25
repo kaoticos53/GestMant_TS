@@ -62,6 +62,7 @@ export function MessageList({
       <ListArea
         resetKey={`${folderRemoteId}|${search}|${page}`}
         ref={attachArea}
+        maxHeightClass="min-h-0 flex-1 max-h-none"
       >
         <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
           <span className="flex size-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
@@ -113,7 +114,11 @@ export function MessageList({
   }
 
   return (
-    <ListArea resetKey={`${folderRemoteId}|${search}|${page}`} ref={attachArea}>
+    <ListArea
+      resetKey={`${folderRemoteId}|${search}|${page}`}
+      ref={attachArea}
+      maxHeightClass="min-h-0 flex-1 max-h-none"
+    >
       <ul className="divide-y divide-border/60">
         {virtual.active && virtual.paddingTop > 0 && (
           <li aria-hidden style={{ height: virtual.paddingTop }} />

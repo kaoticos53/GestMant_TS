@@ -181,6 +181,7 @@ export function MessageViewer({
           type="button"
           variant="outline"
           size="sm"
+          aria-label="Compartir correo"
           className="h-8 shrink-0 gap-1.5 px-2 text-xs"
           disabled={loading || opened === null}
           onClick={() => setSharing(true)}

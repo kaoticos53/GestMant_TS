@@ -13,6 +13,7 @@ export interface SidebarNavListProps {
   navBadges: Record<NavId, number>;
   activeTab: NavId;
   onSelectTab: (id: NavId) => void;
+  itemClassName?: string;
 }
 
 export interface SidebarFooterProps {

@@ -20,12 +20,18 @@ export type NavId =
   | "settings"
   | "profile";
 
+export type NavGroup = "operacion" | "catalogo" | "archivo" | "administracion";
+
+export type NavBadgeKind = "queue" | "count";
+
 export interface NavItem {
   id: NavId;
   label: string;
   icon: LucideIcon;
   /** Contador a mostrar en la píldora del menú (0 = sin píldora). */
   badge: number;
+  group?: NavGroup;
+  badgeKind?: NavBadgeKind;
 }
 
 /** Preferencia del menú guardada en el perfil (viene del documento `users`). */

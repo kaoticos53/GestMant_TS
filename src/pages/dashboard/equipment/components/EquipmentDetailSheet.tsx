@@ -122,6 +122,11 @@ export function EquipmentDetailSheet({
           />
 
           <EquipmentMovementsSection equipmentId={item._id} />
+
+          <SharedMailSection
+            destinationType="equipment"
+            destinationId={item._id}
+          />
         </div>
 
         {formTarget && (
@@ -140,7 +145,7 @@ export function EquipmentDetailSheet({
           onClose={() => setDeleteTarget(null)}
         />
 
-        <SheetFooter className="border-t border-border/70 bg-background/80 px-4 py-4 sm:px-6">
+        <SheetFooter className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6">
           <div className="flex w-full flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
@@ -193,10 +198,6 @@ export function EquipmentDetailSheet({
           item={item}
         />
         {children}
-        <SharedMailSection
-          destinationType="equipment"
-          destinationId={item._id}
-        />
       </SheetContent>
     </Sheet>
   );

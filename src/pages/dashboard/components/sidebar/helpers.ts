@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import type { NavBadgeKind } from "../../types";
 
 /**
  * Devuelve las clases CSS del botón de navegación en la barra lateral según si está activo.
@@ -15,11 +16,16 @@ export function getNavButtonClass(active: boolean): string {
 /**
  * Devuelve las clases CSS de la insignia/píldora con el conteo de elementos para un botón de navegación.
  */
-export function getNavPillClass(active: boolean): string {
+export function getNavPillClass(
+  active: boolean,
+  kind: NavBadgeKind = "count",
+): string {
   return cn(
-    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none tabular-nums",
     active
-      ? "bg-signal text-primary-foreground"
-      : "bg-muted text-muted-foreground",
+      ? "bg-signal text-signal-foreground"
+      : kind === "queue"
+        ? "bg-signal/15 text-signal"
+        : "bg-muted text-muted-foreground",
   );
 }

@@ -23,7 +23,21 @@ import {
 import type { DashboardStatItem } from "../components/DashboardStats";
 import type { PageHeaderAction } from "../components/PageHeader";
 import type { RequestFilterId } from "../requests/types";
-import type { NavId, NavItem } from "../types";
+import type { NavGroup, NavId, NavItem } from "../types";
+
+export const NAV_GROUP_ORDER: readonly NavGroup[] = [
+  "operacion",
+  "catalogo",
+  "archivo",
+  "administracion",
+] as const;
+
+export const NAV_GROUP_LABELS: Record<NavGroup, string> = {
+  operacion: "Operación",
+  catalogo: "Catálogo",
+  archivo: "Archivo y Correo",
+  administracion: "Administración",
+};
 
 export type WorkshopSummaryData = typeof api.dashboard.summary._returnType;
 
@@ -131,6 +145,7 @@ export function buildNavItems({
             label: "Panel y gráficos",
             icon: BarChart3,
             badge: 0,
+            group: "operacion" as const,
           },
         ]
       : []),
@@ -141,6 +156,8 @@ export function buildNavItems({
             label: "Incidencias",
             icon: Siren,
             badge: 0,
+            group: "operacion" as const,
+            badgeKind: "queue" as const,
           },
         ]
       : []),
@@ -151,6 +168,8 @@ export function buildNavItems({
             label: "Peticiones",
             icon: ClipboardList,
             badge: 0,
+            group: "operacion" as const,
+            badgeKind: "queue" as const,
           },
         ]
       : []),
@@ -161,6 +180,8 @@ export function buildNavItems({
             label: "Compras",
             icon: ShoppingCart,
             badge: 0,
+            group: "operacion" as const,
+            badgeKind: "queue" as const,
           },
         ]
       : []),
@@ -171,6 +192,8 @@ export function buildNavItems({
             label: "Repuestos",
             icon: Boxes,
             badge: 0,
+            group: "catalogo" as const,
+            badgeKind: "count" as const,
           },
         ]
       : []),
@@ -181,6 +204,8 @@ export function buildNavItems({
             label: "Equipos",
             icon: Cpu,
             badge: 0,
+            group: "catalogo" as const,
+            badgeKind: "count" as const,
           },
         ]
       : []),
@@ -191,6 +216,8 @@ export function buildNavItems({
             label: "Manuales",
             icon: BookOpen,
             badge: 0,
+            group: "catalogo" as const,
+            badgeKind: "count" as const,
           },
         ]
       : []),
@@ -201,6 +228,7 @@ export function buildNavItems({
             label: "Flujos y estados",
             icon: Workflow,
             badge: 0,
+            group: "archivo" as const,
           },
         ]
       : []),
@@ -211,6 +239,7 @@ export function buildNavItems({
             label: "Archivo",
             icon: Archive,
             badge: 0,
+            group: "archivo" as const,
           },
         ]
       : []),
@@ -221,6 +250,7 @@ export function buildNavItems({
             label: "Correo",
             icon: Mail,
             badge: 0,
+            group: "archivo" as const,
           },
         ]
       : []),
@@ -231,6 +261,7 @@ export function buildNavItems({
             label: "Auditoría de documentos",
             icon: FileClock,
             badge: 0,
+            group: "administracion" as const,
           },
         ]
       : []),
@@ -241,6 +272,7 @@ export function buildNavItems({
             label: "Usuarios",
             icon: Users,
             badge: 0,
+            group: "administracion" as const,
           },
         ]
       : []),
@@ -251,6 +283,7 @@ export function buildNavItems({
             label: "Roles y permisos",
             icon: ShieldCheck,
             badge: 0,
+            group: "administracion" as const,
           },
         ]
       : []),
@@ -264,6 +297,7 @@ export function buildNavItems({
             label: "Ajustes del taller",
             icon: SlidersHorizontal,
             badge: 0,
+            group: "administracion" as const,
           },
         ]
       : []),

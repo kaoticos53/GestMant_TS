@@ -112,7 +112,7 @@ export function MailboxView({
   const [sortBy, setSortBy] = useState<MailSortField>("date");
   const [sortDir, setSortDir] = useState<MailSortDirection>("desc");
   const [groupByConversation, setGroupByConversation] = useState(false);
-  const [mobilePane, setMobilePane] = useState<MobilePane>("folders");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("messages");
   const [selectedMessage, setSelectedMessage] = useState<MailboxHeader | null>(
     null,
   );
@@ -376,6 +376,7 @@ export function MailboxView({
                       type="button"
                       variant={groupByConversation ? "secondary" : "outline"}
                       size="sm"
+                      aria-label="Agrupar por conversaciones"
                       aria-pressed={groupByConversation}
                       className="h-9 shrink-0 gap-1.5 text-xs"
                       onClick={() => setGroupByConversation((prev) => !prev)}
@@ -388,6 +389,9 @@ export function MailboxView({
                       type="button"
                       variant="outline"
                       size="sm"
+                      aria-label={
+                        tagging ? "Etiquetando correos" : "Autoetiquetar correos"
+                      }
                       className="h-9 shrink-0 gap-1.5 text-xs"
                       disabled={tagging}
                       onClick={() => void handleAutoTag()}
@@ -423,6 +427,9 @@ export function MailboxView({
                       type="button"
                       variant="outline"
                       size="sm"
+                      aria-label={
+                        syncing ? "Sincronizando buzón" : "Sincronizar buzón"
+                      }
                       className="shrink-0 gap-2"
                       disabled={syncing}
                       onClick={() => void handleSync()}

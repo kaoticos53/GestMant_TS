@@ -192,9 +192,9 @@ export function RequestDetailSheet({
             onOpenIncident={
               onOpenIncident
                 ? (id) => {
-                    onClose();
-                    onOpenIncident(id);
-                  }
+                  onClose();
+                  onOpenIncident(id);
+                }
                 : undefined
             }
           />
@@ -240,6 +240,11 @@ export function RequestDetailSheet({
           <DeliveryTrail requestId={request._id} />
 
           <DecisionNotes request={request} />
+
+          <SharedMailSection
+            destinationType="request"
+            destinationId={request._id}
+          />
         </div>
 
         <RequestActionsFooter
@@ -266,10 +271,6 @@ export function RequestDetailSheet({
           withdrawReason={withdrawReason}
           setWithdrawReason={setWithdrawReason}
           onWithdraw={() => handleWithdraw(request, onClose)}
-        />
-        <SharedMailSection
-          destinationType="request"
-          destinationId={request._id}
         />
         <RevertApprovalDialog
           open={revertOpen}
