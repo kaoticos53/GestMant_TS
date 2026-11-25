@@ -1,4 +1,5 @@
 import { SheetFooter } from "@/components/ui/sheet";
+import { requestDelivery } from "@/lib/requestFlow";
 import {
   RequestWithdrawDialog,
   RequestWorkflowButtons,
@@ -23,6 +24,7 @@ export function RequestActionsFooter({
   resuming = false,
   onReturn,
   onCancel,
+  onRevertApproval,
   archiving,
   onArchive,
   withdrawing,
@@ -32,10 +34,12 @@ export function RequestActionsFooter({
   setWithdrawReason,
   onWithdraw,
 }: RequestActionsFooterProps) {
+  const delivery = requestDelivery(request.lines, request.status);
   const flags = computeRequestActionFlags(
     request.status,
     noReference,
     readOnly,
+    delivery.deliveredUnits,
   );
 
   return (
@@ -54,6 +58,7 @@ export function RequestActionsFooter({
           resuming={resuming}
           onReturn={onReturn}
           onCancel={onCancel}
+          onRevertApproval={onRevertApproval}
           archiving={archiving}
           onArchive={onArchive}
           withdrawing={withdrawing}

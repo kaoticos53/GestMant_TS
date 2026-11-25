@@ -181,6 +181,7 @@ stateDiagram-v2
     pendingSupplierQuote --> onHold: hold — responsable
     onHold --> heldFrom: resume — vuelve al estado del que salió
     approved --> issued: issue — responsable
+    approved --> pending: revertApproval — responsable (si no hay entregas)
     issued --> returned: returnMaterial — responsable
     pending --> cancelled: cancel — responsable
     onHold --> cancelled: cancel — responsable
@@ -224,6 +225,7 @@ Dos cosas que no son de estilo:
 | `pendingSupplierQuote` Presupuesto pendiente | `hold` Poner en espera              | `onHold` En espera                           | `decideRequests` responsable de repuestos o administrador                        |
 | `onHold` En espera                           | `resume` Reanudar                   | `heldFrom` vuelve al estado del que salió    | `decideRequests` responsable de repuestos o administrador                        |
 | `approved` Aprobada                          | `issue` Entregar material           | `issued` Entregada                           | `decideRequests` responsable de repuestos o administrador; de una en una, lo entregado se apunta por línea y la petición no se cierra hasta la última |
+| `approved` Aprobada                          | `revertApproval` Revertir aprobación | `pending` Pendiente                          | `decideRequests` responsable de repuestos o administrador; solo si no hay entregas, libera la reserva y opcionalmente ajusta el stock real a 0 |
 | `issued` Entregada                           | `returnMaterial` Devolver material  | `returned` Devuelta                          | `decideRequests` devuelve el material quien decide sobre repuestos               |
 | `pending` Pendiente                          | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` todavía no hay material comprometido                            |
 | `onHold` En espera                           | `cancel` Cancelar petición          | `cancelled` Cancelada                        | `decideRequests` una suspensión no compromete material                           |

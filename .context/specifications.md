@@ -152,6 +152,7 @@ stateDiagram-v2
   pendingSupplierQuote --> onHold : hold
   onHold --> heldFrom : resume
   approved --> issued : issue
+  approved --> pending : revertApproval
   issued --> returned : returnMaterial
   pending --> cancelled : cancel
   onHold --> cancelled : cancel
@@ -192,6 +193,7 @@ stateDiagram-v2
 | `pendingSupplierQuote` Presupuesto pendiente | `hold` Poner en espera              | `onHold` En espera                           | El responsable de repuestos                                                                 |
 | `onHold` En espera                           | `resume` Reanudar                   | `heldFrom` vuelve al estado del que salió    | El responsable de repuestos                                                                 |
 | `approved` Aprobada                          | `issue` Entregar material           | `issued` Entregada                           | El responsable, al dar el material; puede entregarse por tandas, con una cantidad por línea |
+| `approved` Aprobada                          | `revertApproval` Revertir aprobación | `pending` Pendiente                          | El responsable de repuestos si falta stock real y no hay entregas; libera la reserva y opcionalmente ajusta el stock a 0 |
 | `issued` Entregada                           | `returnMaterial` Devolver material  | `returned` Devuelta                          | El responsable de repuestos                                                                 |
 | `pending` Pendiente                          | `cancel` Cancelar petición          | `cancelled` Cancelada                        | El responsable de repuestos                                                                 |
 | `onHold` En espera                           | `cancel` Cancelar petición          | `cancelled` Cancelada                        | El responsable de repuestos; una suspensión no compromete material                          |

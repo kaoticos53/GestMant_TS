@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
+import { RevertApprovalDialog } from "../dialogs/RevertApprovalDialog";
 import {
   canEditRequest,
   isRequestSettled,
@@ -90,6 +91,8 @@ export function RequestDetailSheet({
 
   const status = STATUS_META[request.status] ?? STATUS_META.pending;
   const priority = PRIORITY_META[request.priority as Priority];
+
+  const [revertOpen, setRevertOpen] = useState(false);
 
   // Hook de ciclo de vida (archivado y retirada a papelera)
   const {
@@ -209,6 +212,7 @@ export function RequestDetailSheet({
           resuming={resuming}
           onReturn={onReturn}
           onCancel={onCancel}
+          onRevertApproval={() => setRevertOpen(true)}
           archiving={archiving}
           onArchive={() => handleArchive(request, onClose)}
           withdrawing={withdrawing}
@@ -221,6 +225,11 @@ export function RequestDetailSheet({
         <SharedMailSection
           destinationType="request"
           destinationId={request._id}
+        />
+        <RevertApprovalDialog
+          open={revertOpen}
+          onOpenChange={setRevertOpen}
+          request={resolvedRequest}
         />
       </SheetContent>
     </Sheet>

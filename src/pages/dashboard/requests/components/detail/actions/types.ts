@@ -17,6 +17,7 @@ export interface RequestActionsFooterProps {
   resuming?: boolean;
   onReturn?: () => void;
   onCancel?: () => void;
+  onRevertApproval?: () => void;
   archiving: boolean;
   onArchive: () => Promise<void>;
   withdrawing: boolean;
@@ -36,6 +37,7 @@ export interface RequestActionFlags {
   canResume: boolean;
   canReturnMaterial: boolean;
   canCancel: boolean;
+  canRevertApproval: boolean;
   canArchive: boolean;
   canWithdraw: boolean;
 }
@@ -53,6 +55,7 @@ export interface RequestWorkflowButtonsProps {
   resuming?: boolean;
   onReturn?: () => void;
   onCancel?: () => void;
+  onRevertApproval?: () => void;
   archiving: boolean;
   onArchive: () => Promise<void>;
   withdrawing: boolean;

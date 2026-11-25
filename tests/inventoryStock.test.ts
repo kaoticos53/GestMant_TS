@@ -169,4 +169,117 @@ describe("stock reservado en backend (Fase 3)", () => {
     expect(part?.stock).toBe(8);
     expect(part?.reservedStock).toBe(0);
   });
+
+  test("revertApproval devuelve la petición a pendiente y libera reserva", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const sparePartId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "REV-01",
+        name: "Sensor inductivo",
+        category: "Eléctrica",
+        unit: "ud",
+        stock: 5,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Lucía",
+      priority: "normal",
+      description: "Cambio de sensor",
+      lines: [{ sparePartId, quantity: 2 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+
+    let part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(3);
+    expect(part?.reservedStock).toBe(2);
+
+    await authed.mutation(api.partRequests.revertApproval, {
+      requestId: request._id,
+      adjustCatalogStockToZero: false,
+      note: "Se asignó por error",
+    });
+
+    const reverted = await t.run((ctx) => ctx.db.get(request._id));
+    expect(reverted?.status).toBe("pending");
+    expect(reverted?.decidedBy).toBeUndefined();
+    expect(reverted?.decidedAt).toBeUndefined();
+
+    part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(5);
+    expect(part?.reservedStock).toBe(0);
+  });
+
+  test("revertApproval con adjustCatalogStockToZero ajusta el stock real a 0 y bloquea si ya hubo entregas", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const sparePartId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "REV-02",
+        name: "Válvula solenoide",
+        category: "Neumática",
+        unit: "ud",
+        stock: 4,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Mario",
+      priority: "urgent",
+      description: "Fallo neumático",
+      lines: [{ sparePartId, quantity: 2 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+
+    await authed.mutation(api.partRequests.revertApproval, {
+      requestId: request._id,
+      adjustCatalogStockToZero: true,
+      note: "No quedan unidades reales en estantería",
+    });
+
+    const reverted = await t.run((ctx) => ctx.db.get(request._id));
+    expect(reverted?.status).toBe("pending");
+
+    const part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(0);
+    expect(part?.reservedStock).toBe(0);
+
+    const movements = await t.run((ctx) =>
+      ctx.db
+        .query("stockMovements")
+        .filter((q) => q.eq(q.field("sparePartId"), sparePartId))
+        .collect(),
+    );
+    expect(movements.map((m) => m.kind)).toContain("request_return");
+    expect(movements.map((m) => m.kind)).toContain("manual_adjust");
+
+    // Si reponemos stock, aprobamos y entregamos 1 unidad parcial, no debe dejar revertir
+    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 4 }));
+    await authed.mutation(api.partRequests.approve, {
+      requestId: request._id,
+    });
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId: request._id,
+      lines: [{ sparePartId, quantity: 1 }],
+    });
+
+    await expect(
+      authed.mutation(api.partRequests.revertApproval, {
+        requestId: request._id,
+      }),
+    ).rejects.toThrow(/entregada/i);
+  });
 });

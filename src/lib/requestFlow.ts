@@ -39,7 +39,8 @@ export type RequestAction =
   | "returnMaterial" // devuelta por el técnico
   | "cancel" // ya no se va a atender
   | "requestQuote" // esperando presupuesto externo
-  | "receiveMaterial"; // lo comprado ha entrado en el almacén
+  | "receiveMaterial" // lo comprado ha entrado en el almacén
+  | "revertApproval"; // libera reserva y vuelve a pendiente si falta stock real
 
 /** Un paso: desde qué estados se puede dar y a cuál lleva. */
 type RequestStep = {
@@ -78,6 +79,7 @@ export const REQUEST_STEPS = {
     from: ["pending", "onHold", "pendingSupplierQuote"],
     to: "materialReceived",
   },
+  revertApproval: { from: ["approved"], to: "pending" },
 } as const satisfies Record<RequestAction, RequestStep>;
 
 /** Los estados desde los que se puede editar una petición: solo mientras espera
@@ -367,6 +369,7 @@ export const REQUEST_STEP_LABELS: Record<RequestAction, string> = {
   cancel: "Cancelar petición",
   requestQuote: "Pedir presupuesto",
   receiveMaterial: "Material recibido",
+  revertApproval: "Revertir aprobación",
 };
 
 /**
@@ -418,6 +421,8 @@ const REQUEST_STEP_NEEDS: Record<RequestAction, string> = {
   cancel: "se cancela lo que todavía no tiene material comprometido",
   requestQuote: "se pide presupuesto desde pendiente o en espera",
   receiveMaterial: "el material recibido entra desde lo que aún esperaba",
+  revertApproval:
+    "se revierte una petición aprobada sin entregas para liberar la reserva",
 };
 
 /**

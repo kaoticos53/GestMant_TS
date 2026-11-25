@@ -216,6 +216,7 @@ const STAGE_OF_STEP: Record<RequestAction, RequestJourneyStageKey> = {
   requestQuote: "pending",
   receiveMaterial: "pending",
   issue: "approved",
+  revertApproval: "approved",
   returnMaterial: "issued",
 };
 

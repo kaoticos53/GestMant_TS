@@ -1,5 +1,6 @@
 import { archiveDecidedRequestsBefore } from "./archive";
 import { notifyUsers } from "./notify";
+import { syncDashboardStatsIfPresent } from "./_stats/dashboardStats";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -927,6 +928,130 @@ export const approve = mutation({
         decidedAt: now,
         ...(reason ? { decisionNote: reason } : {}),
       });
+    },
+  ),
+});
+
+/**
+ * Revierte una petición aprobada sin entregas de vuelta a `pending`, liberando
+ * el stock reservado y, opcionalmente, ajustando el stock real del catálogo a 0.
+ */
+const revertApprovalArgs = {
+  requestId: v.id("partRequests"),
+  adjustCatalogStockToZero: v.optional(v.boolean()),
+  note: v.optional(v.string()),
+};
+
+export const revertApproval = mutation({
+  args: revertApprovalArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
+      denyMessage:
+        "No tienes permisos para revertir la aprobación de peticiones. Revisa la configuración de tu rol con el administrador.",
+    },
+    revertApprovalArgs,
+    async (ctx, args, actor) => {
+      const request = await ctx.db.get(args.requestId);
+      if (!request) throw new ConvexError("La petición ya no existe.");
+      const reverted = requireRequestStep(
+        request,
+        "revertApproval",
+        (status) =>
+          `Solo se pueden revertir peticiones aprobadas (la ${request.reference} está en ${status}).`,
+      );
+
+      const delivery = requestDelivery(request.lines, request.status);
+      if (delivery.deliveredUnits > 0) {
+        throw new ConvexError(
+          `La petición ${request.reference} ya tiene ${delivery.deliveredUnits} unidad(es) entregada(s) y no puede revertirse a pendiente.`,
+        );
+      }
+
+      const now = Date.now();
+      const name = await actorName(ctx, actor._id);
+      const reason = decisionReason(args.note);
+
+      const touchedParts = new Set<Id<"spareParts">>();
+      for (const line of request.lines) {
+        const qty = line.quantity;
+        if (qty <= 0) continue;
+        const part = await ctx.db.get(line.sparePartId);
+        if (!part) continue;
+        const nextStock = part.stock + qty;
+        const nextReserved = Math.max(
+          0,
+          reservedUnits(part.reservedStock) - qty,
+        );
+        await ctx.db.patch(part._id, {
+          stock: nextStock,
+          reservedStock: nextReserved,
+          updatedAt: now,
+        });
+        await recordStockMovement(ctx, {
+          sparePartId: part._id,
+          partCode: part.code,
+          partName: part.name,
+          kind: "request_return",
+          previousStock: part.stock,
+          nextStock,
+          reference: request.reference,
+          reason: reason
+            ? `Reversión de aprobación ${request.reference}: ${reasonOneLine(reason)}`
+            : `Reversión de aprobación ${request.reference}`,
+          actorId: actor._id,
+          actorName: name,
+          createdAt: now,
+        });
+        touchedParts.add(part._id);
+      }
+
+      if (args.adjustCatalogStockToZero) {
+        for (const sparePartId of touchedParts) {
+          const part = await ctx.db.get(sparePartId);
+          if (!part || part.stock <= 0) continue;
+          await ctx.db.patch(part._id, {
+            stock: 0,
+            updatedAt: now,
+          });
+          await recordStockMovement(ctx, {
+            sparePartId: part._id,
+            partCode: part.code,
+            partName: part.name,
+            kind: "manual_adjust",
+            previousStock: part.stock,
+            nextStock: 0,
+            reference: request.reference,
+            reason: reason
+              ? `Ajuste a 0 por falta de stock real (${request.reference}): ${reasonOneLine(reason)}`
+              : `Ajuste a 0 por falta de stock real (${request.reference})`,
+            actorId: actor._id,
+            actorName: name,
+            createdAt: now,
+          });
+        }
+      }
+
+      await ctx.db.patch(args.requestId, {
+        status: reverted,
+        decidedBy: undefined,
+        decidedAt: undefined,
+        decisionNote: reason || undefined,
+      });
+
+      await recordDecision(ctx, args.requestId, name, {
+        reason: REJECTION_REASONS.STOCK_PENDING,
+        note:
+          reasonOneLine(reason) ||
+          (args.adjustCatalogStockToZero
+            ? "Aprobación revertida por falta de stock real; stock del catálogo ajustado a 0."
+            : "Aprobación revertida por falta de stock real."),
+      });
+
+      await syncDashboardStatsIfPresent(ctx);
     },
   ),
 });

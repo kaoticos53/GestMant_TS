@@ -378,6 +378,8 @@ async function montarPeticion(
       persona.sesion.mutation(api.partRequests.cancel, { requestId }),
     requestQuote: () =>
       persona.sesion.mutation(api.partRequests.requestQuote, { requestId }),
+    revertApproval: () =>
+      persona.sesion.mutation(api.partRequests.revertApproval, { requestId }),
   };
 
   return { dar: dar[action], estado };

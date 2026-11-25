@@ -27,6 +27,7 @@ export function RequestWorkflowButtons({
   resuming = false,
   onReturn,
   onCancel,
+  onRevertApproval,
   archiving,
   onArchive,
   withdrawing,
@@ -69,6 +70,20 @@ export function RequestWorkflowButtons({
           <Button type="button" className="gap-2" onClick={onIssue}>
             <PackageCheck className="size-4" />
             Entregar material
+          </Button>
+        </Can>
+      )}
+
+      {flags.canRevertApproval && onRevertApproval && (
+        <Can I="decide" this={asRequest(request)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={onRevertApproval}
+          >
+            <RotateCcw className="size-4" />
+            Falta stock / Revertir
           </Button>
         </Can>
       )}
