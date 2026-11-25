@@ -21,6 +21,7 @@ import { TrackingCard } from "./lookup/components/TrackingCard";
 export function IncidentLookup({
   className,
   initialCode,
+  onLookupCode,
 }: IncidentLookupProps) {
   const {
     typed,
@@ -32,7 +33,7 @@ export function IncidentLookup({
     confusables,
     referenceTyped,
     handleSubmit,
-  } = useIncidentLookup(initialCode);
+  } = useIncidentLookup(initialCode, onLookupCode);
 
   return (
     <div className={className}>

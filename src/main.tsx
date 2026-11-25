@@ -111,6 +111,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/reportar" element={<ReportIncident />} />
               {/* La dirección del enlace del correo: pública, sin sesión. */}
               <Route path="/seguimiento" element={<FollowIncident />} />
+              <Route path="/seguimiento/:codigo" element={<FollowIncident />} />
               <Route
                 path="/dashboard"
                 element={

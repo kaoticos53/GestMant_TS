@@ -83,6 +83,7 @@ export function DashboardSidebar({
             <GlobalSearch
               canSearchCatalog={canSearchCatalog}
               onSelect={onSearchSelect}
+              shortcutEnabled={!sidebarCollapsed}
             />
           </div>
         )}

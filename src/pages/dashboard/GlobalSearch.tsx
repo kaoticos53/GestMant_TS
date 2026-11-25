@@ -20,6 +20,7 @@ export function GlobalSearch({
   canSearchCatalog = false,
   onSelect,
   className,
+  shortcutEnabled = true,
 }: GlobalSearchProps) {
   const {
     query,
@@ -38,7 +39,7 @@ export function GlobalSearch({
     handleChangeQuery,
     handleScan,
     handleOpenScanner,
-  } = useGlobalSearch({ canSearchCatalog, onSelect });
+  } = useGlobalSearch({ canSearchCatalog, onSelect, shortcutEnabled });
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>

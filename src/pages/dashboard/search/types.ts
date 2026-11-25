@@ -57,6 +57,8 @@ export interface GlobalSearchProps {
   canSearchCatalog?: boolean;
   onSelect: (hit: SearchHit) => void;
   className?: string;
+  /** Solo la instancia visible en escritorio debe registrar el atajo Ctrl/Cmd+K. */
+  shortcutEnabled?: boolean;
 }
 
 export interface FilterSearchGroupsParams {

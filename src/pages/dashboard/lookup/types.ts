@@ -19,6 +19,8 @@ export interface IncidentLookupProps {
   className?: string;
   /** El código que trae la dirección, si viene. Se consulta al abrir. */
   initialCode?: string | null;
+  /** Notifica el código normalizado cuando se lanza una nueva búsqueda. */
+  onLookupCode?: (normalizedCode: string) => void;
 }
 
 /** Props para el formulario de búsqueda de código. */

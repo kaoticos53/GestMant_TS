@@ -8,6 +8,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { LogOut, PanelLeftOpen } from "lucide-react";
 import type React from "react";
+import { Link } from "react-router";
 import { GlobalSearch, type SearchHit } from "../GlobalSearch";
 import type { NavId, NavItem } from "../types";
 
@@ -71,6 +72,15 @@ export function DashboardHeader({
             <PanelLeftOpen className="size-4" />
             Mostrar menú
           </Button>
+          {!isGuest && (
+            <div className="max-w-md flex-1">
+              <GlobalSearch
+                canSearchCatalog={canSearchCatalog}
+                onSelect={onSearchSelect}
+                shortcutEnabled={sidebarCollapsed}
+              />
+            </div>
+          )}
           {/* Lo que vivía en el menú: avisos, mensajes y el rol en uso. */}
           <div className="flex shrink-0 items-center gap-2">
             {roleBadge}
@@ -85,7 +95,7 @@ export function DashboardHeader({
       {/* Cabecera móvil */}
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-md lg:hidden">
         <div className="flex h-16 items-center justify-between gap-3 px-4">
-          <a href="/" className="flex min-w-0 items-center gap-3">
+          <Link to="/" className="flex min-w-0 items-center gap-3">
             <img
               src={logo}
               alt="Pulso Taller"
@@ -94,7 +104,7 @@ export function DashboardHeader({
             <span className="truncate text-sm font-semibold tracking-tight">
               Pulso Taller
             </span>
-          </a>
+          </Link>
           <div className="flex shrink-0 items-center gap-2">
             <NotificationBell onOpen={onOpenNotification} />
             <MessagesCenter canSend={canSendMessages} />
@@ -157,7 +167,7 @@ export function DashboardHeader({
                 <item.icon className="size-4" />
                 {item.label}
                 {badge > 0 && (
-                  <span className={navPillClass(true)}>{badge}</span>
+                  <span className={navPillClass(active)}>{badge}</span>
                 )}
               </button>
             );
@@ -170,6 +180,7 @@ export function DashboardHeader({
             <GlobalSearch
               canSearchCatalog={canSearchCatalog}
               onSelect={onSearchSelect}
+              shortcutEnabled={false}
             />
           </div>
         )}

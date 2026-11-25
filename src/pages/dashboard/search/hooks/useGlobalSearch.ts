@@ -6,7 +6,8 @@ import { buildSearchGroupsFromResponse } from "../helpers";
 
 export function useGlobalSearch({
   onSelect,
-}: Pick<GlobalSearchProps, "canSearchCatalog" | "onSelect">) {
+  shortcutEnabled = true,
+}: Pick<GlobalSearchProps, "canSearchCatalog" | "onSelect" | "shortcutEnabled">) {
   const [engaged, setEngaged] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -33,8 +34,9 @@ export function useGlobalSearch({
     engaged && effectiveQuery ? { query: effectiveQuery } : "skip",
   );
 
-  // ⌘/Ctrl + K lleva el foco al buscador desde cualquier pantalla
+  // ⌘/Ctrl + K lleva el foco al buscador desde cualquier pantalla visible
   useEffect(() => {
+    if (!shortcutEnabled) return;
     const onShortcut = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "k") return;
       if (!event.metaKey && !event.ctrlKey) return;
@@ -46,7 +48,7 @@ export function useGlobalSearch({
     };
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
-  }, []);
+  }, [shortcutEnabled]);
 
   // Cierre al pulsar fuera
   useEffect(() => {

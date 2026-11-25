@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card";
 import logo from "@/assets/logo.svg";
 import { Home, Siren } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { IncidentLookup } from "./dashboard/IncidentLookup";
 
 /**
@@ -25,8 +25,9 @@ import { IncidentLookup } from "./dashboard/IncidentLookup";
  * código —o se quiere seguir otro caso—, el campo está ahí para escribirlo.
  */
 export default function FollowIncident() {
-  const [params] = useSearchParams();
-  const code = params.get("codigo");
+  const { codigo: paramCode } = useParams<{ codigo?: string }>();
+  const [params, setParams] = useSearchParams();
+  const code = paramCode ?? params.get("codigo") ?? params.get("code");
 
   return (
     <div className="min-h-screen bg-background">
@@ -68,7 +69,12 @@ export default function FollowIncident() {
             </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            <IncidentLookup initialCode={code} />
+            <IncidentLookup
+              initialCode={code}
+              onLookupCode={(normalized) =>
+                setParams({ codigo: normalized }, { replace: true })
+              }
+            />
 
             <p className="border-t border-border/60 pt-4 text-xs text-muted-foreground">
               ¿No tienes el código? Está en el correo de confirmación y en cada

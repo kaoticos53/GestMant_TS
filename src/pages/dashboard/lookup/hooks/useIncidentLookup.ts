@@ -12,7 +12,10 @@ import type { LookupOutcome, Tracking } from "../types";
  * Hook que gestiona el ciclo de vida de consulta pública de incidencias por código,
  * con prevención de condiciones de carrera (latest ref) y control de rate-limiting.
  */
-export function useIncidentLookup(initialCode?: string | null) {
+export function useIncidentLookup(
+  initialCode?: string | null,
+  onLookupCode?: (normalizedCode: string) => void,
+) {
   const [typed, setTyped] = useState(initialCode ?? "");
   const [asked, setAsked] = useState<string | null>(initialCode ?? null);
   const [tracking, setTracking] = useState<Tracking | null | undefined>(
@@ -51,13 +54,14 @@ export function useIncidentLookup(initialCode?: string | null) {
     async (value: string) => {
       const found = normalizePublicCode(value);
       if (found === null) return;
+      onLookupCode?.(found);
       setTracking(undefined);
       setFailure(null);
       latest.current += 1;
       const request = latest.current;
       guardar(request, await pedir(found));
     },
-    [guardar, pedir],
+    [guardar, onLookupCode, pedir],
   );
 
   const started = useRef(false);

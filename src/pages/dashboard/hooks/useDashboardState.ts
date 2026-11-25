@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -29,12 +29,31 @@ import { useDashboardSeed } from "./useDashboardSeed";
 import { useEnsureRole } from "./useEnsureRole";
 import { useSidebarPanel } from "./useSidebarPanel";
 import { useWorkAlertState } from "./useWorkAlertState";
+import type { NavId } from "../types";
+
+const VALID_NAV_IDS: ReadonlySet<string> = new Set([
+  "analytics",
+  "incidents",
+  "requests",
+  "purchasing",
+  "inventory",
+  "equipment",
+  "manuals",
+  "machines",
+  "archive",
+  "mailbox",
+  "audit",
+  "users",
+  "permissions",
+  "settings",
+  "profile",
+]);
 
 export function useDashboardState() {
   const { user, signOut } = useAuth();
   const isGuest = user?.isAnonymous === true;
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const permissions = useQuery(api.permissions.myPermissions);
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
 
@@ -70,10 +89,14 @@ export function useDashboardState() {
   const [initialTarget] = useState(() => {
     const equipment = searchParams.get("equipo")?.trim();
     const part = searchParams.get("repuesto")?.trim();
+    const tabParam = searchParams.get("tab")?.trim();
     if (equipment) {
       return { tab: "equipment" as const, equipmentSearch: equipment };
     }
     if (part) return { tab: "inventory" as const, inventorySearch: part };
+    if (tabParam && VALID_NAV_IDS.has(tabParam)) {
+      return { tab: tabParam as NavId };
+    }
     return {};
   });
   const navigation = useDashboardNavigation(can, navItems, initialTarget);
@@ -84,6 +107,41 @@ export function useDashboardState() {
     handleSearchSelect,
     openNotification,
   } = navigation;
+
+  // Sincronización bidireccional URL (?tab=…) <-> pestaña activa y scroll superior al navegar
+  const urlTab = searchParams.get("tab");
+  const prevTabRef = useRef<NavId>(activeTab);
+  const prevUrlTabRef = useRef<string | null>(urlTab);
+
+  useEffect(() => {
+    if (urlTab !== prevUrlTabRef.current) {
+      prevUrlTabRef.current = urlTab;
+      if (urlTab && VALID_NAV_IDS.has(urlTab) && urlTab !== activeTab) {
+        prevTabRef.current = urlTab as NavId;
+        goToTab(urlTab as NavId);
+      }
+      return;
+    }
+
+    if (activeTab !== prevTabRef.current) {
+      prevTabRef.current = activeTab;
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0 });
+      }
+      if (
+        urlTab !== activeTab ||
+        searchParams.has("equipo") ||
+        searchParams.has("repuesto")
+      ) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("equipo");
+        nextParams.delete("repuesto");
+        nextParams.set("tab", activeTab);
+        prevUrlTabRef.current = activeTab;
+        setSearchParams(nextParams, { replace: false });
+      }
+    }
+  }, [activeTab, goToTab, searchParams, setSearchParams, urlTab]);
 
   // Alertas de trabajo y estado de taller vacío
   const {
