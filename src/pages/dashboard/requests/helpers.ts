@@ -69,11 +69,17 @@ export function decisionLine(request: RequestDoc): string {
   const at = (value: number | undefined) =>
     value ? ` · ${formatDateTime(value)}` : "";
 
+  const partialReturnSuffix =
+    request.returnedAt !== undefined ||
+    (request.returnNote && !richDocIsEmpty(request.returnNote))
+      ? ` · Devolución parcial${at(request.returnedAt)}${reason(request.returnNote)}`
+      : "";
+
   switch (request.status) {
     case "approved":
       return `Aprobada por ${request.decidedBy ?? "el responsable"}${at(
         request.decidedAt,
-      )}${reason(request.decisionNote)}`;
+      )}${reason(request.decisionNote)}${partialReturnSuffix}`;
     case "rejected":
       return `Rechazada por ${request.decidedBy ?? "el responsable"}${reason(
         request.decisionNote,
@@ -81,7 +87,7 @@ export function decisionLine(request: RequestDoc): string {
     case "issued":
       return `Material entregado${at(request.issuedAt)}${reason(
         request.issueNote,
-      )}`;
+      )}${partialReturnSuffix}`;
     case "onHold":
       return `En espera${at(request.holdSinceAt)}${reason(request.holdNote)}`;
     case "returned":

@@ -202,7 +202,9 @@ export function ReturnMaterialDialog({
           })}
 
           <div className="grid gap-2">
-            <Label htmlFor="return-material-note">Motivo (opcional)</Label>
+            <Label htmlFor="return-material-note">
+              Motivo de la devolución (opcional)
+            </Label>
             <Textarea
               id="return-material-note"
               value={note}
@@ -212,6 +214,10 @@ export function ReturnMaterialDialog({
               maxLength={240}
               disabled={submitting}
             />
+            <p className="text-xs text-muted-foreground">
+              El detalle de unidades devueltas por artículo, su destino y este
+              motivo quedarán registrados en la ficha de la petición.
+            </p>
           </div>
         </div>
 

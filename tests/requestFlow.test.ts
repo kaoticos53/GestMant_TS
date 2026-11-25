@@ -330,8 +330,10 @@ describe("la entrega de una en una — lo que ha salido y lo que queda", () => {
       totalUnits: 10,
       deliveredUnits: 6,
       pendingUnits: 4,
+      returnedUnits: 0,
       deliveredLines: 1,
       anyDelivered: true,
+      anyReturned: false,
       complete: false,
     });
 

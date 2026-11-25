@@ -80,18 +80,28 @@ export function RequestLinesCard({
                 <p className="text-sm font-semibold tabular-nums">
                   pedido ×{line.quantity}
                 </p>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  {line.deliveredQuantity > 0
-                    ? `entregado ×${line.deliveredQuantity}${
-                        line.remainingQuantity > 0
-                          ? ` · faltan ×${line.remainingQuantity}`
-                          : ""
-                      }`
-                    : "sin entregar"}
-                </p>
+                {(line.deliveredQuantity > 0 || line.returnedQuantity === 0) && (
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    {line.deliveredQuantity > 0
+                      ? `entregado ×${line.deliveredQuantity}${
+                          line.remainingQuantity > 0
+                            ? ` · faltan ×${line.remainingQuantity}`
+                            : ""
+                        }`
+                      : "sin entregar"}
+                  </p>
+                )}
                 {line.deliveredAt !== undefined && (
                   <p className="text-xs text-muted-foreground">
                     {formatDateTime(line.deliveredAt)}
+                  </p>
+                )}
+                {line.returnedQuantity > 0 && (
+                  <p className="text-xs font-medium tabular-nums text-status-warning-foreground">
+                    devuelto ×{line.returnedQuantity}
+                    {line.returnedAt !== undefined
+                      ? ` · ${formatDateTime(line.returnedAt)}`
+                      : ""}
                   </p>
                 )}
                 {showStock && (

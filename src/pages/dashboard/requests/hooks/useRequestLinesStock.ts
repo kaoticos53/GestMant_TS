@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import {
   lineDelivered,
   lineRemaining,
+  lineReturned,
   requestDelivery,
   requestMaterialState,
 } from "@/lib/requestFlow";
@@ -15,7 +16,9 @@ export interface EnrichedRequestLine {
   quantity: number;
   deliveredQuantity: number;
   remainingQuantity: number;
+  returnedQuantity: number;
   deliveredAt?: number;
+  returnedAt?: number;
   part?: PartDoc;
   hasShortage: boolean;
 }
@@ -37,13 +40,23 @@ export function useRequestLinesStock(
     [status, delivery],
   );
 
-  // 3. Última fecha en la que se entregó material
+  // 3. Últimas fechas de entrega y devolución
   const lastDeliveredAt = useMemo(() => {
     return lines.reduce<number | null>(
       (latest, line) =>
         line.deliveredAt === undefined
           ? latest
           : Math.max(latest ?? 0, line.deliveredAt),
+      null,
+    );
+  }, [lines]);
+
+  const lastReturnedAt = useMemo(() => {
+    return lines.reduce<number | null>(
+      (latest, line) =>
+        line.returnedAt === undefined
+          ? latest
+          : Math.max(latest ?? 0, line.returnedAt),
       null,
     );
   }, [lines]);
@@ -56,6 +69,7 @@ export function useRequestLinesStock(
       const part = partById.get(line.sparePartId);
       const delivered = lineDelivered(line, status);
       const remaining = lineRemaining(line, status);
+      const returned = lineReturned(line);
       const hasShortage = remaining > 0 && (!part || part.stock < remaining);
 
       return {
@@ -66,7 +80,9 @@ export function useRequestLinesStock(
         quantity: line.quantity,
         deliveredQuantity: delivered,
         remainingQuantity: remaining,
+        returnedQuantity: returned,
         deliveredAt: line.deliveredAt,
+        returnedAt: line.returnedAt,
         part,
         hasShortage,
       };
@@ -78,6 +94,7 @@ export function useRequestLinesStock(
     delivery,
     material,
     lastDeliveredAt,
+    lastReturnedAt,
     noReference,
     enrichedLines,
   };

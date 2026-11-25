@@ -25,6 +25,7 @@ import {
   nextRequestStatus,
   planMaterialReturn,
   requestDelivery,
+  returnNote,
   type RequestAction,
 } from "../lib/requestFlow";
 import { richDocToStore } from "../lib/richDoc";
@@ -880,6 +881,13 @@ export const returnMaterial = mutation({
         }
       }
 
+      const returnedIds = new Set(plan.items.map((item) => item.sparePartId));
+      const nextLinesWithTimestamp = plan.nextLines.map((line) =>
+        returnedIds.has(line.sparePartId)
+          ? { ...line, returnedAt: now }
+          : line,
+      );
+
       if (canReturnFromIssued && plan.fullyReturned) {
         const returned = requireRequestStep(
           request,
@@ -888,7 +896,7 @@ export const returnMaterial = mutation({
             `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
         );
         await ctx.db.patch(args.requestId, {
-          lines: plan.nextLines,
+          lines: nextLinesWithTimestamp,
           status: returned,
           returnedAt: now,
           ...(reason ? { returnNote: reason } : {}),
@@ -901,21 +909,17 @@ export const returnMaterial = mutation({
         }
       } else {
         await ctx.db.patch(args.requestId, {
-          lines: plan.nextLines,
+          lines: nextLinesWithTimestamp,
+          returnedAt: now,
           ...(reason ? { returnNote: reason } : {}),
         });
       }
 
-      const summaryNote =
-        plan.damagedUnits > 0
-          ? `Devueltas ${plan.restockUnits} ud(s) al almacén y ${plan.damagedUnits} como merma/dañada.`
-          : plan.totalReturnedUnits > 0
-            ? `Devueltas ${plan.restockUnits} ud(s) al almacén.`
-            : "Material devuelto por el técnico.";
-
       await recordDecision(ctx, args.requestId, name, {
-        reason: REJECTION_REASONS.MATERIAL_RETURNED,
-        note: reasonOneLine(reason) || summaryNote,
+        reason: plan.fullyReturned
+          ? REJECTION_REASONS.MATERIAL_RETURNED
+          : REJECTION_REASONS.MATERIAL_PARTIALLY_RETURNED,
+        note: returnNote(plan.items, reasonOneLine(reason)),
       });
 
       await syncDashboardStatsIfPresent(ctx);

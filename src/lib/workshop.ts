@@ -120,6 +120,7 @@ export const REJECTION_REASON_LABELS: Record<string, string> = {
   incidentClosed: "Incidencia ya cerrada",
   requestCancelled: "Petición cancelada",
   materialReturned: "Material devuelto",
+  materialPartiallyReturned: "Material devuelto en parte",
   materialDelivered: "Material entregado",
   materialPartiallyDelivered: "Material entregado en parte",
   pendingExternalQuote: "Pendiente de presupuesto externo",

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { planMaterialReturn } from "../src/lib/requestFlow";
+import {
+  isReturnReason,
+  planMaterialReturn,
+  requestDelivery,
+  returnNote,
+} from "../src/lib/requestFlow";
 
 describe("planMaterialReturn (Sub-fase 1.1)", () => {
   const sampleLines = [
@@ -92,5 +97,50 @@ describe("planMaterialReturn (Sub-fase 1.1)", () => {
         { sparePartId: "part-999", quantity: 1, disposition: "restock" },
       ]),
     ).toThrow(/pertenece/i);
+  });
+
+  test("acumula returnedQuantity en nextLines y requestDelivery suma returnedUnits", () => {
+    const plan = planMaterialReturn(sampleLines, "issued", [
+      { sparePartId: "part-1", quantity: 2, disposition: "restock" },
+      { sparePartId: "part-2", quantity: 1, disposition: "damaged" },
+    ]);
+
+    expect(plan.nextLines[0].returnedQuantity).toBe(2);
+    expect(plan.nextLines[1].returnedQuantity).toBe(1);
+
+    const summary = requestDelivery(plan.nextLines, "issued");
+    expect(summary.returnedUnits).toBe(3);
+    expect(summary.anyReturned).toBe(true);
+    expect(summary.deliveredUnits).toBe(3);
+  });
+
+  test("isReturnReason identifica devoluciones totales y parciales, y returnNote conserva detalle y motivo", () => {
+    expect(isReturnReason("materialReturned")).toBe(true);
+    expect(isReturnReason("materialPartiallyReturned")).toBe(true);
+    expect(isReturnReason("materialDelivered")).toBe(false);
+
+    const text = returnNote(
+      [
+        {
+          sparePartId: "part-1",
+          code: "SEN-01",
+          name: "Sensor inductivo",
+          quantity: 2,
+          disposition: "restock",
+        },
+        {
+          sparePartId: "part-2",
+          code: "REL-02",
+          name: "Relé 24V",
+          quantity: 1,
+          disposition: "damaged",
+        },
+      ],
+      "Sobrante tras reparación",
+    );
+
+    expect(text).toContain("2 × SEN-01 Sensor inductivo (almacén)");
+    expect(text).toContain("1 × REL-02 Relé 24V (merma/dañada)");
+    expect(text).toContain("Motivo: Sobrante tras reparación");
   });
 });

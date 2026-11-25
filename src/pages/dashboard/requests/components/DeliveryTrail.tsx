@@ -1,22 +1,42 @@
 import { useQuery } from "convex/react";
-import { PackageCheck, ShoppingCart } from "lucide-react";
+import { PackageCheck, ShoppingCart, Undo2 } from "lucide-react";
 
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { isDeliveryReason } from "@/lib/requestFlow";
+import { isDeliveryReason, isReturnReason } from "@/lib/requestFlow";
 import { REJECTION_REASON_LABELS, formatDateTime } from "@/lib/workshop";
 
 interface TimelineEntry {
   key: string;
   at: number;
-  kind: "delivery" | "purchase";
+  kind: "delivery" | "return" | "purchase";
   actor: string;
   title: string;
   detail?: string;
 }
 
+function timelineHeading(
+  hasDeliveries: boolean,
+  hasReturns: boolean,
+  hasPurchases: boolean,
+): string {
+  const parts: string[] = [];
+  if (hasDeliveries) parts.push("entregas");
+  if (hasReturns) parts.push("devoluciones");
+  if (hasPurchases) parts.push("compras");
+
+  if (parts.length === 3) return "Entregas, devoluciones y compras";
+  if (parts.length === 2) {
+    const first = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    return `${first} y ${parts[1]}`;
+  }
+  if (hasReturns) return "Devoluciones del material";
+  if (hasPurchases) return "Historial de compras";
+  return "Entregas del material";
+}
+
 /**
- * La constancia cronológica de las entregas y los hitos de compra de una petición.
+ * Constancia cronológica de entregas, devoluciones e hitos de compra de una petición.
  */
 export function DeliveryTrail({
   requestId,
@@ -37,6 +57,20 @@ export function DeliveryTrail({
         row.decision?.reason !== undefined
           ? (REJECTION_REASON_LABELS[row.decision.reason] ?? "Entrega")
           : "Entrega",
+      detail: row.decision?.note,
+    }));
+
+  const devoluciones: TimelineEntry[] = (trail ?? [])
+    .filter((row) => isReturnReason(row.decision?.reason))
+    .map((row) => ({
+      key: `return-${row._id}`,
+      at: row.at,
+      kind: "return",
+      actor: row.by,
+      title:
+        row.decision?.reason !== undefined
+          ? (REJECTION_REASON_LABELS[row.decision.reason] ?? "Devolución")
+          : "Devolución",
       detail: row.decision?.note,
     }));
 
@@ -80,15 +114,16 @@ export function DeliveryTrail({
     });
   }
 
-  const entries = [...entregas, ...purchaseEntries].sort((a, b) => a.at - b.at);
+  const entries = [...entregas, ...devoluciones, ...purchaseEntries].sort(
+    (a, b) => a.at - b.at,
+  );
   if (entries.length === 0) return null;
 
-  const heading =
-    purchaseEntries.length > 0 && entregas.length > 0
-      ? "Entregas y compras"
-      : purchaseEntries.length > 0
-        ? "Historial de compras"
-        : "Entregas del material";
+  const heading = timelineHeading(
+    entregas.length > 0,
+    devoluciones.length > 0,
+    purchaseEntries.length > 0,
+  );
 
   return (
     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
@@ -105,6 +140,9 @@ export function DeliveryTrail({
             <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
               {entry.kind === "purchase" && (
                 <ShoppingCart className="inline size-3.5 text-muted-foreground" />
+              )}
+              {entry.kind === "return" && (
+                <Undo2 className="inline size-3.5 text-status-warning-foreground" />
               )}
               <span className="font-medium">{entry.actor}</span>
               <span className="text-xs text-muted-foreground">

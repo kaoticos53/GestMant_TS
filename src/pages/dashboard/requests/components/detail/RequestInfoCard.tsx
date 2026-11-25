@@ -2,6 +2,7 @@ import { DetailTitleButton } from "@/components/DetailTitleButton";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { RequestDelivery } from "@/lib/requestFlow";
 import { formatDateTime } from "@/lib/workshop";
+import type { RequestDoc } from "../../types";
 
 export interface RequestInfoCardProps {
   requesterName: string;
@@ -11,6 +12,9 @@ export interface RequestInfoCardProps {
   decidedAt?: number;
   decidedBy?: string;
   issuedAt?: number;
+  status?: RequestDoc["status"];
+  returnedAt?: number;
+  lastReturnedAt?: number | null;
   delivery: RequestDelivery;
   lastDeliveredAt: number | null;
   incidentId?: Id<"incidents">;
@@ -25,6 +29,9 @@ export function RequestInfoCard({
   decidedAt,
   decidedBy,
   issuedAt,
+  status,
+  returnedAt,
+  lastReturnedAt = null,
   delivery,
   lastDeliveredAt,
   incidentId,
@@ -39,6 +46,23 @@ export function RequestInfoCard({
             : ` · última el ${formatDateTime(lastDeliveredAt)}`
         }`
       : "—";
+
+  const effectiveReturnedAt = returnedAt ?? lastReturnedAt ?? undefined;
+  const hasReturn =
+    status === "returned" ||
+    effectiveReturnedAt !== undefined ||
+    delivery.anyReturned;
+
+  const returnValue =
+    status === "returned"
+      ? `Total${delivery.returnedUnits > 0 ? ` (${delivery.returnedUnits} ud)` : ""}${
+          effectiveReturnedAt ? ` · ${formatDateTime(effectiveReturnedAt)}` : ""
+        }`
+      : `Parcial${
+          delivery.returnedUnits > 0
+            ? ` (${delivery.returnedUnits} de ${delivery.totalUnits} ud)`
+            : ""
+        }${effectiveReturnedAt ? ` · ${formatDateTime(effectiveReturnedAt)}` : ""}`;
 
   const details: { label: string; value: string }[] = [
     { label: "Solicitante", value: requesterName },
@@ -55,6 +79,7 @@ export function RequestInfoCard({
       label: "Entrega",
       value: deliveryValue,
     },
+    ...(hasReturn ? [{ label: "Devolución", value: returnValue }] : []),
   ];
 
   return (

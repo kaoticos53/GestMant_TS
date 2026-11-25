@@ -211,6 +211,8 @@ export interface RequestLineProgress {
   quantity: number;
   /** Lo entregado de esta línea, si se ha apuntado. Sin apuntar, se lee abajo. */
   deliveredQuantity?: number;
+  /** Lo devuelto acumulado de esta línea. */
+  returnedQuantity?: number;
 }
 
 /**
@@ -239,6 +241,11 @@ export function lineRemaining(
   return Math.max(0, line.quantity - lineDelivered(line, status));
 }
 
+/** Unidades devueltas acumuladas de una línea. */
+export function lineReturned(line: RequestLineProgress): number {
+  return Math.max(0, line.returnedQuantity ?? 0);
+}
+
 /** El material de una petición, contado por líneas y por unidades. */
 export interface RequestDelivery {
   /** Líneas que tiene la petición. */
@@ -249,10 +256,14 @@ export interface RequestDelivery {
   deliveredUnits: number;
   /** Unidades que faltan por entregar. */
   pendingUnits: number;
+  /** Unidades devueltas acumuladas tras la entrega. */
+  returnedUnits: number;
   /** Líneas entregadas completas. */
   deliveredLines: number;
   /** ¿Ha salido algo ya? Es lo que distingue «parcial» de «sin entregar». */
   anyDelivered: boolean;
+  /** ¿Consta alguna devolución en las líneas? */
+  anyReturned: boolean;
   /** ¿Está todo lo pedido en manos del técnico? */
   complete: boolean;
 }
@@ -272,11 +283,13 @@ export function requestDelivery(
 ): RequestDelivery {
   let totalUnits = 0;
   let deliveredUnits = 0;
+  let returnedUnits = 0;
   let deliveredLines = 0;
   for (const line of lines) {
     const delivered = lineDelivered(line, status);
     totalUnits += line.quantity;
     deliveredUnits += delivered;
+    returnedUnits += lineReturned(line);
     if (line.quantity > 0 && delivered >= line.quantity) deliveredLines += 1;
   }
   return {
@@ -284,8 +297,10 @@ export function requestDelivery(
     totalUnits,
     deliveredUnits,
     pendingUnits: Math.max(0, totalUnits - deliveredUnits),
+    returnedUnits,
     deliveredLines,
     anyDelivered: deliveredUnits > 0,
+    anyReturned: returnedUnits > 0,
     complete: totalUnits > 0 && deliveredUnits >= totalUnits,
   };
 }
@@ -323,6 +338,39 @@ export const DELIVERY_REASONS = [
 /** ¿Esta constancia es una entrega de material? */
 export function isDeliveryReason(reason: string | undefined): boolean {
   return DELIVERY_REASONS.some((delivery) => delivery === reason);
+}
+
+/** Motivos con los que una devolución deja constancia en la petición. */
+export const RETURN_REASONS = [
+  "materialReturned",
+  "materialPartiallyReturned",
+] as const;
+
+/** ¿Esta constancia es una devolución de material? */
+export function isReturnReason(reason: string | undefined): boolean {
+  return RETURN_REASONS.some((ret) => ret === reason);
+}
+
+/** Formatea artículos devueltos, su destino y el motivo para la constancia. */
+export function returnNote(
+  items: readonly PlannedReturnItem<string>[],
+  userReason?: string,
+): string {
+  const detail = items
+    .map(
+      (item) =>
+        `${item.quantity} × ${item.code} ${item.name} (${
+          item.disposition === "restock" ? "almacén" : "merma/dañada"
+        })`,
+    )
+    .join(" · ");
+  const trimmedReason = userReason?.trim();
+  if (detail && trimmedReason) {
+    return `${detail} — Motivo: ${trimmedReason}`;
+  }
+  if (detail) return detail;
+  if (trimmedReason) return trimmedReason;
+  return "Material devuelto por el técnico.";
 }
 
 /**
@@ -521,6 +569,7 @@ export interface MaterialReturnPlan<
     name: string;
     quantity: number;
     deliveredQuantity?: number;
+    returnedQuantity?: number;
   },
 > {
   items: PlannedReturnItem<T["sparePartId"]>[];
@@ -544,6 +593,7 @@ export function planMaterialReturn<
     name: string;
     quantity: number;
     deliveredQuantity?: number;
+    returnedQuantity?: number;
   },
 >(
   lines: readonly T[],
@@ -611,13 +661,19 @@ export function planMaterialReturn<
     const prevDelivered = lineDelivered(line, status);
     const returned = returnedByKey.get(line.sparePartId) ?? 0;
     const nextDelivered = Math.max(0, prevDelivered - returned);
+    const nextReturned = Math.max(0, (line.returnedQuantity ?? 0) + returned);
     remainingDeliveredUnits += nextDelivered;
-    if (returned === 0 && line.deliveredQuantity === undefined) {
+    if (
+      returned === 0 &&
+      line.deliveredQuantity === undefined &&
+      line.returnedQuantity === undefined
+    ) {
       return line;
     }
     return {
       ...line,
       deliveredQuantity: nextDelivered,
+      ...(returned > 0 ? { returnedQuantity: nextReturned } : {}),
     };
   });
 

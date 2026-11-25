@@ -419,6 +419,19 @@ describe("stock reservado en backend (Fase 3)", () => {
 
     const returned = await t.run((ctx) => ctx.db.get(request._id));
     expect(returned?.status).toBe("returned");
+    expect(returned?.returnedAt).toBeTypeOf("number");
+    expect(returned?.returnNote).toBe("No fue necesario montarlo");
+    expect(returned?.lines[0].returnedQuantity).toBe(3);
+    expect(returned?.lines[0].returnedAt).toBeTypeOf("number");
+
+    const decisions = await authed.query(api.partRequests.decisions, {
+      requestId: request._id,
+    });
+    const returnDecision = decisions.find(
+      (d) => d.decision?.reason === "materialReturned",
+    );
+    expect(returnDecision?.decision?.note).toContain("3 × RET-01");
+    expect(returnDecision?.decision?.note).toContain("No fue necesario montarlo");
 
     part = await t.run((ctx) => ctx.db.get(sparePartId));
     expect(part?.stock).toBe(6);
@@ -492,8 +505,26 @@ describe("stock reservado en backend (Fase 3)", () => {
 
     const updated = await t.run((ctx) => ctx.db.get(request._id));
     expect(updated?.status).toBe("approved");
+    expect(updated?.returnedAt).toBeTypeOf("number");
+    expect(updated?.returnNote).toBe("Sobran 2 fusibles y el display llegó roto");
     expect(updated?.lines[0].deliveredQuantity).toBe(1);
+    expect(updated?.lines[0].returnedQuantity).toBe(2);
+    expect(updated?.lines[0].returnedAt).toBeTypeOf("number");
     expect(updated?.lines[1].deliveredQuantity).toBe(0);
+    expect(updated?.lines[1].returnedQuantity).toBe(1);
+    expect(updated?.lines[1].returnedAt).toBeTypeOf("number");
+
+    const decisions = await authed.query(api.partRequests.decisions, {
+      requestId: request._id,
+    });
+    const partialDecision = decisions.find(
+      (d) => d.decision?.reason === "materialPartiallyReturned",
+    );
+    expect(partialDecision?.decision?.note).toContain("2 × RET-02");
+    expect(partialDecision?.decision?.note).toContain("merma/dañada");
+    expect(partialDecision?.decision?.note).toContain(
+      "Sobran 2 fusibles y el display llegó roto",
+    );
 
     const partOk = await t.run((ctx) => ctx.db.get(partOkId));
     expect(partOk?.stock).toBe(8); // 10 - 4 + 2

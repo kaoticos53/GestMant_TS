@@ -152,6 +152,9 @@ export const requestLineValidator = v.object({
   // Cuándo salió la última unidad de esta línea, para poder contar la entrega
   // parcial sin abrir el histórico de la petición.
   deliveredAt: v.optional(v.number()),
+  // Unidades devueltas acumuladas de esta línea y fecha de la última devolución.
+  returnedQuantity: v.optional(v.number()),
+  returnedAt: v.optional(v.number()),
 });
 export type RequestLine = Infer<typeof requestLineValidator>;
 
@@ -168,6 +171,7 @@ export const REJECTION_REASONS = {
   INCIDENT_CLOSED: "incidentClosed",
   REQUEST_CANCELLED: "requestCancelled",
   MATERIAL_RETURNED: "materialReturned",
+  MATERIAL_PARTIALLY_RETURNED: "materialPartiallyReturned",
   // La entrega también deja constancia: quién sacó el material y qué salió en
   // esa tanda. Completa cuando salió lo último que faltaba, parcial cuando la
   // petición sigue esperando al resto.

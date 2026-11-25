@@ -121,8 +121,14 @@ export function RequestDetailSheet({
   } = useRequestLifecycle();
 
   // Hook de líneas de repuesto y control de stock memoizado
-  const { delivery, material, lastDeliveredAt, noReference, enrichedLines } =
-    useRequestLinesStock(request.lines, request.status, parts);
+  const {
+    delivery,
+    material,
+    lastDeliveredAt,
+    lastReturnedAt,
+    noReference,
+    enrichedLines,
+  } = useRequestLinesStock(request.lines, request.status, parts);
 
   // Recorrido de la petición y pasos sugeridos
   const stages = useMemo(
@@ -186,6 +192,9 @@ export function RequestDetailSheet({
             decidedAt={request.decidedAt}
             decidedBy={request.decidedBy}
             issuedAt={request.issuedAt}
+            status={request.status}
+            returnedAt={request.returnedAt}
+            lastReturnedAt={lastReturnedAt}
             delivery={delivery}
             lastDeliveredAt={lastDeliveredAt}
             incidentId={resolvedRequest.incidentId}
