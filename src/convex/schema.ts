@@ -1010,6 +1010,9 @@ const schema = defineSchema({
     note: v.optional(v.string()),
     receivedBy: v.string(),
     receivedAt: v.number(),
+    reversedAt: v.optional(v.number()),
+    reversedBy: v.optional(v.string()),
+    reversalNote: v.optional(v.string()),
   })
     .index("by_order", ["orderId"])
     .index("by_receivedAt", ["receivedAt"]),

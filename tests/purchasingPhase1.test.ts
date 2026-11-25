@@ -84,4 +84,106 @@ describe("Compras Fase 1 (Sub-fase 1.2 y 1.3)", () => {
     part = await t.run((ctx) => ctx.db.get(sparePartId));
     expect(part?.stock).toBe(2);
   });
+
+  test("reverseReception revierte entrada en almacén, reabre OC y PC, y valida stock disponible", async () => {
+    const { t, authed } = await authedPurchasingTest();
+    const now = Date.now();
+    const sparePartId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "COM-02",
+        name: "Ventilador axial 24V",
+        category: "Refrigeración",
+        unit: "ud",
+        stock: 0,
+        minStock: 2,
+        supplier: "RS",
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Carlos",
+      priority: "normal",
+      description: "Ventilación armario",
+      lines: [{ sparePartId, quantity: 4 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: request._id,
+    });
+    const prList = await authed.query(api.purchasing.listPurchaseRequests, {});
+    const pr = prList.requests[0];
+
+    const { orderId } = await authed.mutation(api.purchasing.createOrder, {
+      purchaseRequestIds: [pr._id],
+    });
+    const storageId = await t.run((ctx) =>
+      ctx.storage.store(new Blob(["albaran"], { type: "application/pdf" })),
+    );
+
+    await authed.mutation(api.purchasing.receive, {
+      orderId,
+      items: [{ purchaseRequestId: pr._id, quantity: 4 }],
+      deliveryNote: {
+        storageId,
+        name: "albaran-completo.pdf",
+        kind: "document",
+      },
+    });
+
+    const receptions = await authed.query(api.purchasing.listReceptions, {});
+    expect(receptions).toHaveLength(1);
+    const receptionId = receptions[0]._id;
+
+    let part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(4);
+    let order = await t.run((ctx) => ctx.db.get(orderId));
+    expect(order?.status).toBe("completed");
+    let updatedPr = await t.run((ctx) => ctx.db.get(pr._id));
+    expect(updatedPr?.status).toBe("received");
+
+    // Si el stock actual es menor que lo recibido (ej. ya se consumió parte), rechaza
+    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 2 }));
+    await expect(
+      authed.mutation(api.purchasing.reverseReception, {
+        receptionId,
+        note: "Material defectuoso",
+      }),
+    ).rejects.toThrow(/stock disponible suficiente/i);
+
+    // Restauramos stock a 4 y revertimos
+    await t.run((ctx) => ctx.db.patch(sparePartId, { stock: 4 }));
+    await authed.mutation(api.purchasing.reverseReception, {
+      receptionId,
+      note: "Material llegado defectuoso (DOA)",
+    });
+
+    part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(0);
+    order = await t.run((ctx) => ctx.db.get(orderId));
+    expect(order?.status).toBe("pending");
+    expect(order?.lines[0].receivedQuantity).toBe(0);
+    updatedPr = await t.run((ctx) => ctx.db.get(pr._id));
+    expect(updatedPr?.status).toBe("ordered");
+
+    const updatedRec = await t.run((ctx) => ctx.db.get(receptionId));
+    expect(updatedRec?.reversedAt).toBeDefined();
+
+    const movements = await t.run((ctx) =>
+      ctx.db
+        .query("stockMovements")
+        .filter((q) => q.eq(q.field("sparePartId"), sparePartId))
+        .collect(),
+    );
+    expect(movements.map((m) => m.kind)).toContain("supplier_return");
+
+    // No permite revertir dos veces
+    await expect(
+      authed.mutation(api.purchasing.reverseReception, {
+        receptionId,
+        note: "Segundo intento",
+      }),
+    ).rejects.toThrow(/ya fue revertida/i);
+  });
 });

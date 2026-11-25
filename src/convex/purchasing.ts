@@ -4,6 +4,8 @@ import { mutation, type MutationCtx } from "./_generated/server";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { notifyUsers } from "./notify";
 import { freeReference } from "./references";
+import { recordStockMovement } from "./_inventory/movements";
+import { syncDashboardStatsIfPresent } from "./_stats/dashboardStats";
 import {
   canAdvancePurchaseOrder,
   isPurchaseOrderClosed,
@@ -12,6 +14,7 @@ import {
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
   planOrderCancellation,
+  planReceptionReversal,
 } from "../lib/purchaseFlow";
 import { canBuyForRequest } from "../lib/requestFlow";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_REQUEST_STATUSES } from "./schema";
@@ -637,6 +640,127 @@ export const receive = mutation({
         received,
         materialReceived,
       };
+    },
+  ),
+});
+
+/**
+ * Revierte una recepción errónea o devuelve el material al proveedor: descuenta
+ * del almacén (`supplier_return`), reabre las líneas en su orden (`OC-...`) y
+ * devuelve las peticiones de compra afectadas a `ordered`.
+ */
+const reverseReceptionArgs = {
+  receptionId: v.id("receptions"),
+  note: v.string(),
+};
+
+export const reverseReception = mutation({
+  args: reverseReceptionArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
+      denyMessage:
+        "No tienes permisos para revertir recepciones de compra. Revisa la configuración de tu rol con el administrador.",
+    },
+    reverseReceptionArgs,
+    async (ctx, args, actor) => {
+      const reception = await ctx.db.get(args.receptionId);
+      if (!reception) throw new ConvexError("La recepción ya no existe.");
+      if (reception.reversedAt !== undefined) {
+        throw new ConvexError("Esta recepción ya fue revertida anteriormente.");
+      }
+
+      const note = args.note.trim();
+      if (!note) {
+        throw new ConvexError(
+          "Indica el motivo de la reversión o devolución al proveedor.",
+        );
+      }
+
+      const order = await ctx.db.get(reception.orderId);
+      if (!order) {
+        throw new ConvexError("La orden de compra asociada ya no existe.");
+      }
+      if (order.status === PURCHASE_ORDER_STATUSES.CANCELLED) {
+        throw new ConvexError(
+          `La orden ${order.reference} ya está anulada: no se puede revertir una recepción sobre ella.`,
+        );
+      }
+
+      const partsToDeduct: Array<{
+        part: Doc<"spareParts">;
+        quantity: number;
+      }> = [];
+      for (const line of reception.lines) {
+        if (line.quantity <= 0) continue;
+        const part = await ctx.db.get(line.sparePartId);
+        if (!part) {
+          throw new ConvexError(
+            `El repuesto ${line.code} ya no está en el catálogo: no se puede revertir la recepción.`,
+          );
+        }
+        if (part.stock < line.quantity) {
+          throw new ConvexError(
+            `No hay stock disponible suficiente de ${part.code} (${part.name}) para revertir esta recepción: hay ${part.stock} ${part.unit} y la recepción fue de ${line.quantity}. Regulariza o libera reservas primero.`,
+          );
+        }
+        partsToDeduct.push({ part, quantity: line.quantity });
+      }
+
+      const now = Date.now();
+      const name = await actorName(ctx, actor._id);
+      for (const { part, quantity } of partsToDeduct) {
+        const nextStock = part.stock - quantity;
+        await ctx.db.patch(part._id, {
+          stock: nextStock,
+          updatedAt: now,
+        });
+        await recordStockMovement(ctx, {
+          sparePartId: part._id,
+          partCode: part.code,
+          partName: part.name,
+          kind: "supplier_return",
+          previousStock: part.stock,
+          nextStock,
+          reference: reception.orderReference,
+          reason: `Reversión recepción / devolución a proveedor (${reception.orderReference}): ${note}`,
+          actorId: actor._id,
+          actorName: name,
+          createdAt: now,
+        });
+      }
+
+      const reversal = planReceptionReversal(order.lines, reception.lines);
+      await ctx.db.patch(order._id, {
+        lines: reversal.nextLines,
+        status: reversal.nextOrderStatus,
+        completedAt:
+          reversal.nextOrderStatus === PURCHASE_ORDER_STATUSES.COMPLETED
+            ? order.completedAt
+            : undefined,
+        updatedAt: now,
+      });
+
+      for (const purchaseRequestId of reversal.reopenPurchaseRequestIds) {
+        const row = await ctx.db.get(purchaseRequestId);
+        if (!row || row.status !== PURCHASE_REQUEST_STATUSES.RECEIVED) continue;
+        await ctx.db.patch(row._id, {
+          status: PURCHASE_REQUEST_STATUSES.ORDERED,
+          receivedAt: undefined,
+        });
+      }
+
+      await ctx.db.patch(reception._id, {
+        reversedAt: now,
+        reversedBy: name,
+        reversalNote: note,
+      });
+
+      await syncDashboardStatsIfPresent(ctx);
+      return { orderStatus: reversal.nextOrderStatus };
     },
   ),
 });

@@ -208,6 +208,82 @@ export function purchaseOrderStatusAfterReceiving(
   return everything ? "completed" : "partial";
 }
 
+/**
+ * El estado de una orden tras revertir una recepción: `completed` si aún sigue
+ * cubierta entera, `partial` si conserva alguna unidad recibida y `pending` si
+ * vuelve a cero.
+ */
+export function purchaseOrderStatusAfterReversal(
+  lines: readonly PurchaseLineProgress[],
+): PurchaseOrderStatus {
+  if (
+    lines.length > 0 &&
+    lines.every((line) => line.receivedQuantity >= line.quantity)
+  ) {
+    return "completed";
+  }
+  if (lines.some((line) => line.receivedQuantity > 0)) {
+    return "partial";
+  }
+  return "pending";
+}
+
+export interface ReceptionReversalPlan<
+  T extends PurchaseLineProgress & {
+    purchaseRequestId: string;
+    sparePartId: string;
+  },
+> {
+  nextLines: T[];
+  nextOrderStatus: PurchaseOrderStatus;
+  reopenPurchaseRequestIds: T["purchaseRequestId"][];
+}
+
+/**
+ * Calcula las líneas actualizadas, el nuevo estado de la orden y las
+ * peticiones de compra que dejan de estar completas al revertir una recepción.
+ */
+export function planReceptionReversal<
+  T extends PurchaseLineProgress & {
+    purchaseRequestId: string;
+    sparePartId: string;
+  },
+>(
+  orderLines: readonly T[],
+  receptionLines: readonly { sparePartId: string; quantity: number }[],
+): ReceptionReversalPlan<T> {
+  const pendingToSubtract = new Map<string, number>();
+  for (const item of receptionLines) {
+    if (item.quantity <= 0) continue;
+    pendingToSubtract.set(
+      item.sparePartId,
+      (pendingToSubtract.get(item.sparePartId) ?? 0) + item.quantity,
+    );
+  }
+
+  const reopenPurchaseRequestIds: T["purchaseRequestId"][] = [];
+  const nextLines = orderLines.map((line) => {
+    const toSubtract = pendingToSubtract.get(line.sparePartId) ?? 0;
+    if (toSubtract <= 0 || line.receivedQuantity <= 0) return line;
+    const deducted = Math.min(line.receivedQuantity, toSubtract);
+    pendingToSubtract.set(line.sparePartId, toSubtract - deducted);
+    const nextReceived = line.receivedQuantity - deducted;
+    if (nextReceived < line.quantity) {
+      reopenPurchaseRequestIds.push(line.purchaseRequestId);
+    }
+    return {
+      ...line,
+      receivedQuantity: nextReceived,
+    };
+  });
+
+  return {
+    nextLines,
+    nextOrderStatus: purchaseOrderStatusAfterReversal(nextLines),
+    reopenPurchaseRequestIds,
+  };
+}
+
 /** Unidades que faltan por recibir en una línea de orden de compra. */
 export function purchaseOrderLinePending(
   line: PurchaseLineProgress,

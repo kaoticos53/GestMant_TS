@@ -71,7 +71,9 @@ export function PurchasingView({
           initialOrderId={initialOrderId}
         />
       )}
-      {section === "movements" && <MovementsSection receptions={receptions} />}
+      {section === "movements" && (
+        <MovementsSection receptions={receptions} canManage={canManage} />
+      )}
       {section === "history" && (
         <HistorySection orders={orders} receptions={receptions} />
       )}

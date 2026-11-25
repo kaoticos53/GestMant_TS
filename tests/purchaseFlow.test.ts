@@ -14,8 +14,10 @@ import {
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
   planOrderCancellation,
+  planReceptionReversal,
   purchaseOrderLinePending,
   purchaseOrderStatusAfterReceiving,
+  purchaseOrderStatusAfterReversal,
   purchaseOrderStepBlocker,
   purchaseRequestReceivedStatus,
   type PurchaseOrderAction,
@@ -251,5 +253,46 @@ describe("planOrderCancellation (Sub-fase 1.2)", () => {
       { purchaseRequestId: "pc-2", requeue: true, remainingQuantity: 3 },
       { purchaseRequestId: "pc-3", requeue: false, remainingQuantity: 0 },
     ]);
+  });
+});
+
+describe("planReceptionReversal (Sub-fase 1.3)", () => {
+  test("descuenta receivedQuantity, recalcula estado de OC y detecta PC a reabrir", () => {
+    expect(
+      purchaseOrderStatusAfterReversal([
+        { quantity: 4, receivedQuantity: 0 },
+        { quantity: 2, receivedQuantity: 0 },
+      ]),
+    ).toBe("pending");
+
+    expect(
+      purchaseOrderStatusAfterReversal([
+        { quantity: 4, receivedQuantity: 2 },
+        { quantity: 2, receivedQuantity: 0 },
+      ]),
+    ).toBe("partial");
+
+    const plan = planReceptionReversal(
+      [
+        {
+          purchaseRequestId: "pc-1",
+          sparePartId: "sp-1",
+          quantity: 4,
+          receivedQuantity: 4,
+        },
+        {
+          purchaseRequestId: "pc-2",
+          sparePartId: "sp-2",
+          quantity: 2,
+          receivedQuantity: 2,
+        },
+      ],
+      [{ sparePartId: "sp-1", quantity: 4 }],
+    );
+
+    expect(plan.nextOrderStatus).toBe("partial");
+    expect(plan.nextLines[0].receivedQuantity).toBe(0);
+    expect(plan.nextLines[1].receivedQuantity).toBe(2);
+    expect(plan.reopenPurchaseRequestIds).toEqual(["pc-1"]);
   });
 });
