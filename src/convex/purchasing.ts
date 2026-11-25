@@ -11,6 +11,7 @@ import {
   isPurchaseRequestClosed,
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
+  planOrderCancellation,
 } from "../lib/purchaseFlow";
 import { canBuyForRequest } from "../lib/requestFlow";
 import { PURCHASE_ORDER_STATUSES, PURCHASE_REQUEST_STATUSES } from "./schema";
@@ -678,17 +679,29 @@ export const cancelOrder = mutation({
       }
 
       let returned = 0;
-      for (const line of order.lines) {
-        const row = await ctx.db.get(line.purchaseRequestId);
+      const cancellationPlan = planOrderCancellation(order.lines);
+      for (const item of cancellationPlan) {
+        if (!item.requeue) continue;
+        const row = await ctx.db.get(item.purchaseRequestId);
         if (!row) continue;
-        // La vuelta a la cola: solo las que estaban dentro de la orden —lo que ya
-        // había llegado no se devuelve solo—.
+        // La vuelta a la cola: solo las que estaban dentro de la orden y con
+        // las unidades realmente pendientes tras recepciones parciales.
         const pending = nextPurchaseRequestStatus(row.status, "unorder");
         if (pending === null) continue;
+        const partialNote =
+          item.remainingQuantity < row.quantity
+            ? `Resto pendiente tras anulación parcial de ${order.reference} (${row.quantity - item.remainingQuantity} ya recibidas).`
+            : undefined;
         await ctx.db.patch(row._id, {
           status: pending,
+          quantity: item.remainingQuantity,
           orderId: undefined,
           orderedAt: undefined,
+          ...(partialNote
+            ? {
+                notes: row.notes ? `${row.notes}\n${partialNote}` : partialNote,
+              }
+            : {}),
         });
         returned += 1;
       }

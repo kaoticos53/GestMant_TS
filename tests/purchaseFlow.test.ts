@@ -13,6 +13,8 @@ import {
   isPurchaseRequestClosed,
   isPurchaseRequestUntreated,
   nextPurchaseRequestStatus,
+  planOrderCancellation,
+  purchaseOrderLinePending,
   purchaseOrderStatusAfterReceiving,
   purchaseOrderStepBlocker,
   purchaseRequestReceivedStatus,
@@ -229,5 +231,25 @@ describe("por qué no se puede recepcionar ni anular — lo que explica la ficha
     const anulada = blockedPurchaseOrderSteps("cancelled");
     expect(anulada).toHaveLength(1);
     expect(anulada[0].reason).toContain("ya está anulada");
+  });
+});
+
+describe("planOrderCancellation (Sub-fase 1.2)", () => {
+  test("devuelve solo las unidades pendientes por recibir al anular una orden", () => {
+    expect(
+      purchaseOrderLinePending({ quantity: 5, receivedQuantity: 2 }),
+    ).toBe(3);
+
+    const plan = planOrderCancellation([
+      { purchaseRequestId: "pc-1", quantity: 5, receivedQuantity: 0 },
+      { purchaseRequestId: "pc-2", quantity: 5, receivedQuantity: 2 },
+      { purchaseRequestId: "pc-3", quantity: 4, receivedQuantity: 4 },
+    ]);
+
+    expect(plan).toEqual([
+      { purchaseRequestId: "pc-1", requeue: true, remainingQuantity: 5 },
+      { purchaseRequestId: "pc-2", requeue: true, remainingQuantity: 3 },
+      { purchaseRequestId: "pc-3", requeue: false, remainingQuantity: 0 },
+    ]);
   });
 });

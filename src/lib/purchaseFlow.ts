@@ -208,6 +208,36 @@ export function purchaseOrderStatusAfterReceiving(
   return everything ? "completed" : "partial";
 }
 
+/** Unidades que faltan por recibir en una línea de orden de compra. */
+export function purchaseOrderLinePending(
+  line: PurchaseLineProgress,
+): number {
+  return Math.max(0, line.quantity - line.receivedQuantity);
+}
+
+export interface OrderCancellationLinePlan<IdType extends string = string> {
+  purchaseRequestId: IdType;
+  requeue: boolean;
+  remainingQuantity: number;
+}
+
+/**
+ * Calcula qué líneas de una orden anulada deben volver a la cola de compras
+ * (`pending`) y con cuántas unidades pendientes.
+ */
+export function planOrderCancellation<
+  T extends PurchaseLineProgress & { purchaseRequestId: string },
+>(lines: readonly T[]): OrderCancellationLinePlan<T["purchaseRequestId"]>[] {
+  return lines.map((line) => {
+    const remainingQuantity = purchaseOrderLinePending(line);
+    return {
+      purchaseRequestId: line.purchaseRequestId as T["purchaseRequestId"],
+      requeue: remainingQuantity > 0,
+      remainingQuantity,
+    };
+  });
+}
+
 /**
  * ¿Ya está cerrada la orden? Completada —no queda nada por recibir— o anulada
  * —sus peticiones han vuelto a la cola—: en ninguna de las dos se anota ni se
