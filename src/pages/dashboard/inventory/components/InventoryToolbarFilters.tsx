@@ -1,4 +1,4 @@
-import { CircleAlert, FileDown, History, Plus } from "lucide-react";
+import { CircleAlert, ClipboardCheck, FileDown, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -28,6 +28,7 @@ export interface InventoryToolbarActionsProps {
   onExport: () => void;
   onNewPart: () => void;
   onOpenMovements?: () => void;
+  onOpenCount?: () => void;
 }
 
 export function InventoryToolbarFilters({
@@ -104,9 +105,22 @@ export function InventoryToolbarActions({
   onExport,
   onNewPart,
   onOpenMovements,
+  onOpenCount,
 }: InventoryToolbarActionsProps) {
   return (
     <>
+      {canManage && onOpenCount && (
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={onOpenCount}
+          title="Introducir recuento físico de almacén en lote"
+        >
+          <ClipboardCheck className="size-4" />
+          Recuento físico
+        </Button>
+      )}
       {onOpenMovements && (
         <Button
           type="button"

@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, internalMutation, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
+import { computeInventoryCountDeltas } from "../lib/inventoryStock";
 import { secureMutation } from "./_auth/secureMutation";
 import { recordStockMovement } from "./_inventory/movements";
 import { reconcileReservedStockImpl } from "./_inventory/reservedStock";
@@ -378,9 +379,19 @@ export const update = mutation({
 });
 
 /** Ajuste rápido de stock desde la tabla (+/- unidades). */
+const adjustStockKindValidator = v.union(
+  v.literal("manual_adjust"),
+  v.literal("loss"),
+  v.literal("damage"),
+  v.literal("inventory_count"),
+  v.literal("salvage"),
+);
+
 const adjustStockArgs = {
   id: v.id("spareParts"),
   delta: v.number(),
+  kind: v.optional(adjustStockKindValidator),
+  reason: v.optional(v.string()),
 };
 
 export const adjustStock = mutation({
@@ -393,7 +404,7 @@ export const adjustStock = mutation({
     },
     adjustStockArgs,
     async (ctx, args, actor) => {
-        const part = await ctx.db.get(args.id);
+      const part = await ctx.db.get(args.id);
       if (!part) throw new ConvexError("El repuesto ya no existe.");
       const next = Math.max(0, part.stock + Math.trunc(args.delta));
       if (next === part.stock) return;
@@ -403,15 +414,105 @@ export const adjustStock = mutation({
         sparePartId: part._id,
         partCode: part.code,
         partName: part.name,
-        kind: "manual_adjust",
+        kind: args.kind ?? "manual_adjust",
         previousStock: part.stock,
         nextStock: next,
-        reason: "Ajuste rápido desde inventario",
+        reason: args.reason?.trim() || "Ajuste rápido desde inventario",
         actorId: actor._id,
         actorName: actor.name?.trim() || actor.email?.trim() || "Técnico",
         createdAt: now,
       });
       await syncDashboardStatsIfPresent(ctx);
+    },
+  ),
+});
+
+/** Regularización en lote por recuento físico de almacén. */
+const applyInventoryCountArgs = {
+  counts: v.array(
+    v.object({
+      sparePartId: v.id("spareParts"),
+      countedStock: v.number(),
+    }),
+  ),
+  note: v.optional(v.string()),
+};
+
+export const applyInventoryCount = mutation({
+  args: applyInventoryCountArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    applyInventoryCountArgs,
+    async (ctx, args, actor) => {
+      const parts: Doc<"spareParts">[] = [];
+      for (const entry of args.counts) {
+        const part = await ctx.db.get(entry.sparePartId);
+        if (part) parts.push(part);
+      }
+
+      let deltas;
+      try {
+        deltas = computeInventoryCountDeltas(parts, args.counts);
+      } catch (error) {
+        throw new ConvexError(
+          error instanceof Error ? error.message : "Recuento no válido.",
+        );
+      }
+
+      const now = Date.now();
+      const actorName =
+        actor.name?.trim() || actor.email?.trim() || "Responsable de almacén";
+      const note = args.note?.trim();
+
+      for (const item of deltas) {
+        await ctx.db.patch(item.sparePartId, {
+          stock: item.nextStock,
+          updatedAt: now,
+        });
+        await recordStockMovement(ctx, {
+          sparePartId: item.sparePartId,
+          partCode: item.code,
+          partName: item.name,
+          kind: "inventory_count",
+          previousStock: item.previousStock,
+          nextStock: item.nextStock,
+          reason: note ? `Recuento físico: ${note}` : "Recuento físico",
+          actorId: actor._id,
+          actorName,
+          createdAt: now,
+        });
+      }
+
+      if (deltas.length > 0) {
+        await syncDashboardStatsIfPresent(ctx);
+      }
+
+      return {
+        updatedCount: deltas.length,
+        totalDelta: deltas.reduce((sum, item) => sum + item.delta, 0),
+      };
+    },
+  ),
+});
+
+/** Reconcilia manualmente `reservedStock` desde Inventario/Administración. */
+const reconcilePublicArgs = {};
+
+export const reconcileReservedStockPublic = mutation({
+  args: reconcilePublicArgs,
+  handler: secureMutation(
+    {
+      capability: "manageInventory",
+      identityMessage: PART_IDENTITY,
+      denyMessage: PART_DENY,
+    },
+    reconcilePublicArgs,
+    async (ctx) => {
+      return await reconcileReservedStockImpl(ctx);
     },
   ),
 });

@@ -95,3 +95,51 @@ export function computeReservedFromRequests(
   }
   return totals;
 }
+
+export interface InventoryCountDelta<IdType extends string = string> {
+  sparePartId: IdType;
+  code: string;
+  name: string;
+  previousStock: number;
+  nextStock: number;
+  delta: number;
+}
+
+/**
+ * Calcula las diferencias entre el stock del catálogo y el recuento físico,
+ * omitiendo los artículos sin variación y validando valores no negativos.
+ */
+export function computeInventoryCountDeltas<
+  T extends { _id: string; code: string; name: string; stock: number },
+>(
+  parts: readonly T[],
+  counts: readonly { sparePartId: string; countedStock: number }[],
+): InventoryCountDelta<T["_id"]>[] {
+  const partById = new Map(parts.map((part) => [part._id, part]));
+  const seen = new Set<string>();
+  const deltas: InventoryCountDelta<T["_id"]>[] = [];
+
+  for (const entry of counts) {
+    if (seen.has(entry.sparePartId)) continue;
+    const part = partById.get(entry.sparePartId);
+    if (!part) continue;
+    if (!Number.isFinite(entry.countedStock) || entry.countedStock < 0) {
+      throw new Error(
+        `El recuento de ${part.code} (${part.name}) no puede ser negativo.`,
+      );
+    }
+    const nextStock = Math.floor(entry.countedStock);
+    seen.add(entry.sparePartId);
+    if (nextStock === part.stock) continue;
+    deltas.push({
+      sparePartId: part._id as T["_id"],
+      code: part.code,
+      name: part.name,
+      previousStock: part.stock,
+      nextStock,
+      delta: nextStock - part.stock,
+    });
+  }
+
+  return deltas;
+}

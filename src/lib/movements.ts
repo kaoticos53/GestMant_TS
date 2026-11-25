@@ -10,7 +10,17 @@ export type StockMovementKind =
   | "request_return"
   | "purchase_reception"
   | "damage"
-  | "supplier_return";
+  | "supplier_return"
+  | "loss"
+  | "inventory_count"
+  | "salvage";
+
+export type StockAdjustmentKind =
+  | "manual_adjust"
+  | "loss"
+  | "damage"
+  | "inventory_count"
+  | "salvage";
 
 export type EquipmentMovementKind =
   | "created"
@@ -77,7 +87,21 @@ export const STOCK_MOVEMENT_META: Record<
   purchase_reception: { label: "Recepción de compra", signTone: "in" },
   damage: { label: "Merma / pieza dañada", signTone: "neutral" },
   supplier_return: { label: "Devolución a proveedor", signTone: "out" },
+  loss: { label: "Pérdida / extravío", signTone: "out" },
+  inventory_count: { label: "Recuento físico", signTone: "neutral" },
+  salvage: { label: "Recuperado de equipo", signTone: "in" },
 };
+
+export const STOCK_ADJUSTMENT_OPTIONS: ReadonlyArray<{
+  value: StockAdjustmentKind;
+  label: string;
+}> = [
+  { value: "manual_adjust", label: "Ajuste manual" },
+  { value: "loss", label: "Pérdida / extravío" },
+  { value: "damage", label: "Rotura / merma" },
+  { value: "inventory_count", label: "Recuento físico" },
+  { value: "salvage", label: "Recuperado de equipo" },
+];
 
 export const EQUIPMENT_MOVEMENT_META: Record<
   EquipmentMovementKind,

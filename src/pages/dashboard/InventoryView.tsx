@@ -5,6 +5,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { PartFormDialog } from "./inventory/dialogs/PartFormDialog";
 import { StockDialog } from "./inventory/dialogs/StockDialog";
 import { StockMovementsDialog } from "./inventory/dialogs/StockMovementsDialog";
+import { InventoryCountDialog } from "./inventory/dialogs/InventoryCountDialog";
 import {
   InventoryToolbarActions,
   InventoryToolbarFilters,
@@ -33,6 +34,7 @@ export function InventoryView({
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
   const [detailTarget, setDetailTarget] = useState<PartDoc | null>(null);
   const [movementsOpen, setMovementsOpen] = useState(false);
+  const [countOpen, setCountOpen] = useState(false);
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
 
@@ -103,6 +105,7 @@ export function InventoryView({
               onExport={handleExport}
               onNewPart={() => setFormTarget({ part: null })}
               onOpenMovements={() => setMovementsOpen(true)}
+              onOpenCount={() => setCountOpen(true)}
             />
           }
         />
@@ -189,6 +192,14 @@ export function InventoryView({
         <StockMovementsDialog
           open={movementsOpen}
           onClose={() => setMovementsOpen(false)}
+        />
+      )}
+
+      {countOpen && (
+        <InventoryCountDialog
+          open={countOpen}
+          onClose={() => setCountOpen(false)}
+          parts={parts}
         />
       )}
     </div>

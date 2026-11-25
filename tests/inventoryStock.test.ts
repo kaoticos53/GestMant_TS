@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
 import {
   availableStock,
+  computeInventoryCountDeltas,
   computeReservedFromRequests,
   hasReservedStock,
   isRequestReservingStock,
@@ -38,6 +39,45 @@ describe("inventoryStock (lógica pura Fase 3)", () => {
     expect(isRequestReservingStock("onHold", "approved")).toBe(true);
     expect(isRequestReservingStock("onHold", "pending")).toBe(false);
     expect(isRequestReservingStock("issued")).toBe(false);
+  });
+
+  test("computeInventoryCountDeltas omite sin cambios, calcula deltas y valida no negativos", () => {
+    const parts = [
+      { _id: "p1", code: "A-1", name: "Fusible", stock: 10 },
+      { _id: "p2", code: "A-2", name: "Relé", stock: 3 },
+      { _id: "p3", code: "A-3", name: "Sensor", stock: 5 },
+    ];
+
+    const deltas = computeInventoryCountDeltas(parts, [
+      { sparePartId: "p1", countedStock: 10 },
+      { sparePartId: "p2", countedStock: 1 },
+      { sparePartId: "p3", countedStock: 8 },
+    ]);
+
+    expect(deltas).toEqual([
+      {
+        sparePartId: "p2",
+        code: "A-2",
+        name: "Relé",
+        previousStock: 3,
+        nextStock: 1,
+        delta: -2,
+      },
+      {
+        sparePartId: "p3",
+        code: "A-3",
+        name: "Sensor",
+        previousStock: 5,
+        nextStock: 8,
+        delta: 3,
+      },
+    ]);
+
+    expect(() =>
+      computeInventoryCountDeltas(parts, [
+        { sparePartId: "p1", countedStock: -1 },
+      ]),
+    ).toThrow(/negativo/i);
   });
 
   test("computeReservedFromRequests suma solo peticiones vivas en curso de entrega", () => {
@@ -468,5 +508,77 @@ describe("stock reservado en backend (Fase 3)", () => {
         .collect(),
     );
     expect(damagedMovs.map((m) => m.kind)).toContain("damage");
+  });
+
+  test("adjustStock tipificado (loss), applyInventoryCount y reconcileReservedStockPublic (Sub-fase 2.1)", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const p1 = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "INV-01",
+        name: "Tornillo M6",
+        category: "Mecánica",
+        unit: "ud",
+        stock: 20,
+        minStock: 5,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const p2 = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "INV-02",
+        name: "Junta tórica",
+        category: "Mecánica",
+        unit: "ud",
+        stock: 4,
+        minStock: 2,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.spareParts.adjustStock, {
+      id: p1,
+      delta: -3,
+      kind: "loss",
+      reason: "Extraviados en obra",
+    });
+
+    let part1 = await t.run((ctx) => ctx.db.get(p1));
+    expect(part1?.stock).toBe(17);
+
+    const res = await authed.mutation(api.spareParts.applyInventoryCount, {
+      counts: [
+        { sparePartId: p1, countedStock: 15 },
+        { sparePartId: p2, countedStock: 6 },
+      ],
+      note: "Recuento estantería B",
+    });
+    expect(res.updatedCount).toBe(2);
+    expect(res.totalDelta).toBe(0); // -2 + 2
+
+    part1 = await t.run((ctx) => ctx.db.get(p1));
+    const part2 = await t.run((ctx) => ctx.db.get(p2));
+    expect(part1?.stock).toBe(15);
+    expect(part2?.stock).toBe(6);
+
+    const movs = await t.run((ctx) =>
+      ctx.db
+        .query("stockMovements")
+        .filter((q) => q.eq(q.field("sparePartId"), p1))
+        .collect(),
+    );
+    expect(movs.map((m) => m.kind)).toContain("loss");
+    expect(movs.map((m) => m.kind)).toContain("inventory_count");
+
+    await t.run((ctx) => ctx.db.patch(p1, { reservedStock: 12 }));
+    const rec = await authed.mutation(
+      api.spareParts.reconcileReservedStockPublic,
+      {},
+    );
+    expect(rec.updatedParts).toBe(1);
+    part1 = await t.run((ctx) => ctx.db.get(p1));
+    expect(part1?.reservedStock).toBe(0);
   });
 });
