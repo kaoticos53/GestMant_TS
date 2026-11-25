@@ -47,11 +47,10 @@ export function ScannerViewport({
           type="button"
           onClick={onToggleTorch}
           aria-pressed={torchOn}
-          className={`absolute top-4 right-4 p-2.5 rounded-full backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-            torchOn
+          className={`absolute top-4 right-4 p-2.5 rounded-full backdrop-blur-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${torchOn
               ? "bg-amber-400 text-black shadow-lg"
               : "bg-black/60 text-white hover:bg-black/80"
-          }`}
+            }`}
           aria-label="Alternar linterna"
           title="Alternar linterna"
         >
