@@ -200,10 +200,30 @@ export interface AiDebugTraceEntry {
   durationMs: number;
 }
 
+export type AiResultKind =
+  | "incidents"
+  | "equipment"
+  | "parts"
+  | "requests"
+  | "purchasing"
+  | "manuals";
+
+export interface AiResultTable {
+  kind: AiResultKind;
+  title: string;
+  columns: Array<{ key: string; label: string }>;
+  rows: Array<{
+    id?: string;
+    ref?: string;
+    cells: Record<string, string>;
+  }>;
+}
+
 export interface WorkshopQaAnswer {
   answer: string;
   citedReferences: string[];
   usedTools?: string[];
+  tables?: AiResultTable[];
   debugTrace?: AiDebugTraceEntry[];
 }
 

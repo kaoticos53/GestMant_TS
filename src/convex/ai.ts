@@ -22,6 +22,8 @@ import {
   type WorkshopQaAnswer,
 } from "../lib/ai";
 import { compactChatTurns } from "../lib/ai/memory";
+import { buildToolResultTable } from "../lib/ai/tables";
+import type { AiResultTable } from "../lib/ai/types";
 import { isClosedIncident } from "../lib/incidentFlow";
 import type { Capability } from "../lib/permissions";
 import { richDocToPlainText } from "../lib/richDoc";
@@ -485,6 +487,7 @@ async function dispatchWorkshopTool(
     canParts: boolean;
     canEquipment: boolean;
   },
+  collectedTables?: AiResultTable[],
 ): Promise<string> {
   if (!allowedNames.has(name)) {
     return JSON.stringify({
@@ -505,13 +508,25 @@ async function dispatchWorkshopTool(
   const strArg = (key: string): string | undefined =>
     typeof parsedArgs[key] === "string" ? parsedArgs[key] : undefined;
 
+  const recordTable = <T>(data: T): string => {
+    if (collectedTables) {
+      const table = buildToolResultTable(name, data);
+      if (table) {
+        const idx = collectedTables.findIndex((t) => t.kind === table.kind);
+        if (idx >= 0) collectedTables[idx] = table;
+        else collectedTables.push(table);
+      }
+    }
+    return JSON.stringify(data);
+  };
+
   switch (name) {
     case "get_workshop_stats":
       return JSON.stringify(
         await ctx.runQuery(internal._ai.workshopTools.queryStats, {}),
       );
     case "search_equipment":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.queryEquipment, {
           query: strArg("query"),
         }),
@@ -523,33 +538,33 @@ async function dispatchWorkshopTool(
         }),
       );
     case "search_incidents":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.queryIncidents, {
           query: strArg("query"),
           onlyOpen: strArg("onlyOpen") === "true",
         }),
       );
     case "search_spare_parts":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.querySpareParts, {
           query: strArg("query"),
           lowStockOnly: strArg("lowStockOnly") === "true",
         }),
       );
     case "search_part_requests":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.queryPartRequests, {
           query: strArg("query"),
         }),
       );
     case "search_purchase_orders":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.queryPurchasing, {
           query: strArg("query"),
         }),
       );
     case "search_manuals":
-      return JSON.stringify(
+      return recordTable(
         await ctx.runQuery(internal._ai.workshopTools.queryManuals, {
           query: strArg("query"),
         }),
@@ -670,6 +685,7 @@ export const askWorkshop = action({
       },
     });
 
+    const collectedTables: AiResultTable[] = [];
     const { content, usedTools, debugTrace } = await callDeepSeekWithTools({
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
@@ -680,13 +696,20 @@ export const askWorkshop = action({
       tools: allowedTools,
       collectDebug: args.debug === true,
       executeTool: (name, rawArgs) =>
-        dispatchWorkshopTool(ctx, name, rawArgs, allowedToolNames, {
-          userId: member.userId,
-          allowedModules: allowedModuleList,
-          canViewMailbox: member.canViewMailbox,
-          canParts: member.capabilities.parts,
-          canEquipment: member.capabilities.equipment,
-        }),
+        dispatchWorkshopTool(
+          ctx,
+          name,
+          rawArgs,
+          allowedToolNames,
+          {
+            userId: member.userId,
+            allowedModules: allowedModuleList,
+            canViewMailbox: member.canViewMailbox,
+            canParts: member.capabilities.parts,
+            canEquipment: member.capabilities.equipment,
+          },
+          collectedTables,
+        ),
     });
 
     const parsed = parseWorkshopQaResponse(content, validRefs);
@@ -696,6 +719,7 @@ export const askWorkshop = action({
           answer: `⚠️ ${parsed.error}\n\nRespuesta cruda del modelo:\n${content}`,
           citedReferences: [],
           usedTools,
+          ...(collectedTables.length > 0 ? { tables: collectedTables } : {}),
           ...(debugTrace ? { debugTrace } : {}),
         };
       }
@@ -704,6 +728,7 @@ export const askWorkshop = action({
     return {
       ...parsed.value,
       usedTools,
+      ...(collectedTables.length > 0 ? { tables: collectedTables } : {}),
       ...(debugTrace ? { debugTrace } : {}),
     };
   },

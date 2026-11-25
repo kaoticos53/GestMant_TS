@@ -208,6 +208,8 @@ export function buildWorkshopChatMessages(args: {
     "",
     PROTECTED_OUTPUT_CONTRACTS.workshop_chat,
     "",
+    "FORMATO EN CHAT: Cuando devuelvas listados o tablas consultadas con herramientas, NO dibujes tablas Markdown largas dentro del chat; resume los hallazgos en pocas frases y cita las referencias porque la aplicación abre la tabla interactiva en la ventana principal.",
+    "",
     `RESUMEN ACTUAL DEL TALLER: ${summaryLine}`,
   ].join("\n");
 

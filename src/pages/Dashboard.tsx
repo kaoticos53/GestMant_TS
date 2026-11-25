@@ -1,4 +1,14 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { useConvex } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { AiResultsDialog } from "@/components/ai/AiResultsDialog";
+import type { AiResultTable } from "@/lib/ai/types";
+import {
+  subscribeAiOpenReference,
+  subscribeAiShowTables,
+} from "@/lib/aiBridge";
+import { buildSearchGroupsFromResponse } from "./dashboard/search/helpers";
 import { WorkAlertNotice } from "./dashboard/WorkAlertNotice";
 import { DashboardContent } from "./dashboard/components/DashboardContent";
 import { DashboardHeader } from "./dashboard/components/DashboardHeader";
@@ -62,6 +72,65 @@ export default function Dashboard() {
     weeklyReportOpen,
     setWeeklyReportOpen,
   } = useDashboardState();
+
+  const convex = useConvex();
+  const [aiTables, setAiTables] = useState<AiResultTable[] | null>(null);
+
+  useEffect(() => {
+    const unsubTables = subscribeAiShowTables(setAiTables);
+    const unsubOpen = subscribeAiOpenReference((detail) => {
+      if (
+        detail.kind === "purchasing" ||
+        /^(OC|PC)-/i.test(detail.reference)
+      ) {
+        goToTab("purchasing");
+        return;
+      }
+      if (detail.kind === "manuals") {
+        goToTab("manuals");
+        return;
+      }
+      if (detail.kind === "parts") {
+        handleSearchSelect({
+          kind: "part",
+          id: (detail.id ?? "") as Id<"spareParts">,
+          term: detail.reference,
+          title: detail.reference,
+          subtitle: "",
+        });
+        return;
+      }
+      if (detail.kind === "equipment") {
+        handleSearchSelect({
+          kind: "equipment",
+          id: (detail.id ?? "") as Id<"equipment">,
+          term: detail.reference,
+          title: detail.reference,
+          subtitle: "",
+        });
+        return;
+      }
+
+      void convex
+        .query(api.search.global, { query: detail.reference })
+        .then((res) => {
+          const groups = buildSearchGroupsFromResponse(res);
+          const firstHit = groups.flatMap((g) => g.hits)[0];
+          if (firstHit) {
+            handleSearchSelect(firstHit);
+          } else if (detail.kind === "incidents") {
+            goToTab("incidents");
+          } else if (detail.kind === "requests") {
+            goToTab("requests");
+          }
+        })
+        .catch(() => {});
+    });
+    return () => {
+      unsubTables();
+      unsubOpen();
+    };
+  }, [convex, goToTab, handleSearchSelect]);
 
   if (accountDeactivated) {
     return <DashboardInactiveNotice onSignOut={() => void handleSignOut()} />;
@@ -177,6 +246,13 @@ export default function Dashboard() {
                 onOpenChange={setWeeklyReportOpen}
               />
             </Suspense>
+          )}
+
+          {aiTables && (
+            <AiResultsDialog
+              tables={aiTables}
+              onClose={() => setAiTables(null)}
+            />
           )}
         </div>
       </div>

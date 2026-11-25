@@ -5,6 +5,7 @@ import {
   AI_VARIABLE_CATALOG,
   type WorkshopChatTurn,
 } from "@/lib/ai";
+import { dispatchAiShowTables } from "@/lib/aiBridge";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
@@ -140,9 +141,13 @@ export function WorkshopAiChatButton() {
         content: result.answer,
         citedReferences: result.citedReferences,
         usedTools: result.usedTools,
+        tables: result.tables,
         debugTrace: result.debugTrace,
       };
       setEntries((prev) => [...prev, assistantEntry]);
+      if (result.tables && result.tables.length > 0) {
+        dispatchAiShowTables(result.tables);
+      }
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

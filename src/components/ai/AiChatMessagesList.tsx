@@ -1,8 +1,12 @@
 import type { RefObject } from "react";
-import { Database, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Database, ExternalLink, Loader2, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { AiDebugTraceEntry, WorkshopChatTurn } from "@/lib/ai";
+import type {
+  AiDebugTraceEntry,
+  AiResultTable,
+  WorkshopChatTurn,
+} from "@/lib/ai";
+import { dispatchAiOpenReference, dispatchAiShowTables } from "@/lib/aiBridge";
 import { cn } from "@/lib/utils";
 import { AiMarkdownMessage } from "./AiMarkdownMessage";
 
@@ -10,6 +14,7 @@ export interface AiChatEntry extends WorkshopChatTurn {
   id: string;
   citedReferences?: string[];
   usedTools?: string[];
+  tables?: AiResultTable[];
   debugTrace?: AiDebugTraceEntry[];
 }
 
@@ -88,16 +93,34 @@ export function AiChatMessagesList({
                 ))}
               </div>
             )}
+            {entry.tables && entry.tables.length > 0 && (
+              <div className="mt-2 border-t pt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => dispatchAiShowTables(entry.tables!)}
+                >
+                  <Table2 className="size-3.5 text-primary" />
+                  Ver tabla en ventana principal (
+                  {entry.tables.reduce((acc, t) => acc + t.rows.length, 0)})
+                </Button>
+              </div>
+            )}
             {entry.citedReferences && entry.citedReferences.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1 border-t pt-2">
                 {entry.citedReferences.map((ref) => (
-                  <Badge
+                  <button
                     key={ref}
-                    variant="secondary"
-                    className="font-mono text-[11px]"
+                    type="button"
+                    title="Abrir en la ventana principal"
+                    onClick={() => dispatchAiOpenReference({ reference: ref })}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[11px] font-medium text-secondary-foreground transition-colors hover:border-primary/50 hover:bg-primary/10"
                   >
                     {ref}
-                  </Badge>
+                    <ExternalLink className="size-2.5 opacity-70" />
+                  </button>
                 ))}
               </div>
             )}
