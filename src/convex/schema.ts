@@ -1458,6 +1458,8 @@ const schema = defineSchema({
       v.literal("request_reserve"),
       v.literal("request_return"),
       v.literal("purchase_reception"),
+      v.literal("damage"),
+      v.literal("supplier_return"),
     ),
     previousStock: v.number(),
     delta: v.number(),

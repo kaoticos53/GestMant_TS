@@ -496,3 +496,138 @@ export function requestNeedsAttachmentUrls(request: {
 }): boolean {
   return (request.attachments ?? []).some((attachment) => !attachment.url);
 }
+
+/** Destino de una pieza devuelta al almacén: vuelve útil al stock o se da de baja por merma. */
+export type ReturnDisposition = "restock" | "damaged";
+
+export interface ReturnLineInput {
+  sparePartId: string;
+  quantity: number;
+  disposition: ReturnDisposition;
+}
+
+export interface PlannedReturnItem<IdType extends string = string> {
+  sparePartId: IdType;
+  code: string;
+  name: string;
+  quantity: number;
+  disposition: ReturnDisposition;
+}
+
+export interface MaterialReturnPlan<
+  T extends {
+    sparePartId: string;
+    code: string;
+    name: string;
+    quantity: number;
+    deliveredQuantity?: number;
+  },
+> {
+  items: PlannedReturnItem<T["sparePartId"]>[];
+  nextLines: T[];
+  totalReturnedUnits: number;
+  restockUnits: number;
+  damagedUnits: number;
+  remainingDeliveredUnits: number;
+  fullyReturned: boolean;
+}
+
+/**
+ * Calcula el plan de devolución de material de una petición (total o parcial),
+ * validando cantidades contra lo ya entregado y separando material útil (`restock`)
+ * de mermas o piezas dañadas (`damaged`).
+ */
+export function planMaterialReturn<
+  T extends {
+    sparePartId: string;
+    code: string;
+    name: string;
+    quantity: number;
+    deliveredQuantity?: number;
+  },
+>(
+  lines: readonly T[],
+  status: string,
+  requestedReturns?: readonly ReturnLineInput[],
+): MaterialReturnPlan<T> {
+  const effectiveEntries: ReturnLineInput[] =
+    requestedReturns === undefined
+      ? lines
+          .map((line) => ({
+            sparePartId: line.sparePartId,
+            quantity: lineDelivered(line, status),
+            disposition: "restock" as const,
+          }))
+          .filter((entry) => entry.quantity > 0)
+      : [...requestedReturns];
+
+  const returnedByKey = new Map<string, number>();
+  const lineById = new Map(lines.map((line) => [line.sparePartId, line]));
+  const items: PlannedReturnItem<T["sparePartId"]>[] = [];
+
+  for (const entry of effectiveEntries) {
+    const line = lineById.get(entry.sparePartId);
+    if (!line) {
+      throw new Error(
+        "Uno de los repuestos indicados para devolver no pertenece a esta petición.",
+      );
+    }
+    const qty = Math.floor(entry.quantity);
+    if (!Number.isFinite(entry.quantity) || qty < 0) {
+      throw new Error(
+        `Cantidad de devolución no válida para ${line.code} (${line.name}).`,
+      );
+    }
+    if (qty === 0) continue;
+
+    const delivered = lineDelivered(line, status);
+    const alreadyReturned = returnedByKey.get(line.sparePartId) ?? 0;
+    if (qty + alreadyReturned > delivered) {
+      throw new Error(
+        `De ${line.code} (${line.name}) solo hay ${delivered} unidades entregadas para devolver.`,
+      );
+    }
+
+    returnedByKey.set(line.sparePartId, alreadyReturned + qty);
+    items.push({
+      sparePartId: line.sparePartId as T["sparePartId"],
+      code: line.code,
+      name: line.name,
+      quantity: qty,
+      disposition: entry.disposition,
+    });
+  }
+
+  let restockUnits = 0;
+  let damagedUnits = 0;
+  for (const item of items) {
+    if (item.disposition === "restock") restockUnits += item.quantity;
+    else damagedUnits += item.quantity;
+  }
+  const totalReturnedUnits = restockUnits + damagedUnits;
+
+  let remainingDeliveredUnits = 0;
+  const nextLines = lines.map((line) => {
+    const prevDelivered = lineDelivered(line, status);
+    const returned = returnedByKey.get(line.sparePartId) ?? 0;
+    const nextDelivered = Math.max(0, prevDelivered - returned);
+    remainingDeliveredUnits += nextDelivered;
+    if (returned === 0 && line.deliveredQuantity === undefined) {
+      return line;
+    }
+    return {
+      ...line,
+      deliveredQuantity: nextDelivered,
+    };
+  });
+
+  return {
+    items,
+    nextLines,
+    totalReturnedUnits,
+    restockUnits,
+    damagedUnits,
+    remainingDeliveredUnits,
+    fullyReturned: remainingDeliveredUnits === 0,
+  };
+}

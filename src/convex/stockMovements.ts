@@ -73,6 +73,8 @@ export const listByKind = query({
       v.literal("request_return"),
       v.literal("purchase_reception"),
       v.literal("initial"),
+      v.literal("damage"),
+      v.literal("supplier_return"),
     ),
     limit: v.optional(v.number()),
   },

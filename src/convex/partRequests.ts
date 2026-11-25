@@ -23,6 +23,7 @@ import {
   lineDelivered,
   lineRemaining,
   nextRequestStatus,
+  planMaterialReturn,
   requestDelivery,
   type RequestAction,
 } from "../lib/requestFlow";
@@ -664,10 +665,19 @@ export const resume = mutation({
   ),
 });
 
-/** Devuelve el material de una petición entregada. */
+/** Devuelve el material de una petición entregada (total o parcialmente, con reintegro o merma). */
 const returnMaterialArgs = {
   requestId: v.id("partRequests"),
   note: v.optional(v.string()),
+  lines: v.optional(
+    v.array(
+      v.object({
+        sparePartId: v.id("spareParts"),
+        quantity: v.number(),
+        disposition: v.union(v.literal("restock"), v.literal("damaged")),
+      }),
+    ),
+  ),
 };
 
 export const returnMaterial = mutation({
@@ -686,32 +696,124 @@ export const returnMaterial = mutation({
       const decisionActor = actor._id;
       const request = await ctx.db.get(args.requestId);
       if (!request) throw new ConvexError("La petición ya no existe.");
-      const returned = requireRequestStep(
-        request,
+
+      const canReturnFromIssued = canRequestStep(
+        request.status,
         "returnMaterial",
-        (status) =>
-          `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
       );
+      const delivery = requestDelivery(request.lines, request.status);
+      const canPartialReturnFromApproved =
+        canRequestStep(request.status, "revertApproval") &&
+        delivery.deliveredUnits > 0;
+
+      if (!canReturnFromIssued && !canPartialReturnFromApproved) {
+        requireRequestStep(
+          request,
+          "returnMaterial",
+          (status) =>
+            `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
+        );
+      }
+
+      let plan;
+      try {
+        plan = planMaterialReturn(request.lines, request.status, args.lines);
+      } catch (error) {
+        throw new ConvexError(
+          error instanceof Error ? error.message : "Devolución no válida.",
+        );
+      }
+
+      if (args.lines !== undefined && plan.totalReturnedUnits === 0) {
+        throw new ConvexError("Indica al menos una unidad para devolver.");
+      }
 
       const now = Date.now();
       const name = await actorName(ctx, decisionActor);
       const reason = decisionReason(args.note);
-      await ctx.db.patch(args.requestId, {
-        status: returned,
-        returnedAt: now,
-        ...(reason ? { returnNote: reason } : {}),
-      });
 
-      // Devolver el material deja la incidencia, otra vez, sin lo que necesita:
-      // si era la última petición entregada, vuelve a la espera de repuestos.
-      if (request.incidentId) {
-        await syncIncidentWithParts(ctx, request.incidentId, name);
+      for (const item of plan.items) {
+        const part = await ctx.db.get(item.sparePartId);
+        if (!part) continue;
+        if (item.disposition === "restock") {
+          const nextStock = part.stock + item.quantity;
+          await ctx.db.patch(part._id, {
+            stock: nextStock,
+            updatedAt: now,
+          });
+          await recordStockMovement(ctx, {
+            sparePartId: part._id,
+            partCode: part.code,
+            partName: part.name,
+            kind: "request_return",
+            previousStock: part.stock,
+            nextStock,
+            reference: request.reference,
+            reason: reason
+              ? `Devolución de material (${request.reference}): ${reasonOneLine(reason)}`
+              : `Devolución de material (${request.reference})`,
+            actorId: decisionActor,
+            actorName: name,
+            createdAt: now,
+          });
+        } else {
+          await recordStockMovement(ctx, {
+            sparePartId: part._id,
+            partCode: part.code,
+            partName: part.name,
+            kind: "damage",
+            previousStock: part.stock,
+            nextStock: part.stock,
+            reference: request.reference,
+            reason: reason
+              ? `Merma en devolución (${request.reference}): ${reasonOneLine(reason)}`
+              : `Merma en devolución (${request.reference})`,
+            actorId: decisionActor,
+            actorName: name,
+            createdAt: now,
+          });
+        }
       }
 
+      if (canReturnFromIssued && plan.fullyReturned) {
+        const returned = requireRequestStep(
+          request,
+          "returnMaterial",
+          (status) =>
+            `Solo se pueden devolver peticiones ya entregadas (la ${request.reference} está en ${status}).`,
+        );
+        await ctx.db.patch(args.requestId, {
+          lines: plan.nextLines,
+          status: returned,
+          returnedAt: now,
+          ...(reason ? { returnNote: reason } : {}),
+        });
+
+        // Devolver el material deja la incidencia, otra vez, sin lo que necesita:
+        // si era la última petición entregada, vuelve a la espera de repuestos.
+        if (request.incidentId) {
+          await syncIncidentWithParts(ctx, request.incidentId, name);
+        }
+      } else {
+        await ctx.db.patch(args.requestId, {
+          lines: plan.nextLines,
+          ...(reason ? { returnNote: reason } : {}),
+        });
+      }
+
+      const summaryNote =
+        plan.damagedUnits > 0
+          ? `Devueltas ${plan.restockUnits} ud(s) al almacén y ${plan.damagedUnits} como merma/dañada.`
+          : plan.totalReturnedUnits > 0
+            ? `Devueltas ${plan.restockUnits} ud(s) al almacén.`
+            : "Material devuelto por el técnico.";
+
       await recordDecision(ctx, args.requestId, name, {
-        reason: "materialReturned",
-        note: reasonOneLine(reason) || "Material devuelto por el técnico.",
+        reason: REJECTION_REASONS.MATERIAL_RETURNED,
+        note: reasonOneLine(reason) || summaryNote,
       });
+
+      await syncDashboardStatsIfPresent(ctx);
     },
   ),
 });

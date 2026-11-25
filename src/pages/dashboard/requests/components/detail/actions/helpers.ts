@@ -16,6 +16,7 @@ export function computeRequestActionFlags(
   noReference: boolean,
   readOnly = false,
   pendingUnits = 1,
+  deliveredUnits = 0,
 ): RequestActionFlags {
   if (readOnly) {
     return {
@@ -41,7 +42,9 @@ export function computeRequestActionFlags(
     canIssue: canRequestStep(status, "issue"),
     canHold: canRequestStep(status, "hold"),
     canResume: canRequestStep(status, "resume"),
-    canReturnMaterial: canRequestStep(status, "returnMaterial"),
+    canReturnMaterial:
+      canRequestStep(status, "returnMaterial") ||
+      (canRequestStep(status, "revertApproval") && deliveredUnits > 0),
     canCancel: canRequestStep(status, "cancel"),
     canRevertApproval:
       canRequestStep(status, "revertApproval") && pendingUnits > 0,

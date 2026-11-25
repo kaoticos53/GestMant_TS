@@ -5,6 +5,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { RevertApprovalDialog } from "../dialogs/RevertApprovalDialog";
+import { ReturnMaterialDialog } from "../dialogs/ReturnMaterialDialog";
 import { LinkedPurchasesCard } from "./LinkedPurchasesCard";
 import {
   canEditRequest,
@@ -69,7 +70,7 @@ export function RequestDetailSheet({
   onReject,
   onIssue,
   onHold,
-  onReturn,
+  onReturn: _onReturn,
   onCancel,
   onResume,
   resuming = false,
@@ -102,6 +103,7 @@ export function RequestDetailSheet({
   const priority = PRIORITY_META[request.priority as Priority];
 
   const [revertOpen, setRevertOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
 
   // Hook de ciclo de vida (archivado y retirada a papelera)
   const {
@@ -226,7 +228,7 @@ export function RequestDetailSheet({
           onHold={onHold}
           onResume={onResume}
           resuming={resuming}
-          onReturn={onReturn}
+          onReturn={() => setReturnOpen(true)}
           onCancel={onCancel}
           onRevertApproval={() => setRevertOpen(true)}
           archiving={archiving}
@@ -245,6 +247,11 @@ export function RequestDetailSheet({
         <RevertApprovalDialog
           open={revertOpen}
           onOpenChange={setRevertOpen}
+          request={resolvedRequest}
+        />
+        <ReturnMaterialDialog
+          open={returnOpen}
+          onOpenChange={setReturnOpen}
           request={resolvedRequest}
         />
       </SheetContent>

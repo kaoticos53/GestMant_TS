@@ -8,7 +8,9 @@ export type StockMovementKind =
   | "manual_adjust"
   | "request_reserve"
   | "request_return"
-  | "purchase_reception";
+  | "purchase_reception"
+  | "damage"
+  | "supplier_return";
 
 export type EquipmentMovementKind =
   | "created"
@@ -73,6 +75,8 @@ export const STOCK_MOVEMENT_META: Record<
   request_reserve: { label: "Reserva en petición", signTone: "out" },
   request_return: { label: "Devolución de petición", signTone: "in" },
   purchase_reception: { label: "Recepción de compra", signTone: "in" },
+  damage: { label: "Merma / pieza dañada", signTone: "neutral" },
+  supplier_return: { label: "Devolución a proveedor", signTone: "out" },
 };
 
 export const EQUIPMENT_MOVEMENT_META: Record<

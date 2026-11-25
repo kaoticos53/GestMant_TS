@@ -339,4 +339,134 @@ describe("stock reservado en backend (Fase 3)", () => {
     expect(linked.requests.length).toBe(1);
     expect(linked.requests[0].quantity).toBe(3);
   });
+
+  test("returnMaterial total reintegra el stock y registra request_return (Sub-fase 1.1)", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const sparePartId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "RET-01",
+        name: "Contactor 24V",
+        category: "Eléctrica",
+        unit: "ud",
+        stock: 6,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Ana",
+      priority: "normal",
+      description: "Sustitución contactor",
+      lines: [{ sparePartId, quantity: 3 }],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, { requestId: request._id });
+    await authed.mutation(api.partRequests.markIssued, {
+      requestId: request._id,
+    });
+
+    let part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(3);
+    expect(part?.reservedStock).toBe(0);
+
+    await authed.mutation(api.partRequests.returnMaterial, {
+      requestId: request._id,
+      note: "No fue necesario montarlo",
+    });
+
+    const returned = await t.run((ctx) => ctx.db.get(request._id));
+    expect(returned?.status).toBe("returned");
+
+    part = await t.run((ctx) => ctx.db.get(sparePartId));
+    expect(part?.stock).toBe(6);
+
+    const movements = await t.run((ctx) =>
+      ctx.db
+        .query("stockMovements")
+        .filter((q) => q.eq(q.field("sparePartId"), sparePartId))
+        .collect(),
+    );
+    expect(movements.map((m) => m.kind)).toContain("request_return");
+  });
+
+  test("returnMaterial separa útil (restock) vs merma (damaged) y soporta devolución parcial en approved", async () => {
+    const { t, authed } = await authedTest();
+    const now = Date.now();
+    const partOkId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "RET-02",
+        name: "Fusible 10A",
+        category: "Eléctrica",
+        unit: "ud",
+        stock: 10,
+        minStock: 2,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+    const partDamagedId = await t.run((ctx) =>
+      ctx.db.insert("spareParts", {
+        code: "RET-03",
+        name: "Display LCD",
+        category: "Electrónica",
+        unit: "ud",
+        stock: 2,
+        minStock: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
+    await authed.mutation(api.partRequests.create, {
+      requesterName: "Luis",
+      priority: "urgent",
+      description: "Reparación módulo",
+      lines: [
+        { sparePartId: partOkId, quantity: 4 },
+        { sparePartId: partDamagedId, quantity: 1 },
+      ],
+    });
+    const [request] = await authed.query(api.partRequests.list, {});
+    await authed.mutation(api.partRequests.approve, { requestId: request._id });
+    // Entrega parcial desde approved: 3 fusibles y 1 display
+    await authed.mutation(api.partRequests.issueLines, {
+      requestId: request._id,
+      lines: [
+        { sparePartId: partOkId, quantity: 3 },
+        { sparePartId: partDamagedId, quantity: 1 },
+      ],
+    });
+
+    // Devolución parcial desde approved: 2 fusibles útiles y 1 display dañado
+    await authed.mutation(api.partRequests.returnMaterial, {
+      requestId: request._id,
+      lines: [
+        { sparePartId: partOkId, quantity: 2, disposition: "restock" },
+        { sparePartId: partDamagedId, quantity: 1, disposition: "damaged" },
+      ],
+      note: "Sobran 2 fusibles y el display llegó roto",
+    });
+
+    const updated = await t.run((ctx) => ctx.db.get(request._id));
+    expect(updated?.status).toBe("approved");
+    expect(updated?.lines[0].deliveredQuantity).toBe(1);
+    expect(updated?.lines[1].deliveredQuantity).toBe(0);
+
+    const partOk = await t.run((ctx) => ctx.db.get(partOkId));
+    expect(partOk?.stock).toBe(8); // 10 - 4 + 2
+
+    const partDamaged = await t.run((ctx) => ctx.db.get(partDamagedId));
+    expect(partDamaged?.stock).toBe(1); // 2 - 1, no suma porque es merma
+
+    const damagedMovs = await t.run((ctx) =>
+      ctx.db
+        .query("stockMovements")
+        .filter((q) => q.eq(q.field("sparePartId"), partDamagedId))
+        .collect(),
+    );
+    expect(damagedMovs.map((m) => m.kind)).toContain("damage");
+  });
 });

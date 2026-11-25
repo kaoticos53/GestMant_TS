@@ -19,7 +19,7 @@ export async function recordStockMovement(
   },
 ): Promise<void> {
   const change = computeStockDelta(args.previousStock, args.nextStock);
-  if (change === null && args.kind !== "initial") {
+  if (change === null && args.kind !== "initial" && args.kind !== "damage") {
     return;
   }
   if (args.kind === "initial" && args.nextStock === 0) {

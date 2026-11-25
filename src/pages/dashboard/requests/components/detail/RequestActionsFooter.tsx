@@ -40,6 +40,7 @@ export function RequestActionsFooter({
     noReference,
     readOnly,
     delivery.pendingUnits,
+    delivery.deliveredUnits,
   );
 
   return (
