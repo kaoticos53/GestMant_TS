@@ -93,9 +93,10 @@ stateDiagram-v2
     unresolved --> [*]
 ```
 
-Ningún paso sale de un estado cerrado: lo resuelto y lo que quedó sin resolución
-no se reabren desde aquí —volver a por ello es una incidencia nueva, con su propio
-rastro—.
+Desde un estado cerrado (`resolved` o `unresolved`) solo cabe la **reapertura
+controlada** (`reopen` → `workshop`, únicamente por coordinación con motivo
+obligatorio). Para un fallo nuevo tras una reparación válida se abre una
+reincidencia vinculada (`incidents.createRecurrence`).
 
 Cuatro cosas que no son de estilo:
 
@@ -331,9 +332,10 @@ la cola: es el `unorder` de la máquina de arriba.
   completada: entró todo lo que se pidió»—.
 - **Tipadas contra el esquema.** Una acción nueva sin decidir por dónde pasa, o un
   estado al que nadie llega, no compilan (`satisfies Record<Acción, Paso>`).
-- **Los cierres no se reabren.** Lo resuelto, lo rechazado, lo retirado, lo
-  recibido y lo completado se quedan como están: volver a por ello es un caso
-  nuevo.
+- **Cierres y reaperturas.** Lo rechazado, lo retirado, lo recibido y lo
+  completado se quedan como están: volver a por ello es un caso nuevo. En
+  incidencias cerradas solo existe `reopen` como reapertura controlada por error
+  de cierre.
 - **Quién es una capacidad, con dos excepciones.** Todo lo que se firma se
   comprueba por capacidad (`lib/permissions`); además, en las incidencias manda
   quien tiene el caso («el técnico asignado», «el de la orden de taller» —no es un

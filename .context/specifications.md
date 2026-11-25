@@ -20,7 +20,7 @@ Para mantener la coherencia conceptual del negocio, se aplican estrictamente est
 
 ### A. Flujo de Incidencias (`src/lib/incidentFlow.ts`)
 
-El ciclo tiene **siete estados** y **doce pasos**, y ninguna transición se escribe
+El ciclo tiene **ocho estados** y **quince pasos**, y ninguna transición se escribe
 en otro sitio: la tabla que manda es `INCIDENT_STEPS`, tipada con todos los pasos y
 todos los estados —un paso sin decidir por dónde pasa, o un estado al que nadie
 llega, no compila—. El backend la consulta con `canAdvanceIncident` y la ficha
@@ -88,7 +88,7 @@ Los ocho estados del ciclo son estos, con el nombre que enseña la app:
 | `resolved`       | Resuelta               | Cerrada con resolución: deja su parte de trabajo si el equipo estaba relacionado.                                                     |
 | `unresolved`     | Sin resolución         | Cerrada sin poder resolverla.                                                                                                         |
 
-Los catorce pasos, uno por fila:
+Los quince pasos, uno por fila:
 
 Cada fila es una transición: desde dónde se puede dar el paso, a dónde lleva y
 quién lo da. Las que comparten paso se leen juntas: `waitParts`, `sendExternal` y
@@ -131,14 +131,15 @@ quién lo da. Las que comparten paso se leen juntas: `waitParts`, `sendExternal`
 | `unresolved`     | `reopen` Reabrir incidencia                                    | `workshop`       | El coordinador, por cierre erróneo con motivo obligatorio                       |
 
 **Regla:** un paso solo se da si `INCIDENT_STEPS` lo admite desde el estado en el
-que está la incidencia, y desde un estado cerrado no sale ninguno. La tabla de
+que está la incidencia; desde un estado cerrado (`resolved` o `unresolved`) solo
+cabe la reapertura controlada (`reopen`) por un coordinador. La tabla de
 arriba es la misma que la de `MAQUINAS.md`, contada sin la columna de permisos.
 
 ---
 
 ### B. Flujo de Peticiones de Repuesto (`src/lib/requestFlow.ts`)
 
-Nueve estados y nueve pasos. Una petición nace **pendiente** —no hay borrador que
+Nueve estados y diez pasos. Una petición nace **pendiente** —no hay borrador que
 guardar ni estado archivado: vive en la cola hasta que se cierra en uno de sus
 finales—. `onHold` recuerda de dónde salió y `resume` la devuelve allí, en vez de
 dejarla siempre en «pendiente»; `requestQuote` la manda a la cola del proveedor, y
@@ -267,23 +268,23 @@ Los endpoints de backend están definidos en `src/convex/` y expuestos vía el o
 
 ### Incidencias (`src/convex/incidents.ts`)
 
-- `api.incidents.list({ status?, equipmentId? })`: Devuelve las incidencias filtradas por estado o equipo.
-- `api.incidents.getById({ id })`: Obtiene los detalles de la incidencia junto con sus partes de trabajo y repuestos asociados.
-- `api.incidents.create({ title, description, equipmentId, priority })`: Registra una nueva incidencia en estado `reported`.
-- `api.incidents.updateStatus({ id, newStatus, reason? })`: Valida vía `canTransitionIncident` y actualiza el estado.
+- `api.incidents.list({})` / `paginatedList`: Devuelve las incidencias activas (y filtradas por paginación).
+- `api.incidents.detail({ incidentId })`: Obtiene el detalle de la incidencia, historial, equipo y repuestos vinculados.
+- `api.incidents.report(...)`: Registra una nueva incidencia en estado `reported` (vía `registerIncidentIntake`).
+- `api.incidents.assign`, `selfAssign`, `verify`, `assignWorkshop`, `sendToExternalRepair`, `receiveFromExternalRepair`, `close`, `reopen`, `createRecurrence`, `updateExternalRepair`: Mutaciones validadas vía `canAdvanceIncident` / `incidentStepStatus`.
 
 ### Equipos (`src/convex/equipment.ts`)
 
-- `api.equipment.list({ search?, location?, status? })`: Consulta el catálogo de equipos con filtros de búsqueda y paginación.
-- `api.equipment.create(data: EquipmentFormData)`: Inserta un nuevo equipo con manuales, fotos y componentes.
-- `api.equipment.update({ id, ...data })`: Modifica los datos del equipo o actualiza su contador de horas/ciclos.
-- `api.equipment.registerMaintenance({ id, maintenanceType, date, notes })`: Registra una rutina preventiva.
+- `api.equipment.list({})`: Consulta el catálogo de equipos activos.
+- `api.equipment.create(...)`: Inserta un nuevo equipo con código `EQ-XXX` único.
+- `api.equipment.update(...)`: Modifica datos del equipo y registra cambios de ubicación/estado en `equipmentMovements`.
+- `api.equipment.loanOut`, `returnLoan`, `decommission`, `remove`: Préstamos, devoluciones (con apertura opcional de incidencia por daños) y bajas con recuperación de piezas.
 
-### Peticiones de Repuesto (`src/convex/requests.ts`)
+### Peticiones de Repuesto (`src/convex/partRequests.ts`)
 
-- `api.requests.list({ status?, incidentId? })`: Consulta peticiones con detalles del solicitante y artículos.
-- `api.requests.create({ incidentId, items, urgency })`: Crea una nueva petición en estado `draft` o `pending`.
-- `api.requests.updateStatus({ id, newStatus })`: Transición validada con `canTransitionRequest`.
+- `api.partRequests.list({ includeArchived? })` / `paginatedList`: Consulta peticiones de repuesto.
+- `api.partRequests.create(...)`: Crea una nueva petición en estado `pending`.
+- `api.partRequests.approve`, `reject`, `onHold`, `resume`, `issueLines`, `markIssued`, `returnMaterial`, `revertApproval`, `cancel`, `requestQuote`, `replaceLine`: Transiciones y ajustes validados con `canRequestStep` / `nextRequestStatus`.
 
 ---
 
@@ -417,6 +418,39 @@ de entorno de reserva:
 - `api.mailSettings.check({})`: comprobación previa (solo administrador). Le pide al relevo que se conecte y se autentique con lo guardado y devuelve `{ ok, provider, detail?, error? }`; con un servicio que no sale por el relevo contesta que su comprobación es el correo de prueba. La llama sola la tarjeta al abrirse y al guardar; el botón solo la repite.
 - Relevo — `POST /comprobar` (o `<camino>/comprobar`, p. ej. `/enviar/comprobar`): la misma puerta de siempre con el testigo, cuerpo opcional `{ smtp }`. Devuelve `{ ok, check: { host, port, tls, auth, greeting } }` (200), 400 con un `smtp` a medias, 502 si el servidor no acepta la conexión o las credenciales, 501 si el relevo no tiene `verify` montado y 405 con otro método que POST.
 - `internal.mailSettings.incidentRecipients({})`: correos de los roles marcados para el aviso interno (activos, sin invitados, sin repetidos).
+
+---
+
+## 5. Contratos Operativos de Almacén, Peticiones, Compras, Incidencias y Equipos
+
+### A. Almacén e Inventario (`src/convex/spareParts.ts`, `src/lib/inventoryStock.ts`, `src/lib/partLifecycle.ts`)
+- **Tipología de movimientos (`stockMovements.kind`):** `initial`, `manual_adjust`, `request_reserve`, `request_return`, `purchase_reception`, `damage` (merma/pieza dañada, admite delta `0`), `supplier_return` (devolución a proveedor/reversión), `loss` (extravío/pérdida), `inventory_count` (regularización por conteo físico) y `salvage` (pieza recuperada de equipo dado de baja).
+- `api.spareParts.adjustStock({ id, delta, kind?, reason? })`: ajuste tipificado (`manual_adjust` por defecto).
+- `api.spareParts.applyInventoryCount({ counts, note? })`: regularización atómica en lote por conteo físico (`computeInventoryCountDeltas`), omitiendo líneas sin diferencia.
+- `api.spareParts.reconcileReservedStockPublic({})`: recalcula `reservedStock` desde las peticiones vivas que mantienen reserva.
+- **Ciclo de vida y equivalentes:** `spareParts` admite `lifecycleStatus` (`"active"` | `"low_availability"` | `"discontinued"`), `replacementPartId` (validado sin auto-referencias ni ciclos en `validateReplacementPart`) y `discontinuedNote`. Los repuestos `discontinued` bloquean nuevas compras en `missingLines` y `requestRestock`.
+
+### B. Peticiones de Repuesto (`src/convex/partRequests.ts`, `src/lib/requestFlow.ts`)
+- `api.partRequests.approve({ requestId, note? })`: comprueba stock y reserva únicamente `lineRemaining(line, request.status)` (respetando entregas parciales previas).
+- `api.partRequests.revertApproval({ requestId, deliverLines?, stockAdjustments?, adjustCatalogStockToZero?, note? })`: devuelve una petición `approved` con unidades pendientes a `pending`; permite entrega parcial previa (`deliverLines`), libera la reserva pendiente (`request_return`) y opcionalmente ajusta el stock real del catálogo (`0` o un valor indicado) registrando `manual_adjust`.
+- `api.partRequests.returnMaterial({ requestId, lines?, note? })`: admite devolución total o parcial por línea (`planMaterialReturn`) desde `issued` o desde `approved` (con entregas previas), separando unidades útiles (`disposition: "restock"` → suma a `part.stock` con `request_return`) de mermas (`disposition: "damaged"` → registra `damage` sin sumar stock).
+- `api.partRequests.replaceLine({ requestId, oldSparePartId, newSparePartId, quantity?, note? })`: sustituye un repuesto (p. ej. descatalogado por su equivalente) o ajusta la cantidad mientras la petición esté en estado editable.
+
+### C. Compras (`src/convex/purchasing.ts`, `src/lib/purchaseFlow.ts`)
+- `api.purchasing.requestPurchase({ requestId, sparePartIds?, supplier?, notes? })`: calcula el faltante sobre `lineRemaining(line, status) - part.stock` y bloquea artículos `discontinued`.
+- `api.purchasing.requestRestock({ sparePartId, quantity?, supplier?, notes? })`: crea una petición de compra directa (`PC-...`) sin `requestId` (`reason: "minStock"`, `requestReference: "REPOSICIÓN"`).
+- `api.purchasing.cancelOrder({ orderId, note })`: en órdenes `partial`, devuelve a `pending` únicamente las unidades pendientes (`planOrderCancellation`: `quantity - receivedQuantity`), sin duplicar lo ya recepcionado.
+- `api.purchasing.cancelOrderLine({ orderId, purchaseRequestId, mode, note })`: retira una sola línea pendiente de una `OC-...` (`planOrderLineRemoval`), devolviéndola a pendientes (`"requeue"`) o cancelándola por falta de suministro (`"noSupply"`).
+- `api.purchasing.reverseReception({ receptionId, note })`: revierte una recepción errónea o devolución a proveedor, descontando `part.stock` (`supplier_return`), recalculando el estado de la `OC-...` (`pending`/`partial`) y reabriendo las `PC-...` afectadas a `ordered`.
+
+### D. Incidencias (`src/convex/incidents.ts`, `src/lib/incidentFlow.ts`)
+- `api.incidents.reopen({ incidentId, note })`: reapertura controlada desde `resolved` o `unresolved` hacia `workshop` (solo `manageIncidents`, motivo obligatorio).
+- `api.incidents.createRecurrence({ parentIncidentId, description?, priority? })`: crea una incidencia nueva vinculada (`parentIncidentId`) heredando equipo y ubicación.
+- `api.incidents.updateExternalRepair({ incidentId, rmaNumber?, quoteStatus?, estimatedCost?, expectedReturnAt? })`: actualiza el seguimiento RMA y de presupuesto (`externalQuoteStatusValidator`: `"awaiting_quote"` | `"accepted"` | `"declined"`) en incidencias `externalRepair`.
+
+### E. Equipos (`src/convex/equipment.ts`)
+- `api.equipment.decommission({ id, reason?, salvagedParts? })`: da de baja definitiva un equipo sin préstamos ni incidencias abiertas y suma al catálogo las piezas recuperadas (`kind: "salvage"`).
+- `api.equipment.returnLoan({ id, notes?, condition?, openIncident?, damageDescription? })`: registra la devolución de un préstamo y, si vuelve `"damaged"` con `openIncident: true`, crea automáticamente una incidencia de prioridad alta vinculada al equipo.
 - `internal.incidentMail.notifyStaff({ incidentId, notice })`: compone y manda el aviso interno del momento (`reported` | `assigned` | `resolved` | `unresolved`), se salta el que ya está apuntado en la ficha y lo anota en el histórico con origen `equipo`.
 - `api.mailLog.history({ limit? })`: últimos envíos, del más reciente al más viejo (solo administrador).
 - `internal.mailSettings.delivery({})`: configuración con secretos resueltos —incluidos `smtpUser` y la contraseña del servicio— para `deliverMail`.
