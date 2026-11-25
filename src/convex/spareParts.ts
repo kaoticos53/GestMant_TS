@@ -4,6 +4,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { QueryCtx, internalMutation, mutation, query } from "./_generated/server";
 import { richDocToStore } from "../lib/richDoc";
 import { computeInventoryCountDeltas } from "../lib/inventoryStock";
+import { validateReplacementPart } from "../lib/partLifecycle";
 import { secureMutation } from "./_auth/secureMutation";
 import { recordStockMovement } from "./_inventory/movements";
 import { reconcileReservedStockImpl } from "./_inventory/reservedStock";
@@ -196,6 +197,16 @@ const createPartArgs = {
   purchaseUrl: v.optional(v.string()),
   compatibleWith: v.optional(v.array(v.id("equipment"))),
   compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
+  lifecycleStatus: v.optional(
+    v.union(
+      v.literal("active"),
+      v.literal("low_availability"),
+      v.literal("discontinued"),
+    ),
+  ),
+  replacementPartId: v.optional(v.id("spareParts")),
+  clearReplacementPart: v.optional(v.boolean()),
+  discontinuedNote: v.optional(v.string()),
 };
 
 export const create = mutation({
@@ -283,6 +294,16 @@ const updatePartArgs = {
   purchaseUrl: v.optional(v.string()),
   compatibleWith: v.optional(v.array(v.id("equipment"))),
   compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
+  lifecycleStatus: v.optional(
+    v.union(
+      v.literal("active"),
+      v.literal("low_availability"),
+      v.literal("discontinued"),
+    ),
+  ),
+  replacementPartId: v.optional(v.id("spareParts")),
+  clearReplacementPart: v.optional(v.boolean()),
+  discontinuedNote: v.optional(v.string()),
 };
 
 export const update = mutation({
@@ -355,6 +376,29 @@ export const update = mutation({
       if (args.unitPrice !== undefined) {
         if (args.unitPrice < 0) throw new ConvexError("El precio no puede ser negativo.");
         patch.unitPrice = args.unitPrice;
+      }
+      if (args.lifecycleStatus !== undefined) {
+        patch.lifecycleStatus = args.lifecycleStatus;
+      }
+      if (args.discontinuedNote !== undefined) {
+        patch.discontinuedNote = args.discontinuedNote.trim();
+      }
+      if (args.clearReplacementPart) {
+        patch.replacementPartId = undefined;
+      } else if (args.replacementPartId !== undefined) {
+        const replacement = await ctx.db.get(args.replacementPartId);
+        if (!replacement) {
+          throw new ConvexError("El repuesto equivalente seleccionado no existe.");
+        }
+        const allParts = await ctx.db.query("spareParts").collect();
+        try {
+          validateReplacementPart(part._id, args.replacementPartId, allParts);
+        } catch (error) {
+          throw new ConvexError(
+            error instanceof Error ? error.message : "Equivalencia no válida.",
+          );
+        }
+        patch.replacementPartId = args.replacementPartId;
       }
 
       const now = Date.now();

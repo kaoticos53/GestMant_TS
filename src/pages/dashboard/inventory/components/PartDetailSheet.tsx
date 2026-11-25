@@ -1,4 +1,6 @@
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import {
   MapPin,
   Pencil,
@@ -19,14 +21,19 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { api } from "@/convex/_generated/api";
-import { STOCK_META, formatCurrency, stockState } from "@/lib/workshop";
+import { STOCK_META, formatCurrency, getErrorMessage, stockState } from "@/lib/workshop";
 import { physicalStock, reservedUnits } from "@/lib/inventoryStock";
+import {
+  PART_LIFECYCLE_META,
+  type PartLifecycleStatus,
+} from "@/lib/partLifecycle";
 import { modelLabel } from "../helpers";
 import type { EquipmentModelDoc, PartDoc } from "../types";
 import { PartMovementsSection } from "./PartMovementsSection";
 
 export interface PartDetailSheetProps {
   part: PartDoc | null;
+  parts?: PartDoc[];
   canManage: boolean;
   catalogModels: EquipmentModelDoc[];
   onClose: () => void;
@@ -38,6 +45,7 @@ export interface PartDetailSheetProps {
 
 export function PartDetailSheet({
   part,
+  parts = [],
   canManage,
   catalogModels,
   onClose,
@@ -46,6 +54,8 @@ export function PartDetailSheet({
   onPrintLabel,
   onSelectModel,
 }: PartDetailSheetProps) {
+  const updatePart = useMutation(api.spareParts.update);
+  const [savingLifecycle, setSavingLifecycle] = useState(false);
   const movements = useQuery(
     api.stockMovements.listByPart,
     part ? { sparePartId: part._id, limit: 15 } : "skip",
@@ -77,6 +87,14 @@ export function PartDetailSheet({
                 <Badge variant="outline" className={meta.badgeClassName}>
                   {meta.label}
                 </Badge>
+                {part.lifecycleStatus && part.lifecycleStatus !== "active" && (
+                  <Badge
+                    variant="outline"
+                    className={PART_LIFECYCLE_META[part.lifecycleStatus].badgeClassName}
+                  >
+                    {PART_LIFECYCLE_META[part.lifecycleStatus].label}
+                  </Badge>
+                )}
               </div>
               <SheetTitle className="text-xl tracking-tight">
                 {part.name}
@@ -153,6 +171,84 @@ export function PartDetailSheet({
                     catalogId={part.supplierId}
                     className="mt-3 grid gap-1.5 rounded-lg border border-border/70 bg-muted/30 p-2.5 text-xs text-muted-foreground"
                   />
+                )}
+
+                {canManage && (
+                  <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
+                    <label className="grid gap-1 text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        Disponibilidad / Ciclo de vida
+                      </span>
+                      <select
+                        value={part.lifecycleStatus ?? "active"}
+                        disabled={savingLifecycle}
+                        onChange={async (event) => {
+                          setSavingLifecycle(true);
+                          try {
+                            await updatePart({
+                              id: part._id,
+                              lifecycleStatus: event.target
+                                .value as PartLifecycleStatus,
+                            });
+                            toast.success("Estado del repuesto actualizado.");
+                          } catch (err) {
+                            toast.error(getErrorMessage(err));
+                          } finally {
+                            setSavingLifecycle(false);
+                          }
+                        }}
+                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs shadow-xs"
+                      >
+                        <option value="active">Activo</option>
+                        <option value="low_availability">
+                          Baja disponibilidad
+                        </option>
+                        <option value="discontinued">
+                          Descatalogado / Sin suministro
+                        </option>
+                      </select>
+                    </label>
+
+                    <label className="grid gap-1 text-xs">
+                      <span className="font-medium text-muted-foreground">
+                        Repuesto equivalente
+                      </span>
+                      <select
+                        value={part.replacementPartId ?? ""}
+                        disabled={savingLifecycle}
+                        onChange={async (event) => {
+                          const val = event.target.value;
+                          setSavingLifecycle(true);
+                          try {
+                            await updatePart({
+                              id: part._id,
+                              ...(val
+                                ? {
+                                    replacementPartId:
+                                      val as PartDoc["_id"],
+                                  }
+                                : { clearReplacementPart: true }),
+                            });
+                            toast.success("Repuesto equivalente actualizado.");
+                          } catch (err) {
+                            toast.error(getErrorMessage(err));
+                          } finally {
+                            setSavingLifecycle(false);
+                          }
+                        }}
+                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs shadow-xs"
+                      >
+                        <option value="">Sin equivalente</option>
+                        {parts
+                          .filter((candidate) => candidate._id !== part._id)
+                          .map((candidate) => (
+                            <option key={candidate._id} value={candidate._id}>
+                              {candidate.code} · {candidate.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
                 )}
 
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">

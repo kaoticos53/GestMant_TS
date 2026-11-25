@@ -6,6 +6,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { RevertApprovalDialog } from "../dialogs/RevertApprovalDialog";
 import { ReturnMaterialDialog } from "../dialogs/ReturnMaterialDialog";
+import { ReplaceLineDialog } from "../dialogs/ReplaceLineDialog";
 import { LinkedPurchasesCard } from "./LinkedPurchasesCard";
 import {
   canEditRequest,
@@ -104,6 +105,7 @@ export function RequestDetailSheet({
 
   const [revertOpen, setRevertOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
 
   // Hook de ciclo de vida (archivado y retirada a papelera)
   const {
@@ -203,6 +205,21 @@ export function RequestDetailSheet({
             onAssociate={onAssociate}
           />
 
+          {canManage &&
+            !readOnly &&
+            canEditRequest(request.status) &&
+            resolvedRequest.lines.length > 0 && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReplaceOpen(true)}
+                  className="text-xs font-medium text-signal underline-offset-2 hover:underline"
+                >
+                  Sustituir repuesto o ajustar cantidad
+                </button>
+              </div>
+            )}
+
           <LinkedPurchasesCard
             request={resolvedRequest}
             hasShortage={enrichedLines.some((line) => line.hasShortage)}
@@ -253,6 +270,12 @@ export function RequestDetailSheet({
           open={returnOpen}
           onOpenChange={setReturnOpen}
           request={resolvedRequest}
+        />
+        <ReplaceLineDialog
+          open={replaceOpen}
+          onOpenChange={setReplaceOpen}
+          request={resolvedRequest}
+          parts={parts}
         />
       </SheetContent>
     </Sheet>

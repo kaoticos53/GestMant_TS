@@ -358,6 +358,15 @@ const schema = defineSchema({
     compatibleWith: v.optional(v.array(v.id("equipment"))),
     // Modelos de equipo con los que es compatible (catálogo de modelos)
     compatibleModels: v.optional(v.array(v.id("equipmentModels"))),
+    lifecycleStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("low_availability"),
+        v.literal("discontinued"),
+      ),
+    ),
+    replacementPartId: v.optional(v.id("spareParts")),
+    discontinuedNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

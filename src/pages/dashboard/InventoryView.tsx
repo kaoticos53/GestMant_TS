@@ -179,6 +179,7 @@ export function InventoryView({
 
       <PartDetailSheet
         part={detailTarget}
+        parts={parts}
         canManage={canManage}
         catalogModels={catalogModels}
         onClose={() => setDetailTarget(null)}

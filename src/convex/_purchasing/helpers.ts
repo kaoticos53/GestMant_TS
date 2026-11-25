@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 import { lineRemaining } from "../../lib/requestFlow";
+import { isPartPurchasable } from "../../lib/partLifecycle";
 import { REQUEST_STATUSES } from "../schema";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -328,6 +329,15 @@ export async function missingLines(
     }
     const needed = lineRemaining(line, request.status ?? REQUEST_STATUSES.PENDING);
     if (needed <= 0) continue;
+    if (!isPartPurchasable(part.lifecycleStatus)) {
+      throw new ConvexError(
+        `El repuesto ${part.code} (${part.name}) está descatalogado y no admite nuevas compras.${
+          part.replacementPartId
+            ? " Sustitúyelo por su equivalente en la petición."
+            : ""
+        }`,
+      );
+    }
     const falta = needed - part.stock;
     if (falta <= 0) continue;
     missing.push({

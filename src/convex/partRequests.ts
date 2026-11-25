@@ -570,6 +570,111 @@ export const associateNew = mutation({
   ),
 });
 
+/**
+ * Sustituye un repuesto o ajusta la cantidad de una línea en una petición
+ * abierta (`pending`, `onHold`, `pendingSupplierQuote` o `materialReceived`).
+ */
+const replaceLineArgs = {
+  requestId: v.id("partRequests"),
+  oldSparePartId: v.id("spareParts"),
+  newSparePartId: v.id("spareParts"),
+  quantity: v.optional(v.number()),
+  note: v.optional(v.string()),
+};
+
+export const replaceLine = mutation({
+  args: replaceLineArgs,
+  handler: secureMutation(
+    {
+      capability: "decideRequests",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las peticiones.",
+      ),
+      denyMessage:
+        "No tienes permisos para modificar las líneas de una petición. Revisa la configuración de tu rol con el administrador.",
+    },
+    replaceLineArgs,
+    async (ctx, args, actor) => {
+      const request = await assertPending(ctx, args.requestId);
+      const index = request.lines.findIndex(
+        (line) => line.sparePartId === args.oldSparePartId,
+      );
+      if (index === -1) {
+        throw new ConvexError(
+          "El repuesto indicado ya no figura en esta petición.",
+        );
+      }
+      const existingLine = request.lines[index];
+      const delivered = lineDelivered(existingLine, request.status);
+      const isChangingPart = args.oldSparePartId !== args.newSparePartId;
+      if (isChangingPart && delivered > 0) {
+        throw new ConvexError(
+          `No puedes sustituir ${existingLine.code} porque ya tiene ${delivered} unidad(es) entregada(s).`,
+        );
+      }
+
+      const nextQty =
+        args.quantity !== undefined
+          ? Math.floor(args.quantity)
+          : existingLine.quantity;
+      if (!Number.isFinite(nextQty) || nextQty < 1) {
+        throw new ConvexError("La cantidad debe ser al menos 1.");
+      }
+      if (!isChangingPart && nextQty < delivered) {
+        throw new ConvexError(
+          `La cantidad no puede ser menor que las ${delivered} unidades ya entregadas.`,
+        );
+      }
+
+      const newPart = await ctx.db.get(args.newSparePartId);
+      if (!newPart) {
+        throw new ConvexError("El repuesto seleccionado no existe.");
+      }
+      if (
+        isChangingPart &&
+        request.lines.some(
+          (line, idx) => idx !== index && line.sparePartId === newPart._id,
+        )
+      ) {
+        throw new ConvexError(
+          `El repuesto ${newPart.code} ya está en otra línea de esta petición.`,
+        );
+      }
+
+      const nextLines = request.lines.map((line, idx) =>
+        idx !== index
+          ? line
+          : {
+              sparePartId: newPart._id,
+              code: newPart.code,
+              name: newPart.name,
+              quantity: nextQty,
+              ...(existingLine.deliveredQuantity !== undefined && !isChangingPart
+                ? { deliveredQuantity: existingLine.deliveredQuantity }
+                : {}),
+              ...(existingLine.deliveredAt !== undefined && !isChangingPart
+                ? { deliveredAt: existingLine.deliveredAt }
+                : {}),
+            },
+      );
+
+      await ctx.db.patch(request._id, { lines: nextLines });
+
+      const name = await actorName(ctx, actor._id);
+      const customNote = reasonOneLine(args.note);
+      const defaultNote = isChangingPart
+        ? `Sustituido ${existingLine.code} por ${newPart.code} (${nextQty} ud).`
+        : `Ajustada cantidad de ${existingLine.code}: ${existingLine.quantity} → ${nextQty} ud.`;
+      await recordDecision(ctx, request._id, name, {
+        reason: isChangingPart
+          ? REJECTION_REASONS.PART_OBSOLETE
+          : REJECTION_REASONS.OTHER,
+        note: customNote || defaultNote,
+      });
+    },
+  ),
+});
+
 /** Suspende temporalmente una petición. */
 const onHoldArgs = {
   requestId: v.id("partRequests"),
