@@ -31,36 +31,36 @@ interface AnalyticsChartsGridProps {
 const INCIDENTS_STATUS_CONFIG = {
   count: {
     label: "Incidencias",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
 const WEEKLY_TREND_CONFIG = {
   reported: {
     label: "Reportadas",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
   resolved: {
     label: "Resueltas",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
 } satisfies ChartConfig;
 
 const PARTS_CATEGORY_CONFIG = {
   normal: {
     label: "Stock normal",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
   lowStock: {
     label: "Stock bajo",
-    color: "hsl(var(--chart-5))",
+    color: "var(--status-warning)",
   },
 } satisfies ChartConfig;
 
 const MOVEMENTS_CONFIG = {
   entries: {
     label: "Movimientos (30d)",
-    color: "hsl(var(--chart-3))",
+    color: "var(--chart-3)",
   },
 } satisfies ChartConfig;
 

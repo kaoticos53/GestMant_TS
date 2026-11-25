@@ -109,11 +109,13 @@ export function DashboardSidebar({
         />
       </aside>
 
-      <SidebarResizeHandle
-        sidebarWidth={sidebarWidth}
-        sidebarResizing={sidebarResizing}
-        resizeHandleProps={resizeHandleProps}
-      />
+      {!sidebarCollapsed && (
+        <SidebarResizeHandle
+          sidebarWidth={sidebarWidth}
+          sidebarResizing={sidebarResizing}
+          resizeHandleProps={resizeHandleProps}
+        />
+      )}
     </>
   );
 }

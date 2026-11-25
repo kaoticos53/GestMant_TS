@@ -45,7 +45,7 @@ export function ApiAddressAlert({
   if (!trouble) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-3 pt-3">
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] flex justify-center px-3 pt-3">
       <Alert
         variant="destructive"
         className="pointer-events-auto max-w-3xl border-destructive/40 bg-card shadow-lg"

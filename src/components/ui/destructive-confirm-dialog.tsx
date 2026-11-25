@@ -97,7 +97,7 @@ export function DestructiveConfirmDialog({
           {!hideConfirm && (
             <AlertDialogAction
               disabled={isBusy}
-              className="gap-2 bg-destructive text-white hover:bg-destructive/90"
+              className="gap-2 bg-destructive text-white hover:bg-destructive/90 dark:bg-destructive/60"
               onClick={handleConfirm}
             >
               {confirmIcon}
