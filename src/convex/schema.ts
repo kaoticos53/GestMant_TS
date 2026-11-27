@@ -1025,7 +1025,7 @@ const schema = defineSchema({
     .index("by_reference", ["reference"]),
 
   // Recepciones: cada entrada de material de un proveedor, con el albarán de
-  // entrega adjunto (obligatorio) y lo que ha entrado. Una orden puede tener
+  // entrega adjunto (opcional) y lo que ha entrado. Una orden puede tener
   // varias —el proveedor manda lo que tiene— y de aquí salen el movimiento de
   // almacén, el estado de la orden y el «material recibido» de las peticiones.
   receptions: defineTable({
@@ -1034,7 +1034,7 @@ const schema = defineSchema({
     supplier: v.string(),
     supplierId: v.optional(v.id("catalogs")),
     lines: v.array(receptionLineValidator),
-    deliveryNote: deliveryNoteValidator, // el albarán: sin él no hay recepción
+    deliveryNote: v.optional(deliveryNoteValidator), // el albarán adjunto, opcional
     note: v.optional(v.string()),
     receivedBy: v.string(),
     receivedAt: v.number(),

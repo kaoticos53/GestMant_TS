@@ -38,6 +38,7 @@ export interface OrderLinesListProps {
 
 export interface OrderReceptionsListProps {
   receptions: ReceptionDoc[];
+  canManage?: boolean;
 }
 
 export interface OrderSheetFooterProps {

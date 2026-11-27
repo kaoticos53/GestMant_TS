@@ -110,7 +110,7 @@ export function DeliveryTrail({
       kind: "purchase",
       actor: rec.receivedBy,
       title: `Material recibido (${rec.orderReference})`,
-      detail: `Albarán ${rec.deliveryNote.name}`,
+      detail: rec.deliveryNote ? `Albarán ${rec.deliveryNote.name}` : undefined,
     });
   }
 

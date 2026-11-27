@@ -42,6 +42,10 @@ vi.mock("@/convex/_generated/api", () => ({
       createOrder: { nombre: "purchasing.createOrder" },
       setLineNote: { nombre: "purchasing.setLineNote" },
       receive: { nombre: "purchasing.receive" },
+      reverseReception: { nombre: "purchasing.reverseReception" },
+      removeReceptionDeliveryNote: {
+        nombre: "purchasing.removeReceptionDeliveryNote",
+      },
       cancelOrder: { nombre: "purchasing.cancelOrder" },
       generateUploadUrl: { nombre: "purchasing.generateUploadUrl" },
     },
@@ -443,12 +447,12 @@ describe("el módulo de compras, pintado", () => {
     expect(ficha).toContain("Desde PET-0007");
     expect(ficha).toContain("albaran.pdf");
 
-    // Y desde ahí se recepciona: se abre el diálogo con el albarán pedido.
+    // Y desde ahí se recepciona: el albarán es opcional.
     act(() => boton("Recepcionar material").click());
     expect(document.body.textContent).toContain("Recepcionar OC-0001");
     expect(document.body.textContent).toContain("faltan 2 ud");
-    // Sin albarán no se da la entrada.
-    expect(boton("Dar entrada").disabled).toBe(true);
+    // Sin albarán también se puede dar la entrada.
+    expect(boton("Dar entrada").disabled).toBe(false);
 
     act(() => boton("Recepciones").click());
     expect(document.body.textContent).toContain("albaran.pdf");

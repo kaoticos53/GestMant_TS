@@ -49,8 +49,8 @@ export function ReceiveDialog({
         <DialogHeader>
           <DialogTitle>Recepcionar {order.reference}</DialogTitle>
           <DialogDescription>
-            Lo que ha llegado ahora. El albarán de entrega es obligatorio: es el
-            papel que respalda la entrada.
+            Lo que pongas aquí entra en el almacén y descuenta de lo que falta
+            en la orden. Adjuntar el albarán de entrega es opcional.
           </DialogDescription>
         </DialogHeader>
 
@@ -93,7 +93,7 @@ export function ReceiveDialog({
           <Button
             type="button"
             className="gap-2"
-            disabled={enviando || !archivo}
+            disabled={enviando}
             onClick={() => void enviar()}
           >
             <Truck className="size-4" />

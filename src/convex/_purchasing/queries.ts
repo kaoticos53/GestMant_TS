@@ -135,7 +135,9 @@ export const listReceptions = query({
     return await Promise.all(
       sorted.map(async (row) => ({
         ...row,
-        deliveryNoteUrl: await ctx.storage.getUrl(row.deliveryNote.storageId),
+        deliveryNoteUrl: row.deliveryNote
+          ? await ctx.storage.getUrl(row.deliveryNote.storageId)
+          : null,
       })),
     );
   },
@@ -169,7 +171,9 @@ export const byRequest = query({
       for (const row of rows) {
         receptions.push({
           ...row,
-          deliveryNoteUrl: await ctx.storage.getUrl(row.deliveryNote.storageId),
+          deliveryNoteUrl: row.deliveryNote
+            ? await ctx.storage.getUrl(row.deliveryNote.storageId)
+            : null,
         });
       }
     }

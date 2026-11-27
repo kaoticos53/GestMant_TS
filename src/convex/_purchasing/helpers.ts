@@ -91,7 +91,7 @@ export async function applyReception(
     orderId: Id<"purchaseOrders">;
     /** Lo que ha llegado, por petición de compra de la orden. */
     items: { purchaseRequestId: Id<"purchaseRequests">; quantity: number }[];
-    deliveryNote: DeliveryNote;
+    deliveryNote?: DeliveryNote;
     note?: string;
     receivedBy: string;
     at: number;
@@ -118,14 +118,22 @@ export async function applyReception(
     );
   }
 
-  const note = args.deliveryNote.name.trim();
-  if (!note) {
-    throw new ConvexError("El albarán necesita un nombre para poder abrirlo.");
-  }
-  if ((await ctx.storage.getUrl(args.deliveryNote.storageId)) === null) {
-    throw new ConvexError(
-      "El albarán adjunto ya no está disponible: vuelve a adjuntarlo.",
-    );
+  let normalizedDeliveryNote: DeliveryNote | undefined;
+  if (args.deliveryNote) {
+    const note = args.deliveryNote.name.trim();
+    if (!note) {
+      throw new ConvexError("El albarán necesita un nombre para poder abrirlo.");
+    }
+    if ((await ctx.storage.getUrl(args.deliveryNote.storageId)) === null) {
+      throw new ConvexError(
+        "El albarán adjunto ya no está disponible: vuelve a adjuntarlo.",
+      );
+    }
+    normalizedDeliveryNote = {
+      storageId: args.deliveryNote.storageId,
+      name: note,
+      kind: args.deliveryNote.kind,
+    };
   }
 
   // Se comprueba **todo** antes de tocar nada: media recepción no deja ni la
@@ -212,11 +220,7 @@ export async function applyReception(
     supplier: order.supplier,
     ...(order.supplierId ? { supplierId: order.supplierId } : {}),
     lines: received,
-    deliveryNote: {
-      storageId: args.deliveryNote.storageId,
-      name: note,
-      kind: args.deliveryNote.kind,
-    },
+    ...(normalizedDeliveryNote ? { deliveryNote: normalizedDeliveryNote } : {}),
     ...(args.note?.trim() ? { note: args.note.trim() } : {}),
     receivedBy: args.receivedBy,
     receivedAt: now,

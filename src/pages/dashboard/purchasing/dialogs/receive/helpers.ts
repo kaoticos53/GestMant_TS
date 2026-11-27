@@ -30,15 +30,12 @@ export function parseReceivedItems(
 }
 
 /**
- * Valida que el albarán esté adjunto y que haya al menos un item con cantidad recibida.
+ * Valida que haya al menos un item con cantidad recibida (el albarán es opcional).
  */
 export function validateReceiveInput(
-  archivo: File | null,
+  _archivo: File | null,
   items: readonly ReceivedItemPayload[],
 ): string | null {
-  if (!archivo) {
-    return "Adjunta el albarán de entrega: sin él no se da la entrada.";
-  }
   if (items.length === 0) {
     return "Escribe cuánto ha llegado.";
   }

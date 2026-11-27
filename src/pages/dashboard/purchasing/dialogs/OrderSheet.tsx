@@ -129,7 +129,7 @@ export function OrderSheet({
 
           <OrderLineRemovalControl order={order} canManage={canManage} />
 
-          <OrderReceptionsList receptions={receptions} />
+          <OrderReceptionsList receptions={receptions} canManage={canManage} />
         </div>
 
         <OrderSheetFooter

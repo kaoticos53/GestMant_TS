@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { FileText, RotateCcw, Truck } from "lucide-react";
+import { FileText, RotateCcw, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
@@ -8,6 +8,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DestructiveConfirmDialog } from "@/components/ui/destructive-confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -42,7 +43,11 @@ export function MovementsSection({
   canManage = false,
 }: MovementsSectionProps) {
   const reverseReception = useMutation(api.purchasing.reverseReception);
+  const removeDeliveryNote = useMutation(
+    api.purchasing.removeReceptionDeliveryNote,
+  );
   const [reversing, setReversing] = useState<ReceptionDoc | null>(null);
+  const [removingNote, setRemovingNote] = useState<ReceptionDoc | null>(null);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
@@ -59,7 +64,7 @@ export function MovementsSection({
         row.orderReference.toLowerCase().includes(needle) ||
         row.supplier.toLowerCase().includes(needle) ||
         row.receivedBy.toLowerCase().includes(needle) ||
-        row.deliveryNote.name.toLowerCase().includes(needle) ||
+        (row.deliveryNote?.name ?? "").toLowerCase().includes(needle) ||
         (row.note ?? "").toLowerCase().includes(needle) ||
         row.lines.some(
           (line) =>
@@ -92,8 +97,8 @@ export function MovementsSection({
           No ha entrado material todavía
         </p>
         <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-          Cada entrada de un proveedor deja aquí su movimiento con el albarán
-          adjunto, y es lo que mete el stock en el almacén.
+          Cada entrada de un proveedor deja aquí su movimiento (con su albarán
+          si se adjuntó), y es lo que mete el stock en el almacén.
         </p>
       </div>
     );
@@ -103,6 +108,17 @@ export function MovementsSection({
     if (submitting) return;
     setReversing(null);
     setNote("");
+  };
+
+  const handleConfirmRemoveNote = async () => {
+    if (!removingNote) return;
+    try {
+      await removeDeliveryNote({ receptionId: removingNote._id });
+      toast.success("Albarán eliminado de la recepción.");
+      setRemovingNote(null);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
   };
 
   const handleConfirmReverse = async () => {
@@ -213,33 +229,56 @@ export function MovementsSection({
                     </p>
                   )}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    {row.deliveryNoteUrl ? (
-                      <a
-                        href={row.deliveryNoteUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex w-fit items-center gap-1 text-xs text-signal underline"
-                      >
-                        <FileText className="size-3" />
-                        {row.deliveryNote.name}
-                      </a>
+                    {row.deliveryNote ? (
+                      row.deliveryNoteUrl ? (
+                        <a
+                          href={row.deliveryNoteUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex w-fit items-center gap-1 text-xs text-signal underline"
+                        >
+                          <FileText className="size-3" />
+                          {row.deliveryNote.name}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {row.deliveryNote.name} (ya no está disponible)
+                        </span>
+                      )
                     ) : (
                       <span className="text-xs text-muted-foreground">
-                        {row.deliveryNote.name} (ya no está disponible)
+                        Sin albarán adjunto
                       </span>
                     )}
 
-                    {canManage && !isReversed && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 gap-1.5 text-xs"
-                        onClick={() => setReversing(row)}
-                      >
-                        <RotateCcw className="size-3.5" />
-                        Revertir recepción
-                      </Button>
+                    {canManage && (row.deliveryNote !== undefined || !isReversed) && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {row.deliveryNote && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemovingNote(row)}
+                            aria-label={`Eliminar albarán ${row.deliveryNote.name}`}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Eliminar adjunto
+                          </Button>
+                        )}
+                        {!isReversed && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1.5 text-xs"
+                            onClick={() => setReversing(row)}
+                          >
+                            <RotateCcw className="size-3.5" />
+                            Revertir recepción
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -318,6 +357,18 @@ export function MovementsSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {removingNote?.deliveryNote && (
+        <DestructiveConfirmDialog
+          onClose={() => setRemovingNote(null)}
+          title={`¿Eliminar el albarán «${removingNote.deliveryNote.name}»?`}
+          description={`Se quitará el archivo adjunto de esta recepción de ${removingNote.orderReference}. La recepción y el stock registrado se mantienen intactos.`}
+          confirmLabel="Eliminar adjunto"
+          busyLabel="Eliminando..."
+          confirmIcon={<Trash2 className="size-4" />}
+          onConfirm={handleConfirmRemoveNote}
+        />
+      )}
     </>
   );
 }

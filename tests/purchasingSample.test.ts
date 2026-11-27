@@ -223,7 +223,7 @@ describe("la muestra de compras: lo que se escribe", () => {
     );
     expect(recepciones).toHaveLength(3);
     for (const reception of recepciones) {
-      expect(reception.deliveryNote.name).toMatch(/^Albarán ALB-/);
+      expect(reception.deliveryNote?.name).toMatch(/^Albarán ALB-/);
       expect(reception.receivedBy).toBe("Rita Repuestos");
       expect(reception.lines.length).toBeGreaterThan(0);
     }

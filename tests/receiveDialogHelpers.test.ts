@@ -64,14 +64,19 @@ describe("receiveDialog helpers", () => {
   });
 
   describe("validateReceiveInput", () => {
-    it("exige albarán obligatorio", () => {
+    it("permite recepcionar sin albarán adjunto", () => {
       const error = validateReceiveInput(null, [
         { purchaseRequestId: "req1" as Id<"purchaseRequests">, quantity: 1 },
       ]);
-      expect(error).toBe("Adjunta el albarán de entrega: sin él no se da la entrada.");
+      expect(error).toBeNull();
     });
 
-    it("exige al menos un item con cantidad recibida", () => {
+    it("exige al menos un item con cantidad recibida incluso sin albarán", () => {
+      const error = validateReceiveInput(null, []);
+      expect(error).toBe("Escribe cuánto ha llegado.");
+    });
+
+    it("exige albarán válido: exige al menos un item con cantidad recibida", () => {
       const file = new File(["dummy"], "albaran.pdf", { type: "application/pdf" });
       const error = validateReceiveInput(file, []);
       expect(error).toBe("Escribe cuánto ha llegado.");

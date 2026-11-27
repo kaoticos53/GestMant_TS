@@ -601,7 +601,7 @@ describe("recepciones: el albarán y el estado", () => {
       supplier: "Electro",
       receivedBy: "Rita Repuestos",
     });
-    expect(movimientos[0].deliveryNote.name).toBe("albaran-resto.pdf");
+    expect(movimientos[0].deliveryNote?.name).toBe("albaran-resto.pdf");
     expect(movimientos[0].deliveryNoteUrl).toContain("http");
     expect(movimientos[1].note).toBe("El resto, la semana que viene");
     expect(movimientos[1].lines).toEqual([
@@ -622,6 +622,94 @@ describe("recepciones: el albarán y el estado", () => {
       }),
       "ya está completada",
     );
+  });
+
+  test("permite recepcionar sin albarán adjunto y deja eliminarlo después si fue un error", async () => {
+    const mundo = await taller();
+    const part = await seedPart(mundo.t, { supplier: "Electro" });
+    const request = await pedir(mundo, [{ sparePartId: part, quantity: 2 }]);
+    const authed = mundo.como(mundo.responsable);
+    const tecnicoAuthed = mundo.como(mundo.tecnico);
+
+    await authed.mutation(api.purchasing.requestPurchase, {
+      requestId: request._id,
+    });
+    const { requests } = await authed.query(
+      api.purchasing.listPurchaseRequests,
+      {},
+    );
+    const { orderId } = await authed.mutation(api.purchasing.createOrder, {
+      purchaseRequestIds: requests.map((row) => row._id),
+    });
+
+    // 1. Primera recepción sin albarán adjunto: entra stock y queda parcial.
+    const sinAlbaran = await authed.mutation(api.purchasing.receive, {
+      orderId,
+      items: [{ purchaseRequestId: requests[0]._id, quantity: 1 }],
+      note: "Entrega urgente sin papel",
+    });
+    expect(sinAlbaran.status).toBe("partial");
+    expect((await mundo.t.run((ctx) => ctx.db.get(part)))?.stock).toBe(1);
+
+    // 2. Segunda recepción con albarán adjunto que luego se retira por error.
+    const nota = await albaran(mundo.t, "albaran-equivocado.pdf");
+    const conAlbaran = await authed.mutation(api.purchasing.receive, {
+      orderId,
+      items: [{ purchaseRequestId: requests[0]._id, quantity: 1 }],
+      deliveryNote: nota,
+    });
+    expect(conAlbaran.status).toBe("completed");
+
+    let movimientos = await authed.query(api.purchasing.listReceptions, {});
+    expect(movimientos).toHaveLength(2);
+    const recSinNota = movimientos.find((row) => row.note === "Entrega urgente sin papel");
+    const recConNota = movimientos.find(
+      (row) => row.deliveryNote?.name === "albaran-equivocado.pdf",
+    );
+    expect(recSinNota?.deliveryNote).toBeUndefined();
+    expect(recSinNota?.deliveryNoteUrl).toBeNull();
+    expect(recConNota?.deliveryNoteUrl).toContain("http");
+
+    const porPeticionAntes = await authed.query(api.purchasing.byRequest, {
+      requestId: request._id,
+    });
+    expect(porPeticionAntes.receptions).toHaveLength(2);
+    expect(
+      porPeticionAntes.receptions.find((row) => row._id === recSinNota?._id)
+        ?.deliveryNoteUrl,
+    ).toBeNull();
+
+    // Un usuario sin managePurchasing no puede borrar albaranes.
+    await expectConvexError(
+      tecnicoAuthed.mutation(api.purchasing.removeReceptionDeliveryNote, {
+        receptionId: recConNota!._id,
+      }),
+      "No tienes permisos para eliminar albaranes",
+    );
+
+    // El responsable sí elimina el adjunto equivocado y limpia el archivo de storage.
+    const eliminado = await authed.mutation(
+      api.purchasing.removeReceptionDeliveryNote,
+      { receptionId: recConNota!._id },
+    );
+    expect(eliminado).toEqual({ removed: true });
+    expect(
+      await mundo.t.run((ctx) => ctx.storage.getUrl(nota.storageId)),
+    ).toBeNull();
+
+    // Idempotente si se vuelve a llamar sobre la misma recepción ya sin albarán.
+    const repetido = await authed.mutation(
+      api.purchasing.removeReceptionDeliveryNote,
+      { receptionId: recConNota!._id },
+    );
+    expect(repetido).toEqual({ removed: false });
+
+    movimientos = await authed.query(api.purchasing.listReceptions, {});
+    const recActualizada = movimientos.find((row) => row._id === recConNota!._id);
+    expect(recActualizada?.deliveryNote).toBeUndefined();
+    expect(recActualizada?.deliveryNoteUrl).toBeNull();
+    // La recepción y el stock introducido siguen intactos.
+    expect((await mundo.t.run((ctx) => ctx.db.get(part)))?.stock).toBe(2);
   });
 
   test("con el material dentro, la petición se aprueba y se entrega", async () => {

@@ -594,11 +594,13 @@ const receiveArgs = {
       quantity: v.number(),
     }),
   ),
-  deliveryNote: v.object({
-    storageId: v.id("_storage"),
-    name: v.string(),
-    kind: v.union(v.literal("image"), v.literal("document")),
-  }),
+  deliveryNote: v.optional(
+    v.object({
+      storageId: v.id("_storage"),
+      name: v.string(),
+      kind: v.union(v.literal("image"), v.literal("document")),
+    }),
+  ),
   note: v.optional(v.string()),
 };
 
@@ -642,6 +644,46 @@ export const receive = mutation({
         received,
         materialReceived,
       };
+    },
+  ),
+});
+
+/**
+ * Elimina el albarán adjunto de una recepción (por ejemplo, si se subió por
+ * error). La recepción y el stock introducido se mantienen intactos.
+ */
+const removeReceptionDeliveryNoteArgs = {
+  receptionId: v.id("receptions"),
+};
+
+export const removeReceptionDeliveryNote = mutation({
+  args: removeReceptionDeliveryNoteArgs,
+  handler: secureMutation(
+    {
+      capability: "managePurchasing",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión con una cuenta registrada para gestionar las compras.",
+      ),
+      denyMessage:
+        "No tienes permisos para eliminar albaranes. Revisa la configuración de tu rol con el administrador.",
+    },
+    removeReceptionDeliveryNoteArgs,
+    async (ctx, args) => {
+      const reception = await ctx.db.get(args.receptionId);
+      if (!reception) {
+        throw new ConvexError("La recepción ya no existe.");
+      }
+      if (!reception.deliveryNote) {
+        return { removed: false };
+      }
+      const storageId = reception.deliveryNote.storageId;
+      await ctx.db.patch(reception._id, {
+        deliveryNote: undefined,
+      });
+      if ((await ctx.storage.getUrl(storageId)) !== null) {
+        await ctx.storage.delete(storageId);
+      }
+      return { removed: true };
     },
   ),
 });

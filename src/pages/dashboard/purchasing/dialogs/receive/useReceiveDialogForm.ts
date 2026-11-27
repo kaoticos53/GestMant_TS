@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { compressForUpload, uploadToStorage } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
 import {
@@ -42,16 +43,29 @@ export function useReceiveDialogForm({
 
     setEnviando(true);
     try {
-      const file = await compressForUpload(archivo!);
-      const storageId = await uploadToStorage(await generateUploadUrl(), file);
+      let deliveryNote:
+        | {
+            storageId: Id<"_storage">;
+            name: string;
+            kind: "image" | "document";
+          }
+        | undefined;
+      if (archivo) {
+        const file = await compressForUpload(archivo);
+        const storageId = await uploadToStorage(
+          await generateUploadUrl(),
+          file,
+        );
+        deliveryNote = {
+          storageId,
+          name: archivo.name,
+          kind: archivo.type.startsWith("image/") ? "image" : "document",
+        };
+      }
       const resultado = await recibir({
         orderId: order._id,
         items,
-        deliveryNote: {
-          storageId,
-          name: archivo!.name,
-          kind: archivo!.type.startsWith("image/") ? "image" : "document",
-        },
+        ...(deliveryNote ? { deliveryNote } : {}),
         ...(nota.trim() ? { note: nota } : {}),
       });
 
