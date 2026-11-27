@@ -107,19 +107,26 @@ export function useIncidentFilters({
   const counts = useMemo(() => countIncidentsByStatus(matched), [matched]);
 
   const byDate = sort === "recent" || sort === "oldest";
+  const byUpdatedDate = sort === "updatedRecent" || sort === "updatedOldest";
   const ordered = useMemo(
     () =>
       byDate
         ? sortByDate(filtered, (incident) => incident.reportedAt, sort)
-        : sort === "priority"
-          ? [...filtered].sort(
-              (a, b) =>
-                incidentPriorityRank(b.priority) -
-                  incidentPriorityRank(a.priority) ||
-                b.reportedAt - a.reportedAt,
+        : byUpdatedDate
+          ? sortByDate(
+              filtered,
+              (incident) => incident.updatedAt,
+              sort === "updatedRecent" ? "recent" : "oldest",
             )
-          : inQueueOrder(filtered),
-    [byDate, filtered, sort],
+          : sort === "priority"
+            ? [...filtered].sort(
+                (a, b) =>
+                  incidentPriorityRank(b.priority) -
+                    incidentPriorityRank(a.priority) ||
+                  b.reportedAt - a.reportedAt,
+              )
+            : inQueueOrder(filtered),
+    [byDate, byUpdatedDate, filtered, sort],
   );
 
   const { areaRef, rowsFit } = useRowsThatFit({
@@ -141,8 +148,10 @@ export function useIncidentFilters({
     () =>
       byDate
         ? groupByDate(visible, (incident) => incident.reportedAt)
-        : [{ key: "queue", label: "", items: visible }],
-    [byDate, visible],
+        : byUpdatedDate
+          ? groupByDate(visible, (incident) => incident.updatedAt)
+          : [{ key: "queue", label: "", items: visible }],
+    [byDate, byUpdatedDate, visible],
   );
 
   const detail = useMemo(
