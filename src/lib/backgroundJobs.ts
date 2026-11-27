@@ -92,3 +92,74 @@ export function jobTypeLabel(type: string): string {
 export function jobStatusLabel(status: string): string {
   return JOB_STATUS_LABELS[status as BackgroundJobStatus] ?? status;
 }
+
+/** Días de historial que se conservan y se consultan (coincide con la purga). */
+export const JOB_LOG_WINDOW_DAYS = 7;
+
+/** Filtro del registro de ejecuciones. */
+export type JobLogFilter = "all" | "failed" | "active" | "completed";
+
+export const JOB_LOG_FILTERS: { id: JobLogFilter; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "failed", label: "Con error" },
+  { id: "active", label: "En curso" },
+  { id: "completed", label: "Completados" },
+];
+
+/** ¿El trabajo entra en el filtro elegido? Los cancelados solo salen en «Todos». */
+export function matchesJobLogFilter(status: string, filter: JobLogFilter): boolean {
+  switch (filter) {
+    case "failed":
+      return status === JOB_STATUS.FAILED;
+    case "active":
+      return isActiveJobStatus(status);
+    case "completed":
+      return status === JOB_STATUS.COMPLETED;
+    default:
+      return true;
+  }
+}
+
+/** Recuento por filtro, para las pestañas del registro. */
+export function countJobsByFilter(
+  statuses: readonly string[],
+): Record<JobLogFilter, number> {
+  const counts: Record<JobLogFilter, number> = {
+    all: statuses.length,
+    failed: 0,
+    active: 0,
+    completed: 0,
+  };
+  for (const status of statuses) {
+    if (status === JOB_STATUS.FAILED) counts.failed += 1;
+    else if (status === JOB_STATUS.COMPLETED) counts.completed += 1;
+    else if (isActiveJobStatus(status)) counts.active += 1;
+  }
+  return counts;
+}
+
+/**
+ * Duración legible de una ejecución: hasta que terminó o, si sigue en curso,
+ * hasta `now`. «—» si los tiempos no tienen sentido.
+ */
+export function formatJobDuration(
+  createdAt: number,
+  finishedAt: number | undefined,
+  now: number,
+): string {
+  const end = finishedAt ?? now;
+  const ms = end - createdAt;
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h ${minutes % 60} min`;
+}
+
+/** Progreso legible: «120 de 300» o «120 procesados» si no hay total. */
+export function formatJobProgress(processed: number, total?: number): string {
+  if (total !== undefined && total > 0) return `${processed} de ${total}`;
+  return processed > 0 ? `${processed} procesados` : "—";
+}

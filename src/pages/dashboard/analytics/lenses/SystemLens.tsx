@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -15,8 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { AnalyticsSystemHealth } from "@/lib/analytics";
+import type { JobLogFilter } from "@/lib/backgroundJobs";
 import { formatDateTime } from "@/lib/workshop";
 import { KpiCard } from "../components/AnalyticsPrimitives";
+import { BackgroundJobsLogDialog } from "../components/BackgroundJobsLogDialog";
 
 export interface SystemLensProps {
   health: AnalyticsSystemHealth;
@@ -34,6 +37,7 @@ export function SystemLens({
   onOpenAudit,
 }: SystemLensProps) {
   const hasAlerts = health.unreadableFiles > 0 || health.failedJobs > 0;
+  const [jobsLog, setJobsLog] = useState<JobLogFilter | null>(null);
 
   return (
     <div className="space-y-6">
@@ -68,8 +72,10 @@ export function SystemLens({
           value={health.failedJobs}
           highlight={`${health.activeJobs} en curso`}
           highlightClassName="text-signal"
-          footerText="Fallidos en los últimos 7 días"
-          onClick={onOpenSettings}
+          footerText="Fallidos en los últimos 7 días · ver registro"
+          onClick={() =>
+            setJobsLog(health.failedJobs > 0 ? "failed" : "all")
+          }
         />
 
         <KpiCard
@@ -106,17 +112,21 @@ export function SystemLens({
               Resumen de mantenimiento y alertas técnicas para administración
             </CardDescription>
           </div>
-          {onOpenSettings && (
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
-              className="shrink-0"
-              onClick={onOpenSettings}
+              onClick={() => setJobsLog("all")}
             >
-              Ir a Ajustes
-              <ArrowRight className="ml-1 size-3.5" />
+              Ver trabajos
             </Button>
-          )}
+            {onOpenSettings && (
+              <Button variant="ghost" size="sm" onClick={onOpenSettings}>
+                Ir a Ajustes
+                <ArrowRight className="ml-1 size-3.5" />
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {!hasAlerts ? (
@@ -137,20 +147,39 @@ export function SystemLens({
                 </li>
               )}
               {health.failedJobs > 0 && (
-                <li className="flex items-center justify-between gap-3 py-2.5">
+                <li className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                   <span>
                     Hay trabajos en segundo plano terminados con error en los
                     últimos 7 días.
                   </span>
-                  <Badge variant="destructive" className="shrink-0">
-                    {health.failedJobs} fallidos
-                  </Badge>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <Badge variant="destructive">
+                      {health.failedJobs} fallidos
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setJobsLog("failed")}
+                    >
+                      Ver errores
+                    </Button>
+                  </span>
                 </li>
               )}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      <BackgroundJobsLogDialog
+        open={jobsLog !== null}
+        onOpenChange={(open) => {
+          if (!open) setJobsLog(null);
+        }}
+        initialFilter={jobsLog ?? "all"}
+      />
     </div>
   );
 }

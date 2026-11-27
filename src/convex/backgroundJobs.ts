@@ -9,7 +9,9 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { memberStatus } from "./permissions";
+import { isAdminUser } from "../lib/roles";
 import {
+  JOB_LOG_WINDOW_DAYS,
   JOB_STATUS,
   canCancelJob,
   canTransitionJob,
@@ -29,6 +31,8 @@ async function requireMemberUser(ctx: QueryCtx | MutationCtx) {
 
 const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_VISIBLE_JOBS = 20;
+/** Tope de filas del registro de administración (la purga deja ~7 días). */
+const MAX_ADMIN_JOBS = 300;
 
 /**
  * Crea un trabajo nuevo o reutiliza uno activo si comparte `dedupeKey`.
@@ -91,6 +95,53 @@ export const listMine = query({
     return rows.filter(
       (job) => isActiveJobStatus(job.status) || job.updatedAt >= cutoff,
     );
+  },
+});
+
+/**
+ * Registro de ejecuciones de todo el taller (solo administrador): los trabajos
+ * de los últimos días de cualquier usuario, con quién los lanzó, su progreso y
+ * el error con el que terminaron. Es lo que explica el aviso de «trabajos
+ * fallidos» del panel de estado del sistema.
+ */
+export const listForAdmin = query({
+  args: {},
+  handler: async (ctx) => {
+    const { user, issue } = await memberStatus(ctx);
+    if (issue || !user || !isAdminUser(user)) {
+      throw new ConvexError(
+        "Solo el administrador puede consultar el registro de trabajos.",
+      );
+    }
+    const cutoff = Date.now() - JOB_LOG_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const rows = (
+      await ctx.db.query("backgroundJobs").order("desc").take(MAX_ADMIN_JOBS)
+    ).filter((job) => isActiveJobStatus(job.status) || job.createdAt >= cutoff);
+
+    const owners = new Map<Id<"users">, { name: string; email?: string }>();
+    for (const userId of new Set(rows.map((job) => job.userId))) {
+      const owner = await ctx.db.get(userId);
+      owners.set(userId, {
+        name: owner?.name ?? owner?.email ?? "Usuario eliminado",
+        email: owner?.email,
+      });
+    }
+
+    return rows.map((job) => ({
+      _id: job._id,
+      type: job.type,
+      title: job.title,
+      status: job.status,
+      processed: job.processed,
+      total: job.total,
+      detail: job.detail,
+      error: job.error,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      finishedAt: job.finishedAt,
+      ownerName: owners.get(job.userId)?.name ?? "Usuario eliminado",
+      ownerEmail: owners.get(job.userId)?.email,
+    }));
   },
 });
 
