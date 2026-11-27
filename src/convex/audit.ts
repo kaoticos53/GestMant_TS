@@ -106,6 +106,8 @@ export const securityAuditLogs = query({
   args: {
     paginationOpts: paginationOptsValidator,
     action: v.optional(v.string()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -121,18 +123,41 @@ export const securityAuditLogs = query({
       );
     }
 
-    const action = args.action;
+    const { action, from, to } = args;
     if (action) {
       return await ctx.db
         .query("securityAuditLog")
-        .withIndex("by_action_and_at", (q) => q.eq("action", action))
+        .withIndex("by_action_and_at", (q) => {
+          const byAction = q.eq("action", action);
+          if (from !== undefined && to !== undefined) {
+            return byAction.gte("at", from).lte("at", to);
+          }
+          if (from !== undefined) {
+            return byAction.gte("at", from);
+          }
+          if (to !== undefined) {
+            return byAction.lte("at", to);
+          }
+          return byAction;
+        })
         .order("desc")
         .paginate(args.paginationOpts);
     }
 
     return await ctx.db
       .query("securityAuditLog")
-      .withIndex("by_at")
+      .withIndex("by_at", (q) => {
+        if (from !== undefined && to !== undefined) {
+          return q.gte("at", from).lte("at", to);
+        }
+        if (from !== undefined) {
+          return q.gte("at", from);
+        }
+        if (to !== undefined) {
+          return q.lte("at", to);
+        }
+        return q;
+      })
       .order("desc")
       .paginate(args.paginationOpts);
   },

@@ -3,6 +3,7 @@ import type { Member, RoleOption } from "../types";
 import { CreateUserDialog } from "../dialogs/CreateUserDialog";
 import { EditUserDialog } from "../dialogs/EditUserDialog";
 import { DeactivateDialog } from "../dialogs/DeactivateDialog";
+import { ResetPasswordDialog } from "../dialogs/ResetPasswordDialog";
 
 export interface UsersDialogsProps {
   createOpen: boolean;
@@ -14,10 +15,12 @@ export interface UsersDialogsProps {
   deactivating: Member | null;
   onDeactivateClose: () => void;
   onConfirmDeactivate: () => Promise<void>;
+  resetting?: Member | null;
+  onResetClose?: () => void;
 }
 
 /**
- * Agrupador modal para las operaciones de alta, edición y baja de usuarios.
+ * Agrupador modal para las operaciones de alta, edición, baja y contraseña de usuarios.
  */
 export function UsersDialogs({
   createOpen,
@@ -29,6 +32,8 @@ export function UsersDialogs({
   deactivating,
   onDeactivateClose,
   onConfirmDeactivate,
+  resetting,
+  onResetClose,
 }: UsersDialogsProps) {
   return (
     <>
@@ -47,6 +52,9 @@ export function UsersDialogs({
           onConfirm={onConfirmDeactivate}
           onClose={onDeactivateClose}
         />
+      )}
+      {resetting && onResetClose && (
+        <ResetPasswordDialog member={resetting} onClose={onResetClose} />
       )}
     </>
   );

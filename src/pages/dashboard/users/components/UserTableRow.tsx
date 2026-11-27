@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import type { Id } from "@/convex/_generated/dataModel";
 import { roleBadgeClassName } from "@/lib/roles";
-import { Pencil, UserCheck, UserX } from "lucide-react";
+import { KeyRound, Pencil, UserCheck, UserX } from "lucide-react";
 import { memo } from "react";
 import { getMemberRoleKeys } from "../helpers";
 import type { Member, RoleOption } from "../types";
@@ -19,6 +19,7 @@ export interface UserTableRowProps {
   onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => void | Promise<void>;
+  onResetPassword?: (member: Member) => void;
 }
 
 function cnActive(active: boolean): string {
@@ -39,6 +40,7 @@ export const UserTableRow = memo(function UserTableRow({
   onOpenDetail,
   onEdit,
   onToggleActive,
+  onResetPassword,
 }: UserTableRowProps) {
   const memberRoles = getMemberRoleKeys(member);
   const displayRoles =
@@ -95,7 +97,7 @@ export const UserTableRow = memo(function UserTableRow({
           <UserRolesPopover
             memberRoles={memberRoles}
             roleOptions={roleOptions}
-            disabled={isSelf}
+            disabled={isSelf || member.isAnonymous === true}
             memberName={memberDisplayName}
             onSaveRoles={(roles) => onChangeRoles(member._id, roles)}
           />
@@ -115,6 +117,22 @@ export const UserTableRow = memo(function UserTableRow({
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1.5">
+          {!isSelf &&
+            member.isAnonymous !== true &&
+            Boolean(member.email) &&
+            onResetPassword && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground"
+                aria-label={`Restablecer contraseña de ${member.name ?? member.email ?? "usuario"}`}
+                title="Restablecer contraseña"
+                onClick={() => onResetPassword(member)}
+              >
+                <KeyRound className="size-4" />
+              </Button>
+            )}
           <Button
             type="button"
             variant="ghost"

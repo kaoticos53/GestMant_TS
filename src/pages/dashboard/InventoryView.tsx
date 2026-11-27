@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
 import { ListViewSkeleton } from "@/components/ListViewSkeleton";
+import { PrintBatchLabelsDialog } from "@/components/PrintBatchLabelsDialog";
 import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import { TablePagination } from "@/components/TablePagination";
 import { PartFormDialog } from "./inventory/dialogs/PartFormDialog";
@@ -35,6 +36,7 @@ export function InventoryView({
   onOpenEquipmentModel,
 }: InventoryViewProps) {
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
+  const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const [detailId, setDetailId] = useState<Id<"spareParts"> | null>(null);
   const [movementsOpen, setMovementsOpen] = useState(false);
   const [countOpen, setCountOpen] = useState(false);
@@ -127,6 +129,7 @@ export function InventoryView({
               onNewPart={() => setFormTarget({ part: null })}
               onOpenMovements={() => setMovementsOpen(true)}
               onOpenCount={() => setCountOpen(true)}
+              onOpenBatchLabels={() => setBatchLabelsOpen(true)}
             />
           }
         />
@@ -196,6 +199,13 @@ export function InventoryView({
       <PrintLabelDialog
         label={labelTarget === null ? null : buildPartLabel(labelTarget, origin)}
         onClose={() => setLabelTarget(null)}
+      />
+
+      <PrintBatchLabelsDialog
+        open={batchLabelsOpen}
+        onClose={() => setBatchLabelsOpen(false)}
+        kind="part"
+        labels={filtered.map((part) => buildPartLabel(part, origin))}
       />
 
       <PartDetailSheet

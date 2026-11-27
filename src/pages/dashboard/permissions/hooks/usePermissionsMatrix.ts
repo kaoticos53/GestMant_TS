@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { type Capability } from "@/lib/permissions";
 import {
   canRestoreDefaults,
+  countDirtyCells,
   dropRole,
   editableGrants,
   isDirty,
@@ -28,6 +29,7 @@ export interface UsePermissionsMatrixReturn {
   saved: Draft | undefined;
   current: Draft | undefined;
   dirty: boolean;
+  dirtyCount: number;
   canRestore: boolean;
   saving: boolean;
   toggle: (roleKey: string, id: Capability) => void;
@@ -62,6 +64,10 @@ export function usePermissionsMatrix({
   );
 
   const dirty = Boolean(draft !== null && saved !== undefined && isDirty(draft, saved));
+  const dirtyCount = useMemo(
+    () => (current && saved ? countDirtyCells(current, saved) : 0),
+    [current, saved],
+  );
   const canRestore = Boolean(current !== undefined && canRestoreDefaults(current));
 
   const toggle = useCallback(
@@ -115,6 +121,7 @@ export function usePermissionsMatrix({
     saved,
     current,
     dirty,
+    dirtyCount,
     canRestore,
     saving,
     toggle,

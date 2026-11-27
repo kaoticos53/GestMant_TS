@@ -7,8 +7,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { api } from "@/convex/_generated/api";
 import { getErrorMessage } from "@/lib/workshop";
-import { UserX } from "lucide-react";
+import { useQuery } from "convex/react";
+import { AlertTriangle, UserX } from "lucide-react";
 import { useState } from "react";
 import type { Member } from "../types";
 
@@ -28,6 +30,11 @@ export function DeactivateDialog({
 }: DeactivateDialogProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const summary = useQuery(
+    api.members.getMemberSummary,
+    member.active ? { userId: member._id } : "skip",
+  );
+  const activeIncidents = summary?.activeAssignedIncidents ?? 0;
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -56,6 +63,25 @@ export function DeactivateDialog({
             podrás reactivarlo cuando quieras.
           </DialogDescription>
         </DialogHeader>
+
+        {member.active && activeIncidents > 0 && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              Este usuario tiene{" "}
+              <strong>
+                {activeIncidents}{" "}
+                {activeIncidents === 1
+                  ? "incidencia activa asignada"
+                  : "incidencias activas asignadas"}
+              </strong>
+              . Al darle de baja, conviene reasignarlas a otro técnico.
+            </span>
+          </div>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-destructive">

@@ -22,6 +22,8 @@ export interface SecurityAuditEntry {
 export const SECURITY_ACTION_LABELS: Record<string, string> = {
   role_change: "Cambio de rol",
   account_status_change: "Alta o baja de cuenta",
+  password_change: "Cambio de contraseña",
+  password_reset: "Restablecimiento de contraseña",
   session_revoked: "Revocación de sesiones",
   role_permissions_change: "Cambio de permisos de rol",
   role_definition_change: "Gestión de rol personalizado",
@@ -165,4 +167,30 @@ export function securityAuditCsvTable(entries: readonly SecurityAuditEntry[]): {
     formatSecurityMetadata(entry.metadata),
   ]);
   return { header, rows };
+}
+
+function normalizeAuditText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Filtra trazas de seguridad por texto sobre actor, objetivo, acción o detalles. */
+export function filterSecurityAuditEntries<T extends SecurityAuditEntry>(
+  entries: readonly T[],
+  query: string,
+): T[] {
+  const q = normalizeAuditText(query.trim());
+  if (!q) return [...entries];
+  return entries.filter((entry) =>
+    [
+      entry.actorEmail ?? "",
+      entry.actorId ?? "",
+      entry.target,
+      entry.action,
+      securityActionLabel(entry.action),
+      formatSecurityMetadata(entry.metadata),
+    ].some((field) => normalizeAuditText(field).includes(q)),
+  );
 }

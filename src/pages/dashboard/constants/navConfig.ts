@@ -16,7 +16,6 @@ import {
   ShoppingCart,
   Siren,
   SlidersHorizontal,
-  Sparkles,
   Users,
 } from "lucide-react";
 import type { DashboardStatItem } from "../components/DashboardStats";
@@ -96,7 +95,7 @@ export const MODULE_META: Record<
       "Tu buzón de Zimbra, con las carpetas y las cabeceras sincronizadas sin descargar los cuerpos.",
   },
   audit: {
-    title: "Auditoría de documentos",
+    title: "Auditoría",
     description:
       "La trazabilidad de los documentos: quién movió qué, cuándo y desde dónde.",
   },
@@ -246,7 +245,7 @@ export function buildNavItems({
       ? [
           {
             id: "audit" as const,
-            label: "Auditoría de documentos",
+            label: "Auditoría",
             icon: FileClock,
             badge: 0,
             group: "administracion" as const,
@@ -460,11 +459,6 @@ export interface BuildHeaderActionsParams {
   hasStaleWork: boolean;
   alertDismissed: boolean;
   onRestoreAlert: () => void;
-  canManageInventory: boolean;
-  isEmpty: boolean;
-  isSeedingMore: boolean;
-  loading: boolean;
-  onSeedMore: () => void;
 }
 
 /** Construye las acciones contextuales del menú de cabecera. */
@@ -475,11 +469,6 @@ export function buildHeaderActions({
   hasStaleWork,
   alertDismissed,
   onRestoreAlert,
-  canManageInventory,
-  isEmpty,
-  isSeedingMore,
-  loading,
-  onSeedMore,
 }: BuildHeaderActionsParams): PageHeaderAction[] {
   return [
     ...(canConfigureReport
@@ -497,19 +486,6 @@ export function buildHeaderActions({
             label: "Volver a mostrar el aviso",
             icon: Eye,
             onSelect: onRestoreAlert,
-          },
-        ]
-      : []),
-    ...(canManageInventory && !isEmpty
-      ? [
-          {
-            label: isSeedingMore
-              ? "Generando datos de ejemplo…"
-              : "Más datos de ejemplo",
-            icon: Sparkles,
-            onSelect: onSeedMore,
-            disabled: isSeedingMore || loading,
-            separatorBefore: true,
           },
         ]
       : []),

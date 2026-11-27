@@ -168,7 +168,6 @@ describe("navConfig", () => {
     it("construye acciones de cabecera contextuales", () => {
       const onOpenWeeklyReport = vi.fn();
       const onRestoreAlert = vi.fn();
-      const onSeedMore = vi.fn();
 
       const actions = buildHeaderActions({
         canConfigureReport: true,
@@ -177,20 +176,13 @@ describe("navConfig", () => {
         hasStaleWork: true,
         alertDismissed: true,
         onRestoreAlert,
-        canManageInventory: true,
-        isEmpty: false,
-        isSeedingMore: false,
-        loading: false,
-        onSeedMore,
       });
 
-      expect(actions.length).toBe(3);
+      expect(actions.length).toBe(2);
       actions[0].onSelect();
       expect(onOpenWeeklyReport).toHaveBeenCalled();
       actions[1].onSelect();
       expect(onRestoreAlert).toHaveBeenCalled();
-      actions[2].onSelect();
-      expect(onSeedMore).toHaveBeenCalled();
     });
   });
 });

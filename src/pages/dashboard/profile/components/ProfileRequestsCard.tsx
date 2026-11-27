@@ -9,6 +9,7 @@ import type { ProfileRequestsCardProps } from "../types";
 export function ProfileRequestsCard({
   requests,
   onOpenRequests,
+  onOpenRequest,
 }: ProfileRequestsCardProps) {
   return (
     <section className="rounded-xl border border-border/70 bg-card shadow-sm">
@@ -35,7 +36,9 @@ export function ProfileRequestsCard({
             <li key={request._id}>
               <button
                 type="button"
-                onClick={onOpenRequests}
+                onClick={() =>
+                  onOpenRequest ? onOpenRequest(request._id) : onOpenRequests()
+                }
                 className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60"
               >
                 <span className="font-mono text-xs font-semibold text-muted-foreground">

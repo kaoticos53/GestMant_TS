@@ -14,6 +14,7 @@ export interface ArchiveListSectionProps {
   filteredEntries: ArchiveEntry[];
   sort: QueueSortId;
   kind: ArchiveKind;
+  dateKey?: string;
   compact: boolean;
   canArchiveIncidents: boolean;
   canArchiveRequests: boolean;
@@ -29,6 +30,7 @@ export function ArchiveListSection({
   filteredEntries,
   sort,
   kind,
+  dateKey = "",
   compact,
   canArchiveIncidents,
   canArchiveRequests,
@@ -44,7 +46,7 @@ export function ArchiveListSection({
   const paging = useTablePagination({
     total: filteredEntries.length,
     rowsFit,
-    resetKey: `${search}|${sort}|${kind}`,
+    resetKey: `${search}|${sort}|${kind}|${dateKey}`,
   });
 
   const visible = filteredEntries.slice(paging.from - 1, paging.to);
@@ -53,7 +55,7 @@ export function ArchiveListSection({
   if (filteredEntries.length === 0) {
     return (
       <ArchiveEmptyState
-        search={search}
+        search={search || (dateKey !== "|" && dateKey !== "" ? "el rango de fechas" : "")}
         totalEntries={totalEntries}
         onClearSearch={onClearSearch}
       />
@@ -64,7 +66,7 @@ export function ArchiveListSection({
     <div className="flex flex-col gap-5">
       <ListArea
         ref={areaRef}
-        resetKey={`${search}|${sort}|${kind}|${paging.page}`}
+        resetKey={`${search}|${sort}|${kind}|${dateKey}|${paging.page}`}
       >
         <div className="flex flex-col gap-5">
           {sections.map((section) => (

@@ -19,6 +19,8 @@ export interface UseArchiveEntriesOptions {
   search: string;
   kind: ArchiveKind;
   sort: QueueSortId;
+  fromMs?: number;
+  toMs?: number;
 }
 
 export function useArchiveEntries({
@@ -27,6 +29,8 @@ export function useArchiveEntries({
   search,
   kind,
   sort,
+  fromMs,
+  toMs,
 }: UseArchiveEntriesOptions) {
   // 1. Unificación y normalización de entradas memoizada
   const allEntries = useMemo<ArchiveEntry[]>(() => {
@@ -36,19 +40,23 @@ export function useArchiveEntries({
     ];
   }, [incidents, requests]);
 
-  // 2. Búsqueda y normalización de referencia memoizada
+  // 2. Búsqueda, normalización de referencia y filtro por fecha memoizados
   const matched = useMemo(() => {
     const trimmed = search.trim();
-    if (!trimmed) return allEntries;
+    const normalizedRef = trimmed ? normalizeIncidentReference(trimmed) : "";
 
-    const normalizedRef = normalizeIncidentReference(trimmed);
-
-    return allEntries.filter(
-      (entry) =>
-        matchesQuery(entry.fields, trimmed) ||
-        (entry.kind === "incident" && entry.reference === normalizedRef),
-    );
-  }, [allEntries, search]);
+    return allEntries.filter((entry) => {
+      if (trimmed) {
+        const textOk =
+          matchesQuery(entry.fields, trimmed) ||
+          (entry.kind === "incident" && entry.reference === normalizedRef);
+        if (!textOk) return false;
+      }
+      if (fromMs !== undefined && entry.date < fromMs) return false;
+      if (toMs !== undefined && entry.date > toMs) return false;
+      return true;
+    });
+  }, [allEntries, search, fromMs, toMs]);
 
   // 3. Conteo de incidencias y peticiones según los resultados encontrados
   const counts = useMemo<Record<ArchiveKind, number>>(

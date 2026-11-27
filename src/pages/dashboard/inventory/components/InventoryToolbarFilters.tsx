@@ -1,4 +1,4 @@
-import { CircleAlert, ClipboardCheck, FileDown, History, Plus } from "lucide-react";
+import { CircleAlert, ClipboardCheck, FileDown, History, Plus, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -30,6 +30,7 @@ export interface InventoryToolbarActionsProps {
   onNewPart: () => void;
   onOpenMovements?: () => void;
   onOpenCount?: () => void;
+  onOpenBatchLabels?: () => void;
 }
 
 export function InventoryToolbarFilters({
@@ -116,6 +117,7 @@ export function InventoryToolbarActions({
   onNewPart,
   onOpenMovements,
   onOpenCount,
+  onOpenBatchLabels,
 }: InventoryToolbarActionsProps) {
   return (
     <>
@@ -141,6 +143,19 @@ export function InventoryToolbarActions({
         >
           <History className="size-4" />
           Movimientos
+        </Button>
+      )}
+      {onOpenBatchLabels && (
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={onOpenBatchLabels}
+          disabled={filteredCount === 0}
+          title="Imprimir lote de etiquetas QR de los repuestos filtrados"
+        >
+          <Tags className="size-4" />
+          Etiquetas ({filteredCount})
         </Button>
       )}
       <Button

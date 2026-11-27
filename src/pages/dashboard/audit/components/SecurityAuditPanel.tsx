@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { usePaginatedQuery } from "convex/react";
-import { Download, Loader2, ShieldAlert } from "lucide-react";
+import { Download, Loader2, Search, ShieldAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { api } from "@/convex/_generated/api";
@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import {
 import { csvFilename, downloadCsv, toCsv } from "@/lib/export";
 import {
   SECURITY_ACTION_OPTIONS,
+  filterSecurityAuditEntries,
   formatSecurityMetadata,
   securityActionLabel,
   securityAuditCsvTable,
@@ -34,20 +36,52 @@ const PAGE_SIZE = 25;
 
 /**
  * Visor de la tabla inmutable `securityAuditLog` para administradores, con
- * paginación por cursor, filtro por tipo de evento y exportación CSV segura.
+ * paginación por cursor, filtros por tipo, fecha y texto libre, y exportación CSV segura.
  */
 export function SecurityAuditPanel() {
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [searchText, setSearchText] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<SecurityAuditEntry | null>(
     null,
   );
+
+  const fromMs = fromDate
+    ? new Date(`${fromDate}T00:00:00`).getTime()
+    : undefined;
+  const toMs = toDate
+    ? new Date(`${toDate}T23:59:59.999`).getTime()
+    : undefined;
+
+  const queryArgs = {
+    ...(actionFilter === "all" ? {} : { action: actionFilter }),
+    ...(fromMs !== undefined && !Number.isNaN(fromMs) ? { from: fromMs } : {}),
+    ...(toMs !== undefined && !Number.isNaN(toMs) ? { to: toMs } : {}),
+  };
+
   const { results, status, loadMore, isLoading } = usePaginatedQuery(
     api.audit.securityAuditLogs,
-    actionFilter === "all" ? {} : { action: actionFilter },
+    queryArgs,
     { initialNumItems: PAGE_SIZE },
   );
 
-  const entries = results as SecurityAuditEntry[];
+  const entries = filterSecurityAuditEntries(
+    results as SecurityAuditEntry[],
+    searchText,
+  );
+  const hasFilters =
+    actionFilter !== "all" ||
+    searchText.trim() !== "" ||
+    fromDate !== "" ||
+    toDate !== "";
+
+  const clearFilters = () => {
+    setActionFilter("all");
+    setSearchText("");
+    setFromDate("");
+    setToDate("");
+  };
 
   const handleExport = () => {
     if (entries.length === 0) {
@@ -62,23 +96,55 @@ export function SecurityAuditPanel() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ShieldAlert className="size-5" />
-            </span>
-            <div>
-              <CardTitle className="text-lg">Auditoría de seguridad</CardTitle>
-              <CardDescription>
-                Registro inmutable de cambios de roles, sesiones, configuración
-                de correo, purgas manuales, vaciados y alertas anti-abuso.
-              </CardDescription>
+        <CardHeader className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ShieldAlert className="size-5" />
+              </span>
+              <div>
+                <CardTitle className="text-lg">Auditoría de seguridad</CardTitle>
+                <CardDescription>
+                  Registro inmutable de cambios de roles, sesiones, configuración
+                  de correo, purgas manuales, vaciados y alertas anti-abuso.
+                </CardDescription>
+              </div>
             </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 self-start sm:self-center"
+              onClick={handleExport}
+              disabled={entries.length === 0}
+            >
+              <Download className="size-4" />
+              Exportar CSV
+            </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[200px] flex-1">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Buscar por actor, destino o detalle…"
+                aria-label="Buscar trazas de seguridad"
+                className="pl-8"
+              />
+            </div>
+
             <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger className="w-full sm:w-[220px]" aria-label="Filtrar evento">
+              <SelectTrigger
+                className="w-full sm:w-[210px]"
+                aria-label="Filtrar evento"
+              >
                 <SelectValue placeholder="Todos los eventos" />
               </SelectTrigger>
               <SelectContent>
@@ -91,17 +157,38 @@ export function SecurityAuditPanel() {
               </SelectContent>
             </Select>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleExport}
-              disabled={entries.length === 0}
-            >
-              <Download className="size-4" />
-              Exportar CSV
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                aria-label="Desde"
+                title="Desde"
+                className="w-[140px]"
+              />
+              <span className="text-xs text-muted-foreground">a</span>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                aria-label="Hasta"
+                title="Hasta"
+                className="w-[140px]"
+              />
+            </div>
+
+            {hasFilters && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1 px-2 text-xs text-muted-foreground"
+                onClick={clearFilters}
+              >
+                <X className="size-3.5" />
+                Limpiar
+              </Button>
+            )}
           </div>
         </CardHeader>
 

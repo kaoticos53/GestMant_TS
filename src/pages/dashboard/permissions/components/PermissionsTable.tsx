@@ -10,17 +10,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CAPABILITIES, type Capability, type CapabilityMeta } from "@/lib/permissions";
-import { ADMIN_KEY, type Draft } from "@/lib/permissionsDraft";
+import { ADMIN_KEY, isCellDirty, type Draft } from "@/lib/permissionsDraft";
+import { cn } from "@/lib/utils";
 import type { RoleInfo } from "../types";
 
 export interface PermissionsTableProps {
   roles: RoleInfo[];
   current: Draft;
+  saved?: Draft;
   saving?: boolean;
   onToggle: (roleKey: string, id: Capability) => void;
   onEditRole: (role: RoleInfo) => void;
   onDuplicateRole: (role: RoleInfo) => void;
   onDeleteRole: (role: RoleInfo) => void;
+  onOpenRoleUsers?: (roleKey: string) => void;
 }
 
 const ICON_BUTTON_CLASS =
@@ -39,11 +42,13 @@ const CAPABILITY_HEAD_CLASS =
 export function PermissionsTable({
   roles,
   current,
+  saved,
   saving = false,
   onToggle,
   onEditRole,
   onDuplicateRole,
   onDeleteRole,
+  onOpenRoleUsers,
 }: PermissionsTableProps) {
   const groups = useMemo(
     () => [...new Set(CAPABILITIES.map((item) => item.group))],
@@ -90,11 +95,22 @@ export function PermissionsTable({
                     )}
                   </span>
                   <span className="block text-[10px] font-normal text-muted-foreground">
-                    {role.userCount === 0
-                      ? "Sin personas"
-                      : `${role.userCount} ${
-                          role.userCount === 1 ? "persona" : "personas"
-                        }`}
+                    {role.userCount === 0 ? (
+                      "Sin personas"
+                    ) : onOpenRoleUsers ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenRoleUsers(role.key)}
+                        className="text-signal underline-offset-2 hover:underline"
+                      >
+                        {role.userCount}{" "}
+                        {role.userCount === 1 ? "persona" : "personas"}
+                      </button>
+                    ) : (
+                      `${role.userCount} ${
+                        role.userCount === 1 ? "persona" : "personas"
+                      }`
+                    )}
                   </span>
                   {role.kind === "custom" && (
                     <span className="mt-1 flex gap-1">
@@ -159,7 +175,14 @@ export function PermissionsTable({
                         </p>
                       </TableCell>
                       {roles.map((role) => (
-                        <TableCell key={role.key} className="align-top">
+                        <TableCell
+                          key={role.key}
+                          className={cn(
+                            "align-top transition-colors",
+                            isCellDirty(current, saved, role.key, item.id) &&
+                              "bg-amber-500/10 ring-1 ring-inset ring-amber-500/30",
+                          )}
+                        >
                           {renderCell(role, item)}
                         </TableCell>
                       ))}

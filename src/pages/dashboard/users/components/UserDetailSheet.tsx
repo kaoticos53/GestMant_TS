@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import {
   Activity,
   History,
+  KeyRound,
   Mail,
   MapPin,
   Pencil,
@@ -34,6 +35,7 @@ export interface UserDetailSheetProps {
   onClose: () => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => void | Promise<void>;
+  onResetPassword?: (member: Member) => void;
 }
 
 export function UserDetailSheet({
@@ -43,6 +45,7 @@ export function UserDetailSheet({
   onClose,
   onEdit,
   onToggleActive,
+  onResetPassword,
 }: UserDetailSheetProps) {
   const summary = useQuery(
     api.members.getMemberSummary,
@@ -116,6 +119,23 @@ export function UserDetailSheet({
                 <Pencil className="mr-1.5 size-4" />
                 Editar perfil
               </Button>
+              {!isSelf &&
+                member.isAnonymous !== true &&
+                Boolean(member.email) &&
+                onResetPassword && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onResetPassword(member);
+                    }}
+                  >
+                    <KeyRound className="mr-1.5 size-4" />
+                    Restablecer contraseña
+                  </Button>
+                )}
               {!isSelf && (
                 <Button
                   type="button"

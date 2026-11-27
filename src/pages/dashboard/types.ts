@@ -2,6 +2,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import type { LucideIcon } from "lucide-react";
 import type { OpenArchivedDoc } from "./ArchiveView";
 import type { RequestFilterId } from "./requests/types";
+import type { WorkshopTabId } from "./settings/view";
 
 export type NavId =
   | "analytics"
@@ -62,5 +63,7 @@ export interface NavigationTarget {
   manualsSearch?: string;
   purchasingSection?: "pending" | "orders" | "movements" | "history";
   purchaseOrderId?: Id<"purchaseOrders"> | null;
+  settingsTab?: WorkshopTabId;
+  usersRoleFilter?: string;
   timestamp?: number;
 }

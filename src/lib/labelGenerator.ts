@@ -116,6 +116,11 @@ export function labelLookupUrl(
   return `${base}/dashboard?${param}=${encodeURIComponent(code.trim())}`;
 }
 
+/** Un elemento es imprimible si tiene un código no vacío para generar su QR/barras. */
+export function isPrintableLabel(label: Pick<LabelData, "code">): boolean {
+  return label.code.trim().length > 0;
+}
+
 /** La etiqueta de un equipo del inventario. */
 export function equipmentLabel(
   equipment: LabelEquipmentLike,

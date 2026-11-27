@@ -16,6 +16,19 @@ export type Draft = Record<string, Grants>;
 /** Clave del administrador: siempre los tiene todos y no se guarda aquí. */
 export const ADMIN_KEY = "admin";
 
+/** Prerrequisitos de lectura para capacidades de gestión o creación. */
+export const CAPABILITY_DEPENDENCIES: Partial<
+  Record<Capability, readonly Capability[]>
+> = {
+  manageIncidents: ["viewIncidents"],
+  createRequests: ["viewRequests"],
+  decideRequests: ["viewRequests"],
+  managePurchasing: ["viewPurchasing"],
+  manageInventory: ["viewInventory"],
+  manageEquipment: ["viewEquipment"],
+  manageManuals: ["viewManuals"],
+};
+
 /** Permisos de cada rol editable (el administrador se queda fuera). */
 export function editableGrants(roles: { key: string; grants: Grants }[]): Draft {
   const draft: Draft = {};
@@ -72,7 +85,23 @@ export function toggleGrant(
   if (!base) return current;
   const next: Draft = {};
   for (const key of Object.keys(current)) next[key] = { ...current[key] };
-  next[roleKey][id] = !base[id];
+  const enabling = !base[id];
+  next[roleKey][id] = enabling;
+
+  if (enabling) {
+    for (const prereq of CAPABILITY_DEPENDENCIES[id] ?? []) {
+      next[roleKey][prereq] = true;
+    }
+  } else {
+    for (const [dep, prereqs] of Object.entries(CAPABILITY_DEPENDENCIES) as [
+      Capability,
+      readonly Capability[],
+    ][]) {
+      if (prereqs.includes(id)) {
+        next[roleKey][dep] = false;
+      }
+    }
+  }
   return next;
 }
 
@@ -128,4 +157,39 @@ export function pendingChanges(draft: Draft, saved: Draft): PendingChange[] {
 /** ¿Hay cambios sin guardar? (mismo criterio que `pendingChanges`). */
 export function isDirty(draft: Draft, saved: Draft): boolean {
   return pendingChanges(draft, saved).length > 0;
+}
+
+/** Indica si una celda concreta de rol + capacidad difiere de lo guardado. */
+export function isCellDirty(
+  current: Draft,
+  saved: Draft | undefined,
+  roleKey: string,
+  id: Capability,
+): boolean {
+  if (!saved || roleKey === ADMIN_KEY) return false;
+  const savedGrants = saved[roleKey];
+  const currentGrants = current[roleKey];
+  if (!savedGrants || !currentGrants) return false;
+  return Boolean(currentGrants[id]) !== Boolean(savedGrants[id]);
+}
+
+/** Cuenta cuántas celdas individuales han cambiado respecto a lo guardado. */
+export function countDirtyCells(
+  current: Draft,
+  saved: Draft | undefined,
+): number {
+  if (!saved) return 0;
+  let count = 0;
+  for (const roleKey of Object.keys(saved)) {
+    if (roleKey === ADMIN_KEY) continue;
+    const savedGrants = saved[roleKey];
+    const currentGrants = current[roleKey];
+    if (!savedGrants || !currentGrants) continue;
+    for (const cap of Object.keys(savedGrants) as Capability[]) {
+      if (Boolean(currentGrants[cap]) !== Boolean(savedGrants[cap])) {
+        count += 1;
+      }
+    }
+  }
+  return count;
 }

@@ -30,11 +30,15 @@ import {
 import { useUsersOperations } from "./users/hooks/useUsersOperations";
 import type { Member, RoleOption } from "./users/types";
 
+export interface UsersViewProps {
+  initialRoleFilter?: string;
+}
+
 /**
  * Vista de administración de usuarios del taller: lista ordenable y paginada,
  * gestión de roles, alta de credenciales y edición de perfiles.
  */
-export function UsersView() {
+export function UsersView({ initialRoleFilter = "all" }: UsersViewProps = {}) {
   const users = useQuery(api.members.list);
   const rawRoleOptions = useQuery(api.permissions.listRoles);
   const roleOptions: RoleOption[] = useMemo(
@@ -47,9 +51,10 @@ export function UsersView() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null);
+  const [resetTarget, setResetTarget] = useState<Member | null>(null);
   const [detailTarget, setDetailTarget] = useState<Member | null>(null);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState(initialRoleFilter);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const {
@@ -185,6 +190,7 @@ export function UsersView() {
         onOpenDetail={setDetailTarget}
         onEdit={setEditing}
         onToggleActive={handleToggleActive}
+        onResetPassword={setResetTarget}
       />
 
       <UserDetailSheet
@@ -194,6 +200,7 @@ export function UsersView() {
         onClose={() => setDetailTarget(null)}
         onEdit={setEditing}
         onToggleActive={handleToggleActive}
+        onResetPassword={setResetTarget}
       />
 
       <UsersDialogs
@@ -206,6 +213,8 @@ export function UsersView() {
         deactivating={deactivating}
         onDeactivateClose={() => setDeactivating(null)}
         onConfirmDeactivate={handleConfirmDeactivate}
+        resetting={resetTarget}
+        onResetClose={() => setResetTarget(null)}
       />
     </div>
   );

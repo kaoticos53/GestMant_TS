@@ -30,18 +30,14 @@ export function AuditMovementRow({
         </p>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{entry.by}</span>
-          {entry.archived ? (
-            <span className="font-mono">{entry.reference}</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onOpenIncident(entry.incidentId)}
-              title={`Abrir la ficha de ${entry.reference}`}
-              className="cursor-pointer rounded font-mono font-medium text-signal underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {entry.reference}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => onOpenIncident(entry.incidentId)}
+            title={`Abrir la ficha de ${entry.reference}`}
+            className="cursor-pointer rounded font-mono font-medium text-signal underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {entry.reference}
+          </button>
           {entry.title !== "" && <span>{entry.title}</span>}
         </p>
       </div>

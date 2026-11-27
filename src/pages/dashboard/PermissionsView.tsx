@@ -21,8 +21,10 @@ export type { RoleInfo, DialogState };
  */
 export function PermissionsView({
   onOpenMachines,
+  onOpenRoleUsers,
 }: {
   onOpenMachines?: () => void;
+  onOpenRoleUsers?: (roleKey: string) => void;
 } = {}) {
   const roles = useQuery(api.permissions.listRoles);
   const setManyRolePermissions = useMutation(
@@ -58,17 +60,11 @@ export function PermissionsView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-            <ShieldCheck className="size-5 text-signal" />
-            Roles y permisos
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Crea los roles del taller y decide en la matriz qué ve y qué puede
-            modificar cada uno. Los cambios se aplican al instante en el menú y
-            en las acciones del backend.
-          </p>
-        </div>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Crea los roles del taller y decide en la matriz qué ve y qué puede
+          modificar cada uno. Los cambios se aplican al instante en el menú y en
+          las acciones del backend.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {onOpenMachines && (
             <Button
@@ -132,11 +128,13 @@ export function PermissionsView({
       <PermissionsTable
         roles={roles}
         current={matrix.current}
+        saved={matrix.saved}
         saving={matrix.saving}
         onToggle={matrix.toggle}
         onEditRole={roleMgmt.openEditRole}
         onDuplicateRole={(role) => roleMgmt.openNewRole(role)}
         onDeleteRole={roleMgmt.openDeleteRole}
+        onOpenRoleUsers={onOpenRoleUsers}
       />
 
       <PermissionsStats roles={roles} current={matrix.current} />
@@ -148,7 +146,9 @@ export function PermissionsView({
           className="sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal/30 bg-background/95 px-4 py-3 shadow-lg backdrop-blur-sm"
         >
           <p className="text-sm font-medium">
-            Tienes cambios sin guardar en los permisos
+            {matrix.dirtyCount === 1
+              ? "1 cambio sin guardar en los permisos"
+              : `${matrix.dirtyCount} cambios sin guardar en los permisos`}
           </p>
           <div className="flex items-center gap-2">
             <Button

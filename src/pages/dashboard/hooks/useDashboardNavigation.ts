@@ -25,6 +25,8 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   manualsSearch: "",
   purchasingSection: "pending",
   purchaseOrderId: null,
+  settingsTab: undefined,
+  usersRoleFilter: undefined,
   timestamp: Date.now(),
 };
 
@@ -80,6 +82,8 @@ export function useDashboardNavigation(
       requestsFilter: "all",
       requestsMineOnly: false,
       inventoryLowStockOnly: false,
+      settingsTab: undefined,
+      usersRoleFilter: undefined,
       timestamp: Date.now(),
     }));
     setViewKeys((prev) => ({

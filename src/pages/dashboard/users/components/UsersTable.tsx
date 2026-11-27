@@ -36,6 +36,7 @@ export interface UsersTableProps {
   onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => Promise<void>;
+  onResetPassword?: (member: Member) => void;
 }
 
 /**
@@ -56,6 +57,7 @@ export function UsersTable({
   onOpenDetail,
   onEdit,
   onToggleActive,
+  onResetPassword,
 }: UsersTableProps) {
   return (
     <div className="rounded-xl border border-border/70 bg-card shadow-sm">
@@ -107,6 +109,7 @@ export function UsersTable({
                 onOpenDetail={onOpenDetail}
                 onEdit={onEdit}
                 onToggleActive={onToggleActive}
+                onResetPassword={onResetPassword}
               />
             ))}
           </TableBody>

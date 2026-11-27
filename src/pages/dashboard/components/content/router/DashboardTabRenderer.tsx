@@ -200,6 +200,8 @@ export function DashboardTabRenderer({
           user={user}
           onOpenIncidents={() => goToTab("incidents")}
           onOpenRequests={() => goToTab("requests")}
+          onOpenIncident={can("viewIncidents") ? openIncident : undefined}
+          onOpenRequest={can("viewRequests") ? openRequest : undefined}
         />
       );
 
@@ -339,7 +341,13 @@ export function DashboardTabRenderer({
           onOpenRequest={openRequest}
           onOpenSettings={
             can("manageIncidents") || can("decideRequests")
-              ? () => goToTab("settings")
+              ? () =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "settings",
+                    settingsTab: "storage",
+                    timestamp: Date.now(),
+                  }))
               : undefined
           }
         />
@@ -351,6 +359,8 @@ export function DashboardTabRenderer({
     case "settings":
       return (
         <WorkshopSettingsView
+          key={`settings-${target.settingsTab ?? "default"}-${target.timestamp ?? 0}`}
+          defaultTab={target.settingsTab}
           canManageArchive={can("manageIncidents") || can("decideRequests")}
           canManageAlert={can("manageIncidents")}
           canManageAudit={adminOk && can("viewAudit")}
@@ -367,10 +377,30 @@ export function DashboardTabRenderer({
       return <AuditView onOpenIncident={openIncident} />;
 
     case "users":
-      return <UsersView />;
+      return (
+        <UsersView
+          key={`users-${target.usersRoleFilter ?? "all"}-${target.timestamp ?? 0}`}
+          initialRoleFilter={target.usersRoleFilter ?? "all"}
+        />
+      );
 
     case "permissions":
-      return <PermissionsView onOpenMachines={() => goToTab("machines")} />;
+      return (
+        <PermissionsView
+          onOpenMachines={() => goToTab("machines")}
+          onOpenRoleUsers={
+            can("manageUsers")
+              ? (roleKey) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "users",
+                    usersRoleFilter: roleKey,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
+          }
+        />
+      );
 
     default:
       return null;

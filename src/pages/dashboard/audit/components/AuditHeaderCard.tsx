@@ -11,10 +11,7 @@ export function AuditHeaderCard({ rango, audit }: AuditHeaderCardProps) {
           <FileClock className="size-4" />
         </span>
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold tracking-tight">
-            Auditoría de documentos
-          </h2>
-          <p className="mt-0.5 max-w-3xl text-xs leading-5 text-muted-foreground">
+          <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
             Cada alta, edición, reemplazo de archivo y retirada de un documento
             del expediente, de todas las incidencias y con quién lo firmó. Lo
             retirado ya no está en la ficha —y de un archivo reemplazado tampoco

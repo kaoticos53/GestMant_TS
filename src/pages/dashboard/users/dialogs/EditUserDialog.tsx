@@ -30,6 +30,7 @@ export function EditUserDialog({
   isSelf = false,
   onClose,
 }: EditUserDialogProps) {
+  const isAnonymous = member.isAnonymous === true;
   const {
     name,
     setName,
@@ -77,13 +78,19 @@ export function EditUserDialog({
                 roleOptions={roleOptions}
                 selectedRoles={roles}
                 onChange={setRoles}
-                disabled={busy || isSelf}
+                disabled={busy || isSelf || isAnonymous}
                 idPrefix="edit-user-role"
               />
-              {isSelf && (
+              {isAnonymous ? (
                 <p className="text-xs text-muted-foreground">
-                  No puedes cambiar tus propios roles desde aquí.
+                  Las cuentas de invitado no pueden recibir roles del taller.
                 </p>
+              ) : (
+                isSelf && (
+                  <p className="text-xs text-muted-foreground">
+                    No puedes cambiar tus propios roles desde aquí.
+                  </p>
+                )
               )}
             </div>
           )}

@@ -5,7 +5,7 @@ import {
   fallbackRoleMeta,
   roleBadgeClassName,
 } from "@/lib/roles";
-import { Pencil } from "lucide-react";
+import { KeyRound, Pencil } from "lucide-react";
 import { getUserInitial } from "../helpers";
 import type { ProfileHeaderCardProps } from "../types";
 
@@ -16,6 +16,7 @@ export function ProfileHeaderCard({
   roleDetails,
   metaChips,
   onEdit,
+  onChangePassword,
 }: ProfileHeaderCardProps) {
   const initial = getUserInitial(user);
   const effectiveRoles = effectiveUserRoles(user);
@@ -85,15 +86,28 @@ export function ProfileHeaderCard({
             )}
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-2"
-          onClick={onEdit}
-        >
-          <Pencil className="size-4" />
-          Editar perfil
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onChangePassword && (
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={onChangePassword}
+            >
+              <KeyRound className="size-4" />
+              Cambiar contraseña
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2"
+            onClick={onEdit}
+          >
+            <Pencil className="size-4" />
+            Editar perfil
+          </Button>
+        </div>
       </div>
     </section>
   );

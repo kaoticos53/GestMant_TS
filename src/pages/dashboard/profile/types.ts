@@ -1,4 +1,4 @@
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import type { LucideIcon } from "lucide-react";
 
 /** Props de la vista de perfil de usuario. */
@@ -6,6 +6,8 @@ export interface ProfileViewProps {
   user: Doc<"users"> | null | undefined;
   onOpenIncidents: () => void;
   onOpenRequests: () => void;
+  onOpenIncident?: (id: Id<"incidents">) => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /** Tarjeta de métrica estadística personal. */
@@ -38,6 +40,7 @@ export interface ProfileHeaderCardProps {
   roleDetails?: ProfileRoleDetail[];
   metaChips: ProfileMetaChip[];
   onEdit: () => void;
+  onChangePassword?: () => void;
 }
 
 /** Props para el panel de estadísticas del perfil. */
@@ -49,12 +52,14 @@ export interface ProfileStatsGridProps {
 export interface ProfileIncidentsCardProps {
   incidents: Doc<"incidents">[];
   onOpenIncidents: () => void;
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }
 
 /** Props para el listado de peticiones de repuesto. */
 export interface ProfileRequestsCardProps {
   requests: Doc<"partRequests">[];
   onOpenRequests: () => void;
+  onOpenRequest?: (id: Id<"partRequests">) => void;
 }
 
 /** Props para el listado de avisos recientes. */

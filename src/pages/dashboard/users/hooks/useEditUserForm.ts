@@ -58,7 +58,8 @@ export function useEditUserForm({
       setError(validationError);
       return;
     }
-    if (!isSelf && roles.length === 0) {
+    const isAnonymous = member.isAnonymous === true;
+    if (!isSelf && !isAnonymous && roles.length === 0) {
       setError("Asigna al menos un rol al usuario.");
       return;
     }
@@ -75,7 +76,7 @@ export function useEditUserForm({
         phone,
       });
 
-      if (!isSelf && !areRoleListsEqual(roles, initialRoles)) {
+      if (!isSelf && !isAnonymous && !areRoleListsEqual(roles, initialRoles)) {
         await setUserRoles({ userId: member._id, roles });
       }
 

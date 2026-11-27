@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
 import { ListViewSkeleton } from "@/components/ListViewSkeleton";
+import { PrintBatchLabelsDialog } from "@/components/PrintBatchLabelsDialog";
 import { PrintLabelDialog } from "@/components/PrintLabelDialog";
 import {
   Select,
@@ -20,7 +21,7 @@ import {
   EQUIPMENT_OPERATIONAL_META,
   type EquipmentOperationalState,
 } from "@/lib/movements";
-import { FileDown, Plus } from "lucide-react";
+import { FileDown, Plus, Tags } from "lucide-react";
 import {
   EquipmentEmptyState,
   EquipmentModals,
@@ -62,6 +63,7 @@ export function EquipmentView({
   const [labelTarget, setLabelTarget] = useState<
     Parameters<typeof buildEquipmentLabel>[0] | null
   >(null);
+  const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
 
@@ -235,6 +237,17 @@ export function EquipmentView({
                 type="button"
                 variant="outline"
                 className="gap-2"
+                onClick={() => setBatchLabelsOpen(true)}
+                disabled={filtered.length === 0}
+                title="Imprimir lote de etiquetas QR de los equipos filtrados"
+              >
+                <Tags className="size-4" />
+                Etiquetas ({filtered.length})
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
                 onClick={handleExport}
                 disabled={filtered.length === 0}
               >
@@ -336,6 +349,13 @@ export function EquipmentView({
             : buildEquipmentLabel(labelTarget, origin)
         }
         onClose={() => setLabelTarget(null)}
+      />
+
+      <PrintBatchLabelsDialog
+        open={batchLabelsOpen}
+        onClose={() => setBatchLabelsOpen(false)}
+        kind="equipment"
+        labels={filtered.map((item) => buildEquipmentLabel(item, origin))}
       />
     </div>
   );

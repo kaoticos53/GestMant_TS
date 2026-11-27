@@ -1,9 +1,13 @@
 import {
   createAccount,
+  getAuthSessionId,
   getAuthUserId,
   invalidateSessions,
+  modifyAccountCredentials,
+  retrieveAccount,
 } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
+import { validatePassword } from "../lib/password";
 import {
   DEFAULT_ROLE,
   areRoleListsEqual,
@@ -388,6 +392,189 @@ export const setActive = action({
   },
 });
 
+/** Cambio de contraseña por el propio usuario autenticado (no anónimo). */
+export const changePassword = action({
+  args: {
+    currentPassword: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actorId = await getAuthUserId(ctx);
+    if (!actorId) {
+      throw new ConvexError("Debes iniciar sesión para cambiar tu contraseña.");
+    }
+    const actor = await ctx.runQuery(internal.members.getPasswordActor, {
+      userId: actorId,
+    });
+    if (!actor || !actor.active || actor.isAnonymous || !actor.email) {
+      throw new ConvexError(
+        "Esta cuenta no admite cambio de contraseña con correo.",
+      );
+    }
+    const validationError = validatePassword(args.newPassword);
+    if (validationError) {
+      throw new ConvexError(validationError);
+    }
+    if (args.newPassword === args.currentPassword) {
+      throw new ConvexError(
+        "La nueva contraseña debe ser distinta de la actual.",
+      );
+    }
+
+    try {
+      await retrieveAccount(ctx, {
+        provider: "password",
+        account: { id: actor.email, secret: args.currentPassword },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("TooManyFailedAttempts")) {
+        throw new ConvexError(
+          "Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.",
+        );
+      }
+      if (msg.includes("InvalidAccountId")) {
+        throw new ConvexError(
+          "Tu cuenta usa acceso sin contraseña; pide al administrador que la configure.",
+        );
+      }
+      throw new ConvexError("La contraseña actual no es correcta.");
+    }
+
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: actor.email, secret: args.newPassword },
+    });
+
+    const currentSessionId = await getAuthSessionId(ctx);
+    await invalidateSessions(ctx, {
+      userId: actorId,
+      ...(currentSessionId ? { except: [currentSessionId] } : {}),
+    });
+
+    await ctx.runMutation(internal.members.recordPasswordSecurityEvent, {
+      actorId,
+      actorEmail: actor.email,
+      action: "password_change",
+      target: `user:${actorId}`,
+      metadata: JSON.stringify({
+        metadataVersion: 1,
+        selfService: true,
+        targetEmail: actor.email,
+      }),
+    });
+    return true;
+  },
+});
+
+/** Restablecimiento de contraseña por el administrador, cerrando todas las sesiones del destino. */
+export const resetUserPassword = action({
+  args: {
+    userId: v.id("users"),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actorId = await getAuthUserId(ctx);
+    if (!actorId) {
+      throw new ConvexError("Debes iniciar sesión para gestionar usuarios.");
+    }
+    await ctx.runQuery(internal.members.getAdminActor, { userId: actorId });
+    if (actorId === args.userId) {
+      throw new ConvexError(
+        "Para cambiar tu propia contraseña usa Mi perfil.",
+      );
+    }
+    const target = await ctx.runQuery(internal.members.getPasswordActor, {
+      userId: args.userId,
+    });
+    if (!target) {
+      throw new ConvexError("El usuario ya no existe.");
+    }
+    if (target.isAnonymous || !target.email) {
+      throw new ConvexError(
+        "No se puede restablecer contraseña en una cuenta sin correo o de invitado.",
+      );
+    }
+    const validationError = validatePassword(args.newPassword);
+    if (validationError) {
+      throw new ConvexError(validationError);
+    }
+
+    await ctx.runMutation(internal.members.ensurePasswordAccount, {
+      userId: args.userId,
+      email: target.email,
+    });
+    await modifyAccountCredentials(ctx, {
+      provider: "password",
+      account: { id: target.email, secret: args.newPassword },
+    });
+    await invalidateSessions(ctx, { userId: args.userId });
+
+    await ctx.runMutation(internal.members.recordPasswordSecurityEvent, {
+      actorId,
+      action: "password_reset",
+      target: `user:${args.userId}`,
+      metadata: JSON.stringify({
+        metadataVersion: 1,
+        targetEmail: target.email,
+      }),
+    });
+    return true;
+  },
+});
+
+export const getPasswordActor = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    return {
+      _id: user._id,
+      email: user.email ? normalizeEmail(user.email) : undefined,
+      active: user.active !== false,
+      isAnonymous: user.isAnonymous === true,
+    };
+  },
+});
+
+export const ensurePasswordAccount = internalMutation({
+  args: { userId: v.id("users"), email: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("authAccounts")
+      .withIndex("providerAndAccountId", (q) =>
+        q.eq("provider", "password").eq("providerAccountId", args.email),
+      )
+      .first();
+    if (existing) {
+      if (existing.userId !== args.userId) {
+        throw new ConvexError(
+          "Ese correo ya está vinculado a otra cuenta de contraseña.",
+        );
+      }
+      return existing._id;
+    }
+    return await ctx.db.insert("authAccounts", {
+      userId: args.userId,
+      provider: "password",
+      providerAccountId: args.email,
+    });
+  },
+});
+
+export const recordPasswordSecurityEvent = internalMutation({
+  args: {
+    actorId: v.id("users"),
+    actorEmail: v.optional(v.string()),
+    action: v.union(v.literal("password_change"), v.literal("password_reset")),
+    target: v.string(),
+    metadata: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await logSecurityEvent(ctx, args);
+  },
+});
+
 /** Comprobación de rol para las acciones (no tienen acceso directo a la BD). */
 export const getAdminActor = internalQuery({
   args: { userId: v.id("users") },
@@ -565,6 +752,11 @@ async function applyUserRolesChange(
   }
   const target = await ctx.db.get(args.userId);
   if (!target) throw new ConvexError("El usuario ya no existe.");
+  if (target.isAnonymous === true) {
+    throw new ConvexError(
+      "No se pueden cambiar los roles de una cuenta de invitado.",
+    );
+  }
 
   const normalized = normalizeUserRoles(args.roles);
   if (normalized.length === 0) {
@@ -736,7 +928,10 @@ export const getMemberSummary = query({
 
     const allIncidents = await ctx.db.query("incidents").collect();
     const assignedIncidents = allIncidents.filter(
-      (inc) => inc.deletedAt === undefined && inc.assigneeId === args.userId,
+      (inc) =>
+        inc.deletedAt === undefined &&
+        (inc.assigneeId === args.userId ||
+          inc.workshopAssigneeId === args.userId),
     );
     const activeAssignedIncidents = assignedIncidents.filter(
       (inc) => !isClosedIncident(inc.status),

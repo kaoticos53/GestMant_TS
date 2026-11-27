@@ -155,12 +155,11 @@ export function useDashboardState() {
     restoreAlert,
     handleStartEmpty,
     markStartedEmpty,
-    isEmpty,
     showEmptyNotice,
   } = useWorkAlertState(user, roles.length > 0 ? roles : role);
 
   // Carga de datos de demostración
-  const { isSeeding, isSeedingMore, handleSeed, handleSeedMore } = useDashboardSeed({
+  const { isSeeding, handleSeed } = useDashboardSeed({
     onSeedSuccess: () => markStartedEmpty(false),
   });
 
@@ -182,11 +181,6 @@ export function useDashboardState() {
     hasStaleWork: staleWork.length > 0,
     alertDismissed,
     onRestoreAlert: restoreAlert,
-    canManageInventory: can("manageInventory"),
-    isEmpty,
-    isSeedingMore,
-    loading,
-    onSeedMore: () => void handleSeedMore(),
   });
 
   const displayName = getDisplayName(user);

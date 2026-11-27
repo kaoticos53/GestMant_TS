@@ -7,6 +7,7 @@ import type { ProfileIncidentsCardProps } from "../types";
 export function ProfileIncidentsCard({
   incidents,
   onOpenIncidents,
+  onOpenIncident,
 }: ProfileIncidentsCardProps) {
   return (
     <section className="rounded-xl border border-border/70 bg-card shadow-sm">
@@ -29,11 +30,20 @@ export function ProfileIncidentsCard({
         <ul className="divide-y divide-border/60">
           {incidents.map((incident) => {
             const meta = INCIDENT_STATUS_META[incident.status];
+            const equipmentSummary =
+              [incident.equipmentKind, incident.model]
+                .map((part) => part?.trim())
+                .filter(Boolean)
+                .join(" · ") || "Sin equipo especificado";
             return (
               <li key={incident._id}>
                 <button
                   type="button"
-                  onClick={onOpenIncidents}
+                  onClick={() =>
+                    onOpenIncident
+                      ? onOpenIncident(incident._id)
+                      : onOpenIncidents()
+                  }
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/60"
                 >
                   <span className="font-mono text-xs font-semibold text-muted-foreground">
@@ -43,7 +53,7 @@ export function ProfileIncidentsCard({
                     {meta.label}
                   </Badge>
                   <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {incident.equipmentKind} · {incident.model}
+                    {equipmentSummary}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatRelativeTime(incident.updatedAt)}
