@@ -10,9 +10,12 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   incidentId: null,
   incidentsFilter: "all",
   incidentsSearch: "",
+  incidentsMineOnly: false,
+  incidentsPriority: "all",
   requestId: null,
   requestsEquipmentFilter: "all",
   requestsFilter: "all",
+  requestsMineOnly: false,
   archiveEntry: null,
   inventorySearch: "",
   inventoryCategory: "all",
@@ -65,6 +68,8 @@ export function useDashboardNavigation(
       incidentId: null,
       incidentsFilter: "all",
       incidentsSearch: "",
+      incidentsMineOnly: false,
+      incidentsPriority: "all",
       requestId: null,
       archiveEntry: null,
       inventorySearch: "",
@@ -73,6 +78,7 @@ export function useDashboardNavigation(
       manualId: null,
       manualsSearch: "",
       requestsFilter: "all",
+      requestsMineOnly: false,
       inventoryLowStockOnly: false,
       timestamp: Date.now(),
     }));
@@ -84,6 +90,7 @@ export function useDashboardNavigation(
       mailbox: prev.mailbox + 1,
       inventory: prev.inventory + 1,
       equipment: prev.equipment + 1,
+      manuals: prev.manuals + 1,
     }));
   }, []);
 
@@ -201,6 +208,18 @@ export function useDashboardNavigation(
           timestamp: Date.now(),
         }));
         setViewKeys((prev) => ({ ...prev, requests: prev.requests + 1 }));
+        return;
+      }
+      if (hit.kind === "manual") {
+        if (!can("viewManuals")) return;
+        setTarget((prev) => ({
+          ...prev,
+          tab: "manuals",
+          manualId: hit.id,
+          manualsSearch: "",
+          timestamp: Date.now(),
+        }));
+        setViewKeys((prev) => ({ ...prev, manuals: prev.manuals + 1 }));
         return;
       }
       if (hit.kind === "part") {

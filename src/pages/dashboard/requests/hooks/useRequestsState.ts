@@ -11,13 +11,17 @@ import { useRequestFilters } from "./useRequestFilters";
 import type { DecisionMode, RequestDoc, RequestFilterId } from "../types";
 
 export function useRequestsState({
+  currentUserId = null,
   equipmentFilter = "all",
   initialDetailId = null,
   initialFilter = "all",
+  initialMineOnly = false,
 }: {
+  currentUserId?: Id<"users"> | null;
   equipmentFilter?: string;
   initialDetailId?: Id<"partRequests"> | null;
   initialFilter?: RequestFilterId;
+  initialMineOnly?: boolean;
 }) {
   const rawRequests = useQuery(api.partRequests.list, {});
   const requests = rawRequests ?? [];
@@ -44,8 +48,10 @@ export function useRequestsState({
   const filterState = useRequestFilters({
     requests,
     equipment,
+    currentUserId,
     equipmentFilter,
     initialFilter,
+    initialMineOnly,
     initialDetailId,
   });
 

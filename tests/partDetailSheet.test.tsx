@@ -165,4 +165,70 @@ describe("PartDetailSheet (Fase 2)", () => {
     expect(text).toContain("Físico 10 ud");
     expect(text).toContain("Reservado 3 ud");
   });
+
+  it("muestra purchaseUrl y repuesto equivalente clicable en solo lectura y protege Pedir reposición con canPurchase", async () => {
+    mockUseQuery.mockReturnValue([]);
+    const onSelectPart = vi.fn();
+    const equivalentPart: PartDoc = {
+      ...SAMPLE_PART,
+      _id: "part_eq" as never,
+      code: "REP-200",
+      name: "Filtro alternativo HF-2",
+    };
+
+    await act(async () => {
+      root.render(
+        <PartDetailSheet
+          part={{
+            ...SAMPLE_PART,
+            purchaseUrl: "https://proveedor.test/filtro",
+            replacementPartId: equivalentPart._id,
+          }}
+          parts={[SAMPLE_PART, equivalentPart]}
+          canManage={false}
+          canPurchase={false}
+          catalogModels={SAMPLE_MODELS}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onStockAdjust={vi.fn()}
+          onPrintLabel={vi.fn()}
+          onSelectPart={onSelectPart}
+        />,
+      );
+      await settle();
+    });
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Abrir enlace del proveedor");
+    expect(text).toContain("REP-200 · Filtro alternativo HF-2");
+    expect(text).not.toContain("Pedir reposición");
+
+    const eqBtn = Array.from(document.body.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("REP-200"),
+    );
+    await act(async () => {
+      eqBtn?.click();
+      await settle();
+    });
+    expect(onSelectPart).toHaveBeenCalledWith(equivalentPart._id);
+
+    // Con canPurchase=true sí aparece Pedir reposición
+    await act(async () => {
+      root.render(
+        <PartDetailSheet
+          part={SAMPLE_PART}
+          parts={[SAMPLE_PART]}
+          canManage={false}
+          canPurchase={true}
+          catalogModels={SAMPLE_MODELS}
+          onClose={vi.fn()}
+          onEdit={vi.fn()}
+          onStockAdjust={vi.fn()}
+          onPrintLabel={vi.fn()}
+        />,
+      );
+      await settle();
+    });
+    expect(document.body.textContent).toContain("Pedir reposición");
+  });
 });

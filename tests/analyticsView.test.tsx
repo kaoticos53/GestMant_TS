@@ -217,6 +217,7 @@ describe("AnalyticsView (Propuesta A por capacidades)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -356,5 +357,61 @@ describe("AnalyticsView (Propuesta A por capacidades)", () => {
     });
 
     expect(container.textContent).toContain("Cargando");
+  });
+
+  it("recuerda la lente elegida, oculta gráficos globales duplicados en Mi jornada y navega a Mis incidencias/peticiones", async () => {
+    const onOpenMyIncidents = vi.fn();
+    const onOpenMyRequests = vi.fn();
+    mockUseQuery.mockReturnValue(ADMIN_ANALYTICS);
+
+    await act(async () => {
+      root.render(
+        <AnalyticsView
+          onOpenIncidents={vi.fn()}
+          onOpenRequests={vi.fn()}
+          onOpenMyIncidents={onOpenMyIncidents}
+          onOpenMyRequests={onOpenMyRequests}
+        />,
+      );
+      await settle();
+    });
+
+    // Cambiar a Mi jornada y verificar persistencia
+    await act(async () => {
+      clickTab(container, "Mi jornada");
+      await settle();
+    });
+
+    expect(window.localStorage.getItem("pulso:analytics-lens")).toBe("my_day");
+    expect(container.textContent).toContain("Mis incidencias abiertas");
+    // Los gráficos globales viven en Taller, así que no se duplican en Mi jornada
+    expect(container.textContent).not.toContain("Equipos con más incidencias");
+
+    const myIncBtn = container.querySelector<HTMLButtonElement>(
+      '[data-testid="kpi-my-incidents"]',
+    );
+    const myReqBtn = container.querySelector<HTMLButtonElement>(
+      '[data-testid="kpi-my-requests"]',
+    );
+    await act(async () => {
+      myIncBtn?.click();
+      myReqBtn?.click();
+      await settle();
+    });
+    expect(onOpenMyIncidents).toHaveBeenCalledTimes(1);
+    expect(onOpenMyRequests).toHaveBeenCalledWith("materialReceived");
+
+    // Re-montar debe abrir directamente en Mi jornada
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <AnalyticsView onOpenIncidents={vi.fn()} onOpenRequests={vi.fn()} />,
+      );
+      await settle();
+    });
+    expect(container.textContent).toContain("Mis incidencias abiertas");
   });
 });

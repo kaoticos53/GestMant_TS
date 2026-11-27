@@ -7,6 +7,8 @@ import {
   incidentPriorityRank,
   liveNotes,
   matchesIncidentQuery,
+  normalizeIncidentPriority,
+  type IncidentPriority,
   type IncidentStatus,
 } from "@/lib/workshop";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
@@ -51,16 +53,26 @@ function inQueueOrder(items: IncidentDoc[]): IncidentDoc[] {
 
 export function useIncidentFilters({
   incidents,
+  currentUserId = null,
   initialDetailId = null,
   initialFilter = "all",
   initialSearch = "",
+  initialMineOnly = false,
+  initialPriority = "all",
 }: {
   incidents: IncidentDoc[];
+  currentUserId?: Id<"users"> | null;
   initialDetailId?: Id<"incidents"> | null;
   initialFilter?: IncidentStatus | "all";
   initialSearch?: string;
+  initialMineOnly?: boolean;
+  initialPriority?: IncidentPriority | "all";
 }) {
   const [filter, setFilter] = useState<IncidentStatus | "all">(initialFilter);
+  const [mineOnly, setMineOnly] = useState<boolean>(initialMineOnly);
+  const [priority, setPriority] = useState<IncidentPriority | "all">(
+    initialPriority,
+  );
   const [detailId, setDetailId] = useState<Id<"incidents"> | null>(
     initialDetailId ?? null,
   );
@@ -98,15 +110,46 @@ export function useIncidentFilters({
     [searchableIndex, search],
   );
 
+  const mineCount = useMemo(() => {
+    if (!currentUserId) return 0;
+    return matched.filter(
+      (item) =>
+        item.assigneeId === currentUserId ||
+        item.workshopAssigneeId === currentUserId,
+    ).length;
+  }, [matched, currentUserId]);
+
+  const scoped = useMemo(
+    () =>
+      matched.filter((item) => {
+        if (
+          mineOnly &&
+          currentUserId &&
+          item.assigneeId !== currentUserId &&
+          item.workshopAssigneeId !== currentUserId
+        ) {
+          return false;
+        }
+        if (
+          priority !== "all" &&
+          normalizeIncidentPriority(item.priority) !== priority
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [matched, mineOnly, currentUserId, priority],
+  );
+
   const filtered = useMemo(
     () =>
       filter === "all"
-        ? matched
-        : matched.filter((item) => item.status === filter),
-    [matched, filter],
+        ? scoped
+        : scoped.filter((item) => item.status === filter),
+    [scoped, filter],
   );
 
-  const counts = useMemo(() => countIncidentsByStatus(matched), [matched]);
+  const counts = useMemo(() => countIncidentsByStatus(scoped), [scoped]);
 
   const byDate = sort === "recent" || sort === "oldest";
   const byUpdatedDate = sort === "updatedRecent" || sort === "updatedOldest";
@@ -139,7 +182,7 @@ export function useIncidentFilters({
   const paging = useTablePagination({
     total: ordered.length,
     rowsFit,
-    resetKey: `${search}|${sort}|${filter}`,
+    resetKey: `${search}|${sort}|${filter}|${mineOnly}|${priority}`,
   });
 
   const visible = useMemo(
@@ -165,6 +208,11 @@ export function useIncidentFilters({
   return {
     filter,
     setFilter,
+    mineOnly,
+    setMineOnly,
+    mineCount,
+    priority,
+    setPriority,
     detailId,
     setDetailId,
     search,

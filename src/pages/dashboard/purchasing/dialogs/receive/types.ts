@@ -10,6 +10,8 @@ export interface ReceiveLinesInputsProps {
   lines: readonly PurchaseOrderLine[];
   cantidades: Record<string, string>;
   onChangeCantidad: (purchaseRequestId: string, value: string) => void;
+  onFillAllPending?: () => void;
+  onClearAllQuantities?: () => void;
   disabled?: boolean;
 }
 

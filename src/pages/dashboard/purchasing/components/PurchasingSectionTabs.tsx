@@ -6,7 +6,7 @@ export const SECTIONS: PurchasingSectionItem[] = [
   { id: "pending", label: "Sin tratar", icon: ShoppingCart },
   { id: "orders", label: "Órdenes de compra", icon: ClipboardList },
   { id: "movements", label: "Recepciones", icon: Truck },
-  { id: "history", label: "Histórico (Excel)", icon: Table2 },
+  { id: "history", label: "Histórico de líneas", icon: Table2 },
 ];
 
 export interface PurchasingSectionTabsProps {

@@ -6,6 +6,8 @@ import type { Id } from "@/convex/_generated/dataModel";
 import {
   getAvailableAnalyticsLenses,
   getDefaultAnalyticsLens,
+  readStoredAnalyticsLens,
+  writeStoredAnalyticsLens,
   type AnalyticsLensId,
   type AnalyticsPeriodDays,
 } from "@/lib/analytics";
@@ -21,6 +23,8 @@ import { WorkshopLens } from "./analytics/lenses/WorkshopLens";
 export interface AnalyticsViewProps {
   onOpenIncidents: () => void;
   onOpenRequests: () => void;
+  onOpenMyIncidents?: () => void;
+  onOpenMyRequests?: (filter?: "all" | "materialReceived") => void;
   onOpenInventoryLowStock?: () => void;
   onOpenEquipment?: () => void;
   onOpenPurchasingPending?: () => void;
@@ -63,6 +67,8 @@ const LENS_META: Record<
 export function AnalyticsView({
   onOpenIncidents,
   onOpenRequests,
+  onOpenMyIncidents,
+  onOpenMyRequests,
   onOpenInventoryLowStock,
   onOpenEquipment,
   onOpenPurchasingPending,
@@ -80,7 +86,7 @@ export function AnalyticsView({
 }: AnalyticsViewProps) {
   const [period, setPeriod] = useState<PeriodOption>("all");
   const [selectedLens, setSelectedLens] = useState<AnalyticsLensId | null>(
-    null,
+    () => readStoredAnalyticsLens(),
   );
   const periodDays =
     period === "all" ? undefined : (Number(period) as AnalyticsPeriodDays);
@@ -139,7 +145,10 @@ export function AnalyticsView({
                     type="button"
                     role="tab"
                     aria-selected={isSelected}
-                    onClick={() => setSelectedLens(lensId)}
+                    onClick={() => {
+                      setSelectedLens(lensId);
+                      writeStoredAnalyticsLens(lensId);
+                    }}
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                       isSelected
@@ -190,6 +199,8 @@ export function AnalyticsView({
           analytics={analytics}
           onOpenIncidents={onOpenIncidents}
           onOpenRequests={onOpenRequests}
+          onOpenMyIncidents={onOpenMyIncidents}
+          onOpenMyRequests={onOpenMyRequests}
           onOpenEquipment={onOpenEquipment}
           onOpenIncident={onOpenIncident}
           onOpenRequest={onOpenRequest}

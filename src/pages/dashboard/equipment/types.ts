@@ -73,6 +73,12 @@ export interface EquipmentDetailSheetProps {
   onEditManual?: (manual: ManualDoc) => void;
   /** Retira el manual, con su confirmación. */
   onDeleteManual?: (manual: ManualDoc) => void;
+  /** Abre el formulario para editar el equipo desde su ficha. */
+  onEdit?: (item: EquipmentDoc) => void;
+  /** Abre el diálogo de etiqueta imprimible del equipo. */
+  onPrintLabel?: (item: EquipmentDoc) => void;
+  /** Navega a una incidencia relacionada con el equipo. */
+  onOpenIncident?: (incidentId: Id<"incidents">) => void;
   onClose: () => void;
   onViewRequests: (equipmentId: string) => void;
   /** Los diálogos que se abren desde la ficha (manuales), dentro de su árbol. */
@@ -138,6 +144,9 @@ export interface EquipmentModalsProps {
   manualDetail: ManualDoc | null;
   manualDelete: ManualDoc | null;
   onCloseDetail: () => void;
+  onEdit?: (item: EquipmentDoc) => void;
+  onPrintLabel?: (item: EquipmentDoc) => void;
+  onOpenIncident?: (incidentId: Id<"incidents">) => void;
   onViewRequests: (equipmentId: string) => void;
   setManualForm: (
     target: {

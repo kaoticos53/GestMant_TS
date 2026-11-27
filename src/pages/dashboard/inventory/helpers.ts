@@ -59,6 +59,7 @@ export function filterInventoryParts({
 
     return [
       part.code,
+      part.partNumber ?? "",
       part.name,
       richDocToPlainText(part.description),
       part.location ?? "",

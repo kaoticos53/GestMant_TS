@@ -9,13 +9,19 @@ import { useIncidentFilters } from "./useIncidentFilters";
 import type { IncidentDoc } from "../types";
 
 export function useIncidentsViewState({
+  currentUserId = null,
   initialDetailId = null,
   initialFilter = "all",
   initialSearch = "",
+  initialMineOnly = false,
+  initialPriority = "all",
 }: {
+  currentUserId?: Id<"users"> | null;
   initialDetailId?: Id<"incidents"> | null;
   initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
   initialSearch?: string;
+  initialMineOnly?: boolean;
+  initialPriority?: import("@/lib/workshop").IncidentPriority | "all";
 } = {}) {
   const rawIncidents = useQuery(api.incidents.list, {});
   const incidents = rawIncidents ?? [];
@@ -37,9 +43,12 @@ export function useIncidentsViewState({
 
   const filterState = useIncidentFilters({
     incidents,
+    currentUserId,
     initialDetailId,
     initialFilter,
     initialSearch,
+    initialMineOnly,
+    initialPriority,
   });
 
   const toggleSelect = (id: Id<"incidents">) => {

@@ -34,6 +34,8 @@ export interface MyDayLensProps {
   analytics: WorkshopAnalyticsResult;
   onOpenIncidents: () => void;
   onOpenRequests: () => void;
+  onOpenMyIncidents?: () => void;
+  onOpenMyRequests?: (filter?: "all" | "materialReceived") => void;
   onOpenEquipment?: () => void;
   onOpenIncident?: (id: Id<"incidents">) => void;
   onOpenRequest?: (id: Id<"partRequests">) => void;
@@ -46,6 +48,8 @@ export function MyDayLens({
   analytics,
   onOpenIncidents,
   onOpenRequests,
+  onOpenMyIncidents,
+  onOpenMyRequests,
   onOpenEquipment,
   onOpenIncident,
   onOpenRequest,
@@ -55,6 +59,7 @@ export function MyDayLens({
 }: MyDayLensProps) {
   const { capabilities, myDay } = analytics;
   const firstStaleMine = analytics.staleWork.find((item) => item.isMine);
+  const showGlobalOverview = !capabilities.manageIncidents;
 
   return (
     <div className="space-y-6">
@@ -75,7 +80,7 @@ export function MyDayLens({
               }
               highlightClassName="text-rose-600 dark:text-rose-400"
               footerText={`${analytics.kpis.activeIncidents} activas en todo el taller`}
-              onClick={onOpenIncidents}
+              onClick={onOpenMyIncidents ?? onOpenIncidents}
             />
 
             <KpiCard
@@ -133,15 +138,17 @@ export function MyDayLens({
             footerIcon={<ClipboardCheck className="size-3.5" />}
             footerText="Material recibido o aprobado para recoger"
             onClick={() =>
-              onOpenRequestsByStatus
-                ? onOpenRequestsByStatus("materialReceived")
-                : onOpenRequests()
+              onOpenMyRequests
+                ? onOpenMyRequests("materialReceived")
+                : onOpenRequestsByStatus
+                  ? onOpenRequestsByStatus("materialReceived")
+                  : onOpenRequests()
             }
           />
         )}
       </div>
 
-      {capabilities.incidents && (
+      {capabilities.incidents && showGlobalOverview && (
         <div className="grid gap-4 lg:grid-cols-2">
           <IncidentsByStatusChart
             data={analytics.incidentsByStatus}
@@ -171,7 +178,7 @@ export function MyDayLens({
                 variant="ghost"
                 size="sm"
                 className="shrink-0"
-                onClick={onOpenIncidents}
+                onClick={onOpenMyIncidents ?? onOpenIncidents}
               >
                 Ver todas
                 <ArrowRight className="ml-1 size-3.5" />
@@ -237,7 +244,9 @@ export function MyDayLens({
                 variant="ghost"
                 size="sm"
                 className="shrink-0"
-                onClick={onOpenRequests}
+                onClick={() =>
+                  onOpenMyRequests ? onOpenMyRequests("all") : onOpenRequests()
+                }
               >
                 Ir a peticiones
                 <ArrowRight className="ml-1 size-3.5" />
@@ -278,7 +287,7 @@ export function MyDayLens({
           </Card>
         )}
 
-        {capabilities.incidents && (
+        {capabilities.incidents && showGlobalOverview && (
           <ProblematicEquipmentCard
             items={analytics.topProblematicEquipment}
             canViewEquipment={capabilities.equipment}
@@ -287,7 +296,9 @@ export function MyDayLens({
           />
         )}
 
-        {capabilities.incidents && analytics.externalRepairs.length > 0 && (
+        {capabilities.incidents &&
+          showGlobalOverview &&
+          analytics.externalRepairs.length > 0 && (
           <ExternalRepairsCard
             items={analytics.externalRepairs}
             onOpenIncident={onOpenIncident}

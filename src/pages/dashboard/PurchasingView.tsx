@@ -2,7 +2,11 @@ import { useState } from "react";
 import { useQuery } from "convex/react";
 import { ListViewSkeleton } from "@/components/ListViewSkeleton";
 import { api } from "@/convex/_generated/api";
-import { isPurchaseRequestUntreated } from "@/lib/purchaseFlow";
+import type { Id } from "@/convex/_generated/dataModel";
+import {
+  isPurchaseOrderClosed,
+  isPurchaseRequestUntreated,
+} from "@/lib/purchaseFlow";
 import { PurchasingSectionTabs } from "./purchasing/components/PurchasingSectionTabs";
 import { PendingSection } from "./purchasing/components/PendingSection";
 import { OrdersSection } from "./purchasing/components/OrdersSection";
@@ -47,6 +51,14 @@ export function PurchasingView({
     setPrevInitialSection(initialSection);
     setSection(initialSection);
   }
+  const [focusedOrderId, setFocusedOrderId] =
+    useState<Id<"purchaseOrders"> | null>(initialOrderId);
+  const [prevInitialOrderId, setPrevInitialOrderId] =
+    useState<Id<"purchaseOrders"> | null>(initialOrderId);
+  if (initialOrderId !== prevInitialOrderId) {
+    setPrevInitialOrderId(initialOrderId);
+    setFocusedOrderId(initialOrderId);
+  }
 
   if (
     purchasing === undefined ||
@@ -60,8 +72,15 @@ export function PurchasingView({
   const sinTratar = purchaseRequests.filter((row) =>
     isPurchaseRequestUntreated(row.status),
   );
-  const pedidas = orders.filter((order) => order.status !== "cancelled").length;
+  const pedidas = orders.filter(
+    (order) => !isPurchaseOrderClosed(order.status),
+  ).length;
   const totalLineas = orders.reduce((sum, o) => sum + o.lines.length, 0);
+
+  const handleOpenOrder = (orderId: Id<"purchaseOrders">) => {
+    setFocusedOrderId(orderId);
+    setSection("orders");
+  };
 
   return (
     <div className="grid gap-5">
@@ -88,12 +107,16 @@ export function PurchasingView({
           orders={orders}
           receptions={receptions}
           canManage={canManage}
-          initialOrderId={initialOrderId}
+          initialOrderId={focusedOrderId}
           onOpenRequest={onOpenRequest}
         />
       )}
       {section === "movements" && (
-        <MovementsSection receptions={receptions} canManage={canManage} />
+        <MovementsSection
+          receptions={receptions}
+          canManage={canManage}
+          onOpenOrder={handleOpenOrder}
+        />
       )}
       {section === "history" && (
         <HistorySection

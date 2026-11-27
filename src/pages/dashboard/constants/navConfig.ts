@@ -18,7 +18,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Users,
-  Workflow,
 } from "lucide-react";
 import type { DashboardStatItem } from "../components/DashboardStats";
 import type { PageHeaderAction } from "../components/PageHeader";
@@ -221,17 +220,6 @@ export function buildNavItems({
           },
         ]
       : []),
-    ...(!isGuest
-      ? [
-          {
-            id: "machines" as const,
-            label: "Flujos y estados",
-            icon: Workflow,
-            badge: 0,
-            group: "archivo" as const,
-          },
-        ]
-      : []),
     ...(can("viewIncidents") || can("viewRequests")
       ? [
           {
@@ -289,7 +277,6 @@ export function buildNavItems({
       : []),
     ...(can("manageIncidents") ||
     can("decideRequests") ||
-    can("viewMailbox") ||
     (adminOk && can("viewAudit"))
       ? [
           {

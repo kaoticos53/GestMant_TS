@@ -826,23 +826,32 @@ export const relatedSummary = query({
       }
     }
 
-    const [allParts, linkedRequests, unlinkedRequests] = await Promise.all([
-      resolvedModelId
-        ? ctx.db.query("spareParts").collect()
-        : Promise.resolve([]),
-      ctx.db
-        .query("partRequests")
-        .withIndex("by_equipment", (q) =>
-          q.eq("equipmentId", args.equipmentId),
-        )
-        .order("desc")
-        .collect(),
-      ctx.db
-        .query("partRequests")
-        .withIndex("by_equipment", (q) => q.eq("equipmentId", undefined))
-        .order("desc")
-        .collect(),
-    ]);
+    const [canIncidents, allParts, linkedRequests, unlinkedRequests, rawIncidents] =
+      await Promise.all([
+        hasAnyCapability(ctx, me, ["viewIncidents", "manageIncidents"]),
+        resolvedModelId
+          ? ctx.db.query("spareParts").collect()
+          : Promise.resolve([]),
+        ctx.db
+          .query("partRequests")
+          .withIndex("by_equipment", (q) =>
+            q.eq("equipmentId", args.equipmentId),
+          )
+          .order("desc")
+          .collect(),
+        ctx.db
+          .query("partRequests")
+          .withIndex("by_equipment", (q) => q.eq("equipmentId", undefined))
+          .order("desc")
+          .collect(),
+        ctx.db
+          .query("incidents")
+          .withIndex("by_equipment_and_created", (q) =>
+            q.eq("equipmentId", args.equipmentId),
+          )
+          .order("desc")
+          .take(20),
+      ]);
 
     const compatible = resolvedModelId
       ? allParts.filter((part) =>
@@ -858,6 +867,20 @@ export const relatedSummary = query({
       ),
     ].sort((a, b) => b._creationTime - a._creationTime);
 
-    return { compatible, requests };
+    const incidents = canIncidents
+      ? rawIncidents
+          .filter((inc) => inc.deletedAt === undefined)
+          .map((inc) => ({
+            _id: inc._id,
+            reference: inc.reference,
+            status: inc.status,
+            priority: inc.priority,
+            description: inc.description,
+            reportedAt: inc.reportedAt,
+            closedAt: inc.closedAt,
+          }))
+      : [];
+
+    return { compatible, requests, incidents };
   },
 });

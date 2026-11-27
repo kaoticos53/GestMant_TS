@@ -62,6 +62,12 @@ export interface GlobalSearchResponse {
     title: string;
     subtitle: string;
   }>;
+  manuals: Array<{
+    kind: "manual";
+    id: Id<"manuals">;
+    title: string;
+    subtitle: string;
+  }>;
 }
 
 const EMPTY_RESPONSE: GlobalSearchResponse = {
@@ -70,6 +76,7 @@ const EMPTY_RESPONSE: GlobalSearchResponse = {
   archived: [],
   parts: [],
   equipment: [],
+  manuals: [],
 };
 
 /**
@@ -102,6 +109,7 @@ export const global = query({
     const canEquipment = Boolean(
       grants.viewEquipment || grants.manageEquipment,
     );
+    const canManuals = Boolean(grants.viewManuals || grants.manageManuals);
 
     const limit = Math.min(
       10,
@@ -262,12 +270,44 @@ export const global = query({
       }
     }
 
+    const manualHits: GlobalSearchResponse["manuals"] = [];
+    if (canManuals) {
+      const manuals = await ctx.db.query("manuals").order("desc").collect();
+      for (const manual of manuals) {
+        const matched = [
+          manual.title,
+          manual.brand ?? "",
+          manual.model ?? "",
+          manual.type,
+          manual.fileName ?? "",
+          richDocToPlainText(manual.notes),
+        ].some((value) => includesSearchQuery(value, q));
+
+        if (!matched) continue;
+        manualHits.push({
+          kind: "manual",
+          id: manual._id,
+          title: manual.title,
+          subtitle: [
+            manual.kind === "note" ? "Nota del taller" : "Manual PDF",
+            manual.brand,
+            manual.model,
+            manual.type,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
+        if (manualHits.length >= limit) break;
+      }
+    }
+
     return {
       incidents: incidentHits.filter((h) => !h.archived).slice(0, limit),
       requests: requestHits.filter((h) => !h.archived).slice(0, limit),
       archived,
       parts: partHits,
       equipment: equipmentHits,
+      manuals: manualHits,
     };
   },
 });

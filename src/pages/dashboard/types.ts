@@ -47,9 +47,12 @@ export interface NavigationTarget {
   incidentId?: Id<"incidents"> | null;
   incidentsFilter?: import("@/lib/workshop").IncidentStatus | "all";
   incidentsSearch?: string;
+  incidentsMineOnly?: boolean;
+  incidentsPriority?: import("@/lib/workshop").IncidentPriority | "all";
   requestId?: Id<"partRequests"> | null;
   requestsEquipmentFilter?: string;
   requestsFilter?: RequestFilterId;
+  requestsMineOnly?: boolean;
   archiveEntry?: OpenArchivedDoc | null;
   inventorySearch?: string;
   inventoryCategory?: string;

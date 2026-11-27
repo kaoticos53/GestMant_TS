@@ -4,6 +4,7 @@ import { Cpu, Plus } from "lucide-react";
 interface EquipmentEmptyStateProps {
   isEmpty: boolean;
   search: string;
+  hasActiveFilters?: boolean;
   canManage: boolean;
   onNewEquipment: () => void;
   onClearSearch: () => void;
@@ -16,6 +17,7 @@ interface EquipmentEmptyStateProps {
 export function EquipmentEmptyState({
   isEmpty,
   search,
+  hasActiveFilters = false,
   canManage,
   onNewEquipment,
   onClearSearch,
@@ -47,7 +49,9 @@ export function EquipmentEmptyState({
     <div className="p-10 text-center">
       <p className="text-base font-semibold tracking-tight">Sin resultados</p>
       <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-muted-foreground">
-        Ningún equipo coincide con «{search}».
+        {search.trim() !== "" && !hasActiveFilters
+          ? `Ningún equipo coincide con «${search}».`
+          : "Ningún equipo coincide con los filtros activos."}
       </p>
       <Button
         type="button"
@@ -55,7 +59,7 @@ export function EquipmentEmptyState({
         className="mt-4"
         onClick={onClearSearch}
       >
-        Limpiar búsqueda
+        Limpiar filtros
       </Button>
     </div>
   );

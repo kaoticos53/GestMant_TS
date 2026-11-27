@@ -35,7 +35,7 @@ describe("navConfig", () => {
       expect(idsAll).toContain("inventory");
       expect(idsAll).toContain("equipment");
       expect(idsAll).toContain("manuals");
-      expect(idsAll).toContain("machines");
+      expect(idsAll).not.toContain("machines");
       expect(idsAll).toContain("archive");
       expect(idsAll).toContain("mailbox");
       expect(idsAll).toContain("audit");
@@ -60,8 +60,8 @@ describe("navConfig", () => {
       expect(idsGuest).not.toContain("users");
       expect(idsGuest).not.toContain("purchasing");
 
-      // El correo es personal: abre Ajustes sin dar acceso a la configuración
-      // del taller. La pestaña «Mi buzón» decide dentro con su capacidad.
+      // El correo integra su configuración en el propio módulo sin exponer
+      // «Ajustes del taller» en el menú lateral.
       const mailboxOnly = buildNavItems({
         can: (cap) => cap === "viewMailbox",
         adminOk: false,
@@ -69,7 +69,7 @@ describe("navConfig", () => {
         canSeePurchasing: false,
       });
       const mailboxOnlyIds = mailboxOnly.map((item) => item.id);
-      expect(mailboxOnlyIds).toContain("settings");
+      expect(mailboxOnlyIds).not.toContain("settings");
       expect(mailboxOnlyIds).toContain("mailbox");
     });
   });

@@ -1,4 +1,4 @@
-import { FileDown, Plus } from "lucide-react";
+import { FileDown, Plus, UserCheck } from "lucide-react";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,11 @@ export function RequestsHeaderBar({
   filter,
   onFilterChange,
   counts,
+  canFilterMine = false,
+  mineOnly = false,
+  onMineOnlyChange,
+  mineCount = 0,
+  canCreate = true,
   equipmentFilter,
   onEquipmentFilterChange,
   equipment,
@@ -19,6 +24,11 @@ export function RequestsHeaderBar({
   filter: RequestFilterId;
   onFilterChange: (filter: RequestFilterId) => void;
   counts: Record<RequestFilterId, number>;
+  canFilterMine?: boolean;
+  mineOnly?: boolean;
+  onMineOnlyChange?: (value: boolean) => void;
+  mineCount?: number;
+  canCreate?: boolean;
   equipmentFilter: string;
   onEquipmentFilterChange: (value: string) => void;
   equipment: EquipmentDoc[];
@@ -73,6 +83,23 @@ export function RequestsHeaderBar({
           ariaLabel="Filtrar peticiones por equipo"
           className="w-full sm:w-56"
         />
+
+        {canFilterMine && onMineOnlyChange && (
+          <Button
+            type="button"
+            variant={mineOnly ? "default" : "outline"}
+            size="sm"
+            aria-pressed={mineOnly}
+            className="gap-1.5"
+            onClick={() => onMineOnlyChange(!mineOnly)}
+          >
+            <UserCheck className="size-4" />
+            Mis peticiones
+            <span className="text-xs tabular-nums opacity-75">
+              {mineCount}
+            </span>
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -87,14 +114,16 @@ export function RequestsHeaderBar({
           <FileDown className="size-4" />
           Exportar CSV ({filteredCount})
         </Button>
-        <Button
-          type="button"
-          className="gap-2"
-          onClick={onNewRequest}
-        >
-          <Plus className="size-4" />
-          Nueva petición
-        </Button>
+        {canCreate && (
+          <Button
+            type="button"
+            className="gap-2"
+            onClick={onNewRequest}
+          >
+            <Plus className="size-4" />
+            Nueva petición
+          </Button>
+        )}
       </div>
     </div>
   );

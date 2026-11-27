@@ -74,9 +74,15 @@ export function useEquipmentDerivedData({
     [maintenance, item.maintenanceIntervalDays, item.purchaseDate],
   );
 
+  const incidents = useMemo(
+    () => remoteSummary?.incidents ?? [],
+    [remoteSummary],
+  );
+
   return {
     related,
     shownRequests,
+    incidents,
     resolvedModelId,
     compatible,
     review,

@@ -32,6 +32,8 @@ export function ReceiveDialog({
   const {
     cantidades,
     setCantidad,
+    fillAllPending,
+    clearAllQuantities,
     nota,
     setNota,
     archivo,
@@ -59,6 +61,8 @@ export function ReceiveDialog({
             lines={order.lines}
             cantidades={cantidades}
             onChangeCantidad={setCantidad}
+            onFillAllPending={fillAllPending}
+            onClearAllQuantities={clearAllQuantities}
             disabled={enviando}
           />
 

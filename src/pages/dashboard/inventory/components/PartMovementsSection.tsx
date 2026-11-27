@@ -45,7 +45,14 @@ export function PartMovementsSection({
                 className="flex items-start justify-between gap-3 px-3 py-2 text-xs"
               >
                 <div className="min-w-0">
-                  <p className="font-medium">{kindMeta.label}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="font-medium">{kindMeta.label}</p>
+                    {mov.reference && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                        {mov.reference}
+                      </span>
+                    )}
+                  </div>
                   <p className="truncate text-muted-foreground">
                     {mov.actorName}
                     {mov.reason ? ` · ${mov.reason}` : ""}

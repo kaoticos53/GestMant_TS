@@ -1,4 +1,4 @@
-import { Plus, RotateCcw, Save, ShieldCheck, X } from "lucide-react";
+import { Plus, RotateCcw, Save, ShieldCheck, Workflow, X } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
@@ -19,7 +19,11 @@ export type { RoleInfo, DialogState };
  * cada rol, más el alta, renombrado, duplicado y borrado de roles. Los
  * cambios se aplican de inmediato en el menú y en las acciones del backend.
  */
-export function PermissionsView() {
+export function PermissionsView({
+  onOpenMachines,
+}: {
+  onOpenMachines?: () => void;
+} = {}) {
   const roles = useQuery(api.permissions.listRoles);
   const setManyRolePermissions = useMutation(
     api.permissions.setManyRolePermissions,
@@ -65,7 +69,19 @@ export function PermissionsView() {
             en las acciones del backend.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenMachines && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-muted-foreground"
+              onClick={onOpenMachines}
+            >
+              <Workflow className="size-4" />
+              Flujos y estados
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"

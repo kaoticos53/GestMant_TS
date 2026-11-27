@@ -17,6 +17,7 @@ export interface SupplierGroupCardProps {
   isGroupFullySelected: boolean;
   onToggleItem: (id: string) => void;
   onToggleGroup: () => void;
+  onCreateOrder?: () => void;
   onAction: (target: PurchaseActionTarget) => void;
   onOpenRequest?: (id: Id<"partRequests">) => void;
 }
@@ -31,6 +32,7 @@ export function SupplierGroupCard({
   isGroupFullySelected,
   onToggleItem,
   onToggleGroup,
+  onCreateOrder,
   onAction,
   onOpenRequest,
 }: SupplierGroupCardProps) {
@@ -42,14 +44,26 @@ export function SupplierGroupCard({
           <p className="text-sm text-muted-foreground">{groupSummary(group)}</p>
         </div>
         <Can I="create" a="PurchaseOrder">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onToggleGroup}
-          >
-            {isGroupFullySelected ? "Quitar el grupo" : "Elegir el grupo"}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onToggleGroup}
+            >
+              {isGroupFullySelected ? "Quitar el grupo" : "Elegir el grupo"}
+            </Button>
+            {onCreateOrder && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onCreateOrder}
+              >
+                Crear orden
+              </Button>
+            )}
+          </div>
         </Can>
       </CardHeader>
       <CardContent className="grid gap-2">

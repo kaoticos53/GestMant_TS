@@ -1,3 +1,4 @@
+import { canDeleteManual, canEditManual } from "@/lib/manuals";
 import { ManualDeleteDialog } from "../../ManualDeleteDialog";
 import { ManualDetailSheet } from "../../ManualDetailSheet";
 import { ManualFormDialog } from "../../ManualFormDialog";
@@ -23,6 +24,9 @@ export function EquipmentModals({
   manualDetail,
   manualDelete,
   onCloseDetail,
+  onEdit,
+  onPrintLabel,
+  onOpenIncident,
   onViewRequests,
   setManualForm,
   setManualDetail,
@@ -55,6 +59,9 @@ export function EquipmentModals({
             setManualForm({ manual, equipmentId: null })
           }
           onDeleteManual={setManualDelete}
+          onEdit={onEdit}
+          onPrintLabel={onPrintLabel}
+          onOpenIncident={onOpenIncident}
           onClose={onCloseDetail}
           onViewRequests={(equipmentId) => {
             onCloseDetail();
@@ -65,6 +72,13 @@ export function EquipmentModals({
             <ManualDetailSheet
               manual={manualDetail}
               equipment={equipment}
+              canEdit={canEditManual(manualDetail, rights)}
+              canDelete={canDeleteManual(manualDetail, rights)}
+              onEdit={(manual) => {
+                setManualDetail(null);
+                setManualForm({ manual, equipmentId: null });
+              }}
+              onDelete={(manual) => setManualDelete(manual)}
               onClose={() => setManualDetail(null)}
             />
           )}

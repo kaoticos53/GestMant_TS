@@ -21,6 +21,10 @@ vi.mock("convex/react", () => ({
   useMutation: mockUseMutation,
 }));
 
+vi.mock("@/pages/dashboard/settings/MailboxCard", () => ({
+  MailboxCard: () => <div data-testid="inline-mailbox-card">Configuración inline</div>,
+}));
+
 import { MailboxView } from "@/pages/dashboard/MailboxView";
 
 const ACCOUNT = {
@@ -228,6 +232,7 @@ describe("MailboxView", () => {
       await settle();
     });
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain("Configuración inline");
   });
 
   it("muestra carpetas y cabeceras con su remitente y asunto", async () => {

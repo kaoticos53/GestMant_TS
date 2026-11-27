@@ -42,6 +42,12 @@ export type SearchHit =
       term: string;
       title: string;
       subtitle: string;
+    }
+  | {
+      kind: "manual";
+      id: Id<"manuals">;
+      title: string;
+      subtitle: string;
     };
 
 export interface SearchGroup {

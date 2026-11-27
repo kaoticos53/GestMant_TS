@@ -3,11 +3,20 @@ import type { Doc } from "@/convex/_generated/dataModel";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { csvFilename, downloadCsv, toCsv } from "@/lib/export";
 import { manualsForEquipment } from "@/lib/manuals";
+import {
+  EQUIPMENT_OPERATIONAL_META,
+  resolveOperationalState,
+  type EquipmentOperationalState,
+} from "@/lib/movements";
 import { sortRows } from "@/lib/tableSort";
-import { equipmentLabel, nextReview } from "@/lib/workshop";
+import { equipmentLabel, formatDate, nextReview } from "@/lib/workshop";
 import type { ManualDoc } from "../../ManualsView";
 import type { EquipmentDoc, RecordDoc } from "../types";
+
+export type EquipmentOperationalFilter = "all" | EquipmentOperationalState;
+export type EquipmentReviewFilter = "all" | "overdue";
 
 /**
  * Función pura de filtrado de equipos por búsqueda textual sobre múltiples campos.
@@ -30,6 +39,42 @@ export function filterEquipment(
       item.supplier ?? "",
     ].some((value) => value.toLowerCase().includes(query)),
   );
+}
+
+/** Exporta a CSV la lista actual de equipos con estado operativo y ubicación. */
+export function exportEquipmentCsv(
+  rows: readonly EquipmentDoc[],
+  reviewOverdueOf: (item: EquipmentDoc) => boolean,
+): number {
+  const header = [
+    "Código",
+    "Nombre",
+    "Marca",
+    "Modelo",
+    "Nº de serie",
+    "Ubicación",
+    "Proveedor",
+    "Estado operativo",
+    "Preventivo vencido",
+    "Fecha de compra",
+  ];
+  const exportRows = rows.map((item) => {
+    const opState = resolveOperationalState(item);
+    return [
+      item.code ?? "",
+      item.name,
+      item.brand ?? "",
+      item.model,
+      item.serialNumber ?? "",
+      item.location ?? "",
+      item.supplier ?? "",
+      EQUIPMENT_OPERATIONAL_META[opState].label,
+      reviewOverdueOf(item) ? "Sí" : "No",
+      item.purchaseDate ? formatDate(item.purchaseDate) : "",
+    ];
+  });
+  downloadCsv(csvFilename("equipos"), toCsv(header, exportRows));
+  return exportRows.length;
 }
 
 interface UseEquipmentListStateOptions {
@@ -56,15 +101,90 @@ export function useEquipmentListState({
   initialSearch = "",
 }: UseEquipmentListStateOptions) {
   const [search, setSearch] = useState(initialSearch);
-
-  const filtered = useMemo(
-    () => filterEquipment(equipment, search),
-    [equipment, search],
-  );
+  const [operationalFilter, setOperationalFilter] =
+    useState<EquipmentOperationalFilter>("all");
+  const [hideDecommissioned, setHideDecommissioned] = useState(false);
+  const [reviewFilter, setReviewFilter] =
+    useState<EquipmentReviewFilter>("all");
+  const [locationFilter, setLocationFilter] = useState("all");
 
   /** Intervenciones registradas para un equipo del inventario. */
-  const recordsFor = (item: EquipmentDoc) =>
-    maintenance.filter((record) => record.equipmentId === item._id);
+  const recordsFor = useCallback(
+    (item: EquipmentDoc) =>
+      maintenance.filter((record) => record.equipmentId === item._id),
+    [maintenance],
+  );
+
+  /** Estado de revisión preventiva del equipo. */
+  const reviewOf = useCallback(
+    (item: EquipmentDoc) =>
+      nextReview(
+        recordsFor(item),
+        item.maintenanceIntervalDays,
+        item.purchaseDate,
+      ),
+    [recordsFor],
+  );
+
+  const locations = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          equipment
+            .map((item) => item.location?.trim() ?? "")
+            .filter((loc) => loc.length > 0),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "es")),
+    [equipment],
+  );
+
+  const filtered = useMemo(
+    () =>
+      filterEquipment(equipment, search).filter((item) => {
+        const opState = resolveOperationalState(item);
+        if (hideDecommissioned && opState === "decommissioned") return false;
+        if (operationalFilter !== "all" && opState !== operationalFilter) {
+          return false;
+        }
+        if (
+          reviewFilter === "overdue" &&
+          reviewOf(item).state !== "overdue"
+        ) {
+          return false;
+        }
+        if (
+          locationFilter !== "all" &&
+          (item.location?.trim() ?? "") !== locationFilter
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [
+      equipment,
+      search,
+      hideDecommissioned,
+      operationalFilter,
+      reviewFilter,
+      reviewOf,
+      locationFilter,
+    ],
+  );
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    operationalFilter !== "all" ||
+    hideDecommissioned ||
+    reviewFilter !== "all" ||
+    locationFilter !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setOperationalFilter("all");
+    setHideDecommissioned(false);
+    setReviewFilter("all");
+    setLocationFilter("all");
+  };
 
   /** Conteo de repuestos compatibles con el equipo resuelto por modelo. */
   // Las dos cuentas que la tabla usa por celda se estabilizan con `useCallback`:
@@ -86,14 +206,6 @@ export function useEquipmentListState({
     },
     [catalogModels, parts],
   );
-
-  /** Estado de revisión preventiva del equipo. */
-  const reviewOf = (item: EquipmentDoc) =>
-    nextReview(
-      recordsFor(item),
-      item.maintenanceIntervalDays,
-      item.purchaseDate,
-    );
 
   /** Manuales asignados al equipo y de su modelo. */
   const manualsOf = useCallback(
@@ -151,7 +263,7 @@ export function useEquipmentListState({
   const paging = useTablePagination({
     total: rows.length,
     rowsFit,
-    resetKey: search,
+    resetKey: `${search}|${operationalFilter}|${hideDecommissioned}|${reviewFilter}|${locationFilter}`,
   });
 
   const visible = rows.slice(paging.from - 1, paging.to);
@@ -159,6 +271,17 @@ export function useEquipmentListState({
   return {
     search,
     setSearch,
+    operationalFilter,
+    setOperationalFilter,
+    hideDecommissioned,
+    setHideDecommissioned,
+    reviewFilter,
+    setReviewFilter,
+    locationFilter,
+    setLocationFilter,
+    locations,
+    hasActiveFilters,
+    clearFilters,
     filtered,
     columns,
     sort,

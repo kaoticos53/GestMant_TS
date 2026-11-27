@@ -1,6 +1,8 @@
 import { useQuery } from "convex/react";
+import { Pencil, Trash2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetFooter } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { manualNeedsHistoryUrls } from "@/lib/manuals";
 import { getErrorMessage } from "@/lib/workshop";
@@ -28,6 +30,10 @@ export type { ManualDetailSheetProps };
 export function ManualDetailSheet({
   manual,
   equipment,
+  canEdit = false,
+  canDelete = false,
+  onEdit,
+  onDelete,
   onClose,
 }: ManualDetailSheetProps) {
   const needsHistoryUrls = manualNeedsHistoryUrls(manual);
@@ -70,6 +76,36 @@ export function ManualDetailSheet({
             destinationId={resolvedManual._id}
           />
         </div>
+
+        <SheetFooter className="sticky bottom-0 z-20 border-t border-border/70 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6">
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cerrar
+            </Button>
+            {canEdit && onEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => onEdit(resolvedManual)}
+              >
+                <Pencil className="size-4" />
+                Editar
+              </Button>
+            )}
+            {canDelete && onDelete && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 text-destructive hover:text-destructive"
+                onClick={() => onDelete(resolvedManual)}
+              >
+                <Trash2 className="size-4" />
+                Eliminar
+              </Button>
+            )}
+          </div>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

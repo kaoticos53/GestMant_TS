@@ -409,6 +409,7 @@ export default function Dashboard() {
           <KeyboardShortcutsDialog
             open={shortcutsOpen}
             onOpenChange={setShortcutsOpen}
+            onOpenMachines={!isGuest ? () => goToTab("machines") : undefined}
           />
         </div>
 

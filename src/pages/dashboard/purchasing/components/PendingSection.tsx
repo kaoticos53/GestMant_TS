@@ -112,6 +112,7 @@ export function PendingSection({
           isGroupFullySelected={selection.isGroupFullySelected(group.items)}
           onToggleItem={selection.toggleItem}
           onToggleGroup={() => selection.toggleGroup(group.items)}
+          onCreateOrder={() => selection.selectGroupAndOpenOrder(group.items)}
           onAction={setActionTarget}
           onOpenRequest={onOpenRequest}
         />

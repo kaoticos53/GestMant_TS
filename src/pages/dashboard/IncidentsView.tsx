@@ -20,8 +20,12 @@ export function IncidentsView({
   initialDetailId = null,
   initialFilter = "all",
   initialSearch = "",
+  initialMineOnly = false,
+  initialPriority = "all",
   canOpenRequests = false,
+  canViewManuals = false,
   onOpenRequest,
+  onOpenManual,
 }: {
   /** Identidad actual (para autoasignación y permisos de atención). */
   currentUserId?: Id<"users"> | null;
@@ -34,15 +38,26 @@ export function IncidentsView({
   initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
   /** Búsqueda inicial (p. ej. al pulsar un modelo en Analítica). */
   initialSearch?: string;
+  /** Mostrar solo incidencias asignadas al usuario actual al abrir. */
+  initialMineOnly?: boolean;
+  /** Prioridad inicial del filtro. */
+  initialPriority?: import("@/lib/workshop").IncidentPriority | "all";
   /** Puede ver el módulo de peticiones, así que puede saltar a una. */
   canOpenRequests?: boolean;
+  /** Puede consultar manuales técnicos del modelo en la ficha. */
+  canViewManuals?: boolean;
   /** Abrir una petición concreta en su módulo. */
   onOpenRequest?: (id: Id<"partRequests">) => void;
+  /** Abrir un manual concreto en su módulo. */
+  onOpenManual?: (id: Id<"manuals">) => void;
 }) {
   const state = useIncidentsViewState({
+    currentUserId,
     initialDetailId,
     initialFilter,
     initialSearch,
+    initialMineOnly,
+    initialPriority,
   });
   const aiAvailability = useQuery(api.ai.availability, {});
   const [aiOpen, setAiOpen] = useState(false);
@@ -64,6 +79,12 @@ export function IncidentsView({
         filter={state.filter}
         onFilterChange={state.setFilter}
         counts={state.counts}
+        canFilterMine={Boolean(currentUserId)}
+        mineOnly={state.mineOnly}
+        onMineOnlyChange={state.setMineOnly}
+        mineCount={state.mineCount}
+        priority={state.priority}
+        onPriorityChange={state.setPriority}
         onOpenReports={() => state.setReportsOpen(true)}
         onOpenAiAssistant={
           aiAvailability?.available ? () => setAiOpen(true) : undefined
@@ -105,7 +126,12 @@ export function IncidentsView({
         <IncidentsEmptyState
           search={state.search}
           filter={state.filter}
+          hasExtraFilters={state.mineOnly || state.priority !== "all"}
           onClearSearch={() => state.setSearch("")}
+          onClearExtraFilters={() => {
+            state.setMineOnly(false);
+            state.setPriority("all");
+          }}
         />
       ) : (
         <IncidentsList
@@ -118,7 +144,7 @@ export function IncidentsView({
           selectedIds={state.selectedIds}
           bulkArchiving={state.bulkArchiving}
           areaRef={state.areaRef}
-          resetKey={`${state.search}|${state.sort}|${state.filter}|${state.paging.page}`}
+          resetKey={`${state.search}|${state.sort}|${state.filter}|${state.mineOnly}|${state.priority}|${state.paging.page}`}
           paging={state.paging}
           onOpen={(incident) => state.setDetailId(incident._id)}
           onSelfAssign={(incident) => void state.handleSelfAssign(incident)}
@@ -139,7 +165,9 @@ export function IncidentsView({
           currentUserName={currentUserName}
           canAssign={canAssign}
           canOpenRequests={canOpenRequests}
+          canViewManuals={canViewManuals}
           onOpenRequest={onOpenRequest}
+          onOpenManual={onOpenManual}
           onOpenIncident={(id) => state.setDetailId(id)}
           onClose={() => state.setDetailId(null)}
         />

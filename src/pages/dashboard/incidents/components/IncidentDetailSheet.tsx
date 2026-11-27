@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
+import { BookOpen, Download } from "lucide-react";
 import { api } from "@/convex/_generated/api";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
 import { IncidentLifecycleExtras } from "./IncidentLifecycleExtras";
@@ -8,6 +11,11 @@ import { JourneySummary } from "@/components/JourneySummary";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { incidentNeedsDocumentUrls } from "@/lib/incidentFlow";
 import { incidentJourney } from "@/lib/incidentJourney";
+import {
+  MANUAL_KIND_META,
+  manualFileName,
+  manualsForEquipment,
+} from "@/lib/manuals";
 import { ChangePriorityDialog } from "../dialogs/ChangePriorityDialog";
 
 import type { EquipmentDoc, IncidentDoc } from "../types";
@@ -32,7 +40,9 @@ export interface IncidentDetailSheetProps {
   currentUserName: string;
   canAssign: boolean;
   canOpenRequests?: boolean;
+  canViewManuals?: boolean;
   onOpenRequest?: (id: Id<"partRequests">) => void;
+  onOpenManual?: (id: Id<"manuals">) => void;
   onOpenIncident?: (id: Id<"incidents">) => void;
   onClose: () => void;
 }
@@ -45,7 +55,9 @@ export function IncidentDetailSheet({
   currentUserName,
   canAssign,
   canOpenRequests = false,
+  canViewManuals = false,
   onOpenRequest,
+  onOpenManual,
   onOpenIncident,
   onClose,
 }: IncidentDetailSheetProps) {
@@ -84,6 +96,25 @@ export function IncidentDetailSheet({
   });
 
   const [priorityOpen, setPriorityOpen] = useState(false);
+
+  const manualModelRef = linkedEquipment?.model ?? resolvedIncident.model ?? "";
+  const shouldLoadManuals =
+    canViewManuals &&
+    (linkedEquipment !== null || manualModelRef.trim() !== "");
+  const allManuals = useQuery(
+    api.manuals.list,
+    shouldLoadManuals ? {} : "skip",
+  );
+  const matchingManuals = shouldLoadManuals && allManuals
+    ? (() => {
+      const grouped = manualsForEquipment(allManuals, {
+        _id: linkedEquipment?._id ?? "",
+        brand: linkedEquipment?.brand ?? null,
+        model: manualModelRef || null,
+      });
+      return [...grouped.assigned, ...grouped.byModel];
+    })()
+    : [];
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -145,6 +176,64 @@ export function IncidentDetailSheet({
             onOpenIncident={onOpenIncident}
           />
 
+          {/* Manuales y notas del modelo */}
+          {matchingManuals.length > 0 && (
+            <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <BookOpen className="size-3.5" />
+                Manuales y notas del modelo ({matchingManuals.length})
+              </p>
+              <ul className="mt-2 divide-y divide-border/60">
+                {matchingManuals.map((manual) => {
+                  const meta = MANUAL_KIND_META[manual.kind];
+                  return (
+                    <li
+                      key={manual._id}
+                      className="flex items-center justify-between gap-2 py-2 first:pt-1 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className={meta.badgeClassName}>
+                            {meta.label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {manual.type}
+                          </span>
+                        </div>
+                        {onOpenManual ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenManual(manual._id)}
+                            className="mt-1 block truncate text-left text-sm font-medium text-signal underline-offset-2 hover:underline"
+                          >
+                            {manual.title}
+                          </button>
+                        ) : (
+                          <p className="mt-1 truncate text-sm font-medium">
+                            {manual.title}
+                          </p>
+                        )}
+                      </div>
+                      {manual.kind === "file" && manual.url && (
+                        <Button asChild variant="ghost" size="icon" className="size-8 shrink-0">
+                          <a
+                            href={manual.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Abrir ${manual.title}`}
+                            title={manualFileName(manual) ?? "Abrir manual"}
+                          >
+                            <Download className="size-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
           {/* Expediente documental */}
           <IncidentDocumentsCard
             incident={resolvedIncident}
@@ -165,6 +254,15 @@ export function IncidentDetailSheet({
             destinationType="incident"
             destinationId={resolvedIncident._id}
           />
+
+          <IncidentLifecycleExtras
+            incident={resolvedIncident}
+            canCoordinate={derived.canCoordinate}
+            canWork={derived.canWork}
+            archived={derived.archived}
+            withdrawn={derived.withdrawn}
+            onOpenIncident={onOpenIncident}
+          />
         </div>
 
         {/* Barra fija de acciones y modales subordinados */}
@@ -184,15 +282,6 @@ export function IncidentDetailSheet({
           withdrawn={derived.withdrawn}
           trailPending={trailPending}
           onClose={onClose}
-        />
-
-        <IncidentLifecycleExtras
-          incident={resolvedIncident}
-          canCoordinate={derived.canCoordinate}
-          canWork={derived.canWork}
-          archived={derived.archived}
-          withdrawn={derived.withdrawn}
-          onOpenIncident={onOpenIncident}
         />
 
         {priorityOpen && (

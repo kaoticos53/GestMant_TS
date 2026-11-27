@@ -13,17 +13,22 @@ import { countByStatus, inQueueOrder, searchableFields } from "../helpers";
 export function useRequestFilters({
   requests,
   equipment,
+  currentUserId = null,
   equipmentFilter = "all",
   initialFilter = "all",
+  initialMineOnly = false,
   initialDetailId = null,
 }: {
   requests: RequestDoc[];
   equipment: EquipmentDoc[];
+  currentUserId?: Id<"users"> | null;
   equipmentFilter?: string;
   initialFilter?: RequestFilterId;
+  initialMineOnly?: boolean;
   initialDetailId?: Id<"partRequests"> | null;
 }) {
   const [filter, setFilter] = useState<RequestFilterId>(initialFilter);
+  const [mineOnly, setMineOnly] = useState<boolean>(initialMineOnly);
   const [detailId, setDetailId] = useState<Id<"partRequests"> | null>(
     initialDetailId ?? null,
   );
@@ -47,7 +52,15 @@ export function useRequestFilters({
   const byEquipment = requests.filter((request) =>
     requestMatchesEquipment(request, filterEquipment),
   );
-  const matched = byEquipment.filter((request) =>
+  const mineCount = currentUserId
+    ? byEquipment.filter((request) => request.requesterId === currentUserId)
+      .length
+    : 0;
+  const byOwner =
+    mineOnly && currentUserId
+      ? byEquipment.filter((request) => request.requesterId === currentUserId)
+      : byEquipment;
+  const matched = byOwner.filter((request) =>
     matchesQuery(searchableFields(request), search),
   );
   const filtered =
@@ -68,7 +81,7 @@ export function useRequestFilters({
   const paging = useTablePagination({
     total: ordered.length,
     rowsFit,
-    resetKey: `${search}|${sort}|${filter}`,
+    resetKey: `${search}|${sort}|${filter}|${mineOnly}`,
   });
 
   const visible = ordered.slice(paging.from - 1, paging.to);
@@ -85,6 +98,9 @@ export function useRequestFilters({
   return {
     filter,
     setFilter,
+    mineOnly,
+    setMineOnly,
+    mineCount,
     detailId,
     setDetailId,
     search,

@@ -57,7 +57,15 @@ export function ManualFormDialog(props: ManualFormDialogProps) {
     <Dialog open onOpenChange={(open) => !open && props.onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar manual" : "Nuevo manual"}</DialogTitle>
+          <DialogTitle>
+            {isFile
+              ? isEdit
+                ? "Editar manual"
+                : "Nuevo manual"
+              : isEdit
+                ? "Editar nota del taller"
+                : "Nueva nota del taller"}
+          </DialogTitle>
           <DialogDescription>
             {isEdit
               ? "Cambia la ficha del manual" +
@@ -136,7 +144,9 @@ export function ManualFormDialog(props: ManualFormDialogProps) {
               ? "Guardando..."
               : isEdit
                 ? "Guardar cambios"
-                : "Añadir manual"}
+                : isFile
+                  ? "Añadir manual"
+                  : "Añadir nota"}
           </Button>
         </DialogFooter>
       </DialogContent>

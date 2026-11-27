@@ -6,6 +6,10 @@ export type EquipmentDoc = Doc<"equipment">;
 export interface ManualDetailSheetProps {
   manual: ManualDoc;
   equipment: EquipmentDoc[];
+  canEdit?: boolean;
+  canDelete?: boolean;
+  onEdit?: (manual: ManualDoc) => void;
+  onDelete?: (manual: ManualDoc) => void;
   onClose: () => void;
 }
 

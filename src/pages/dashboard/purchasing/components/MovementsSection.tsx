@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { FileText, RotateCcw, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { DataTableToolbar } from "@/components/DataTableToolbar";
 import { TablePagination } from "@/components/TablePagination";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ import type { ReceptionDoc } from "../types";
 export interface MovementsSectionProps {
   receptions: ReceptionDoc[];
   canManage?: boolean;
+  onOpenOrder?: (orderId: Id<"purchaseOrders">) => void;
 }
 
 type MovementStatusFilter = "all" | "active" | "reversed";
@@ -41,6 +43,7 @@ type MovementStatusFilter = "all" | "active" | "reversed";
 export function MovementsSection({
   receptions,
   canManage = false,
+  onOpenOrder,
 }: MovementsSectionProps) {
   const reverseReception = useMutation(api.purchasing.reverseReception);
   const removeDeliveryNote = useMutation(
@@ -198,7 +201,18 @@ export function MovementsSection({
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium">
-                        {row.orderReference} · {row.supplier}
+                        {onOpenOrder ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenOrder(row.orderId)}
+                            className="text-signal underline-offset-2 hover:underline"
+                          >
+                            {row.orderReference}
+                          </button>
+                        ) : (
+                          row.orderReference
+                        )}{" "}
+                        · {row.supplier}
                       </p>
                       {isReversed && (
                         <Badge variant="outline" className="text-xs">

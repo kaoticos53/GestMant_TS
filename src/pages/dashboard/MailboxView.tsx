@@ -22,6 +22,14 @@ import {
   MailboxWithoutFolders,
   MessageAreaSkeleton,
 } from "./mailbox/components/MailboxStates";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { MailboxCard } from "./settings/MailboxCard";
 import { MailboxToolbar } from "./mailbox/components/MailboxToolbar";
 import { MAILBOX_PAGE_SIZE } from "./mailbox/helpers";
 import { MessageList, MessageListSkeleton } from "./mailbox/MessageList";
@@ -45,13 +53,19 @@ interface PageState {
 export function MailboxView({
   onOpenSettings,
 }: {
-  onOpenSettings: () => void;
+  onOpenSettings?: () => void;
 }) {
   const account = useQuery(api.mailAccounts.account);
   const folders = useQuery(api.mailAccounts.folders, {});
   const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
   const startSyncNow = useMutation(api.mailSync.startSyncNow);
   const startAutoTagFolder = useMutation(api.mailTagging.startAutoTagFolder);
+
+  const [configOpen, setConfigOpen] = useState(false);
+  const openConfig = () => {
+    setConfigOpen(true);
+    onOpenSettings?.();
+  };
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -255,7 +269,24 @@ export function MailboxView({
   }
 
   if (account === null) {
-    return <MailboxWithoutAccount onOpenSettings={onOpenSettings} />;
+    return (
+      <>
+        <MailboxWithoutAccount onOpenSettings={openConfig} />
+        <Sheet open={configOpen} onOpenChange={setConfigOpen}>
+          <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+            <SheetHeader>
+              <SheetTitle>Configurar mi buzón</SheetTitle>
+              <SheetDescription>
+                Conecta tu cuenta personal de correo sin salir del buzón.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="px-4 pb-6 sm:px-6">
+              <MailboxCard />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </>
+    );
   }
 
   const activeSelectedMessage = selectedMessage
@@ -274,7 +305,7 @@ export function MailboxView({
         syncing={syncing}
         onSelectFolder={handleSelectFolder}
         onSync={() => void handleSync()}
-        onOpenSettings={onOpenSettings}
+        onOpenSettings={openConfig}
       />
 
       <PanelGroup
@@ -339,7 +370,7 @@ export function MailboxView({
                   account={account}
                   syncing={syncing}
                   onSync={() => void handleSync()}
-                  onOpenSettings={onOpenSettings}
+                  onOpenSettings={openConfig}
                 />
 
                 {headersResult === undefined || pageOutOfRange ? (
@@ -395,13 +426,28 @@ export function MailboxView({
               folderName={activeFolder?.name ?? "Correo"}
               onSelectMessage={handleSelectMessage}
               onClose={handleCloseMessage}
-              onOpenSettings={onOpenSettings}
+              onOpenSettings={openConfig}
             />
           ) : (
             <MessageViewerPlaceholder />
           )}
         </Panel>
       </PanelGroup>
+
+      <Sheet open={configOpen} onOpenChange={setConfigOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>Configurar mi buzón</SheetTitle>
+            <SheetDescription>
+              Ajusta tu cuenta personal, carpetas y reglas automáticas sin salir
+              de Correo.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6 sm:px-6">
+            <MailboxCard />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

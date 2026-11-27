@@ -1,8 +1,15 @@
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetFooter } from "@/components/ui/sheet";
 import { SharedMailSection } from "@/pages/dashboard/shared/SharedMailSection";
-import { ArchiveX, ClipboardList, Undo2 } from "lucide-react";
+import { richDocToPlainText } from "@/lib/richDoc";
+import {
+  INCIDENT_STATUS_META,
+  formatDate,
+  type IncidentStatus,
+} from "@/lib/workshop";
+import { ArchiveX, ClipboardList, Pencil, Printer, Siren } from "lucide-react";
 import { MaintenanceDialog } from "../dialogs/MaintenanceDialog";
 import {
   DecommissionEquipmentDialog,
@@ -39,6 +46,9 @@ export function EquipmentDetailSheet({
   onViewManual = () => {},
   onEditManual = () => {},
   onDeleteManual = () => {},
+  onEdit,
+  onPrintLabel,
+  onOpenIncident,
   onClose,
   onViewRequests,
   children,
@@ -50,7 +60,7 @@ export function EquipmentDetailSheet({
   const [decommOpen, setDecommOpen] = useState(false);
   const [returnLoanOpen, setReturnLoanOpen] = useState(false);
 
-  const { related, shownRequests, compatible, review } =
+  const { related, shownRequests, incidents, compatible, review } =
     useEquipmentDerivedData({
       item,
       parts,
@@ -121,6 +131,65 @@ export function EquipmentDetailSheet({
             onViewRequests={onViewRequests}
           />
 
+          {incidents.length > 0 && (
+            <section className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+              <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Siren className="size-3.5" />
+                Incidencias de este equipo ({incidents.length})
+              </h3>
+              <ul className="mt-2.5 divide-y divide-border/60">
+                {incidents.slice(0, 6).map((inc) => {
+                  const statusMeta =
+                    INCIDENT_STATUS_META[inc.status as IncidentStatus];
+                  const summary = richDocToPlainText(inc.description).trim();
+                  return (
+                    <li
+                      key={inc._id}
+                      className="flex items-start justify-between gap-3 py-2 first:pt-1 last:pb-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {onOpenIncident ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onOpenIncident(inc._id);
+                              }}
+                              className="font-mono text-xs font-semibold text-signal underline-offset-2 hover:underline"
+                            >
+                              {inc.reference}
+                            </button>
+                          ) : (
+                            <span className="font-mono text-xs font-semibold">
+                              {inc.reference}
+                            </span>
+                          )}
+                          {statusMeta && (
+                            <Badge
+                              variant="outline"
+                              className={statusMeta.badgeClassName}
+                            >
+                              {statusMeta.label}
+                            </Badge>
+                          )}
+                        </div>
+                        {summary && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {summary}
+                          </p>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {formatDate(inc.reportedAt)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
           <EquipmentMovementsSection equipmentId={item._id} />
 
           <SharedMailSection
@@ -150,15 +219,26 @@ export function EquipmentDetailSheet({
             <Button type="button" variant="ghost" onClick={onClose}>
               Cerrar
             </Button>
-            {canManage && item.currentLoan && (
+            {onPrintLabel && (
               <Button
                 type="button"
                 variant="outline"
                 className="gap-2"
-                onClick={() => setReturnLoanOpen(true)}
+                onClick={() => onPrintLabel(item)}
               >
-                <Undo2 className="size-4" />
-                Devolver préstamo
+                <Printer className="size-4" />
+                Etiqueta
+              </Button>
+            )}
+            {canManage && onEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                onClick={() => onEdit(item)}
+              >
+                <Pencil className="size-4" />
+                Editar
               </Button>
             )}
             {canManage &&

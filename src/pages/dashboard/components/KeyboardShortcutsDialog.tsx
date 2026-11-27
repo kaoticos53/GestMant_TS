@@ -1,7 +1,10 @@
+import { Workflow } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -72,9 +75,11 @@ function ShortcutSection({
 export function KeyboardShortcutsDialog({
   open,
   onOpenChange,
+  onOpenMachines,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenMachines?: () => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,6 +95,23 @@ export function KeyboardShortcutsDialog({
           <ShortcutSection title="Navegación general" items={GLOBAL_SHORTCUTS} />
           <ShortcutSection title="En el módulo Correo" items={MAILBOX_SHORTCUTS} />
         </div>
+        {onOpenMachines && (
+          <DialogFooter className="border-t border-border/60 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => {
+                onOpenChange(false);
+                onOpenMachines();
+              }}
+            >
+              <Workflow className="size-4" />
+              Ver flujos y estados del taller
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

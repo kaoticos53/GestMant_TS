@@ -169,12 +169,19 @@ export function ManualsView({
           setDetailId(null);
           setDismissedInitial(true);
         }}
+        onEditDetail={(manual) => {
+          setDetailId(null);
+          setDismissedInitial(true);
+          setFormTarget({ manual });
+        }}
+        onDeleteDetail={(manual) => setDeleteTarget(manual)}
         formTarget={formTarget}
         onCloseForm={() => setFormTarget(null)}
         deleteTarget={deleteTarget}
         onCloseDelete={() => setDeleteTarget(null)}
         equipment={equipment}
         canManage={canManage}
+        rights={rights}
       />
     </div>
   );

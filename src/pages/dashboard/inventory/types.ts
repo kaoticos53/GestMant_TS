@@ -10,6 +10,8 @@ export const COMPATIBLE_RESULTS = 6;
 export interface InventoryViewProps {
   /** Solo responsable de repuestos/admin escriben en el catálogo (fail-closed). */
   canManage?: boolean;
+  /** Puede solicitar reposiciones hacia el módulo de Compras (`managePurchasing`). */
+  canPurchase?: boolean;
   /** Quién mira: su orden de la tabla se recuerda aparte del de los demás. */
   currentUserId?: string | null;
   /** Texto con el que se abre la vista (viene de la búsqueda global). */

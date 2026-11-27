@@ -15,6 +15,17 @@ export function buildInitialQuantities(
   );
 }
 
+/** Rellena a cero todas las líneas pendientes de una recepción parcial. */
+export function buildZeroQuantities(
+  lines: readonly PurchaseOrderLine[],
+): Record<string, string> {
+  return Object.fromEntries(
+    lines
+      .filter((line) => pendingQuantity(line) > 0)
+      .map((line) => [line.purchaseRequestId, "0"]),
+  );
+}
+
 /**
  * Transforma y filtra las cantidades introducidas a items numéricos válidos (> 0).
  */

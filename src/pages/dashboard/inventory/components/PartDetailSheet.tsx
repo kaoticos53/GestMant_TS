@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import {
+  ExternalLink,
   MapPin,
   Pencil,
   Printer,
@@ -37,24 +38,28 @@ export interface PartDetailSheetProps {
   part: PartDoc | null;
   parts?: PartDoc[];
   canManage: boolean;
+  canPurchase?: boolean;
   catalogModels: EquipmentModelDoc[];
   onClose: () => void;
   onEdit: (part: PartDoc) => void;
   onStockAdjust: (part: PartDoc) => void;
   onPrintLabel: (part: PartDoc) => void;
   onSelectModel?: (modelName: string) => void;
+  onSelectPart?: (id: PartDoc["_id"]) => void;
 }
 
 export function PartDetailSheet({
   part,
   parts = [],
   canManage,
+  canPurchase = false,
   catalogModels,
   onClose,
   onEdit,
   onStockAdjust,
   onPrintLabel,
   onSelectModel,
+  onSelectPart,
 }: PartDetailSheetProps) {
   const updatePart = useMutation(api.spareParts.update);
   const requestRestock = useMutation(api.purchasing.requestRestock);
@@ -70,6 +75,14 @@ export function PartDetailSheet({
   const compatibles = (part?.compatibleModels ?? [])
     .map((id) => catalogModels.find((m) => m._id === id))
     .filter((m): m is EquipmentModelDoc => Boolean(m));
+  const replacementPart = part?.replacementPartId
+    ? (parts.find((candidate) => candidate._id === part.replacementPartId) ??
+      null)
+    : null;
+  const safePurchaseUrl =
+    part?.purchaseUrl && /^https?:\/\//i.test(part.purchaseUrl.trim())
+      ? part.purchaseUrl.trim()
+      : null;
 
   return (
     <Sheet open={part !== null} onOpenChange={(open) => !open && onClose()}>
@@ -177,6 +190,52 @@ export function PartDetailSheet({
                   />
                 )}
 
+                {(safePurchaseUrl || replacementPart || part.discontinuedNote) && (
+                  <div className="mt-3 grid gap-2 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
+                    {safePurchaseUrl && (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          Ficha o enlace de compra
+                        </span>
+                        <a
+                          href={safePurchaseUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-signal underline-offset-2 hover:underline"
+                        >
+                          Abrir enlace del proveedor
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </div>
+                    )}
+                    {replacementPart && (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          Repuesto equivalente
+                        </span>
+                        {onSelectPart ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectPart(replacementPart._id)}
+                            className="font-medium text-signal underline-offset-2 hover:underline"
+                          >
+                            {replacementPart.code} · {replacementPart.name}
+                          </button>
+                        ) : (
+                          <span className="font-medium">
+                            {replacementPart.code} · {replacementPart.name}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {part.discontinuedNote && (
+                      <p className="text-muted-foreground">
+                        {part.discontinuedNote}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {canManage && (
                   <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border/60 bg-muted/20 p-3 sm:grid-cols-2">
                     <label className="grid gap-1 text-xs">
@@ -281,33 +340,33 @@ export function PartDetailSheet({
                         <Pencil className="mr-1.5 size-4" />
                         Editar ficha
                       </Button>
-                      {isPartPurchasable(part.lifecycleStatus) && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={requestingRestock}
-                          onClick={async () => {
-                            setRequestingRestock(true);
-                            try {
-                              const res = await requestRestock({
-                                sparePartId: part._id,
-                              });
-                              toast.success(
-                                `Reposición ${res.reference} enviada a Compras → Pendientes.`,
-                              );
-                            } catch (err) {
-                              toast.error(getErrorMessage(err));
-                            } finally {
-                              setRequestingRestock(false);
-                            }
-                          }}
-                        >
-                          <ShoppingCart className="mr-1.5 size-4" />
-                          {requestingRestock ? "Pidiendo..." : "Pedir reposición"}
-                        </Button>
-                      )}
                     </>
+                  )}
+                  {canPurchase && isPartPurchasable(part.lifecycleStatus) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={requestingRestock}
+                      onClick={async () => {
+                        setRequestingRestock(true);
+                        try {
+                          const res = await requestRestock({
+                            sparePartId: part._id,
+                          });
+                          toast.success(
+                            `Reposición ${res.reference} enviada a Compras → Pendientes.`,
+                          );
+                        } catch (err) {
+                          toast.error(getErrorMessage(err));
+                        } finally {
+                          setRequestingRestock(false);
+                        }
+                      }}
+                    >
+                      <ShoppingCart className="mr-1.5 size-4" />
+                      {requestingRestock ? "Pidiendo..." : "Pedir reposición"}
+                    </Button>
                   )}
                   <Button
                     type="button"

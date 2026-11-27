@@ -7,6 +7,7 @@ import { compressForUpload, uploadToStorage } from "@/lib/upload";
 import { getErrorMessage } from "@/lib/workshop";
 import {
   buildInitialQuantities,
+  buildZeroQuantities,
   parseReceivedItems,
   validateReceiveInput,
 } from "./helpers";
@@ -31,6 +32,14 @@ export function useReceiveDialogForm({
       ...actual,
       [purchaseRequestId]: value,
     }));
+  };
+
+  const fillAllPending = () => {
+    setCantidades(buildInitialQuantities(order.lines));
+  };
+
+  const clearAllQuantities = () => {
+    setCantidades(buildZeroQuantities(order.lines));
   };
 
   const enviar = async () => {
@@ -91,6 +100,8 @@ export function useReceiveDialogForm({
   return {
     cantidades,
     setCantidad,
+    fillAllPending,
+    clearAllQuantities,
     nota,
     setNota,
     archivo,

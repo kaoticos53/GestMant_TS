@@ -95,6 +95,11 @@ export function usePendingPurchaseSelection(
   ): boolean =>
     items.length > 0 && items.every((item) => selectedIds.has(item._id));
 
+  const selectGroupAndOpenOrder = (items: readonly PurchaseRequestDoc[]) => {
+    setSelectedIds(new Set(items.map((item) => item._id)));
+    setIsOrderDialogOpen(true);
+  };
+
   return {
     selectedIds,
     isOrderDialogOpen,
@@ -104,5 +109,6 @@ export function usePendingPurchaseSelection(
     toggleGroup,
     clearSelection,
     isGroupFullySelected,
+    selectGroupAndOpenOrder,
   };
 }

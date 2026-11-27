@@ -60,6 +60,35 @@ export function DashboardTabRenderer({
         <AnalyticsView
           onOpenIncidents={() => goToTab("incidents")}
           onOpenRequests={() => goToTab("requests")}
+          onOpenMyIncidents={
+            can("viewIncidents")
+              ? () =>
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "incidents",
+                  incidentsFilter: "all",
+                  incidentsSearch: "",
+                  incidentsMineOnly: true,
+                  incidentsPriority: "all",
+                  incidentId: null,
+                  timestamp: Date.now(),
+                }))
+              : undefined
+          }
+          onOpenMyRequests={
+            can("viewRequests")
+              ? (filter = "all") =>
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "requests",
+                  requestsFilter: filter,
+                  requestsMineOnly: true,
+                  requestsEquipmentFilter: undefined,
+                  requestId: null,
+                  timestamp: Date.now(),
+                }))
+              : undefined
+          }
           onOpenInventoryLowStock={
             can("viewInventory") ? () => openInventory(true) : undefined
           }
@@ -177,29 +206,44 @@ export function DashboardTabRenderer({
     case "incidents":
       return (
         <IncidentsView
-          key={`incidents-${viewKeys.incidents}-${target.incidentsFilter ?? "all"}-${target.incidentsSearch ?? ""}`}
+          key={`incidents-${viewKeys.incidents}-${target.incidentsFilter ?? "all"}-${target.incidentsSearch ?? ""}-${target.incidentsMineOnly ? "mine" : "all"}-${target.incidentsPriority ?? "all"}`}
           currentUserId={user?._id ?? null}
           currentUserName={displayName}
           canAssign={can("manageIncidents")}
           initialDetailId={target.incidentId ?? null}
           initialFilter={target.incidentsFilter ?? "all"}
           initialSearch={target.incidentsSearch ?? ""}
+          initialMineOnly={target.incidentsMineOnly ?? false}
+          initialPriority={target.incidentsPriority ?? "all"}
           canOpenRequests={can("viewRequests")}
+          canViewManuals={can("viewManuals")}
           onOpenRequest={openRequest}
+          onOpenManual={(id) =>
+            setTarget((prev) => ({
+              ...prev,
+              tab: "manuals",
+              manualId: id,
+              manualsSearch: "",
+              timestamp: Date.now(),
+            }))
+          }
         />
       );
 
     case "requests":
       return (
         <RequestsView
-          key={`requests-${viewKeys.requests}`}
+          key={`requests-${viewKeys.requests}-${target.requestsFilter ?? "all"}-${target.requestsMineOnly ? "mine" : "all"}`}
           equipmentFilter={target.requestsEquipmentFilter ?? "all"}
           onEquipmentFilterChange={setRequestsEquipmentFilter}
+          currentUserId={user?._id ?? null}
+          canCreate={can("createRequests")}
           canManage={can("decideRequests")}
           canPurchase={can("managePurchasing") && can("viewPurchasing")}
           canViewPurchasing={can("viewPurchasing")}
           initialDetailId={target.requestId ?? null}
           initialFilter={target.requestsFilter ?? "all"}
+          initialMineOnly={target.requestsMineOnly ?? false}
           onOpenPurchasing={
             can("viewPurchasing")
               ? (section, orderId) =>
@@ -232,17 +276,21 @@ export function DashboardTabRenderer({
         <InventoryView
           key={`inventory-${viewKeys.inventory}-${target.inventoryCategory ?? "all"}-${target.inventorySearch ?? ""}-${target.inventoryLowStockOnly ? "low" : "all"}`}
           canManage={can("manageInventory")}
+          canPurchase={can("managePurchasing")}
           currentUserId={user?._id ?? null}
           initialSearch={target.inventorySearch ?? ""}
           initialCategory={target.inventoryCategory ?? "all"}
           initialLowStockOnly={target.inventoryLowStockOnly ?? false}
-          onOpenEquipmentModel={(modelName) =>
-            setTarget((prev) => ({
-              ...prev,
-              tab: "equipment",
-              equipmentSearch: modelName,
-              timestamp: Date.now(),
-            }))
+          onOpenEquipmentModel={
+            can("viewEquipment")
+              ? (modelName) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "equipment",
+                    equipmentSearch: modelName,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
           }
         />
       );
@@ -271,6 +319,7 @@ export function DashboardTabRenderer({
           canManageManuals={can("manageManuals")}
           currentUserId={user?._id ?? null}
           initialSearch={target.equipmentSearch ?? ""}
+          onOpenIncident={can("viewIncidents") ? openIncident : undefined}
           onViewRequests={openEquipmentViewRequests}
         />
       );
@@ -297,12 +346,7 @@ export function DashboardTabRenderer({
       );
 
     case "mailbox":
-      return (
-        <MailboxView
-          key={`mailbox-${viewKeys.mailbox}`}
-          onOpenSettings={() => goToTab("settings")}
-        />
-      );
+      return <MailboxView key={`mailbox-${viewKeys.mailbox}`} />;
 
     case "settings":
       return (
@@ -326,7 +370,7 @@ export function DashboardTabRenderer({
       return <UsersView />;
 
     case "permissions":
-      return <PermissionsView />;
+      return <PermissionsView onOpenMachines={() => goToTab("machines")} />;
 
     default:
       return null;

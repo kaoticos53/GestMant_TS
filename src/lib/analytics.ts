@@ -806,3 +806,34 @@ export function buildWorkshopAnalytics(input: {
     systemHealth: input.systemHealth ?? null,
   };
 }
+
+export const ANALYTICS_LENS_STORAGE_KEY = "pulso:analytics-lens";
+
+const VALID_ANALYTICS_LENSES: ReadonlySet<string> = new Set<AnalyticsLensId>([
+  "my_day",
+  "workshop",
+  "inventory_purchasing",
+  "system",
+]);
+
+/** Lee la última lente elegida en Panel y gráficos desde localStorage. */
+export function readStoredAnalyticsLens(): AnalyticsLensId | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(ANALYTICS_LENS_STORAGE_KEY);
+    if (raw && VALID_ANALYTICS_LENSES.has(raw)) {
+      return raw as AnalyticsLensId;
+    }
+  } catch {
+    // Sin acceso a almacenamiento en pruebas o modo privado restringido.
+  }
+  return null;
+}
+
+/** Guarda en localStorage la lente seleccionada en Panel y gráficos. */
+export function writeStoredAnalyticsLens(lens: AnalyticsLensId): void {
+  try {
+    globalThis.localStorage?.setItem(ANALYTICS_LENS_STORAGE_KEY, lens);
+  } catch {
+    // Ignorar errores de cuota o modo privado.
+  }
+}

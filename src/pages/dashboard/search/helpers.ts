@@ -1,4 +1,11 @@
-import { Archive, Boxes, ClipboardList, Cpu, Siren } from "lucide-react";
+import {
+  Archive,
+  BookOpen,
+  Boxes,
+  ClipboardList,
+  Cpu,
+  Siren,
+} from "lucide-react";
 import { richDocToPlainText } from "@/lib/richDoc";
 import {
   INCIDENT_STATUS_META,
@@ -187,6 +194,7 @@ export function buildSearchGroupsFromResponse(
     archived: SearchHit[];
     parts: SearchHit[];
     equipment: SearchHit[];
+    manuals?: SearchHit[];
   } | null | undefined,
   options?: { canSearchCatalog?: boolean },
 ): SearchGroup[] {
@@ -226,6 +234,12 @@ export function buildSearchGroupsFromResponse(
       label: "Equipos",
       icon: Cpu,
       hits: response.equipment,
+    },
+    {
+      kind: "manual",
+      label: "Manuales",
+      icon: BookOpen,
+      hits: response.manuals ?? [],
     },
   ];
   return groups.filter((group) => group.hits.length > 0);

@@ -27,6 +27,7 @@ export type { InventoryViewProps } from "./inventory/types";
 
 export function InventoryView({
   canManage = false,
+  canPurchase = false,
   currentUserId = null,
   initialSearch = "",
   initialCategory = "all",
@@ -100,7 +101,7 @@ export function InventoryView({
         <DataTableToolbar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Buscar por código, nombre, ubicación o proveedor"
+          searchPlaceholder="Buscar por código, ref. fabricante, nombre, ubicación o proveedor"
           searchAriaLabel="Buscar repuesto"
           hasActiveFilters={filtering}
           onResetFilters={handleResetFilters}
@@ -201,12 +202,14 @@ export function InventoryView({
         part={detailTarget}
         parts={parts}
         canManage={canManage}
+        canPurchase={canPurchase}
         catalogModels={catalogModels}
         onClose={() => setDetailId(null)}
         onEdit={(part) => setFormTarget({ part })}
         onStockAdjust={setStockTarget}
         onPrintLabel={setLabelTarget}
         onSelectModel={onOpenEquipmentModel}
+        onSelectPart={(id) => setDetailId(id)}
       />
 
       {movementsOpen && (
