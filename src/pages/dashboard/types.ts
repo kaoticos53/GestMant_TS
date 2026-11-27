@@ -46,6 +46,7 @@ export interface NavigationTarget {
   tab: NavId;
   incidentId?: Id<"incidents"> | null;
   incidentsFilter?: import("@/lib/workshop").IncidentStatus | "all";
+  incidentsSearch?: string;
   requestId?: Id<"partRequests"> | null;
   requestsEquipmentFilter?: string;
   requestsFilter?: RequestFilterId;

@@ -38,7 +38,8 @@ export function AnalyticsActionLists({
               Equipos con más incidencias
             </CardTitle>
             <CardDescription>
-              Modelos o equipos que acumulan mayor número de avisos
+              Modelos o equipos que acumulan mayor número de incidencias
+              {onSelectEquipment ? " · haz clic para ver sus incidencias" : ""}
             </CardDescription>
           </div>
           <Button variant="ghost" size="sm" onClick={onOpenEquipment}>

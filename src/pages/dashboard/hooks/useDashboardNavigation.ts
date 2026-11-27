@@ -8,6 +8,8 @@ import type { NavId, NavItem, NavigationTarget } from "../types";
 export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   tab: "incidents",
   incidentId: null,
+  incidentsFilter: "all",
+  incidentsSearch: "",
   requestId: null,
   requestsEquipmentFilter: "all",
   requestsFilter: "all",
@@ -62,6 +64,7 @@ export function useDashboardNavigation(
       tab: id,
       incidentId: null,
       incidentsFilter: "all",
+      incidentsSearch: "",
       requestId: null,
       archiveEntry: null,
       inventorySearch: "",
@@ -117,6 +120,7 @@ export function useDashboardNavigation(
       ...prev,
       tab: "incidents",
       incidentId: id,
+      incidentsSearch: "",
       timestamp: Date.now(),
     }));
     setViewKeys((prev) => ({ ...prev, incidents: prev.incidents + 1 }));
@@ -181,6 +185,7 @@ export function useDashboardNavigation(
           ...prev,
           tab: "incidents",
           incidentId: hit.id,
+          incidentsSearch: "",
           timestamp: Date.now(),
         }));
         setViewKeys((prev) => ({ ...prev, incidents: prev.incidents + 1 }));

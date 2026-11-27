@@ -19,6 +19,7 @@ export function IncidentsView({
   canAssign = false,
   initialDetailId = null,
   initialFilter = "all",
+  initialSearch = "",
   canOpenRequests = false,
   onOpenRequest,
 }: {
@@ -31,12 +32,18 @@ export function IncidentsView({
   initialDetailId?: Id<"incidents"> | null;
   /** Filtro inicial de estado (p. ej. al pulsar una barra en Analítica). */
   initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
+  /** Búsqueda inicial (p. ej. al pulsar un modelo en Analítica). */
+  initialSearch?: string;
   /** Puede ver el módulo de peticiones, así que puede saltar a una. */
   canOpenRequests?: boolean;
   /** Abrir una petición concreta en su módulo. */
   onOpenRequest?: (id: Id<"partRequests">) => void;
 }) {
-  const state = useIncidentsViewState({ initialDetailId, initialFilter });
+  const state = useIncidentsViewState({
+    initialDetailId,
+    initialFilter,
+    initialSearch,
+  });
   const aiAvailability = useQuery(api.ai.availability, {});
   const [aiOpen, setAiOpen] = useState(false);
 

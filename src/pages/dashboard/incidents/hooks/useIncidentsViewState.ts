@@ -11,9 +11,11 @@ import type { IncidentDoc } from "../types";
 export function useIncidentsViewState({
   initialDetailId = null,
   initialFilter = "all",
+  initialSearch = "",
 }: {
   initialDetailId?: Id<"incidents"> | null;
   initialFilter?: import("@/lib/workshop").IncidentStatus | "all";
+  initialSearch?: string;
 } = {}) {
   const rawIncidents = useQuery(api.incidents.list, {});
   const incidents = rawIncidents ?? [];
@@ -37,6 +39,7 @@ export function useIncidentsViewState({
     incidents,
     initialDetailId,
     initialFilter,
+    initialSearch,
   });
 
   const toggleSelect = (id: Id<"incidents">) => {

@@ -81,6 +81,7 @@ export function DashboardTabRenderer({
                     ...prev,
                     tab: "incidents",
                     incidentsFilter: status,
+                    incidentsSearch: "",
                     incidentId: null,
                     timestamp: Date.now(),
                   }))
@@ -99,13 +100,18 @@ export function DashboardTabRenderer({
                   }))
               : undefined
           }
-          onSelectEquipment={(label) =>
-            setTarget((prev) => ({
-              ...prev,
-              tab: "equipment",
-              equipmentSearch: label,
-              timestamp: Date.now(),
-            }))
+          onSelectEquipment={
+            can("viewIncidents")
+              ? (label) =>
+                  setTarget((prev) => ({
+                    ...prev,
+                    tab: "incidents",
+                    incidentsSearch: label,
+                    incidentsFilter: "all",
+                    incidentId: null,
+                    timestamp: Date.now(),
+                  }))
+              : undefined
           }
           onSelectPart={(code) =>
             setTarget((prev) => ({
@@ -132,12 +138,13 @@ export function DashboardTabRenderer({
     case "incidents":
       return (
         <IncidentsView
-          key={`incidents-${viewKeys.incidents}-${target.incidentsFilter ?? "all"}`}
+          key={`incidents-${viewKeys.incidents}-${target.incidentsFilter ?? "all"}-${target.incidentsSearch ?? ""}`}
           currentUserId={user?._id ?? null}
           currentUserName={displayName}
           canAssign={can("manageIncidents")}
           initialDetailId={target.incidentId ?? null}
           initialFilter={target.incidentsFilter ?? "all"}
+          initialSearch={target.incidentsSearch ?? ""}
           canOpenRequests={can("viewRequests")}
           onOpenRequest={openRequest}
         />

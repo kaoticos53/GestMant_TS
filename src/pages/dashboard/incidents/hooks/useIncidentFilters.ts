@@ -53,16 +53,18 @@ export function useIncidentFilters({
   incidents,
   initialDetailId = null,
   initialFilter = "all",
+  initialSearch = "",
 }: {
   incidents: IncidentDoc[];
   initialDetailId?: Id<"incidents"> | null;
   initialFilter?: IncidentStatus | "all";
+  initialSearch?: string;
 }) {
   const [filter, setFilter] = useState<IncidentStatus | "all">(initialFilter);
   const [detailId, setDetailId] = useState<Id<"incidents"> | null>(
     initialDetailId ?? null,
   );
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [sort, setSort] = useState<QueueSortId>("recent");
   // La vista de la cola (cómoda o compacta) se recuerda entre visitas: es una
   // preferencia de quien trabaja, no del módulo. Abre en compacta, que es donde
