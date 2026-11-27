@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { CopyPlus, RotateCcw, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ export interface IncidentLifecycleExtrasProps {
   canWork: boolean;
   archived: boolean;
   withdrawn: boolean;
+  onOpenIncident?: (id: Id<"incidents">) => void;
 }
 
 export function IncidentLifecycleExtras({
@@ -43,6 +45,7 @@ export function IncidentLifecycleExtras({
   canWork,
   archived,
   withdrawn,
+  onOpenIncident,
 }: IncidentLifecycleExtrasProps) {
   const reopen = useMutation(api.incidents.reopen);
   const createRecurrence = useMutation(api.incidents.createRecurrence);
@@ -97,6 +100,9 @@ export function IncidentLifecycleExtras({
       const res = await createRecurrence({ parentIncidentId: incident._id });
       setConfirmRecurrenceOpen(false);
       toast.success(`Reincidencia ${res.reference} creada.`);
+      if (res.incidentId && onOpenIncident) {
+        onOpenIncident(res.incidentId);
+      }
     } catch (err) {
       toast.error(getErrorMessage(err));
     } finally {

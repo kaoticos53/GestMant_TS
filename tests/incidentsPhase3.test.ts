@@ -66,6 +66,7 @@ describe("Incidencias Fase 3 (Sub-fase 3.1)", () => {
       description: "Vuelve a fallar la fuente",
     });
     expect(rec.reference).toMatch(/^INC-/);
+    expect(rec.incidentId).toBeDefined();
     const all = await coord.query(api.incidents.list, {});
     const child = all.find((row) => row.reference === rec.reference);
     expect(child?.parentIncidentId).toBe(inc._id);

@@ -1615,7 +1615,10 @@ export const createRecurrence = mutation({
         }
       }
 
-      return created;
+      return {
+        ...created,
+        incidentId: newIncident?._id,
+      };
     },
   ),
 });

@@ -133,6 +133,7 @@ export function IncidentsView({
           canAssign={canAssign}
           canOpenRequests={canOpenRequests}
           onOpenRequest={onOpenRequest}
+          onOpenIncident={(id) => state.setDetailId(id)}
           onClose={() => state.setDetailId(null)}
         />
       )}

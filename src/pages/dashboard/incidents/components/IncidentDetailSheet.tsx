@@ -33,6 +33,7 @@ export interface IncidentDetailSheetProps {
   canAssign: boolean;
   canOpenRequests?: boolean;
   onOpenRequest?: (id: Id<"partRequests">) => void;
+  onOpenIncident?: (id: Id<"incidents">) => void;
   onClose: () => void;
 }
 
@@ -45,6 +46,7 @@ export function IncidentDetailSheet({
   canAssign,
   canOpenRequests = false,
   onOpenRequest,
+  onOpenIncident,
   onClose,
 }: IncidentDetailSheetProps) {
   const needsDocumentUrls = incidentNeedsDocumentUrls(incident);
@@ -187,6 +189,7 @@ export function IncidentDetailSheet({
           canWork={derived.canWork}
           archived={derived.archived}
           withdrawn={derived.withdrawn}
+          onOpenIncident={onOpenIncident}
         />
 
         {priorityOpen && (
