@@ -40,11 +40,16 @@ function timelineHeading(
  */
 export function DeliveryTrail({
   requestId,
+  canViewPurchasing = true,
 }: {
   requestId: Id<"partRequests">;
+  canViewPurchasing?: boolean;
 }) {
   const trail = useQuery(api.partRequests.decisions, { requestId });
-  const purchasing = useQuery(api.purchasing.byRequest, { requestId });
+  const purchasing = useQuery(
+    api.purchasing.byRequest,
+    canViewPurchasing ? { requestId } : "skip",
+  );
 
   const entregas: TimelineEntry[] = (trail ?? [])
     .filter((row) => isDeliveryReason(row.decision?.reason))

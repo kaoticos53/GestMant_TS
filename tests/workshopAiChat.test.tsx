@@ -23,7 +23,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
-import { WorkshopAiChatButton } from "@/components/ai/WorkshopAiChatButton";
+import {
+  WorkshopAiChatButton,
+  WorkshopAiChatProvider,
+} from "@/components/ai/WorkshopAiChatButton";
 
 describe("WorkshopAiChatButton", () => {
   let container: HTMLDivElement;
@@ -203,5 +206,77 @@ describe("WorkshopAiChatButton", () => {
       "aside[aria-label='Asistente IA del taller']",
     );
     expect(resizedPanel?.style.width).toBe("580px");
+  });
+
+  it("oculta Traza y Variables si showDebugTools es false y envía activeView", async () => {
+    await act(async () => {
+      root.render(
+        <WorkshopAiChatProvider activeView="Incidencias" showDebugTools={false}>
+          <WorkshopAiChatButton />
+          <WorkshopAiChatButton />
+        </WorkshopAiChatProvider>,
+      );
+    });
+    await settle();
+
+    const triggers = container.querySelectorAll<HTMLButtonElement>(
+      "button[aria-label='Asistente IA del taller']",
+    );
+    expect(triggers.length).toBe(2);
+
+    await act(async () => {
+      triggers[0]?.click();
+    });
+    await settle();
+
+    const panels = document.body.querySelectorAll(
+      "aside[aria-label='Asistente IA del taller']",
+    );
+    expect(panels.length).toBe(1);
+    expect(
+      document.body.querySelector("button[aria-label='Modo depuración']"),
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("Variables:");
+
+    const textarea = document.body.querySelector<HTMLTextAreaElement>(
+      "#workshop-ai-input",
+    );
+    await act(async () => {
+      if (textarea) {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(textarea, "¿Qué tengo abierto?");
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    const sendBtn = document.body.querySelector<HTMLButtonElement>(
+      "button[aria-label='Enviar consulta']",
+    );
+    await act(async () => {
+      sendBtn?.click();
+    });
+    await settle();
+
+    expect(askWorkshopMock).toHaveBeenCalledWith({
+      question: "¿Qué tengo abierto?",
+      history: [],
+      activeView: "Incidencias",
+    });
+
+    // Plegar desde el segundo botón conserva un único panel y el historial
+    await act(async () => {
+      triggers[1]?.click();
+    });
+    expect(
+      document.body.querySelector("aside[aria-label='Asistente IA del taller']"),
+    ).toBeNull();
+
+    await act(async () => {
+      triggers[0]?.click();
+    });
+    expect(document.body.textContent).toContain("ALI-24015");
   });
 });

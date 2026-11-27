@@ -12,6 +12,7 @@ function normalizeSearchText(value: string): string {
 }
 
 export function useGlobalSearch({
+  canSearchCatalog = false,
   onSelect,
   quickActions = [],
   shortcutEnabled = true,
@@ -76,8 +77,11 @@ export function useGlobalSearch({
   }, []);
 
   const groups = useMemo(
-    () => buildSearchGroupsFromResponse(effectiveQuery ? response : null),
-    [effectiveQuery, response],
+    () =>
+      buildSearchGroupsFromResponse(effectiveQuery ? response : null, {
+        canSearchCatalog,
+      }),
+    [effectiveQuery, response, canSearchCatalog],
   );
 
   const flatHits = useMemo(

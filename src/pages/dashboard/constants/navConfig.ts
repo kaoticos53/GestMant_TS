@@ -410,7 +410,11 @@ export function buildDashboardStats({
 }
 
 const TABS_WITHOUT_SUMMARY: ReadonlySet<NavId> = new Set([
+  "analytics",
+  "equipment",
+  "manuals",
   "profile",
+  "users",
   "permissions",
   "settings",
   "archive",

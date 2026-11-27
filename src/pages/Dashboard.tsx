@@ -4,6 +4,8 @@ import { useConvex } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { AiResultsDialog } from "@/components/ai/AiResultsDialog";
+import { WorkshopAiChatProvider } from "@/components/ai/WorkshopAiChatButton";
+import { MODULE_META } from "./dashboard/constants/navConfig";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import type { AiResultTable } from "@/lib/ai/types";
 import {
@@ -40,6 +42,7 @@ export default function Dashboard() {
     displayName,
     initial,
     role,
+    roles,
     roleBadge,
     adminOk,
     can,
@@ -277,7 +280,12 @@ export default function Dashboard() {
 
   return (
     <AbilityProvider>
-      <div className="flex min-h-screen flex-col overflow-x-clip bg-background lg:flex-row">
+      <WorkshopAiChatProvider
+        enabled={!isGuest}
+        activeView={MODULE_META[activeTab]?.title}
+        showDebugTools={adminOk}
+      >
+        <div className="flex min-h-screen flex-col overflow-x-clip bg-background lg:flex-row">
         <a
           href="#contenido"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -344,7 +352,7 @@ export default function Dashboard() {
 
             {!summaryHidden && (
               <WorkAlertNotice
-                role={role}
+                role={roles.length > 0 ? roles : role}
                 audience={alertRoleKeys}
                 days={alertDays}
                 staleWork={staleWork}
@@ -412,7 +420,8 @@ export default function Dashboard() {
           onSelectTab={goToTab}
           onOpenMenu={() => setMobileMenuOpen(true)}
         />
-      </div>
+        </div>
+      </WorkshopAiChatProvider>
     </AbilityProvider>
   );
 }

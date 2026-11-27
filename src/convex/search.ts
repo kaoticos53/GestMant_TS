@@ -97,10 +97,10 @@ export const global = query({
       grants.viewRequests || grants.createRequests || grants.decideRequests,
     );
     const canParts = Boolean(
-      grants.viewInventory || grants.manageInventory || grants.lookupCatalog,
+      grants.viewInventory || grants.manageInventory,
     );
     const canEquipment = Boolean(
-      grants.viewEquipment || grants.manageEquipment || grants.lookupEquipment,
+      grants.viewEquipment || grants.manageEquipment,
     );
 
     const limit = Math.min(

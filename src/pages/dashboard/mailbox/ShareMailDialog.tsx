@@ -62,9 +62,13 @@ export function ShareMailDialog({
   );
 
   const effectiveType = options.includes(type) ? type : options[0];
+  const onlyIncidentMode = options.length === 0 && canCreateIncident;
+  const effectiveAsIncident = onlyIncidentMode || asIncident;
   const target = useQuery(
     api.mailShares.findTarget,
-    asIncident || reference.trim() === "" || effectiveType === undefined
+    effectiveAsIncident ||
+      reference.trim() === "" ||
+      effectiveType === undefined
       ? "skip"
       : { destinationType: effectiveType, reference },
   );
@@ -72,10 +76,12 @@ export function ShareMailDialog({
   const createIncident = useAction(api.mailShares.createIncidentFromMail);
 
   const submit = async () => {
-    if (!asIncident && (effectiveType === undefined || !target)) return;
+    if (!effectiveAsIncident && (effectiveType === undefined || !target)) {
+      return;
+    }
     setSaving(true);
     try {
-      if (asIncident) {
+      if (effectiveAsIncident) {
         const result = await createIncident({
           messageId,
           mode,
@@ -131,8 +137,13 @@ export function ShareMailDialog({
                 <input
                   type="checkbox"
                   className="mt-0.5"
-                  checked={asIncident}
-                  onChange={(event) => setAsIncident(event.target.checked)}
+                  checked={effectiveAsIncident}
+                  disabled={onlyIncidentMode}
+                  onChange={(event) => {
+                    if (!onlyIncidentMode) {
+                      setAsIncident(event.target.checked);
+                    }
+                  }}
                 />
                 <span>
                   <span className="font-medium">
@@ -146,7 +157,7 @@ export function ShareMailDialog({
               </label>
             )}
 
-            {!asIncident && options.length > 0 && (
+            {!effectiveAsIncident && options.length > 0 && (
               <>
                 <label className="block text-xs font-medium">
                   Destino
@@ -197,7 +208,7 @@ export function ShareMailDialog({
                   adjuntos.
                 </span>
               </label>
-              {(asIncident ||
+              {(effectiveAsIncident ||
                 (effectiveType !== undefined &&
                   allowsOriginal(effectiveType))) && (
                 <label className="flex items-start gap-2 text-xs">
@@ -213,7 +224,7 @@ export function ShareMailDialog({
                   </span>
                 </label>
               )}
-              {!asIncident && effectiveType === "manual" && (
+              {!effectiveAsIncident && effectiveType === "manual" && (
                 <p className="text-xs text-muted-foreground">
                   Los manuales solo admiten el resumen del correo.
                 </p>
@@ -234,7 +245,7 @@ export function ShareMailDialog({
             type="button"
             disabled={
               saving ||
-              (!asIncident &&
+              (!effectiveAsIncident &&
                 (options.length === 0 ||
                   effectiveType === undefined ||
                   !target))
@@ -242,7 +253,7 @@ export function ShareMailDialog({
             onClick={() => void submit()}
           >
             {saving && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-            {asIncident ? "Crear incidencia" : "Compartir"}
+            {effectiveAsIncident ? "Crear incidencia" : "Compartir"}
           </Button>
         </DialogFooter>
       </DialogContent>

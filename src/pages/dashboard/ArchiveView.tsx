@@ -25,6 +25,8 @@ export interface ArchiveViewProps {
   canViewCatalog?: boolean;
   /** Puede leer el inventario: la ficha enlaza el equipo del caso. */
   canViewEquipment?: boolean;
+  /** Puede consultar el historial de compras vinculado a una petición. */
+  canViewPurchasing?: boolean;
   currentUserId?: Id<"users"> | null;
   /** Firma los informes que se exportan desde la ficha. */
   currentUserName?: string;
@@ -51,6 +53,7 @@ export function ArchiveView({
   canArchiveRequests = false,
   canViewCatalog = false,
   canViewEquipment = false,
+  canViewPurchasing = false,
   currentUserId = null,
   currentUserName = "",
   onOpenRequest,
@@ -197,6 +200,7 @@ export function ArchiveView({
         parts={parts}
         equipment={equipment}
         canViewCatalog={canViewCatalog}
+        canViewPurchasing={canViewPurchasing}
         currentUserId={currentUserId}
         currentUserName={currentUserName}
         onOpenRequest={onOpenRequest}

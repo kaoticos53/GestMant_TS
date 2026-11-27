@@ -7,6 +7,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { isPurchaseRequestAwaitingDelivery } from "@/lib/purchaseFlow";
+import { canBuyForRequest } from "@/lib/requestFlow";
 import { getErrorMessage } from "@/lib/workshop";
 import type { RequestDoc } from "../types";
 
@@ -21,6 +22,7 @@ export interface LinkedPurchasesCardProps {
   request: RequestDoc;
   hasShortage: boolean;
   canPurchase: boolean;
+  canViewPurchasing?: boolean;
   onOpenPurchasing?: (
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
@@ -31,9 +33,13 @@ export function LinkedPurchasesCard({
   request,
   hasShortage,
   canPurchase,
+  canViewPurchasing = canPurchase,
   onOpenPurchasing,
 }: LinkedPurchasesCardProps) {
-  const data = useQuery(api.purchasing.byRequest, { requestId: request._id });
+  const data = useQuery(
+    api.purchasing.byRequest,
+    canViewPurchasing ? { requestId: request._id } : "skip",
+  );
   const requestPurchase = useMutation(api.purchasing.requestPurchase);
   const [creating, setCreating] = useState(false);
 
@@ -46,6 +52,7 @@ export function LinkedPurchasesCard({
     canPurchase &&
     hasShortage &&
     liveCount === 0 &&
+    canBuyForRequest(request.status) &&
     request.lines.length > 0 &&
     request.archivedAt === undefined &&
     request.deletedAt === undefined;

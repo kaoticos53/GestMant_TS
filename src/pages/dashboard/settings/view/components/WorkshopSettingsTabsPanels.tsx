@@ -68,7 +68,7 @@ export function WorkshopSettingsTabsPanels({
           )}
           {canPurgeUploads && <UnusedUploadsCard />}
           {canPurgeUploads && <StorageCleanupCard />}
-          {canPurgeUploads && <OrphanMailSharesCard />}
+          {canManageData && <OrphanMailSharesCard />}
         </TabsContent>
       )}
 

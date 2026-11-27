@@ -6,6 +6,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import type { SidebarHeaderProps } from "./types";
 
 export function SidebarHeader({
+  isGuest = false,
   onOpenNotification,
   canSendMessages,
 }: SidebarHeaderProps) {
@@ -24,12 +25,14 @@ export function SidebarHeader({
           Equipo audiovisual
         </span>
       </span>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <NotificationBell onOpen={onOpenNotification} />
-        <MessagesCenter canSend={canSendMessages} />
-        <BackgroundJobsIndicator />
-        <WorkshopAiChatButton />
-      </div>
+      {!isGuest && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <NotificationBell onOpen={onOpenNotification} />
+          <MessagesCenter canSend={canSendMessages} />
+          <BackgroundJobsIndicator />
+          <WorkshopAiChatButton />
+        </div>
+      )}
     </div>
   );
 }

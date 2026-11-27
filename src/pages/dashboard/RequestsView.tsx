@@ -13,6 +13,7 @@ export function RequestsView({
   onEquipmentFilterChange = () => {},
   canManage = false,
   canPurchase = false,
+  canViewPurchasing = canPurchase,
   initialDetailId = null,
   initialFilter = "all",
   onOpenPurchasing,
@@ -25,6 +26,8 @@ export function RequestsView({
   canManage?: boolean;
   /** Puede generar peticiones de compra cuando el almacén no cubre la petición. */
   canPurchase?: boolean;
+  /** Puede consultar el historial de compras vinculadas a una petición. */
+  canViewPurchasing?: boolean;
   /** Petición abierta al montar (la elige la búsqueda global). */
   initialDetailId?: Id<"partRequests"> | null;
   /** Estado con el que se abre la cola (lo eligen las tarjetas del resumen). */
@@ -119,6 +122,7 @@ export function RequestsView({
         equipment={state.equipment}
         canManage={canManage}
         canPurchase={canPurchase}
+        canViewPurchasing={canViewPurchasing}
         onOpenPurchasing={onOpenPurchasing}
         onOpenIncident={onOpenIncident}
       />

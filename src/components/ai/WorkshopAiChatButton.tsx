@@ -17,7 +17,16 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AiChatMessagesList, type AiChatEntry } from "./AiChatMessagesList";
@@ -48,8 +57,28 @@ const SUGGESTIONS = [
   "¿Qué equipos tienen más incidencias registradas?",
 ];
 
-export function WorkshopAiChatButton() {
-  const availability = useQuery(api.ai.availability, {});
+export interface WorkshopAiChatOptions {
+  enabled?: boolean;
+  activeView?: string;
+  showDebugTools?: boolean;
+}
+
+interface WorkshopAiChatContextValue {
+  chatEnabled: boolean;
+  open: boolean;
+  toggleOpen: () => void;
+}
+
+const WorkshopAiChatContext = createContext<WorkshopAiChatContextValue | null>(
+  null,
+);
+
+function useWorkshopAiChatController({
+  enabled = true,
+  activeView,
+  showDebugTools = true,
+}: WorkshopAiChatOptions) {
+  const availability = useQuery(api.ai.availability, enabled ? {} : "skip");
   const askWorkshop = useAction(api.ai.askWorkshop);
 
   const [open, setOpen] = useState(false);
@@ -62,8 +91,14 @@ export function WorkshopAiChatButton() {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  const chatEnabled =
+    enabled &&
+    Boolean(availability?.available) &&
+    (availability?.tasks?.workshopChat ?? true);
+  const effectiveOpen = chatEnabled && open;
+
   useEffect(() => {
-    if (!open) return;
+    if (!effectiveOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
@@ -71,10 +106,10 @@ export function WorkshopAiChatButton() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [effectiveOpen]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!effectiveOpen) return;
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop =
         scrollContainerRef.current.scrollHeight;
@@ -85,7 +120,7 @@ export function WorkshopAiChatButton() {
         block: "end",
       });
     }
-  }, [entries, loading, open]);
+  }, [entries, loading, effectiveOpen]);
 
   const startResize = (startEvent: React.MouseEvent<HTMLDivElement>) => {
     startEvent.preventDefault();
@@ -100,14 +135,6 @@ export function WorkshopAiChatButton() {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
-
-  const chatEnabled =
-    Boolean(availability?.available) &&
-    (availability?.tasks?.workshopChat ?? true);
-
-  if (!chatEnabled) {
-    return null;
-  }
 
   const insertChatVariable = (key: string) => {
     const token = `{{${key}}}`;
@@ -139,11 +166,13 @@ export function WorkshopAiChatButton() {
     }
     setLoading(true);
 
+    const viewContext = activeView?.trim();
     try {
       const result = await askWorkshop({
         question: trimmed,
         history,
-        ...(debugMode ? { debug: true } : {}),
+        ...(viewContext ? { activeView: viewContext } : {}),
+        ...(showDebugTools && debugMode ? { debug: true } : {}),
       });
       nextIdRef.current += 1;
       const assistantEntry: ChatEntry = {
@@ -166,172 +195,292 @@ export function WorkshopAiChatButton() {
     }
   };
 
-  return (
-    <>
-      <Button
-        type="button"
-        variant={open ? "secondary" : "ghost"}
-        size="icon"
-        aria-label="Asistente IA del taller"
-        aria-expanded={open}
-        title={open ? "Plegar asistente IA" : "Abrir asistente IA del taller"}
-        className={cn(
-          "size-8 shrink-0",
-          open ? "text-primary" : "text-muted-foreground hover:text-primary",
-        )}
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <Sparkles className="size-4" />
-      </Button>
+  const toggleOpen = useCallback(() => setOpen((prev) => !prev), []);
 
-      {open &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <aside
-            aria-label="Asistente IA del taller"
-            style={{ width: `${panelWidth}px` }}
-            className="fixed inset-y-0 right-0 z-50 flex max-w-full flex-col border-l border-border bg-background shadow-2xl"
-          >
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Redimensionar panel de IA"
-              tabIndex={0}
-              onMouseDown={startResize}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft") {
-                  e.preventDefault();
-                  setPanelWidth((prev) => clampPanelWidth(prev + 24));
-                } else if (e.key === "ArrowRight") {
-                  e.preventDefault();
-                  setPanelWidth((prev) => clampPanelWidth(prev - 24));
-                }
-              }}
-              className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-primary/40 focus-visible:bg-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-3.5">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4 shrink-0 text-primary" />
-                <span>Asistente IA del taller</span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Equipos, incidencias, repuestos, peticiones y compras.
-              </p>
-            </div>
+  return {
+    chatEnabled,
+    open: effectiveOpen,
+    setOpen,
+    toggleOpen,
+    panelWidth,
+    setPanelWidth,
+    debugMode,
+    setDebugMode,
+    question,
+    setQuestion,
+    loading,
+    entries,
+    setEntries,
+    scrollContainerRef,
+    messagesEndRef,
+    startResize,
+    insertChatVariable,
+    sendQuestion,
+    showDebugTools,
+  };
+}
 
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant={debugMode ? "secondary" : "ghost"}
-                size="sm"
-                aria-label="Modo depuración"
-                aria-pressed={debugMode}
-                title="Activar/desactivar traza de depuración"
-                className={cn(
-                  "h-8 px-2 text-xs",
-                  debugMode ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-                )}
-                onClick={() => setDebugMode((prev) => !prev)}
-              >
-                <Bug className="mr-1 size-3.5" />
-                Traza
-              </Button>
-              {entries.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-xs text-muted-foreground"
-                  onClick={() => setEntries([])}
-                >
-                  <Trash2 className="mr-1 size-3.5" />
-                  Limpiar
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Plegar panel de IA"
-                title="Plegar panel"
-                className="size-8 text-muted-foreground"
-                onClick={() => setOpen(false)}
-              >
-                <PanelRightClose className="size-4" />
-              </Button>
-            </div>
+function WorkshopAiChatDrawer({
+  controller,
+}: {
+  controller: ReturnType<typeof useWorkshopAiChatController>;
+}) {
+  const {
+    chatEnabled,
+    open,
+    setOpen,
+    panelWidth,
+    setPanelWidth,
+    debugMode,
+    setDebugMode,
+    question,
+    setQuestion,
+    loading,
+    entries,
+    setEntries,
+    scrollContainerRef,
+    messagesEndRef,
+    startResize,
+    insertChatVariable,
+    sendQuestion,
+    showDebugTools,
+  } = controller;
+
+  if (!chatEnabled || !open || typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <aside
+      aria-label="Asistente IA del taller"
+      style={{ width: `${panelWidth}px` }}
+      className="fixed inset-y-0 right-0 z-50 flex max-w-full flex-col border-l border-border bg-background shadow-2xl"
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Redimensionar panel de IA"
+        tabIndex={0}
+        onMouseDown={startResize}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            setPanelWidth((prev) => clampPanelWidth(prev + 24));
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            setPanelWidth((prev) => clampPanelWidth(prev - 24));
+          }
+        }}
+        className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-primary/40 focus-visible:bg-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-3.5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Sparkles className="size-4 shrink-0 text-primary" />
+            <span>Asistente IA del taller</span>
           </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Equipos, incidencias, repuestos, peticiones y compras.
+          </p>
+        </div>
 
-          <AiChatMessagesList
-            entries={entries}
-            loading={loading}
-            suggestions={SUGGESTIONS}
-            onSelectSuggestion={(text) => void sendQuestion(text)}
-            scrollContainerRef={scrollContainerRef}
-            messagesEndRef={messagesEndRef}
-          />
+        <div className="flex shrink-0 items-center gap-1">
+          {showDebugTools && (
+            <Button
+              type="button"
+              variant={debugMode ? "secondary" : "ghost"}
+              size="sm"
+              aria-label="Modo depuración"
+              aria-pressed={debugMode}
+              title="Activar/desactivar traza de depuración"
+              className={cn(
+                "h-8 px-2 text-xs",
+                debugMode
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => setDebugMode((prev) => !prev)}
+            >
+              <Bug className="mr-1 size-3.5" />
+              Traza
+            </Button>
+          )}
+          {entries.length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => setEntries([])}
+            >
+              <Trash2 className="mr-1 size-3.5" />
+              Limpiar
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Plegar panel de IA"
+            title="Plegar panel"
+            className="size-8 text-muted-foreground"
+            onClick={() => setOpen(false)}
+          >
+            <PanelRightClose className="size-4" />
+          </Button>
+        </div>
+      </div>
 
-          <div className="border-t border-border/70 bg-background p-3 space-y-2">
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-[11px] text-muted-foreground">
-                Variables:
-              </span>
-              {CHAT_VARIABLES.map((item) => (
-                <Button
-                  key={item.key}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  title={item.description}
-                  className="h-5 px-1.5 font-mono text-[10px]"
-                  onClick={() => insertChatVariable(item.key)}
-                >
-                  {`{{${item.key}}}`}
-                </Button>
-              ))}
-            </div>
-            <form
-              onSubmit={(e) => {
+      <AiChatMessagesList
+        entries={entries}
+        loading={loading}
+        suggestions={SUGGESTIONS}
+        onSelectSuggestion={(text) => void sendQuestion(text)}
+        scrollContainerRef={scrollContainerRef}
+        messagesEndRef={messagesEndRef}
+      />
+
+      <div className="space-y-2 border-t border-border/70 bg-background p-3">
+        {showDebugTools && (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[11px] text-muted-foreground">
+              Variables:
+            </span>
+            {CHAT_VARIABLES.map((item) => (
+              <Button
+                key={item.key}
+                type="button"
+                size="sm"
+                variant="outline"
+                title={item.description}
+                className="h-5 px-1.5 font-mono text-[10px]"
+                onClick={() => insertChatVariable(item.key)}
+              >
+                {`{{${item.key}}}`}
+              </Button>
+            ))}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void sendQuestion();
+          }}
+          className="flex items-end gap-2"
+        >
+          <Textarea
+            id="workshop-ai-input"
+            aria-label="Consulta para el asistente de IA"
+            rows={2}
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void sendQuestion();
-              }}
-              className="flex items-end gap-2"
-            >
-            <Textarea
-              id="workshop-ai-input"
-              aria-label="Consulta para el asistente de IA"
-              rows={2}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void sendQuestion();
-                }
-              }}
-              placeholder="Pregunta sobre equipos, stock, incidencias, peticiones u órdenes..."
-              disabled={loading}
-              className="min-h-[56px] resize-none"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              aria-label="Enviar consulta"
-              disabled={loading || !question.trim()}
-              className="size-10 shrink-0"
-            >
-              {loading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-            </Button>
-          </form>
-          </div>
-        </aside>,
-          document.body,
-        )}
+              }
+            }}
+            placeholder="Pregunta sobre equipos, stock, incidencias, peticiones u órdenes..."
+            disabled={loading}
+            className="min-h-[56px] resize-none"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            aria-label="Enviar consulta"
+            disabled={loading || !question.trim()}
+            className="size-10 shrink-0"
+          >
+            {loading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+          </Button>
+        </form>
+      </div>
+    </aside>,
+    document.body,
+  );
+}
+
+/**
+ * Monta un único panel lateral compartido de IA para todo el panel de taller,
+ * evitando perder el historial al cambiar entre vista móvil/escritorio/plegado.
+ */
+export function WorkshopAiChatProvider({
+  enabled = true,
+  activeView,
+  showDebugTools = false,
+  children,
+}: WorkshopAiChatOptions & { children: ReactNode }) {
+  const controller = useWorkshopAiChatController({
+    enabled,
+    activeView,
+    showDebugTools,
+  });
+
+  const value = useMemo<WorkshopAiChatContextValue>(
+    () => ({
+      chatEnabled: controller.chatEnabled,
+      open: controller.open,
+      toggleOpen: controller.toggleOpen,
+    }),
+    [controller.chatEnabled, controller.open, controller.toggleOpen],
+  );
+
+  return (
+    <WorkshopAiChatContext.Provider value={value}>
+      {children}
+      <WorkshopAiChatDrawer controller={controller} />
+    </WorkshopAiChatContext.Provider>
+  );
+}
+
+function AiTriggerButton({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={open ? "secondary" : "ghost"}
+      size="icon"
+      aria-label="Asistente IA del taller"
+      aria-expanded={open}
+      title={open ? "Plegar asistente IA" : "Abrir asistente IA del taller"}
+      className={cn(
+        "size-8 shrink-0",
+        open ? "text-primary" : "text-muted-foreground hover:text-primary",
+      )}
+      onClick={onToggle}
+    >
+      <Sparkles className="size-4" />
+    </Button>
+  );
+}
+
+function StandaloneWorkshopAiChatButton(props: WorkshopAiChatOptions) {
+  const controller = useWorkshopAiChatController(props);
+  if (!controller.chatEnabled) {
+    return null;
+  }
+  return (
+    <>
+      <AiTriggerButton open={controller.open} onToggle={controller.toggleOpen} />
+      <WorkshopAiChatDrawer controller={controller} />
     </>
   );
+}
+
+export function WorkshopAiChatButton(props: WorkshopAiChatOptions = {}) {
+  const shared = useContext(WorkshopAiChatContext);
+  if (shared) {
+    if (!shared.chatEnabled) return null;
+    return <AiTriggerButton open={shared.open} onToggle={shared.toggleOpen} />;
+  }
+  return <StandaloneWorkshopAiChatButton {...props} />;
 }

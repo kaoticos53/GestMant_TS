@@ -100,10 +100,14 @@ export function DashboardHeader({
           <div className="flex shrink-0 items-center gap-2">
             <ThemeToggle compact />
             {roleBadge}
-            <NotificationBell onOpen={onOpenNotification} />
-            <MessagesCenter canSend={canSendMessages} />
-            <BackgroundJobsIndicator />
-            <WorkshopAiChatButton />
+            {!isGuest && (
+              <>
+                <NotificationBell onOpen={onOpenNotification} />
+                <MessagesCenter canSend={canSendMessages} />
+                <BackgroundJobsIndicator />
+                <WorkshopAiChatButton />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -137,34 +141,45 @@ export function DashboardHeader({
 
           <div className="flex shrink-0 items-center gap-1">
             {!isGuest && (
-              <Button
-                type="button"
-                variant={mobileSearchOpen ? "secondary" : "ghost"}
-                size="icon-sm"
-                className="size-9"
-                aria-label="Buscar en el taller"
-                aria-expanded={mobileSearchOpen}
-                onClick={() => setMobileSearchOpen((prev) => !prev)}
-              >
-                <Search className="size-4" />
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant={mobileSearchOpen ? "secondary" : "ghost"}
+                  size="icon-sm"
+                  className="size-9"
+                  aria-label="Buscar en el taller"
+                  aria-expanded={mobileSearchOpen}
+                  onClick={() => setMobileSearchOpen((prev) => !prev)}
+                >
+                  <Search className="size-4" />
+                </Button>
+                <NotificationBell onOpen={onOpenNotification} />
+                <MessagesCenter canSend={canSendMessages} />
+                <BackgroundJobsIndicator />
+                <WorkshopAiChatButton />
+              </>
             )}
-            <NotificationBell onOpen={onOpenNotification} />
-            <MessagesCenter canSend={canSendMessages} />
-            <BackgroundJobsIndicator />
-            <WorkshopAiChatButton />
-            <button
-              type="button"
-              onClick={() => goToTab("profile")}
-              aria-label="Ver mi perfil"
-              aria-current={activeTab === "profile" ? "page" : undefined}
-              className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-xs font-semibold text-signal transition-shadow",
-                activeTab === "profile" && "ring-2 ring-signal/50",
-              )}
-            >
-              {initial}
-            </button>
+            {isGuest ? (
+              <span
+                aria-label="Sesión de invitado"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-xs font-semibold text-signal"
+              >
+                {initial}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => goToTab("profile")}
+                aria-label="Ver mi perfil"
+                aria-current={activeTab === "profile" ? "page" : undefined}
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-xs font-semibold text-signal transition-shadow",
+                  activeTab === "profile" && "ring-2 ring-signal/50",
+                )}
+              >
+                {initial}
+              </button>
+            )}
           </div>
         </div>
 

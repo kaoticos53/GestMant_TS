@@ -188,8 +188,10 @@ export function buildSearchGroupsFromResponse(
     parts: SearchHit[];
     equipment: SearchHit[];
   } | null | undefined,
+  options?: { canSearchCatalog?: boolean },
 ): SearchGroup[] {
   if (!response) return [];
+  const includeParts = options?.canSearchCatalog ?? true;
   const groups: SearchGroup[] = [
     {
       kind: "incident",
@@ -209,12 +211,16 @@ export function buildSearchGroupsFromResponse(
       icon: Archive,
       hits: response.archived,
     },
-    {
-      kind: "part",
-      label: "Repuestos",
-      icon: Boxes,
-      hits: response.parts,
-    },
+    ...(includeParts
+      ? [
+          {
+            kind: "part" as const,
+            label: "Repuestos",
+            icon: Boxes,
+            hits: response.parts,
+          },
+        ]
+      : []),
     {
       kind: "equipment",
       label: "Equipos",

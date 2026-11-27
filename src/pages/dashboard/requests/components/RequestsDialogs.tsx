@@ -27,6 +27,7 @@ export function RequestsDialogs({
   equipment,
   canManage,
   canPurchase,
+  canViewPurchasing = canPurchase,
   onOpenPurchasing,
   onOpenIncident,
 }: {
@@ -46,6 +47,7 @@ export function RequestsDialogs({
   equipment: EquipmentDoc[];
   canManage: boolean;
   canPurchase: boolean;
+  canViewPurchasing?: boolean;
   onOpenPurchasing?: (
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
@@ -93,6 +95,7 @@ export function RequestsDialogs({
           onResume={() => onResumeRequest(openRequest)}
           resuming={resumingId === openRequest._id}
           canPurchase={canPurchase}
+          canViewPurchasing={canViewPurchasing}
           onOpenPurchasing={onOpenPurchasing}
           onOpenIncident={onOpenIncident}
         />

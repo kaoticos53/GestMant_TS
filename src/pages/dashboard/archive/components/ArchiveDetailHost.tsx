@@ -20,6 +20,7 @@ export interface ArchiveDetailHostProps {
   parts: Doc<"spareParts">[];
   equipment: Doc<"equipment">[];
   canViewCatalog?: boolean;
+  canViewPurchasing?: boolean;
   currentUserId?: Id<"users"> | null;
   currentUserName?: string;
   onOpenRequest?: (id: Id<"partRequests">) => void;
@@ -35,6 +36,7 @@ export function ArchiveDetailHost({
   parts,
   equipment,
   canViewCatalog = false,
+  canViewPurchasing = false,
   currentUserId = null,
   currentUserName = "",
   onOpenRequest,
@@ -68,6 +70,7 @@ export function ArchiveDetailHost({
           request={openRequestDoc}
           parts={parts}
           canManage={false}
+          canViewPurchasing={canViewPurchasing}
           showStock={canViewCatalog}
           onClose={onCloseEntry}
         />
@@ -97,6 +100,7 @@ export function ArchiveDetailHost({
           }}
           parts={parts}
           canManage={false}
+          canViewPurchasing={canViewPurchasing}
           showStock={canViewCatalog}
           onClose={onCloseTrash}
         />

@@ -3,6 +3,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import type { NavId, NavItem } from "../../types";
 
 export interface SidebarHeaderProps {
+  isGuest?: boolean;
   onOpenNotification: (notification: { incidentId?: Id<"incidents"> | null }) => void;
   canSendMessages: boolean;
 }

@@ -156,7 +156,7 @@ export function defineAbilityFor(
   if (allowed("viewRequests")) can("view", "Request");
   if (allowed("createRequests")) can("create", "Request");
   if (allowed("decideRequests")) {
-    can(["decide", "update", "archive", "delete"], "Request");
+    can(["decide", "update", "cancel", "archive", "delete"], "Request");
   }
 
   // Compras, almacén, equipos y manuales: ver y modificar son casillas aparte.
@@ -201,8 +201,10 @@ export function defineAbilityFor(
   // Propiedad: el técnico trabaja lo que tiene asignado —en la cola o en el
   // taller—, aunque su rol no pueda tocar las incidencias de los demás.
   if (isTechnician) {
-    can(["update", "close"], "Incident", { assigneeId: actor.id });
-    can(["update", "close"], "Incident", { workshopAssigneeId: actor.id });
+    can(["update", "verify", "close"], "Incident", { assigneeId: actor.id });
+    can(["update", "verify", "close"], "Incident", {
+      workshopAssigneeId: actor.id,
+    });
   }
 
   // Y lo cerrado no se retoca, tenga quien tenga la capacidad.

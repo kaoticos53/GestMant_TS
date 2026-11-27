@@ -69,6 +69,22 @@ describe("defineAbilityFor", () => {
     expect(
       allowsOn(
         ability,
+        "verify",
+        "Incident",
+        incidencia({ assigneeId: tecnico.id }),
+      ),
+    ).toBe(true);
+    expect(
+      allowsOn(
+        ability,
+        "verify",
+        "Incident",
+        incidencia({ workshopAssigneeId: tecnico.id }),
+      ),
+    ).toBe(true);
+    expect(
+      allowsOn(
+        ability,
         "close",
         "Incident",
         incidencia({ workshopAssigneeId: tecnico.id }),
@@ -127,6 +143,9 @@ describe("defineAbilityFor", () => {
       allowsOn(gestor, "decide", "Request", { status: "materialReceived" }),
     ).toBe(true);
     expect(allowsOn(gestor, "archive", "Request", { status: "issued" })).toBe(
+      true,
+    );
+    expect(allowsOn(gestor, "cancel", "Request", { status: "pending" })).toBe(
       true,
     );
     expect(allowsOn(gestor, "delete", "Request", {})).toBe(true);

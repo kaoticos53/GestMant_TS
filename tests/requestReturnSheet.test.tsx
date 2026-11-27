@@ -17,6 +17,7 @@ const { STATE } = vi.hoisted(() => ({
   STATE: {
     decisions: [] as unknown[],
     purchasing: { requests: [], orders: [], receptions: [] } as unknown,
+    purchasingArgs: undefined as unknown,
   },
 }));
 
@@ -30,9 +31,12 @@ vi.mock("@/convex/_generated/api", () => ({
 vi.mock("convex/react", async () => {
   const { api } = await import("@/convex/_generated/api");
   return {
-    useQuery: (query: unknown) => {
+    useQuery: (query: unknown, args?: unknown) => {
       if (query === api.partRequests.decisions) return STATE.decisions;
-      if (query === api.purchasing.byRequest) return STATE.purchasing;
+      if (query === api.purchasing.byRequest) {
+        STATE.purchasingArgs = args;
+        return args === "skip" ? undefined : STATE.purchasing;
+      }
       return undefined;
     },
   };
@@ -55,6 +59,7 @@ describe("Constancia de devoluciones en la ficha de petición", () => {
   beforeEach(() => {
     STATE.decisions = [];
     STATE.purchasing = { requests: [], orders: [], receptions: [] };
+    STATE.purchasingArgs = undefined;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -201,5 +206,33 @@ describe("Constancia de devoluciones en la ficha de petición", () => {
     expect(text).toContain("Devoluciones del material");
     expect(text).toContain("Material devuelto");
     expect(text).toContain("Avería cancelada");
+  });
+
+  it("omite api.purchasing.byRequest cuando canViewPurchasing es false", () => {
+    const now = Date.parse("2026-11-25T15:00:00.000Z");
+    STATE.decisions = [
+      {
+        _id: "dec-ret",
+        _creationTime: now,
+        at: now,
+        by: "Ana Almacén",
+        decision: {
+          reason: "materialDelivered",
+          note: "2 × SEN-01",
+        },
+      },
+    ];
+
+    act(() => {
+      root.render(
+        <DeliveryTrail
+          requestId={"req-3" as Id<"partRequests">}
+          canViewPurchasing={false}
+        />,
+      );
+    });
+
+    expect(STATE.purchasingArgs).toBe("skip");
+    expect(container.textContent).toContain("Entregas del material");
   });
 });

@@ -236,6 +236,7 @@ export function useDashboardState() {
     displayName,
     initial,
     role,
+    roles,
     roleBadge,
     adminOk,
     can,

@@ -197,6 +197,7 @@ export function DashboardTabRenderer({
           onEquipmentFilterChange={setRequestsEquipmentFilter}
           canManage={can("decideRequests")}
           canPurchase={can("managePurchasing") && can("viewPurchasing")}
+          canViewPurchasing={can("viewPurchasing")}
           initialDetailId={target.requestId ?? null}
           initialFilter={target.requestsFilter ?? "all"}
           onOpenPurchasing={
@@ -283,6 +284,7 @@ export function DashboardTabRenderer({
           canArchiveRequests={can("decideRequests")}
           canViewCatalog={can("viewInventory")}
           canViewEquipment={can("viewEquipment")}
+          canViewPurchasing={can("viewPurchasing")}
           currentUserId={user?._id ?? null}
           currentUserName={displayName}
           onOpenRequest={openRequest}

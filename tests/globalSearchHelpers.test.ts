@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
+  buildSearchGroupsFromResponse,
   filterSearchGroups,
   includesQuery,
   normalize,
@@ -213,6 +214,38 @@ describe("globalSearch helpers", () => {
 
       const incidentGroup = groups.find((g) => g.kind === "incident");
       expect(incidentGroup?.hits.length).toBe(5);
+    });
+
+    it("omite grupo de repuestos en buildSearchGroupsFromResponse cuando canSearchCatalog es false", () => {
+      const groups = buildSearchGroupsFromResponse(
+        {
+          incidents: [],
+          requests: [],
+          archived: [],
+          parts: [
+            {
+              kind: "part",
+              id: "part1" as Id<"spareParts">,
+              term: "FUENTE-01",
+              title: "FUENTE-01 · Fuente",
+              subtitle: "Stock 2",
+            },
+          ],
+          equipment: [
+            {
+              kind: "equipment",
+              id: "eq1" as Id<"equipment">,
+              term: "EQ-001",
+              title: "Sony HDC-3500",
+              subtitle: "Plató 1",
+            },
+          ],
+        },
+        { canSearchCatalog: false },
+      );
+
+      expect(groups.some((g) => g.kind === "part")).toBe(false);
+      expect(groups.some((g) => g.kind === "equipment")).toBe(true);
     });
   });
 });

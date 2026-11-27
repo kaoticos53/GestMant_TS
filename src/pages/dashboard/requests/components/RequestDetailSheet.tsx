@@ -55,6 +55,7 @@ export interface RequestDetailSheetProps {
   resuming?: boolean;
   showStock?: boolean;
   canPurchase?: boolean;
+  canViewPurchasing?: boolean;
   onOpenPurchasing?: (
     section: "pending" | "orders",
     orderId?: Id<"purchaseOrders"> | null,
@@ -77,9 +78,11 @@ export function RequestDetailSheet({
   resuming = false,
   showStock = true,
   canPurchase = false,
+  canViewPurchasing,
   onOpenPurchasing,
   onOpenIncident,
 }: RequestDetailSheetProps) {
+  const canSeePurchasing = canViewPurchasing ?? canPurchase;
   const needsAttachmentUrls = requestNeedsAttachmentUrls(request);
   const detailed = useQuery(
     api.partRequests.detail,
@@ -243,10 +246,14 @@ export function RequestDetailSheet({
             request={resolvedRequest}
             hasShortage={enrichedLines.some((line) => line.hasShortage)}
             canPurchase={canPurchase}
+            canViewPurchasing={canSeePurchasing}
             onOpenPurchasing={onOpenPurchasing}
           />
 
-          <DeliveryTrail requestId={request._id} />
+          <DeliveryTrail
+            requestId={request._id}
+            canViewPurchasing={canSeePurchasing}
+          />
 
           <DecisionNotes request={request} />
 

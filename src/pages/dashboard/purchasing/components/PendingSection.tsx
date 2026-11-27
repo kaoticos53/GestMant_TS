@@ -30,7 +30,6 @@ export function PendingSection({
   purchaseRequests,
   partRequests,
   parts,
-  canManage = false,
   onOpenRequest,
 }: PendingSectionProps) {
   const missingStock = useMissingStockActions({
@@ -64,7 +63,13 @@ export function PendingSection({
         onGenerateSingle={(request) =>
           void missingStock.generateSingle(request)
         }
-        onOpenRequest={setOpenRequest}
+        onOpenRequest={(request) => {
+          if (onOpenRequest) {
+            onOpenRequest(request._id);
+          } else {
+            setOpenRequest(request);
+          }
+        }}
       />
 
       {groups.length === 0 ? (
@@ -137,7 +142,8 @@ export function PendingSection({
             })),
           }}
           parts={parts}
-          canManage={canManage}
+          canManage={false}
+          canViewPurchasing={true}
           showStock={true}
           onClose={() => setOpenRequest(null)}
         />

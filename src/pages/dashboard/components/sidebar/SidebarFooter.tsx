@@ -24,31 +24,47 @@ export function SidebarFooter({
   return (
     <>
       <div className="shrink-0 border-t border-border/70 p-2.5">
-        <button
-          type="button"
-          onClick={() => onSelectTab("profile")}
-          aria-label="Ver mi perfil"
-          aria-current={activeTab === "profile" ? "page" : undefined}
-          className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors",
-            activeTab === "profile"
-              ? "bg-signal/10 ring-1 ring-signal/30"
-              : "bg-muted/50 hover:bg-muted",
-          )}
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-sm font-semibold text-signal">
-            {initial}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col leading-tight">
-            <span className="truncate text-sm font-medium">
-              {displayName}
+        {isGuest ? (
+          <div className="flex w-full items-center gap-2.5 rounded-lg bg-muted/50 p-2 text-left">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-sm font-semibold text-signal">
+              {initial}
             </span>
-            <span className="truncate text-xs text-muted-foreground">
-              {userEmail ?? (isGuest ? "Sesión de invitado" : "Sin correo")}
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="truncate text-sm font-medium">
+                {displayName}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {userEmail ?? "Sesión de invitado"}
+              </span>
             </span>
-          </span>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSelectTab("profile")}
+            aria-label="Ver mi perfil"
+            aria-current={activeTab === "profile" ? "page" : undefined}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors",
+              activeTab === "profile"
+                ? "bg-signal/10 ring-1 ring-signal/30"
+                : "bg-muted/50 hover:bg-muted",
+            )}
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/10 text-sm font-semibold text-signal">
+              {initial}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="truncate text-sm font-medium">
+                {displayName}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {userEmail ?? "Sin correo"}
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+        )}
 
         {/* Plegar el menú del todo: queda la barra con «Mostrar menú». */}
         <Button
@@ -83,21 +99,25 @@ export function SidebarFooter({
           </Button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowChangelog(true)}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer select-none"
-          title={`${DETAILED_VERSION} · Clic para ver la bitácora de cambios`}
-        >
-          <History className="size-3 shrink-0" />
-          <span>{FULL_VERSION}</span>
-        </button>
+        {!isGuest && (
+          <button
+            type="button"
+            onClick={() => setShowChangelog(true)}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer select-none"
+            title={`${DETAILED_VERSION} · Clic para ver la bitácora de cambios`}
+          >
+            <History className="size-3 shrink-0" />
+            <span>{FULL_VERSION}</span>
+          </button>
+        )}
       </div>
 
-      <ChangelogDialog
-        open={showChangelog}
-        onOpenChange={setShowChangelog}
-      />
+      {!isGuest && (
+        <ChangelogDialog
+          open={showChangelog}
+          onOpenChange={setShowChangelog}
+        />
+      )}
     </>
   );
 }

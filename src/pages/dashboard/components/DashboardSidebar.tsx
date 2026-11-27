@@ -73,6 +73,7 @@ export function DashboardSidebar({
         )}
       >
         <SidebarHeader
+          isGuest={isGuest}
           onOpenNotification={onOpenNotification}
           canSendMessages={canSendMessages}
         />
