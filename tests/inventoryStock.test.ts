@@ -29,7 +29,9 @@ describe("inventoryStock (lógica pura Fase 3)", () => {
     expect(reservedUnits(-3)).toBe(0);
     expect(reservedUnits(4.9)).toBe(4);
 
-    expect(availableStock(7, 3)).toBe(7);
+    expect(availableStock(7)).toBe(7);
+    expect(availableStock(-2)).toBe(0);
+    expect(availableStock(Number.NaN)).toBe(0);
     expect(physicalStock(7, 3)).toBe(10);
     expect(physicalStock(7, undefined)).toBe(7);
 

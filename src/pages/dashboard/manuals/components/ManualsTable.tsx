@@ -28,6 +28,19 @@ export interface ManualsTableProps {
   onDelete: (manual: ManualDoc) => void;
 }
 
+/**
+ * Entrega el nodo a una ref recibida por props, sea de función o de objeto.
+ * Vive fuera del componente: asignar `.current` de una prop dentro del render
+ * o de un callback del componente lo prohíbe la regla de inmutabilidad.
+ */
+function assignRef<T>(ref: React.Ref<T> | undefined, node: T | null): void {
+  if (typeof ref === "function") {
+    ref(node);
+  } else if (ref && "current" in ref) {
+    (ref as { current: T | null }).current = node;
+  }
+}
+
 export function ManualsTable({
   columns,
   sort,
@@ -47,11 +60,7 @@ export function ManualsTable({
   const keepArea = useCallback(
     (node: HTMLDivElement | null) => {
       setScrollElement(node);
-      if (typeof areaRef === "function") {
-        areaRef(node);
-      } else if (areaRef && "current" in areaRef) {
-        (areaRef as { current: HTMLDivElement | null }).current = node;
-      }
+      assignRef(areaRef, node);
     },
     [areaRef],
   );

@@ -36,12 +36,10 @@ export function hasReservedStock(part: {
 /**
  * Stock disponible (no comprometido) de un repuesto.
  * En GestMant_TS `spareParts.stock` ya refleja el stock disponible tras aprobar
- * peticiones; esta función garantiza un entero no negativo.
+ * peticiones (lo reservado ya está descontado), así que no hace falta restar
+ * nada: esta función solo garantiza un entero no negativo.
  */
-export function availableStock(
-  stock: number,
-  _reservedStock?: number | null,
-): number {
+export function availableStock(stock: number): number {
   if (!Number.isFinite(stock)) return 0;
   return Math.max(0, Math.floor(stock));
 }
