@@ -8,6 +8,7 @@ import {
   PROTECTED_OUTPUT_CONTRACTS,
 } from "../lib/ai/prompts";
 import type { AiChatMessage } from "../lib/ai/types";
+import { safeSlice } from "../lib/text";
 import {
   MAIL_TRIAGE_BODY_THRESHOLD,
   evaluateMailTagRules,
@@ -46,7 +47,7 @@ function buildBatchHeaderMessages(
     from: c.fromName ? `${c.fromName} <${c.fromAddress}>` : c.fromAddress,
     to: c.toSummary || undefined,
     subject: c.subject,
-    snippet: c.snippet.slice(0, 320),
+    snippet: safeSlice(c.snippet, 320),
     hasAttachments: c.hasAttachments,
   }));
 

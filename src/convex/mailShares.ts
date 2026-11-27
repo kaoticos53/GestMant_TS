@@ -18,6 +18,7 @@ import { resolveDestination } from "./_mailShares/destinations";
 import { wipeShareContent } from "./_mailShares/purge";
 import { INCIDENT_STATUSES } from "./schema";
 import { freeReference } from "./references";
+import { safeSlice } from "../lib/text";
 import {
   BODY_HTML_MAX_CHARS,
   BODY_TEXT_MAX_CHARS,
@@ -664,9 +665,10 @@ export const createIncidentFromMail = action({
           sharedBy: base.user._id,
           sharedByName: base.userName,
           clientShareId: args.clientShareId,
-          description: `${base.header.subject}\n\n${snapshot.summary}`
-            .trim()
-            .slice(0, 4000),
+          description: safeSlice(
+            `${base.header.subject}\n\n${snapshot.summary}`.trim(),
+            4000,
+          ),
         },
       );
 

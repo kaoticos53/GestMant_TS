@@ -6,6 +6,7 @@
  * - Compresión de historial de conversación
  */
 
+import { toWellFormedText, truncateWithEllipsis } from "../text";
 import type { WorkshopChatTurn } from "./types";
 
 export type AiMemoryScope = "shared" | "mailbox";
@@ -33,7 +34,8 @@ export interface MemoryChunkDraft {
 function cleanText(value: string | undefined | null, maxLen = 140): string {
   if (!value) return "";
   const flat = value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return flat.length > maxLen ? `${flat.slice(0, maxLen - 1)}…` : flat;
+  // Recorte seguro: partir un emoji deja medio carácter que Convex rechaza.
+  return truncateWithEllipsis(flat, maxLen);
 }
 
 export function formatIncidentChunk(inc: {
@@ -154,7 +156,7 @@ export function formatMailChunk(mail: {
     module: "mailbox",
     entityId: mail.messageId,
     reference: mail.messageId,
-    title: mail.subject || "(Sin asunto)",
+    title: toWellFormedText(mail.subject || "(Sin asunto)"),
     compactText: `Correo de ${sender}${tagText}: ${cleanText(mail.subject, 90)} — ${cleanText(mail.snippet, 120)}`,
     tags: mail.tags ?? [],
   };

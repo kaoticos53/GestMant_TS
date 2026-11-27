@@ -3,6 +3,8 @@
  * reglas rápidas configurables sin regex y parsing seguro de respuestas DeepSeek.
  */
 
+import { safeSlice } from "../text";
+
 export const MAIL_TAG_IDS = [
   "requests",
   "incidents",
@@ -321,7 +323,7 @@ function normalizePredictionItem(raw: unknown): MailTriagePrediction | null {
       : confidence < MAIL_TRIAGE_BODY_THRESHOLD || tags.length === 0;
   const reason =
     typeof obj.reason === "string" && obj.reason.trim() !== ""
-      ? obj.reason.trim().slice(0, 180)
+      ? safeSlice(obj.reason.trim(), 180)
       : "Clasificación automática por IA";
 
   return {

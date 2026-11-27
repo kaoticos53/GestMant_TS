@@ -14,6 +14,7 @@ import {
   type MailTagRule,
 } from "../lib/mailClient/tagging";
 import { formatMailChunk } from "../lib/ai/memory";
+import { safeSlice } from "../lib/text";
 import { readAccount, requireMailboxMember } from "./mailAccounts";
 
 const conditionValidator = v.object({
@@ -353,7 +354,7 @@ export const triageContext = internalQuery({
           )
           .first();
         if (body?.text) {
-          cachedBodies[header.messageId] = body.text.slice(0, 1500);
+          cachedBodies[header.messageId] = safeSlice(body.text, 1500);
         }
       }
     }
@@ -466,7 +467,7 @@ export const applyTriageResults = internalMutation({
         tags: sanitizeMailTags(item.tags),
         tagSource: item.tagSource,
         tagConfidence: item.tagConfidence,
-        tagReason: item.tagReason.slice(0, 180),
+        tagReason: safeSlice(item.tagReason, 180),
         taggedAt: now,
       });
       updated += 1;
