@@ -6,6 +6,7 @@ import { ListArea } from "@/components/ListArea";
 import { TablePagination } from "@/components/TablePagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { isAdminUser } from "@/lib/roles";
 import { IncidentDetailSheet } from "./incidents/components/IncidentDetailSheet";
 import { QueueToolbar } from "./QueueToolbar";
 import {
@@ -34,7 +35,7 @@ import {
 export function AuditView({ onOpenIncident }: AuditViewProps) {
   void onOpenIncident;
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = isAdminUser(user);
   const [section, setSection] = useState<"documents" | "security">("documents");
   const [detailIncidentId, setDetailIncidentId] =
     useState<Id<"incidents"> | null>(null);

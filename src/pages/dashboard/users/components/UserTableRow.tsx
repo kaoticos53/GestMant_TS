@@ -1,26 +1,21 @@
 import { DetailTitleButton } from "@/components/DetailTitleButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
 import type { Id } from "@/convex/_generated/dataModel";
 import { roleBadgeClassName } from "@/lib/roles";
 import { Pencil, UserCheck, UserX } from "lucide-react";
 import { memo } from "react";
+import { getMemberRoleKeys } from "../helpers";
 import type { Member, RoleOption } from "../types";
+import { UserRolesPopover } from "./RolesMultiSelect";
 
 export interface UserTableRowProps {
   member: Member;
   isSelf: boolean;
   roleOptions: RoleOption[];
   roleLabelOf: (key: string | null) => string;
-  onChangeRole: (userId: Id<"users">, role: string) => void | Promise<void>;
+  onChangeRoles: (userId: Id<"users">, roles: string[]) => void | Promise<void>;
   onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => void | Promise<void>;
@@ -33,19 +28,23 @@ function cnActive(active: boolean): string {
 }
 
 /**
- * Fila memoizada de usuario en la tabla con avatar, badges, selector de rol y acciones.
+ * Fila memoizada de usuario en la tabla con avatar, múltiples badges de rol y acciones.
  */
 export const UserTableRow = memo(function UserTableRow({
   member,
   isSelf,
   roleOptions,
   roleLabelOf,
-  onChangeRole,
+  onChangeRoles,
   onOpenDetail,
   onEdit,
   onToggleActive,
 }: UserTableRowProps) {
-  const role = member.role ?? "technician";
+  const memberRoles = getMemberRoleKeys(member);
+  const displayRoles =
+    memberRoles.length > 0 ? memberRoles : [member.role ?? "technician"];
+  const memberDisplayName =
+    member.email ?? member.name ?? "usuario";
 
   return (
     <TableRow className={member.active ? undefined : "opacity-70"}>
@@ -83,30 +82,23 @@ export const UserTableRow = memo(function UserTableRow({
         </p>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <div className="flex items-center justify-start gap-2">
-          <Badge variant="outline" className={roleBadgeClassName(role)}>
-            {roleLabelOf(member.role)}
-          </Badge>
-          <Select
-            value={role}
-            onValueChange={(value) => void onChangeRole(member._id, value)}
-            disabled={isSelf}
-          >
-            <SelectTrigger
-              className="h-8 w-32 text-xs"
-              aria-label={`Cambiar rol de ${member.email ?? member.name ?? "usuario"}`}
-              disabled={isSelf}
+        <div className="flex flex-wrap items-center justify-start gap-1.5">
+          {displayRoles.map((roleKey) => (
+            <Badge
+              key={roleKey}
+              variant="outline"
+              className={roleBadgeClassName(roleKey)}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roleOptions.map((option) => (
-                <SelectItem key={option.key} value={option.key}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              {roleLabelOf(roleKey)}
+            </Badge>
+          ))}
+          <UserRolesPopover
+            memberRoles={memberRoles}
+            roleOptions={roleOptions}
+            disabled={isSelf}
+            memberName={memberDisplayName}
+            onSaveRoles={(roles) => onChangeRoles(member._id, roles)}
+          />
         </div>
       </TableCell>
       <TableCell className="text-right">

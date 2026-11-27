@@ -9,14 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UserPlus } from "lucide-react";
+import { RolesChecklist } from "../components/RolesMultiSelect";
 import { useCreateUserForm } from "../hooks/useCreateUserForm";
 
 interface CreateUserDialogProps {
@@ -34,8 +28,8 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
     setEmail,
     password,
     setPassword,
-    role,
-    setRole,
+    roles,
+    setRoles,
     position,
     setPosition,
     location,
@@ -50,7 +44,7 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="size-4" />
@@ -88,7 +82,7 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
                 required
               />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="user-password">Contraseña inicial *</Label>
               <Input
                 id="user-password"
@@ -101,24 +95,15 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="user-role">Rol</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value)}
+            <div className="grid gap-2 sm:col-span-2">
+              <Label>Roles asignados</Label>
+              <RolesChecklist
+                roleOptions={roleOptions ?? []}
+                selectedRoles={roles}
+                onChange={setRoles}
                 disabled={busy}
-              >
-                <SelectTrigger id="user-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(roleOptions ?? []).map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                idPrefix="create-user-role"
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="user-position">Puesto</Label>

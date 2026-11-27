@@ -39,6 +39,7 @@ export function ProfileView({
       <ProfileHeaderCard
         user={user}
         roleLabel={me?.label}
+        roleDetails={me?.roleDetails}
         metaChips={metaChips}
         onEdit={() => setEditOpen(true)}
       />

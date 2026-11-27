@@ -18,7 +18,7 @@ import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { deliverMailLogged } from "./_mail/deliver";
 import { notifyUsers } from "./notify";
 import { requireAdmin } from "./permissions";
-import { ROLES } from "./schema";
+import { isAdminUser } from "../lib/roles";
 
 const OUTBOX_PURGE_DAYS = 14;
 const OUTBOX_PURGE_BATCH = 100;
@@ -48,7 +48,7 @@ async function notifyAdminsOfMailFailure(
   const adminIds = users
     .filter(
       (u) =>
-        u.role === ROLES.ADMIN && u.active !== false && u.isAnonymous !== true,
+        isAdminUser(u) && u.active !== false && u.isAnonymous !== true,
     )
     .map((u) => u._id);
   if (adminIds.length === 0) return;
@@ -253,7 +253,7 @@ export const retryOne = mutation({
         "Debes iniciar sesión para reintentar envíos de correo.",
       ),
       authorize: async (_ctx, actor) =>
-        actor.role === ROLES.ADMIN
+        isAdminUser(actor)
           ? null
           : "Solo el administrador puede reintentar envíos de correo.",
     },
@@ -288,7 +288,7 @@ export const retryAllFailed = mutation({
         "Debes iniciar sesión para reintentar envíos de correo.",
       ),
       authorize: async (_ctx, actor) =>
-        actor.role === ROLES.ADMIN
+        isAdminUser(actor)
           ? null
           : "Solo el administrador puede reintentar envíos de correo.",
     },
@@ -325,7 +325,7 @@ export const discard = mutation({
         "Debes iniciar sesión para descartar envíos de correo.",
       ),
       authorize: async (_ctx, actor) =>
-        actor.role === ROLES.ADMIN
+        isAdminUser(actor)
           ? null
           : "Solo el administrador puede descartar envíos de correo.",
     },

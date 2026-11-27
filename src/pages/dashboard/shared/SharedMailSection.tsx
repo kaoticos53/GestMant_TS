@@ -54,7 +54,9 @@ export function SharedMailSection({
 
   if (rows === undefined || rows.length === 0) return null;
 
-  const isAdmin = permissions?.role === "admin";
+  const isAdmin =
+    permissions?.role === "admin" ||
+    Boolean(permissions?.roles?.includes("admin"));
   // Una sola lectura del estado del detalle: cargando, sin acceso, lápida o
   // copia viva. Antes se repetía la misma cadena de ternarios en título,
   // descripción y cuerpo.

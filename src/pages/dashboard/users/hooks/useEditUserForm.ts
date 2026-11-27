@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import { areRoleListsEqual, effectiveUserRoles } from "@/lib/roles";
 import { getErrorMessage } from "@/lib/workshop";
 import { useMutation, useQuery } from "convex/react";
 import { useState, type FormEvent } from "react";
@@ -21,22 +22,29 @@ export function validateEditUserData({ name }: ValidateEditUserInput): string | 
 
 interface UseEditUserFormOptions {
   member: Member;
+  isSelf?: boolean;
   onSuccess: () => void;
 }
 
 /**
- * Hook para gestionar el formulario de edición de perfil de usuario y enriquecimiento transparente en catálogos.
+ * Hook para gestionar el formulario de edición de perfil de usuario con múltiples roles.
  */
-export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
+export function useEditUserForm({
+  member,
+  isSelf = false,
+  onSuccess,
+}: UseEditUserFormOptions) {
   const updateUser = useMutation(api.members.updateUser);
-  const setUserRole = useMutation(api.members.setRole);
+  const setUserRoles = useMutation(api.members.setRoles);
   const catalogPositions = useQuery(api.catalogs.list, { kind: "position" }) ?? [];
   const catalogLocations =
     useQuery(api.catalogs.list, { kind: "equipmentLocation" }) ?? [];
   const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
+  const initialRoles = effectiveUserRoles(member);
+
   const [name, setName] = useState(member.name ?? "");
-  const [role, setRole] = useState(member.role ?? "");
+  const [roles, setRoles] = useState<string[]>(initialRoles);
   const [position, setPosition] = useState(member.position ?? "");
   const [location, setLocation] = useState(member.location ?? "");
   const [phone, setPhone] = useState(member.phone ?? "");
@@ -48,6 +56,10 @@ export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
     const validationError = validateEditUserData({ name });
     if (validationError) {
       setError(validationError);
+      return;
+    }
+    if (!isSelf && roles.length === 0) {
+      setError("Asigna al menos un rol al usuario.");
       return;
     }
 
@@ -63,8 +75,8 @@ export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
         phone,
       });
 
-      if (role && role !== (member.role ?? "")) {
-        await setUserRole({ userId: member._id, role });
+      if (!isSelf && !areRoleListsEqual(roles, initialRoles)) {
+        await setUserRoles({ userId: member._id, roles });
       }
 
       // Registro transparente en catálogos
@@ -100,8 +112,8 @@ export function useEditUserForm({ member, onSuccess }: UseEditUserFormOptions) {
   return {
     name,
     setName,
-    role,
-    setRole,
+    roles,
+    setRoles,
     position,
     setPosition,
     location,

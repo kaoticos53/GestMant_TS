@@ -7,7 +7,14 @@ import {
   isKnownCapability,
   type Capability,
 } from "../lib/permissions";
-import { DEFAULT_ROLE, ROLE_META, STAFF_ROLES, type Role } from "../lib/roles";
+import {
+  DEFAULT_ROLE,
+  ROLE_META,
+  STAFF_ROLES,
+  effectiveUserRoles,
+  isAdminUser,
+  type Role,
+} from "../lib/roles";
 import { Doc, Id } from "./_generated/dataModel";
 import {
   MutationCtx,
@@ -166,9 +173,32 @@ export async function roleCan(
   return (await grantsForRole(ctx, roleKey))[capability] === true;
 }
 
+/** Permisos efectivos combinando múltiples roles con unión (OR). */
+export async function grantsForRoles(
+  ctx: Ctx,
+  roleKeys: readonly string[],
+): Promise<Record<Capability, boolean>> {
+  if (roleKeys.includes(ROLES.ADMIN)) {
+    return await grantsForRole(ctx, ROLES.ADMIN);
+  }
+  const unique = [...new Set(roleKeys)];
+  if (unique.length === 0) return emptyGrants();
+  if (unique.length === 1) return await grantsForRole(ctx, unique[0]);
+  const combined = emptyGrants();
+  for (const key of unique) {
+    const roleGrants = await grantsForRole(ctx, key);
+    for (const item of CAPABILITIES) {
+      if (item.locked !== true && roleGrants[item.id] === true) {
+        combined[item.id] = true;
+      }
+    }
+  }
+  return combined;
+}
+
 /**
  * ¿Puede el usuario esa capacidad? El administrador siempre; el resto según
- * la configuración de roles (sin configuración → defaults del sistema).
+ * la unión de todos sus roles configurados (sin configuración → defaults del sistema).
  */
 export async function hasCapability(
   ctx: Ctx,
@@ -178,7 +208,12 @@ export async function hasCapability(
   if (user.active === false || user.isAnonymous === true) {
     return false;
   }
-  return await roleCan(ctx, user.role ?? DEFAULT_ROLE, capability);
+  const assigned = effectiveUserRoles(user);
+  const resolved = assigned.length > 0 ? assigned : [DEFAULT_ROLE];
+  for (const key of resolved) {
+    if (await roleCan(ctx, key, capability)) return true;
+  }
+  return false;
 }
 
 /**
@@ -220,9 +255,16 @@ export async function idsWithCapability(
   };
   const ids: Id<"users">[] = [];
   for (const user of users) {
-    if (user.active === false) continue;
-    const grants = await grantsOf(user.role ?? DEFAULT_ROLE);
-    if (grants[capability]) ids.push(user._id);
+    if (user.active === false || user.isAnonymous === true) continue;
+    const assigned = effectiveUserRoles(user);
+    const resolved = assigned.length > 0 ? assigned : [DEFAULT_ROLE];
+    for (const key of resolved) {
+      const grants = await grantsOf(key);
+      if (grants[capability]) {
+        ids.push(user._id);
+        break;
+      }
+    }
   }
   return ids;
 }
@@ -350,7 +392,7 @@ export async function requireAdmin(
   what = "gestionar roles y permisos",
 ): Promise<Doc<"users">> {
   const user = await requireActor(ctx);
-  if (user.role !== ROLES.ADMIN) {
+  if (!isAdminUser(user)) {
     throw new ConvexError(`Solo el administrador puede ${what}.`);
   }
   return user;
@@ -364,7 +406,7 @@ function fallbackLabel(key: string): { label: string; description: string } {
   return { label: key, description: "Rol personalizado del taller" };
 }
 
-/** Permisos y etiqueta del rol del usuario actual (menú y vistas). */
+/** Permisos y etiquetas de los roles asignados al usuario actual (menú y vistas). */
 export const myPermissions = query({
   args: {},
   handler: async (ctx) => {
@@ -372,16 +414,36 @@ export const myPermissions = query({
     // El invitado no tiene permisos de taller: se le responde con los del rol
     // guest aunque el backend todavía no se lo haya asignado, para que el menú
     // no enseñe módulos que luego no puede abrir.
-    const key =
-      user.isAnonymous === true ? ROLES.GUEST : (user.role ?? DEFAULT_ROLE);
-    const row = await getRoleRow(ctx, key);
-    const fallback = fallbackLabel(key);
+    const assigned = effectiveUserRoles(user);
+    const keys =
+      user.isAnonymous === true
+        ? [ROLES.GUEST]
+        : assigned.length > 0
+          ? assigned
+          : [DEFAULT_ROLE];
+    const primaryKey = keys[0];
+    const roleDetails = await Promise.all(
+      keys.map(async (key) => {
+        const row = await getRoleRow(ctx, key);
+        const fallback = fallbackLabel(key);
+        return {
+          key,
+          kind: (row?.kind ??
+            (isSystemKey(key) ? "system" : "custom")) as "system" | "custom",
+          label: row?.label ?? fallback.label,
+          description: row?.description ?? fallback.description,
+        };
+      }),
+    );
+    const primaryDetail = roleDetails[0];
     return {
-      role: key,
-      kind: row?.kind ?? (isSystemKey(key) ? "system" : "custom"),
-      label: row?.label ?? fallback.label,
-      description: row?.description ?? fallback.description,
-      grants: await grantsForRole(ctx, key),
+      role: primaryKey,
+      roles: keys,
+      roleDetails,
+      kind: primaryDetail.kind,
+      label: roleDetails.map((item) => item.label).join(" · "),
+      description: primaryDetail.description,
+      grants: await grantsForRoles(ctx, keys),
     };
   },
 });
@@ -406,8 +468,11 @@ export const listRoles = query({
     const users = await ctx.db.query("users").collect();
     const counts = new Map<string, number>();
     for (const user of users) {
-      const key = user.role ?? DEFAULT_ROLE;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      const assigned = effectiveUserRoles(user);
+      const resolved = assigned.length > 0 ? assigned : [DEFAULT_ROLE];
+      for (const key of resolved) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
     }
 
     const roles: {
@@ -708,7 +773,9 @@ export const deleteRole = mutation({
       if (!row) throw new ConvexError("Ese rol ya no existe.");
 
       const users = await ctx.db.query("users").collect();
-      const assigned = users.filter((user) => user.role === args.key).length;
+      const assigned = users.filter((user) =>
+        effectiveUserRoles(user).includes(args.key),
+      ).length;
       if (assigned > 0) {
         throw new ConvexError(
           `Hay ${assigned} ${assigned === 1 ? "persona" : "personas"} con este rol: ` +

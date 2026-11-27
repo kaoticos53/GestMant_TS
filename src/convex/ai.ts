@@ -26,6 +26,7 @@ import { buildToolResultTable } from "../lib/ai/tables";
 import type { AiResultTable } from "../lib/ai/types";
 import { isClosedIncident } from "../lib/incidentFlow";
 import type { Capability } from "../lib/permissions";
+import { DEFAULT_ROLE, effectiveUserRoles } from "../lib/roles";
 import { richDocToPlainText } from "../lib/richDoc";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -38,7 +39,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { callDeepSeekJson, callDeepSeekWithTools } from "./_ai/client";
-import { grantsForRole } from "./permissions";
+import { grantsForRoles } from "./permissions";
 
 const PURGE_LIMIT = 100;
 const MAX_INCIDENT_CONTEXT = 60;
@@ -75,10 +76,16 @@ function capabilitiesFromGrants(
   };
 }
 
-function isRoleAllowed(role: string | undefined, allowedRoles: readonly string[]): boolean {
+function isRoleAllowed(
+  roleOrRoles: string | readonly string[] | undefined,
+  allowedRoles: readonly string[],
+): boolean {
   if (allowedRoles.length === 0) return true;
-  if (!role) return false;
-  return allowedRoles.includes(role);
+  if (!roleOrRoles) return false;
+  if (typeof roleOrRoles === "string") {
+    return allowedRoles.includes(roleOrRoles);
+  }
+  return roleOrRoles.some((role) => allowedRoles.includes(role));
 }
 
 /** Indica al cliente si el usuario autenticado tiene acceso a las funciones de IA. */
@@ -100,7 +107,11 @@ export const availability = query({
     const enabled = row?.enabled ?? false;
     const hasStored = (row?.apiKey ?? "").trim() !== "";
     const hasEnv = (process.env.DEEPSEEK_API_KEY ?? "").trim() !== "";
-    const roleAllowed = isRoleAllowed(member.role, row?.allowedRoles ?? []);
+    const assignedRoles = effectiveUserRoles(member);
+    const roleAllowed = isRoleAllowed(
+      assignedRoles.length > 0 ? assignedRoles : [DEFAULT_ROLE],
+      row?.allowedRoles ?? [],
+    );
     const baseAvailable = enabled && (hasStored || hasEnv) && roleAllowed;
 
     const tasks = {
@@ -138,12 +149,15 @@ export const activeMemberProfile = internalQuery({
         "Solo los miembros registrados y activos del taller pueden usar el asistente IA.",
       );
     }
-    const role = member.role ?? "technician";
-    const grants = await grantsForRole(ctx, role);
+    const assigned = effectiveUserRoles(member);
+    const roles = assigned.length > 0 ? assigned : [DEFAULT_ROLE];
+    const role = roles[0];
+    const grants = await grantsForRoles(ctx, roles);
     return {
       userId: member._id,
       name: member.name?.trim() || member.email?.trim() || "Técnico",
       role,
+      roles,
       capabilities: capabilitiesFromGrants(grants),
       canViewMailbox: Boolean(grants.viewMailbox),
     };
@@ -279,7 +293,7 @@ export const extractEquipmentLabel = action({
       !config.enabled ||
       config.apiKey.trim() === "" ||
       !config.tasks.labelScanner ||
-      !isRoleAllowed(member.role, config.allowedRoles)
+      !isRoleAllowed(member.roles, config.allowedRoles)
     ) {
       throw new ConvexError(
         "El escáner IA de etiquetas no está habilitado para tu usuario o falta configurar DeepSeek en Ajustes.",
@@ -353,7 +367,7 @@ export const askIncidents = action({
       !config.enabled ||
       config.apiKey.trim() === "" ||
       !config.tasks.incidentQa ||
-      !isRoleAllowed(member.role, config.allowedRoles)
+      !isRoleAllowed(member.roles, config.allowedRoles)
     ) {
       throw new ConvexError(
         "El asistente IA de incidencias no está habilitado para tu usuario.",
@@ -637,7 +651,7 @@ export const askWorkshop = action({
       !config.enabled ||
       config.apiKey.trim() === "" ||
       !config.tasks.workshopChat ||
-      !isRoleAllowed(member.role, config.allowedRoles)
+      !isRoleAllowed(member.roles, config.allowedRoles)
     ) {
       throw new ConvexError(
         "El chat asistente IA no está habilitado para tu usuario o falta configurar DeepSeek en Ajustes.",

@@ -32,7 +32,7 @@ export interface UsersTableProps {
   roleOptions: RoleOption[];
   roleLabelOf: (key: string | null) => string;
   activeCount: number;
-  onChangeRole: (userId: Id<"users">, role: string) => Promise<void>;
+  onChangeRoles: (userId: Id<"users">, roles: string[]) => Promise<void>;
   onOpenDetail: (member: Member) => void;
   onEdit: (member: Member) => void;
   onToggleActive: (member: Member) => Promise<void>;
@@ -52,7 +52,7 @@ export function UsersTable({
   roleOptions,
   roleLabelOf,
   activeCount,
-  onChangeRole,
+  onChangeRoles,
   onOpenDetail,
   onEdit,
   onToggleActive,
@@ -79,7 +79,7 @@ export function UsersTable({
               />
               <SortableTableHead
                 column="role"
-                label="Rol"
+                label="Roles"
                 sort={sort}
                 onSortChange={onSortChange}
                 className="hidden sm:table-cell"
@@ -103,7 +103,7 @@ export function UsersTable({
                 isSelf={member._id === currentUserId}
                 roleOptions={roleOptions}
                 roleLabelOf={roleLabelOf}
-                onChangeRole={onChangeRole}
+                onChangeRoles={onChangeRoles}
                 onOpenDetail={onOpenDetail}
                 onEdit={onEdit}
                 onToggleActive={onToggleActive}

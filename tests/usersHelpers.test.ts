@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createUserColumns,
   formatActiveUsersDetail,
+  formatMemberRoles,
+  getMemberRoleKeys,
   getRoleLabel,
 } from "@/pages/dashboard/users/helpers";
 import type { Member, RoleOption } from "@/pages/dashboard/users/types";
@@ -66,8 +68,23 @@ describe("users helpers", () => {
       expect(columns.position.value(withoutPosition)).toBe("");
     });
 
-    it("extrae el valor de la columna role con su etiqueta resuelta", () => {
+    it("extrae el valor de la columna role con su etiqueta resuelta o múltiples roles", () => {
       expect(columns.role.value(baseMember)).toBe("Técnico de Mantenimiento");
+      const multiRoleMember: Member = {
+        ...baseMember,
+        role: "tecnico",
+        roles: ["tecnico", "custom_role"],
+      };
+      expect(columns.role.value(multiRoleMember)).toBe(
+        "Técnico de Mantenimiento, Auditor Externo",
+      );
+      expect(getMemberRoleKeys(multiRoleMember)).toEqual([
+        "tecnico",
+        "custom_role",
+      ]);
+      expect(formatMemberRoles(mockRoleOptions, baseMember)).toBe(
+        "Técnico de Mantenimiento",
+      );
     });
 
     it("extrae el valor de la columna state distinguiendo activo e inactivo", () => {

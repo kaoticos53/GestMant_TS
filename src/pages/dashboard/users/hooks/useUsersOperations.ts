@@ -11,17 +11,18 @@ interface UseUsersOperationsOptions {
 }
 
 /**
- * Hook para gestionar las operaciones de usuario: cambio de rol, baja y reactivación.
+ * Hook para gestionar las operaciones de usuario: cambio de roles, baja y reactivación.
  */
 export function useUsersOperations({ roleLabelOf }: UseUsersOperationsOptions) {
-  const setRole = useMutation(api.members.setRole);
+  const setRoles = useMutation(api.members.setRoles);
   const setActive = useAction(api.members.setActive);
   const [deactivating, setDeactivating] = useState<Member | null>(null);
 
-  const handleChangeRole = async (userId: Id<"users">, role: string) => {
+  const handleChangeRoles = async (userId: Id<"users">, roles: string[]) => {
     try {
-      await setRole({ userId, role });
-      toast.success(`Rol actualizado a ${roleLabelOf(role)}`);
+      await setRoles({ userId, roles });
+      const labels = roles.map((key) => roleLabelOf(key)).join(", ");
+      toast.success(`Roles actualizados: ${labels}`);
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -55,7 +56,7 @@ export function useUsersOperations({ roleLabelOf }: UseUsersOperationsOptions) {
   return {
     deactivating,
     setDeactivating,
-    handleChangeRole,
+    handleChangeRoles,
     handleToggleActive,
     handleConfirmDeactivate,
   };

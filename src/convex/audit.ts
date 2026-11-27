@@ -4,8 +4,8 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
 import { SECURITY_METADATA_VERSION } from "../lib/securityAudit";
+import { isAdminUser } from "../lib/roles";
 import { notifyUsers } from "./notify";
-import { ROLES } from "./schema";
 
 /**
  * Registra un evento inmutable de auditoría de seguridad del taller.
@@ -79,7 +79,7 @@ export async function notifySecurityAlert(
   const adminIds = users
     .filter(
       (user) =>
-        user.role === ROLES.ADMIN &&
+        isAdminUser(user) &&
         user.active !== false &&
         user.isAnonymous !== true,
     )
@@ -112,7 +112,7 @@ export const securityAuditLogs = query({
     const user = userId === null ? null : await ctx.db.get(userId);
     if (
       !user ||
-      user.role !== ROLES.ADMIN ||
+      !isAdminUser(user) ||
       user.active === false ||
       user.isAnonymous === true
     ) {

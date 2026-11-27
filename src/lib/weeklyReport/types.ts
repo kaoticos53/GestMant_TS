@@ -1,4 +1,8 @@
-import { COORDINATION_ROLES, type RoleKey } from "../roles";
+import {
+  COORDINATION_ROLES,
+  userMatchesAnyRole,
+  type RoleKey,
+} from "../roles";
 import { formatDate, type IncidentStatus, type RequestStatus } from "../workshop";
 
 /** Días que cubre el resumen: la semana que acaba de terminar. */
@@ -154,6 +158,7 @@ export interface WeeklyRecipientSource {
   name?: string;
   email?: string;
   role?: string;
+  roles?: readonly string[];
   active?: boolean;
   isAnonymous?: boolean;
 }
@@ -247,7 +252,7 @@ export function weeklyRecipients(
   const recipients: string[] = [];
   for (const user of users) {
     if (user.active === false || user.isAnonymous === true) continue;
-    if (user.role === undefined || !roleKeys.includes(user.role)) continue;
+    if (!userMatchesAnyRole(user, roleKeys)) continue;
     const email = user.email?.trim();
     if (!email) continue;
     const key = email.toLowerCase();

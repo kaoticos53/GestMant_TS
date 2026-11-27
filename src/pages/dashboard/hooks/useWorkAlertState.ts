@@ -29,7 +29,7 @@ export interface WorkAlertOverrides {
 
 export function useWorkAlertState(
   user: UserAlertSource | null | undefined,
-  role: string,
+  role: string | readonly string[],
   overridesOrTotalParts?: WorkAlertOverrides | number,
   legacyActiveRequests?: number,
   legacyLoading?: boolean,

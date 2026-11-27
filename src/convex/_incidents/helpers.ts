@@ -4,7 +4,11 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { readAuditAlertRoles } from "../auditAlerts";
 import { hasCapability } from "../permissions";
-import { DEFAULT_ROLE } from "../../lib/roles";
+import {
+  DEFAULT_ROLE,
+  effectiveUserRoles,
+  userMatchesAnyRole,
+} from "../../lib/roles";
 import { INCIDENT_STATUSES, ROLES } from "../schema";
 
 export type Actor = Doc<"users">;
@@ -14,7 +18,7 @@ export type LifecycleNote = NonNullable<
 
 /** Coordinador del taller: responsable de repuestos o administrador. */
 export function isModerator(user: Actor | null): boolean {
-  return user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
+  return userMatchesAnyRole(user, [ROLES.ADMIN, ROLES.MANAGER]);
 }
 
 export function actorName(user: Actor): string {
@@ -104,9 +108,12 @@ export async function auditAlertRecipientIds(
   if (roles.size === 0) return [];
   const users = await ctx.db.query("users").collect();
   return users
-    .filter(
-      (user) => user.active !== false && roles.has(user.role ?? DEFAULT_ROLE),
-    )
+    .filter((user) => {
+      if (user.active === false || user.isAnonymous === true) return false;
+      const assigned = effectiveUserRoles(user);
+      const resolved = assigned.length > 0 ? assigned : [DEFAULT_ROLE];
+      return resolved.some((roleKey) => roles.has(roleKey));
+    })
     .map((user) => user._id);
 }
 

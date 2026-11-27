@@ -23,10 +23,19 @@ export interface ProfileMetaChip {
   text: string;
 }
 
+/** Detalle visible de cada rol asignado en `permissions.myPermissions`. */
+export interface ProfileRoleDetail {
+  key: string;
+  label: string;
+  kind: "system" | "custom";
+  description: string;
+}
+
 /** Props para la cabecera de perfil. */
 export interface ProfileHeaderCardProps {
   user: Doc<"users">;
   roleLabel?: string;
+  roleDetails?: ProfileRoleDetail[];
   metaChips: ProfileMetaChip[];
   onEdit: () => void;
 }

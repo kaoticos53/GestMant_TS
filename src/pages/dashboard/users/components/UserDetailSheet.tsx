@@ -24,6 +24,7 @@ import { api } from "@/convex/_generated/api";
 import { STOCK_MOVEMENT_META, type StockMovementKind } from "@/lib/movements";
 import { roleBadgeClassName } from "@/lib/roles";
 import { formatDateTime } from "@/lib/workshop";
+import { getMemberRoleKeys } from "../helpers";
 import type { Member } from "../types";
 
 export interface UserDetailSheetProps {
@@ -48,7 +49,9 @@ export function UserDetailSheet({
     member ? { userId: member._id } : "skip",
   );
 
-  const roleKey = member?.role ?? "technician";
+  const roleKeys = member ? getMemberRoleKeys(member) : [];
+  const displayRoles =
+    roleKeys.length > 0 ? roleKeys : [member?.role ?? "technician"];
 
   return (
     <Sheet open={member !== null} onOpenChange={(open) => !open && onClose()}>
@@ -57,9 +60,15 @@ export function UserDetailSheet({
           <>
             <SheetHeader className="space-y-2 border-b pb-4">
               <div className="flex flex-wrap items-center gap-2 pr-6">
-                <Badge variant="outline" className={roleBadgeClassName(roleKey)}>
-                  {roleLabelOf(member.role)}
-                </Badge>
+                {displayRoles.map((key) => (
+                  <Badge
+                    key={key}
+                    variant="outline"
+                    className={roleBadgeClassName(key)}
+                  >
+                    {roleLabelOf(key)}
+                  </Badge>
+                ))}
                 <Badge variant={member.active ? "secondary" : "destructive"}>
                   {member.active ? "Activo" : "Inactivo"}
                 </Badge>
@@ -179,7 +188,7 @@ export function UserDetailSheet({
                 <section className="space-y-2">
                   <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     <ShieldCheck className="size-3.5" />
-                    Capacidades del rol ({summary.capabilities.length})
+                    Capacidades efectivas ({summary.capabilities.length})
                   </h3>
                   {summary.capabilities.length === 0 ? (
                     <p className="text-xs text-muted-foreground">

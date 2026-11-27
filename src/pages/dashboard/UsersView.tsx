@@ -21,7 +21,12 @@ import {
   UsersSkeleton,
   UsersTable,
 } from "./users/components";
-import { createUserColumns, getRoleLabel } from "./users/helpers";
+import {
+  createUserColumns,
+  formatMemberRoles,
+  getMemberRoleKeys,
+  getRoleLabel,
+} from "./users/helpers";
 import { useUsersOperations } from "./users/hooks/useUsersOperations";
 import type { Member, RoleOption } from "./users/types";
 
@@ -50,7 +55,7 @@ export function UsersView() {
   const {
     deactivating,
     setDeactivating,
-    handleChangeRole,
+    handleChangeRoles,
     handleToggleActive,
     handleConfirmDeactivate,
   } = useUsersOperations({ roleLabelOf });
@@ -67,7 +72,12 @@ export function UsersView() {
     if (!users) return [];
     const needle = search.trim().toLowerCase();
     return users.filter((member) => {
-      if (roleFilter !== "all" && member.role !== roleFilter) return false;
+      if (
+        roleFilter !== "all" &&
+        !getMemberRoleKeys(member).includes(roleFilter)
+      ) {
+        return false;
+      }
       if (statusFilter === "active" && !member.active) return false;
       if (statusFilter === "inactive" && member.active) return false;
       if (!needle) return true;
@@ -76,7 +86,7 @@ export function UsersView() {
         (member.email ?? "").toLowerCase().includes(needle) ||
         (member.position ?? "").toLowerCase().includes(needle) ||
         (member.location ?? "").toLowerCase().includes(needle) ||
-        getRoleLabel(roleOptions, member.role).toLowerCase().includes(needle)
+        formatMemberRoles(roleOptions, member).toLowerCase().includes(needle)
       );
     });
   }, [users, search, roleFilter, statusFilter, roleOptions]);
@@ -171,7 +181,7 @@ export function UsersView() {
         roleOptions={roleOptions}
         roleLabelOf={roleLabelOf}
         activeCount={activeCount}
-        onChangeRole={handleChangeRole}
+        onChangeRoles={handleChangeRoles}
         onOpenDetail={setDetailTarget}
         onEdit={setEditing}
         onToggleActive={handleToggleActive}

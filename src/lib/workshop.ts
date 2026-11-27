@@ -875,10 +875,14 @@ export const DEFAULT_WORK_WITHOUT_TRACE_ROLES: readonly RoleKey[] =
  * siempre.
  */
 export function alertReachesRole(
-  role: RoleKey | null | undefined,
+  role: RoleKey | readonly RoleKey[] | null | undefined,
   roleKeys: readonly RoleKey[],
 ): boolean {
-  return role !== null && role !== undefined && roleKeys.includes(role);
+  if (role === null || role === undefined) return false;
+  if (typeof role === "string") {
+    return roleKeys.includes(role);
+  }
+  return role.some((key) => roleKeys.includes(key));
 }
 
 /**

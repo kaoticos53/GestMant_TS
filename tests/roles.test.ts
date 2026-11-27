@@ -220,3 +220,136 @@ describe("permisos de negocio", () => {
     );
   });
 });
+
+describe("múltiples roles por usuario (setRoles y unión OR de capacidades)", () => {
+  test("setRoles combina capacidades de varios roles, revoca sesiones, audita y protege borrado", async () => {
+    const { t, authed: admin, userId: adminId } = await setup("admin", "admin@taller.es");
+    const customKey = await admin.mutation(api.permissions.createRole, {
+      label: "Auxiliar de almacén",
+    });
+    await admin.mutation(api.permissions.setRolePermissions, {
+      role: customKey,
+      grants: { viewInventory: true, managePurchasing: true },
+    });
+
+    const targetId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("users", {
+        name: "Lucía Multirrol",
+        email: "lucia@taller.es",
+        role: "technician",
+        active: true,
+      });
+      await ctx.db.insert("authSessions", {
+        userId: id,
+        expirationTime: Date.now() + 60_000,
+      });
+      await ctx.db.insert("spareParts", {
+        code: "FUS-001",
+        name: "Fusible 5A",
+        category: "Alimentación",
+        unit: "ud",
+        stock: 10,
+        minStock: 2,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      return id;
+    });
+
+    await admin.mutation(api.members.setRoles, {
+      userId: targetId,
+      roles: ["technician", customKey],
+    });
+
+    // Sesión revocada tras el cambio de roles
+    const remainingSessions = await t.run((ctx) =>
+      ctx.db
+        .query("authSessions")
+        .withIndex("userId", (q) => q.eq("userId", targetId))
+        .collect(),
+    );
+    expect(remainingSessions).toHaveLength(0);
+
+    // Log de auditoría registrado
+    const auditLogs = await t.run((ctx) =>
+      ctx.db.query("securityAuditLog").collect(),
+    );
+    const changeLog = auditLogs.find((row) => row.action === "role_change");
+    expect(changeLog).toBeDefined();
+    expect(changeLog?.metadata).toContain(customKey);
+
+    // myPermissions devuelve la unión OR de ambos roles
+    const lucia = t.withIdentity({ subject: `${targetId}|session2` });
+    const perms = await lucia.query(api.permissions.myPermissions, {});
+    expect(perms.roles).toEqual(["technician", customKey]);
+    expect(perms.role).toBe("technician");
+    expect(perms.label).toContain("Técnico");
+    expect(perms.label).toContain("Auxiliar de almacén");
+    expect(perms.grants.viewIncidents).toBe(true);
+    expect(perms.grants.createRequests).toBe(true);
+    expect(perms.grants.viewInventory).toBe(true);
+    expect(perms.grants.managePurchasing).toBe(true);
+
+    // search.global ve repuestos gracias al rol secundario
+    const searchRes = await lucia.query(api.search.global, {
+      query: "Fusible",
+    });
+    expect(searchRes.parts).toHaveLength(1);
+
+    // listRoles cuenta al usuario en ambos roles y deleteRole bloquea borrar el rol secundario
+    const allRoles = await admin.query(api.permissions.listRoles, {});
+    expect(allRoles.find((r) => r.key === customKey)?.userCount).toBe(1);
+    await expectConvexError(
+      admin.mutation(api.permissions.deleteRole, { key: customKey }),
+      "reasígnalas desde el módulo de usuarios",
+    );
+
+    // Validaciones negativas de setRoles
+    await expectConvexError(
+      admin.mutation(api.members.setRoles, { userId: targetId, roles: [] }),
+      "Asigna al menos un rol",
+    );
+    await expectConvexError(
+      admin.mutation(api.members.setRoles, {
+        userId: targetId,
+        roles: ["guest"],
+      }),
+      "solo para sesiones anónimas",
+    );
+    await expectConvexError(
+      admin.mutation(api.members.setRoles, {
+        userId: adminId,
+        roles: ["admin"],
+      }),
+      "No puedes cambiar tus propios roles",
+    );
+
+    // Incluir "admin" junto a otro rol deja "admin" como rol principal
+    await admin.mutation(api.members.setRoles, {
+      userId: targetId,
+      roles: ["technician", "admin"],
+    });
+    const list = await admin.query(api.members.list, {});
+    const luciaRow = list.find((u) => u._id === targetId);
+    expect(luciaRow?.role).toBe("admin");
+    expect(luciaRow?.roles).toEqual(["admin", "technician"]);
+  });
+
+  test("createUser admite asignar varios roles en el alta", async () => {
+    const { authed: admin } = await setup("admin", "admin@taller.es");
+    const customKey = await admin.mutation(api.permissions.createRole, {
+      label: "Compras",
+    });
+
+    const newId = await admin.action(api.members.createUser, {
+      name: "Mario Dual",
+      email: "mario@taller.es",
+      password: "Password123!",
+      roles: ["technician", customKey],
+    });
+
+    const list = await admin.query(api.members.list, {});
+    const mario = list.find((u) => u._id === newId);
+    expect(mario?.roles).toEqual(["technician", customKey]);
+  });
+});

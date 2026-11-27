@@ -35,7 +35,7 @@ import {
   type MongoAbility,
 } from "@casl/ability";
 import type { Capability } from "./permissions";
-import { isAdmin, type RoleKey } from "./roles";
+import { effectiveUserRoles, isAdminUser, type RoleKey } from "./roles";
 
 /** Las acciones del taller, en el vocabulario de las fichas. */
 export type AppAction =
@@ -84,6 +84,7 @@ export type AppAbility = MongoAbility<
 export interface AbilityActor {
   id: string;
   role: RoleKey;
+  roles?: readonly RoleKey[];
   active?: boolean;
   isAnonymous?: boolean;
 }
@@ -121,9 +122,10 @@ export function defineAbilityFor(
   }
 
   const allowed = (capability: Capability) => grants[capability] === true;
-  const isTechnician = actor.role === "technician";
+  const actorRoles = effectiveUserRoles(actor);
+  const isTechnician = actorRoles.includes("technician");
 
-  if (isAdmin(actor.role)) {
+  if (isAdminUser(actor)) {
     can("manage", "all");
     // Ni el administrador reabre lo cerrado ni borra la traza de seguridad.
     cannot(["update", "close", "assign", "verify"], "Incident", {

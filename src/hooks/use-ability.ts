@@ -31,6 +31,7 @@ export function useAbility(): AppAbility {
       {
         id: user._id,
         role: user.role ?? "",
+        roles: user.roles,
         active: user.active !== false,
         isAnonymous: user.isAnonymous === true,
       },

@@ -48,8 +48,8 @@ export function WorkAlertNotice({
   onOpenSettings,
   onDismiss,
 }: {
-  /** Rol de quien está mirando: decide si el aviso le toca. */
-  role: RoleKey | null | undefined;
+  /** Rol o roles de quien está mirando: deciden si el aviso le toca. */
+  role: RoleKey | readonly RoleKey[] | null | undefined;
   /** Roles destinatarios configurados en «Ajustes del taller». */
   audience: readonly RoleKey[];
   /** Margen configurado, en días (es lo que cuenta el texto). */

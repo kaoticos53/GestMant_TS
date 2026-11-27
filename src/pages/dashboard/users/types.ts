@@ -5,8 +5,10 @@ export interface Member {
   _id: Id<"users">;
   name: string | null;
   email: string | null;
-  /** Clave del rol: del sistema o personalizada. */
+  /** Clave principal del rol (compatibilidad). */
   role: string | null;
+  /** Todos los roles asignados al usuario. */
+  roles?: string[];
   position: string | null;
   location: string | null;
   phone: string | null;
@@ -18,4 +20,5 @@ export interface Member {
 export interface RoleOption {
   key: string;
   label: string;
+  description?: string;
 }

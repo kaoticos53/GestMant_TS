@@ -323,7 +323,8 @@ const schema = defineSchema({
     emailVerificationTime: v.optional(v.number()), // email verification time. do not remove
     isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
-    role: v.optional(roleValidator), // role of the user. do not remove
+    role: v.optional(roleValidator), // rol principal (compatibilidad e índice by_role). do not remove
+    roles: v.optional(v.array(roleValidator)), // múltiples roles asignados al usuario
 
     // Perfil del miembro del taller (gestión de usuarios)
     position: v.optional(v.string()), // puesto, ej. "Realización"

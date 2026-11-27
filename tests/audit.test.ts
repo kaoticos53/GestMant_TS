@@ -225,6 +225,8 @@ describe("Auditoría de seguridad (securityAuditLog y audit.ts)", () => {
       metadataVersion: 1,
       previousRole: "technician",
       newRole: "manager",
+      previousRoles: ["technician"],
+      newRoles: ["manager"],
       targetEmail: "pepe@taller.es",
       targetName: "Pepe Operario",
       revokedSessions: 0,

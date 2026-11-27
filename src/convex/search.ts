@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
-import { grantsForRole } from "./permissions";
-import { memberStatus } from "./permissions";
+import { grantsForRoles, memberStatus } from "./permissions";
+import { effectiveUserRoles } from "../lib/roles";
 import {
   MAX_GLOBAL_SEARCH_PER_GROUP,
   includesSearchQuery,
@@ -89,7 +89,7 @@ export const global = query({
     const { user, issue } = await memberStatus(ctx);
     if (issue || !user) return EMPTY_RESPONSE;
 
-    const grants = await grantsForRole(ctx, user.role ?? "");
+    const grants = await grantsForRoles(ctx, effectiveUserRoles(user));
     const canIncidents = Boolean(
       grants.viewIncidents || grants.manageIncidents,
     );

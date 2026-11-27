@@ -1,11 +1,17 @@
 import { api } from "@/convex/_generated/api";
-import { DEFAULT_ROLE, fallbackRoleMeta, isAdmin } from "@/lib/roles";
+import {
+  effectiveUserRoles,
+  fallbackRoleMeta,
+  isAdminUser,
+  primaryUserRole,
+} from "@/lib/roles";
 import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 
 export interface UserRoleSource {
   _id?: string;
   role?: string;
+  roles?: string[];
   isAnonymous?: boolean;
   active?: boolean;
 }
@@ -16,9 +22,10 @@ export function useEnsureRole(
 ) {
   const ensureRole = useMutation(api.members.ensureRole);
   const roleAttempts = useRef(0);
-  const role = user?.role ?? DEFAULT_ROLE;
-  const adminOk = isAdmin(user?.role);
-  const needsRole = user !== undefined && user !== null && user.role === undefined;
+  const roles = effectiveUserRoles(user);
+  const role = primaryUserRole(roles);
+  const adminOk = isAdminUser(user);
+  const needsRole = user !== undefined && user !== null && roles.length === 0;
 
   useEffect(() => {
     if (!needsRole) {
@@ -47,6 +54,7 @@ export function useEnsureRole(
 
   return {
     role,
+    roles,
     roleLabel,
     adminOk,
     needsRole,

@@ -68,7 +68,7 @@ export function useDashboardState() {
   } = useSidebarPanel(isGuest ? null : user);
 
   // Control de rol y permisos
-  const { role, roleLabel, adminOk, needsRole } = useEnsureRole(
+  const { role, roles, roleLabel, adminOk, needsRole } = useEnsureRole(
     user,
     permissions?.label,
   );
@@ -157,7 +157,7 @@ export function useDashboardState() {
     markStartedEmpty,
     isEmpty,
     showEmptyNotice,
-  } = useWorkAlertState(user, role);
+  } = useWorkAlertState(user, roles.length > 0 ? roles : role);
 
   // Carga de datos de demostración
   const { isSeeding, isSeedingMore, handleSeed, handleSeedMore } = useDashboardSeed({

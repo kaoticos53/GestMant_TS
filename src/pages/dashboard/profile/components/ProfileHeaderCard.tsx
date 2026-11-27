@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  DEFAULT_ROLE,
+  effectiveUserRoles,
   fallbackRoleMeta,
   roleBadgeClassName,
 } from "@/lib/roles";
@@ -9,15 +9,26 @@ import { Pencil } from "lucide-react";
 import { getUserInitial } from "../helpers";
 import type { ProfileHeaderCardProps } from "../types";
 
-/** Ficha personal con avatar, nombre, rol, badges y chips de contacto. */
+/** Ficha personal con avatar, nombre, roles asignados, badges y chips de contacto. */
 export function ProfileHeaderCard({
   user,
   roleLabel,
+  roleDetails,
   metaChips,
   onEdit,
 }: ProfileHeaderCardProps) {
   const initial = getUserInitial(user);
-  const role = user.role ?? DEFAULT_ROLE;
+  const effectiveRoles = effectiveUserRoles(user);
+  const badges =
+    roleDetails && roleDetails.length > 0
+      ? roleDetails.map((detail) => ({ key: detail.key, label: detail.label }))
+      : effectiveRoles.map((key) => ({
+          key,
+          label:
+            effectiveRoles.length === 1 && roleLabel
+              ? roleLabel
+              : fallbackRoleMeta(key).label,
+        }));
 
   return (
     <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
@@ -31,10 +42,16 @@ export function ProfileHeaderCard({
               <h2 className="truncate text-xl font-semibold tracking-tight">
                 {user.name || "Sin nombre"}
               </h2>
-              {user.role ? (
-                <Badge variant="outline" className={roleBadgeClassName(role)}>
-                  {roleLabel ?? fallbackRoleMeta(role).label}
-                </Badge>
+              {badges.length > 0 ? (
+                badges.map((badge) => (
+                  <Badge
+                    key={badge.key}
+                    variant="outline"
+                    className={roleBadgeClassName(badge.key)}
+                  >
+                    {badge.label}
+                  </Badge>
+                ))
               ) : (
                 <Badge variant="outline" className="text-muted-foreground">
                   Configurando rol...

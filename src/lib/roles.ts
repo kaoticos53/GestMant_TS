@@ -80,9 +80,91 @@ export function isSystemRole(
   return key === "admin" || key === "manager" || key === "technician" || key === "guest";
 }
 
-/** Puede gestionar usuarios y roles. */
+/** ¿Puede gestionar usuarios y roles? */
 export function isAdmin(role: RoleKey | null | undefined): boolean {
   return role === "admin";
+}
+
+/** Origen mínimo para leer el rol o la lista de roles de un usuario. */
+export interface UserRolesSource {
+  role?: RoleKey | null;
+  roles?: readonly RoleKey[] | null;
+  isAnonymous?: boolean;
+}
+
+/** Normaliza una lista de roles: recorta, quita repetidos y prioriza `admin`. */
+export function normalizeUserRoles(roles: readonly RoleKey[]): RoleKey[] {
+  const seen = new Set<string>();
+  const cleaned: RoleKey[] = [];
+  for (const raw of roles) {
+    const key = raw.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    cleaned.push(key);
+  }
+  const adminIndex = cleaned.indexOf("admin");
+  if (adminIndex > 0) {
+    cleaned.splice(adminIndex, 1);
+    cleaned.unshift("admin");
+  }
+  return cleaned;
+}
+
+/** Lista efectiva de roles asignados a un usuario (compatible con cuentas legacy de un solo rol). */
+export function effectiveUserRoles(
+  user: UserRolesSource | null | undefined,
+): RoleKey[] {
+  if (!user) return [];
+  if (user.isAnonymous === true) return [GUEST_ROLE];
+  if (user.roles && user.roles.length > 0) {
+    return normalizeUserRoles(user.roles);
+  }
+  if (user.role) {
+    return normalizeUserRoles([user.role]);
+  }
+  return [];
+}
+
+/** Rol principal derivado de la lista normalizada (`admin` si está presente, si no el primero). */
+export function primaryUserRole(roles: readonly RoleKey[]): RoleKey {
+  return normalizeUserRoles(roles)[0] ?? DEFAULT_ROLE;
+}
+
+/** ¿Tiene el usuario ese rol entre sus roles asignados? */
+export function userHasRole(
+  user: UserRolesSource | null | undefined,
+  roleKey: RoleKey,
+): boolean {
+  return effectiveUserRoles(user).includes(roleKey);
+}
+
+/** ¿Tiene privilegios de administrador en cualquiera de sus roles? */
+export function isAdminUser(
+  user: UserRolesSource | null | undefined,
+): boolean {
+  return userHasRole(user, "admin");
+}
+
+/** ¿Coincide alguno de los roles del usuario con la lista objetivo? */
+export function userMatchesAnyRole(
+  user: UserRolesSource | null | undefined,
+  targetRoles: readonly RoleKey[],
+): boolean {
+  if (targetRoles.length === 0) return false;
+  const assigned = effectiveUserRoles(user);
+  return assigned.some((key) => targetRoles.includes(key));
+}
+
+/** Compara dos listas de roles como conjuntos normalizados, sin importar el orden. */
+export function areRoleListsEqual(
+  a: readonly RoleKey[],
+  b: readonly RoleKey[],
+): boolean {
+  const normA = normalizeUserRoles(a);
+  const normB = normalizeUserRoles(b);
+  if (normA.length !== normB.length) return false;
+  const setB = new Set(normB);
+  return normA.every((key) => setB.has(key));
 }
 
 /**

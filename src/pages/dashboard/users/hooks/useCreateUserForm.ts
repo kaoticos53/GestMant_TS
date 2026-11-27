@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import { primaryUserRole } from "@/lib/roles";
 import { getErrorMessage } from "@/lib/workshop";
 import { useAction, useQuery } from "convex/react";
 import { useState, type FormEvent } from "react";
@@ -8,6 +9,7 @@ export interface ValidateCreateUserInput {
   name: string;
   email: string;
   password: string;
+  roles?: string[];
 }
 
 /**
@@ -17,6 +19,7 @@ export function validateCreateUserData({
   name,
   email,
   password,
+  roles,
 }: ValidateCreateUserInput): string | null {
   if (!name.trim()) {
     return "Indica tu nombre y apellidos.";
@@ -27,6 +30,9 @@ export function validateCreateUserData({
   if (password.length < 8) {
     return "La contraseña debe tener al menos 8 caracteres.";
   }
+  if (roles !== undefined && roles.length === 0) {
+    return "Asigna al menos un rol al usuario.";
+  }
   return null;
 }
 
@@ -35,7 +41,7 @@ interface UseCreateUserFormOptions {
 }
 
 /**
- * Hook para gestionar el formulario de alta de usuario con sus validaciones y llamadas a Convex.
+ * Hook para gestionar el formulario de alta de usuario con múltiples roles.
  */
 export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
   const createUser = useAction(api.members.createUser);
@@ -44,7 +50,7 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<string>("technician");
+  const [roles, setRoles] = useState<string[]>(["technician"]);
   const [position, setPosition] = useState("");
   const [location, setLocation] = useState("");
   const [phone, setPhone] = useState("");
@@ -55,7 +61,12 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
     event.preventDefault();
     setError(null);
 
-    const validationError = validateCreateUserData({ name, email, password });
+    const validationError = validateCreateUserData({
+      name,
+      email,
+      password,
+      roles,
+    });
     if (validationError) {
       setError(validationError);
       return;
@@ -67,7 +78,8 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
         name: name.trim(),
         email: email.trim(),
         password,
-        role,
+        role: primaryUserRole(roles),
+        roles,
         position: position.trim() || undefined,
         location: location.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -88,8 +100,8 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
     setEmail,
     password,
     setPassword,
-    role,
-    setRole,
+    roles,
+    setRoles,
     position,
     setPosition,
     location,

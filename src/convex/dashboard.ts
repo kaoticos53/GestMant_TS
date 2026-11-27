@@ -8,7 +8,7 @@ import {
 } from "../lib/analytics";
 import { JOB_STATUS, isActiveJobStatus } from "../lib/backgroundJobs";
 import { STALE_WORK_CANDIDATE_STATUSES } from "../lib/incidentFlow";
-import { isAdmin } from "../lib/roles";
+import { isAdminUser } from "../lib/roles";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   stockState,
@@ -324,7 +324,7 @@ export const analytics = query({
       ]),
       hasAnyCapability(ctx, member, ["viewPurchasing", "managePurchasing"]),
     ]);
-    const adminOk = isAdmin(member.role);
+    const adminOk = isAdminUser(member);
 
     const now = Date.now();
     const auditCutoff = now - (args.periodDays ?? 30) * 24 * 60 * 60 * 1000;

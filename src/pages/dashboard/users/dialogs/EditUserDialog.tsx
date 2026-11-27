@@ -10,13 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RolesChecklist } from "../components/RolesMultiSelect";
 import { useEditUserForm } from "../hooks/useEditUserForm";
 import type { Member, RoleOption } from "../types";
 
@@ -39,8 +33,8 @@ export function EditUserDialog({
   const {
     name,
     setName,
-    role,
-    setRole,
+    roles,
+    setRoles,
     position,
     setPosition,
     location,
@@ -52,11 +46,11 @@ export function EditUserDialog({
     catalogPositions,
     catalogLocations,
     handleSubmit,
-  } = useEditUserForm({ member, onSuccess: onClose });
+  } = useEditUserForm({ member, isSelf, onSuccess: onClose });
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Editar usuario</DialogTitle>
           <DialogDescription>
@@ -78,26 +72,17 @@ export function EditUserDialog({
           </div>
           {roleOptions.length > 0 && (
             <div className="grid gap-2">
-              <Label htmlFor="edit-role">Rol</Label>
-              <Select
-                value={role}
-                onValueChange={setRole}
+              <Label>Roles asignados</Label>
+              <RolesChecklist
+                roleOptions={roleOptions}
+                selectedRoles={roles}
+                onChange={setRoles}
                 disabled={busy || isSelf}
-              >
-                <SelectTrigger id="edit-role" className="w-full">
-                  <SelectValue placeholder="Selecciona un rol" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                idPrefix="edit-user-role"
+              />
               {isSelf && (
                 <p className="text-xs text-muted-foreground">
-                  No puedes cambiar tu propio rol desde aquí.
+                  No puedes cambiar tus propios roles desde aquí.
                 </p>
               )}
             </div>

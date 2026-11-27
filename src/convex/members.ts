@@ -4,7 +4,14 @@ import {
   invalidateSessions,
 } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { DEFAULT_ROLE } from "../lib/roles";
+import {
+  DEFAULT_ROLE,
+  areRoleListsEqual,
+  effectiveUserRoles,
+  isAdminUser,
+  normalizeUserRoles,
+  primaryUserRole,
+} from "../lib/roles";
 import { clampSidebarWidth } from "../lib/sidebar";
 import { dismissalOf } from "../lib/workAlert";
 import { Id } from "./_generated/dataModel";
@@ -12,7 +19,7 @@ import { internal } from "./_generated/api";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { CAPABILITIES } from "../lib/permissions";
 import { isClosedIncident } from "../lib/incidentFlow";
-import { grantsForRole, hasCapability, roleExists } from "./permissions";
+import { grantsForRoles, hasCapability, roleExists } from "./permissions";
 import {
   type MutationCtx,
   QueryCtx,
@@ -44,7 +51,7 @@ async function requireUser(ctx: QueryCtx) {
 async function requireAdmin(ctx: QueryCtx): Promise<Id<"users">> {
   const userId = await requireUser(ctx);
   const user = await ctx.db.get(userId);
-  if (user?.role !== ROLES.ADMIN) {
+  if (!isAdminUser(user)) {
     throw new ConvexError(
       "Solo el administrador puede gestionar usuarios y roles.",
     );
@@ -96,10 +103,11 @@ export const ensureRole = mutation({
       );
     }
 
-    if (user.role) return user.role;
+    const existingRoles = effectiveUserRoles(user);
+    if (existingRoles.length > 0) return primaryUserRole(existingRoles);
 
     if (user.isAnonymous === true) {
-      await ctx.db.patch(userId, { role: ROLES.GUEST });
+      await ctx.db.patch(userId, { role: ROLES.GUEST, roles: [ROLES.GUEST] });
       return ROLES.GUEST;
     }
 
@@ -120,7 +128,7 @@ export const ensureRole = mutation({
     // Si ya existe un administrador, ningún nuevo registro puede autopromocionarse.
     const role =
       matchesConfiguredAdmin || isFirstUser ? ROLES.ADMIN : DEFAULT_ROLE;
-    await ctx.db.patch(userId, { role });
+    await ctx.db.patch(userId, { role, roles: [role] });
     return role;
   },
 });
@@ -276,7 +284,8 @@ export const createUser = action({
     name: v.string(),
     email: v.string(),
     password: v.string(),
-    role: roleValidator,
+    role: v.optional(roleValidator),
+    roles: v.optional(v.array(roleValidator)),
     position: v.optional(v.string()),
     location: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -301,13 +310,31 @@ export const createUser = action({
     if (existing !== null) {
       throw new ConvexError("Ya existe una cuenta con ese correo.");
     }
-    const roleOk = await ctx.runQuery(internal.permissions.roleKeyExists, {
-      key: args.role,
-    });
-    if (!roleOk) {
-      throw new ConvexError("El rol indicado no existe.");
+    const rawRoles =
+      args.roles && args.roles.length > 0
+        ? args.roles
+        : args.role
+          ? [args.role]
+          : [];
+    const normalizedRoles = normalizeUserRoles(rawRoles);
+    if (normalizedRoles.length === 0) {
+      throw new ConvexError("Asigna al menos un rol al usuario.");
+    }
+    if (normalizedRoles.includes(ROLES.GUEST)) {
+      throw new ConvexError(
+        "El rol de invitado es solo para sesiones anónimas.",
+      );
+    }
+    for (const key of normalizedRoles) {
+      const roleOk = await ctx.runQuery(internal.permissions.roleKeyExists, {
+        key,
+      });
+      if (!roleOk) {
+        throw new ConvexError("El rol indicado no existe.");
+      }
     }
 
+    const primary = primaryUserRole(normalizedRoles);
     const position = trimmed(args.position);
     const location = trimmed(args.location);
     const phone = trimmed(args.phone);
@@ -317,7 +344,8 @@ export const createUser = action({
       profile: {
         email,
         name,
-        role: args.role,
+        role: primary,
+        roles: normalizedRoles,
         active: true,
         ...(position ? { position } : {}),
         ...(location ? { location } : {}),
@@ -365,7 +393,7 @@ export const getAdminActor = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
-    if (!user || user.role !== ROLES.ADMIN) {
+    if (!user || !isAdminUser(user)) {
       throw new ConvexError(
         "Solo el administrador puede gestionar usuarios y roles.",
       );
@@ -449,14 +477,21 @@ export const listAssignable = query({
     }
     const users = await ctx.db.query("users").collect();
     return users
-      .filter((user) => user.role !== undefined && user.active !== false)
-      .map((user) => ({
-        _id: user._id,
-        name: user.name?.trim() || user.email?.trim() || "Usuario del taller",
-        email: user.email ?? null,
-        role: user.role,
-        position: user.position ?? null,
-      }))
+      .filter(
+        (user) => effectiveUserRoles(user).length > 0 && user.active !== false,
+      )
+      .map((user) => {
+        const roles = effectiveUserRoles(user);
+        return {
+          _id: user._id,
+          name:
+            user.name?.trim() || user.email?.trim() || "Usuario del taller",
+          email: user.email ?? null,
+          role: roles[0] ?? null,
+          roles,
+          position: user.position ?? null,
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
   },
 });
@@ -468,17 +503,21 @@ export const list = query({
     await requireAdmin(ctx);
     const users = await ctx.db.query("users").collect();
     return users
-      .map((user) => ({
-        _id: user._id,
-        name: user.name ?? null,
-        email: user.email ?? null,
-        role: user.role ?? null,
-        position: user.position ?? null,
-        location: user.location ?? null,
-        phone: user.phone ?? null,
-        active: user.active !== false,
-        isAnonymous: user.isAnonymous ?? false,
-      }))
+      .map((user) => {
+        const roles = effectiveUserRoles(user);
+        return {
+          _id: user._id,
+          name: user.name ?? null,
+          email: user.email ?? null,
+          role: roles[0] ?? null,
+          roles,
+          position: user.position ?? null,
+          location: user.location ?? null,
+          phone: user.phone ?? null,
+          active: user.active !== false,
+          isAnonymous: user.isAnonymous ?? false,
+        };
+      })
       .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""));
   },
 });
@@ -509,6 +548,96 @@ async function revokeAllUserSessions(
   return sessions.length;
 }
 
+/** Cambia los roles de un usuario (solo administrador, nunca los propios) y revoca sus sesiones activas. */
+async function applyUserRolesChange(
+  ctx: MutationCtx,
+  args: {
+    actorId: Id<"users">;
+    userId: Id<"users">;
+    roles: readonly string[];
+    singleRoleError?: string;
+  },
+): Promise<void> {
+  if (args.userId === args.actorId) {
+    throw new ConvexError(
+      args.singleRoleError ?? "No puedes cambiar tus propios roles.",
+    );
+  }
+  const target = await ctx.db.get(args.userId);
+  if (!target) throw new ConvexError("El usuario ya no existe.");
+
+  const normalized = normalizeUserRoles(args.roles);
+  if (normalized.length === 0) {
+    throw new ConvexError("Asigna al menos un rol al usuario.");
+  }
+  if (normalized.includes(ROLES.GUEST)) {
+    throw new ConvexError("El rol de invitado es solo para sesiones anónimas.");
+  }
+  for (const key of normalized) {
+    if (!(await roleExists(ctx, key))) {
+      throw new ConvexError("El rol indicado no existe.");
+    }
+  }
+
+  const previousRoles = effectiveUserRoles(target);
+  if (areRoleListsEqual(previousRoles, normalized)) return;
+
+  const previousPrimary = previousRoles[0] ?? target.role;
+  const nextPrimary = primaryUserRole(normalized);
+  await ctx.db.patch(args.userId, { role: nextPrimary, roles: normalized });
+  const revokedSessions = await revokeAllUserSessions(ctx, args.userId);
+
+  const hadAdmin = previousRoles.includes(ROLES.ADMIN);
+  const hasAdmin = normalized.includes(ROLES.ADMIN);
+  if (hadAdmin !== hasAdmin) {
+    await notifySecurityAlert(ctx, {
+      message: `Alerta de seguridad: cambio de rol administrativo (${previousRoles.join(", ") || "sin rol"} -> ${normalized.join(", ")}) para ${target.name ?? target.email ?? args.userId}.`,
+      exceptUserId: args.actorId,
+    });
+  }
+
+  await logSecurityEvent(ctx, {
+    actorId: args.actorId,
+    action: "role_change",
+    target: `user:${args.userId}`,
+    metadata: {
+      previousRole: previousPrimary,
+      newRole: nextPrimary,
+      previousRoles,
+      newRoles: normalized,
+      targetEmail: target.email,
+      targetName: target.name,
+      revokedSessions,
+    },
+  });
+}
+
+const setRolesArgs = {
+  userId: v.id("users"),
+  roles: v.array(roleValidator),
+};
+
+export const setRoles = mutation({
+  args: setRolesArgs,
+  handler: secureMutation(
+    {
+      capability: "manageUsers",
+      identityMessage: identityNotice(
+        "Debes iniciar sesión para gestionar usuarios.",
+      ),
+      denyMessage: "Solo el administrador puede gestionar usuarios y roles.",
+    },
+    setRolesArgs,
+    async (ctx, args, actor) => {
+      await applyUserRolesChange(ctx, {
+        actorId: actor._id,
+        userId: args.userId,
+        roles: args.roles,
+      });
+    },
+  ),
+});
+
 /** Cambia el rol de un usuario (solo administrador, nunca el propio) y revoca sus sesiones activas. */
 const setRoleArgs = {
   userId: v.id("users"),
@@ -527,37 +656,11 @@ export const setRole = mutation({
     },
     setRoleArgs,
     async (ctx, args, actor) => {
-      const adminId = actor._id;
-      if (args.userId === adminId) {
-        throw new ConvexError("No puedes cambiar tu propio rol.");
-      }
-      const target = await ctx.db.get(args.userId);
-      if (!target) throw new ConvexError("El usuario ya no existe.");
-      if (!(await roleExists(ctx, args.role))) {
-        throw new ConvexError("El rol indicado no existe.");
-      }
-      if (target.role === args.role) return;
-
-      const previousRole = target.role;
-      await ctx.db.patch(args.userId, { role: args.role });
-      const revokedSessions = await revokeAllUserSessions(ctx, args.userId);
-      if (args.role === ROLES.ADMIN || previousRole === ROLES.ADMIN) {
-        await notifySecurityAlert(ctx, {
-          message: `Alerta de seguridad: cambio de rol administrativo (${previousRole ?? "sin rol"} -> ${args.role}) para ${target.name ?? target.email ?? args.userId}.`,
-          exceptUserId: adminId,
-        });
-      }
-      await logSecurityEvent(ctx, {
-        actorId: adminId,
-        action: "role_change",
-        target: `user:${args.userId}`,
-        metadata: {
-          previousRole,
-          newRole: args.role,
-          targetEmail: target.email,
-          targetName: target.name,
-          revokedSessions,
-        },
+      await applyUserRolesChange(ctx, {
+        actorId: actor._id,
+        userId: args.userId,
+        roles: [args.role],
+        singleRoleError: "No puedes cambiar tu propio rol.",
       });
     },
   ),
@@ -585,7 +688,7 @@ export const revokeSessions = mutation({
         if (
           args.userId !== undefined &&
           args.userId !== actor._id &&
-          actor.role !== ROLES.ADMIN
+          !isAdminUser(actor)
         ) {
           return "Solo el administrador puede cerrar sesiones de otro usuario.";
         }
@@ -622,8 +725,11 @@ export const getMemberSummary = query({
       return null;
     }
 
-    const roleKey = target.role ?? DEFAULT_ROLE;
-    const grants = await grantsForRole(ctx, roleKey);
+    const assigned = effectiveUserRoles(target);
+    const grants = await grantsForRoles(
+      ctx,
+      assigned.length > 0 ? assigned : [DEFAULT_ROLE],
+    );
     const capabilities = CAPABILITIES.filter((c) => Boolean(grants[c.id])).map(
       (c) => ({ key: c.id, label: c.label }),
     );
