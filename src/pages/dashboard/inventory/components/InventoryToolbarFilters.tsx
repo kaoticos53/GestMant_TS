@@ -14,6 +14,7 @@ import type { EquipmentDoc } from "../types";
 export interface InventoryToolbarFiltersProps {
   category: string;
   onCategoryChange: (value: string) => void;
+  categories?: string[];
   equipmentFilter: string;
   onEquipmentFilterChange: (value: string) => void;
   equipment: EquipmentDoc[];
@@ -34,6 +35,7 @@ export interface InventoryToolbarActionsProps {
 export function InventoryToolbarFilters({
   category,
   onCategoryChange,
+  categories,
   equipmentFilter,
   onEquipmentFilterChange,
   equipment,
@@ -41,6 +43,14 @@ export function InventoryToolbarFilters({
   onToggleLowStockOnly,
   lowStockCount,
 }: InventoryToolbarFiltersProps) {
+  const categoryOptions = Array.from(
+    new Set([
+      ...PART_CATEGORIES,
+      ...(categories ?? []),
+      ...(category !== "all" ? [category] : []),
+    ]),
+  );
+
   return (
     <>
       <Select value={category} onValueChange={onCategoryChange}>
@@ -52,7 +62,7 @@ export function InventoryToolbarFilters({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todas las categorías</SelectItem>
-          {PART_CATEGORIES.map((option) => (
+          {categoryOptions.map((option) => (
             <SelectItem key={option} value={option}>
               {option}
             </SelectItem>

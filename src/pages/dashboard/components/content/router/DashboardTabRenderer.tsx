@@ -92,7 +92,8 @@ export function DashboardTabRenderer({
                   setTarget((prev) => ({
                     ...prev,
                     tab: "inventory",
-                    inventorySearch: category,
+                    inventorySearch: "",
+                    inventoryCategory: category,
                     inventoryLowStockOnly: false,
                     timestamp: Date.now(),
                   }))
@@ -111,6 +112,7 @@ export function DashboardTabRenderer({
               ...prev,
               tab: "inventory",
               inventorySearch: code,
+              inventoryCategory: "all",
               inventoryLowStockOnly: false,
               timestamp: Date.now(),
             }))
@@ -181,10 +183,11 @@ export function DashboardTabRenderer({
     case "inventory":
       return (
         <InventoryView
-          key={`inventory-${viewKeys.inventory}`}
+          key={`inventory-${viewKeys.inventory}-${target.inventoryCategory ?? "all"}-${target.inventorySearch ?? ""}-${target.inventoryLowStockOnly ? "low" : "all"}`}
           canManage={can("manageInventory")}
           currentUserId={user?._id ?? null}
           initialSearch={target.inventorySearch ?? ""}
+          initialCategory={target.inventoryCategory ?? "all"}
           initialLowStockOnly={target.inventoryLowStockOnly ?? false}
           onOpenEquipmentModel={(modelName) =>
             setTarget((prev) => ({

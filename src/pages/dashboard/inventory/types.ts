@@ -14,6 +14,8 @@ export interface InventoryViewProps {
   currentUserId?: string | null;
   /** Texto con el que se abre la vista (viene de la búsqueda global). */
   initialSearch?: string;
+  /** Categoría con la que se abre la vista (viene de Analítica). */
+  initialCategory?: string;
   /** Abre la tabla mostrando solo lo que está por debajo del mínimo */
   initialLowStockOnly?: boolean;
   /** Navega a Equipos filtrando por modelo compatible. */

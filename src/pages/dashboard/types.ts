@@ -51,6 +51,7 @@ export interface NavigationTarget {
   requestsFilter?: RequestFilterId;
   archiveEntry?: OpenArchivedDoc | null;
   inventorySearch?: string;
+  inventoryCategory?: string;
   inventoryLowStockOnly?: boolean;
   equipmentSearch?: string;
   manualId?: Id<"manuals"> | null;

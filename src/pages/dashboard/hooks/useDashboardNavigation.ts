@@ -13,6 +13,7 @@ export const INITIAL_NAVIGATION_TARGET: NavigationTarget = {
   requestsFilter: "all",
   archiveEntry: null,
   inventorySearch: "",
+  inventoryCategory: "all",
   inventoryLowStockOnly: false,
   equipmentSearch: "",
   manualId: null,
@@ -64,6 +65,7 @@ export function useDashboardNavigation(
       requestId: null,
       archiveEntry: null,
       inventorySearch: "",
+      inventoryCategory: "all",
       equipmentSearch: "",
       manualId: null,
       manualsSearch: "",
@@ -137,6 +139,7 @@ export function useDashboardNavigation(
       tab: "inventory",
       inventoryLowStockOnly: lowStockOnly,
       inventorySearch: "",
+      inventoryCategory: "all",
       timestamp: Date.now(),
     }));
     setViewKeys((prev) => ({ ...prev, inventory: prev.inventory + 1 }));
@@ -201,6 +204,7 @@ export function useDashboardNavigation(
           ...prev,
           tab: "inventory",
           inventorySearch: hit.term,
+          inventoryCategory: "all",
           inventoryLowStockOnly: false,
           timestamp: Date.now(),
         }));

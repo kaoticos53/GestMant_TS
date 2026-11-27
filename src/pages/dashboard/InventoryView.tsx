@@ -29,6 +29,7 @@ export function InventoryView({
   canManage = false,
   currentUserId = null,
   initialSearch = "",
+  initialCategory = "all",
   initialLowStockOnly = false,
   onOpenEquipmentModel,
 }: InventoryViewProps) {
@@ -74,8 +75,17 @@ export function InventoryView({
   } = useInventoryState({
     currentUserId,
     initialSearch,
+    initialCategory,
     initialLowStockOnly,
   });
+
+  const categories = Array.from(
+    new Set(
+      parts
+        .map((part) => part.category.trim())
+        .filter((cat) => cat.length > 0),
+    ),
+  );
 
   const detailTarget =
     detailId === null ? null : (parts.find((part) => part._id === detailId) ?? null);
@@ -99,6 +109,7 @@ export function InventoryView({
             <InventoryToolbarFilters
               category={category}
               onCategoryChange={setCategory}
+              categories={categories}
               equipmentFilter={equipmentFilter}
               onEquipmentFilterChange={setEquipmentFilter}
               equipment={equipment}

@@ -18,10 +18,11 @@ import {
 export function useInventoryState({
   currentUserId = null,
   initialSearch = "",
+  initialCategory = "all",
   initialLowStockOnly = false,
 }: Pick<
   InventoryViewProps,
-  "currentUserId" | "initialSearch" | "initialLowStockOnly"
+  "currentUserId" | "initialSearch" | "initialCategory" | "initialLowStockOnly"
 >) {
   const rawParts = useQuery(api.spareParts.list);
   const parts = rawParts ?? [];
@@ -32,7 +33,7 @@ export function useInventoryState({
   const removePart = useMutation(api.spareParts.remove);
 
   const [search, setSearch] = useState(initialSearch);
-  const [category, setCategory] = useState<string>("all");
+  const [category, setCategory] = useState<string>(initialCategory);
   const [equipmentFilter, setEquipmentFilter] = useState<string>("all");
   const [lowStockOnly, setLowStockOnly] = useState(initialLowStockOnly);
   const [formTarget, setFormTarget] = useState<{ part: PartDoc | null } | null>(
