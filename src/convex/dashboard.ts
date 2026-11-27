@@ -1,9 +1,14 @@
 import { v } from "convex/values";
 import {
   buildWorkshopAnalytics,
+  type AnalyticsCapabilities,
+  type AnalyticsOpenOrderInput,
+  type AnalyticsSystemHealth,
   type WorkshopAnalyticsResult,
 } from "../lib/analytics";
+import { JOB_STATUS, isActiveJobStatus } from "../lib/backgroundJobs";
 import { STALE_WORK_CANDIDATE_STATUSES } from "../lib/incidentFlow";
+import { isAdmin } from "../lib/roles";
 import {
   DEFAULT_WORK_WITHOUT_TRACE_DAYS,
   stockState,
@@ -19,6 +24,7 @@ import {
 import {
   INCIDENT_STATUSES,
   PRIORITIES,
+  PURCHASE_ORDER_STATUSES,
   PURCHASE_REQUEST_STATUSES,
   REQUEST_STATUSES,
   type IncidentStatus,
@@ -297,18 +303,32 @@ export const analytics = query({
     const member = await memberOrNull(ctx);
     if (!member) return null;
 
-    const [canIncidents, canRequests, canParts, canEquipment, canPurchasing] =
-      await Promise.all([
-        hasAnyCapability(ctx, member, ["viewIncidents", "manageIncidents"]),
-        hasAnyCapability(ctx, member, ["viewRequests", "decideRequests"]),
-        hasAnyCapability(ctx, member, ["viewInventory", "manageInventory"]),
-        hasAnyCapability(ctx, member, [
-          "viewEquipment",
-          "manageEquipment",
-          "lookupEquipment",
-        ]),
-        hasAnyCapability(ctx, member, ["viewPurchasing", "managePurchasing"]),
-      ]);
+    const [
+      canIncidents,
+      canManageIncidents,
+      canRequests,
+      canDecideRequests,
+      canParts,
+      canEquipment,
+      canPurchasing,
+    ] = await Promise.all([
+      hasAnyCapability(ctx, member, ["viewIncidents", "manageIncidents"]),
+      hasCapability(ctx, member, "manageIncidents"),
+      hasAnyCapability(ctx, member, ["viewRequests", "decideRequests"]),
+      hasCapability(ctx, member, "decideRequests"),
+      hasAnyCapability(ctx, member, ["viewInventory", "manageInventory"]),
+      hasAnyCapability(ctx, member, [
+        "viewEquipment",
+        "manageEquipment",
+        "lookupEquipment",
+      ]),
+      hasAnyCapability(ctx, member, ["viewPurchasing", "managePurchasing"]),
+    ]);
+    const adminOk = isAdmin(member.role);
+
+    const now = Date.now();
+    const auditCutoff = now - (args.periodDays ?? 30) * 24 * 60 * 60 * 1000;
+    const failedJobCutoff = now - 7 * 24 * 60 * 60 * 1000;
 
     const [
       rawIncidents,
@@ -316,7 +336,15 @@ export const analytics = query({
       rawParts,
       rawEquipment,
       rawMovements,
-      rawPurchasing,
+      rawPendingPurchases,
+      rawOrderedPurchases,
+      rawOrderedOrders,
+      rawPartialOrders,
+      rawUsers,
+      rawCleanupRuns,
+      rawTrashFiles,
+      rawJobs,
+      rawAuditEvents,
     ] = await Promise.all([
       canIncidents
         ? ctx.db.query("incidents").collect()
@@ -341,25 +369,164 @@ export const analytics = query({
             )
             .collect()
         : Promise.resolve([]),
+      canPurchasing || canParts
+        ? ctx.db
+            .query("purchaseRequests")
+            .withIndex("by_status", (q) =>
+              q.eq("status", PURCHASE_REQUEST_STATUSES.ORDERED),
+            )
+            .collect()
+        : Promise.resolve([]),
+      canPurchasing
+        ? ctx.db
+            .query("purchaseOrders")
+            .withIndex("by_status", (q) =>
+              q.eq("status", PURCHASE_ORDER_STATUSES.PENDING),
+            )
+            .collect()
+        : Promise.resolve([]),
+      canPurchasing
+        ? ctx.db
+            .query("purchaseOrders")
+            .withIndex("by_status", (q) =>
+              q.eq("status", PURCHASE_ORDER_STATUSES.PARTIAL),
+            )
+            .collect()
+        : Promise.resolve([]),
+      adminOk ? ctx.db.query("users").collect() : Promise.resolve([]),
+      adminOk
+        ? ctx.db.query("storageCleanupRuns").collect()
+        : Promise.resolve([]),
+      adminOk ? ctx.db.query("trashFiles").collect() : Promise.resolve([]),
+      adminOk
+        ? ctx.db.query("backgroundJobs").order("desc").take(200)
+        : Promise.resolve([]),
+      adminOk
+        ? ctx.db
+            .query("securityAuditLog")
+            .withIndex("by_at", (q) => q.gte("at", auditCutoff))
+            .collect()
+        : Promise.resolve([]),
     ]);
 
+    const capabilities: AnalyticsCapabilities = {
+      incidents: canIncidents,
+      manageIncidents: canManageIncidents,
+      requests: canRequests,
+      decideRequests: canDecideRequests,
+      inventory: canParts,
+      equipment: canEquipment,
+      purchasing: canPurchasing,
+      admin: adminOk,
+    };
+
+    const openPurchaseOrders: AnalyticsOpenOrderInput[] = [
+      ...rawOrderedOrders,
+      ...rawPartialOrders,
+    ].map((order) => {
+      let totalUnits = 0;
+      let pendingUnits = 0;
+      for (const line of order.lines) {
+        totalUnits += line.quantity;
+        pendingUnits += Math.max(0, line.quantity - line.receivedQuantity);
+      }
+      return {
+        id: order._id,
+        reference: order.reference,
+        supplier: order.supplier,
+        status: order.status,
+        orderedAt: order.orderedAt,
+        pendingUnits,
+        totalUnits,
+      };
+    });
+
+    let systemHealth: AnalyticsSystemHealth | null = null;
+    if (adminOk) {
+      let activeUsers = 0;
+      let inactiveUsers = 0;
+      for (const u of rawUsers) {
+        if (u.isAnonymous === true) continue;
+        if (u.active === false) inactiveUsers += 1;
+        else activeUsers += 1;
+      }
+
+      let failedJobs = 0;
+      let activeJobs = 0;
+      for (const job of rawJobs) {
+        if (isActiveJobStatus(job.status)) activeJobs += 1;
+        else if (
+          job.status === JOB_STATUS.FAILED &&
+          job.createdAt >= failedJobCutoff
+        ) {
+          failedJobs += 1;
+        }
+      }
+
+      let unreadableFiles = 0;
+      let lastCleanupAt: number | null = null;
+      for (const run of rawCleanupRuns) {
+        unreadableFiles += run.unreadable ?? 0;
+        if (lastCleanupAt === null || run.ranAt > lastCleanupAt) {
+          lastCleanupAt = run.ranAt;
+        }
+      }
+
+      systemHealth = {
+        activeUsers,
+        inactiveUsers,
+        failedJobs,
+        activeJobs,
+        trashFilesCount: rawTrashFiles.length,
+        unreadableFiles,
+        lastCleanupAt,
+        recentAuditEvents: rawAuditEvents.length,
+      };
+    }
+
     return buildWorkshopAnalytics({
-      now: Date.now(),
+      now,
       periodDays: args.periodDays,
+      currentUserId: member._id,
+      capabilities,
       incidents: rawIncidents
         .filter((i) => i.deletedAt === undefined && i.archivedAt === undefined)
         .map((i) => ({
+          id: i._id,
+          reference: i.reference,
           status: i.status,
+          priority: i.priority,
           reportedAt: i.reportedAt,
           closedAt: i.closedAt,
           model: i.model,
           equipmentKind: i.equipmentKind,
+          assigneeId: i.assigneeId,
+          assigneeName: i.assigneeName,
+          workshopAssigneeId: i.workshopAssigneeId,
+          workshopAssigneeName: i.workshopAssigneeName,
+          history: i.history,
+          lifecycleNotes: i.lifecycleNotes,
+          externalRepair: i.externalRepair
+            ? {
+                companyName: i.externalRepair.companyName,
+                expectedReturnAt: i.externalRepair.expectedReturnAt,
+                receivedAt: i.externalRepair.receivedAt,
+                quoteStatus: i.externalRepair.quoteStatus,
+              }
+            : undefined,
         })),
       requests: rawRequests
         .filter((r) => r.deletedAt === undefined && r.archivedAt === undefined)
         .map((r) => ({
+          id: r._id,
+          reference: r.reference,
           status: r.status,
           priority: r.priority,
+          requesterId: r.requesterId,
+          requesterName: r.requesterName,
+          equipment: r.equipment,
+          createdAt: r.createdAt,
+          linesCount: r.lines.length,
         })),
       parts: rawParts.map((p) => ({
         code: p.code,
@@ -380,7 +547,10 @@ export const analytics = query({
         delta: m.delta,
         createdAt: m.createdAt,
       })),
-      pendingPurchaseRequests: rawPurchasing.length,
+      pendingPurchaseRequests: rawPendingPurchases.length,
+      orderedPartCodes: rawOrderedPurchases.map((p) => p.code),
+      openPurchaseOrders,
+      systemHealth,
     });
   },
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkshopAnalytics } from "@/lib/analytics";
+import {
+  buildWorkshopAnalytics,
+  getAvailableAnalyticsLenses,
+  getDefaultAnalyticsLens,
+  type AnalyticsCapabilities,
+} from "@/lib/analytics";
 
 describe("Analítica del taller (Dominio puro)", () => {
   const now = Date.UTC(2026, 10, 20, 12, 0, 0);
@@ -137,5 +142,220 @@ describe("Analítica del taller (Dominio puro)", () => {
       res.stockMovementsSummary.find((m) => m.kind === "request_reserve")
         ?.entries,
     ).toBe(0);
+  });
+
+  it("mantiene las incidencias abiertas antiguas aunque se elija periodDays: 7 y ajusta la granularidad a días", () => {
+    const res = buildWorkshopAnalytics({
+      now,
+      periodDays: 7,
+      incidents: [
+        {
+          id: "inc-old-open",
+          reference: "INC-0001",
+          status: "workshop",
+          priority: "urgent",
+          reportedAt: now - 25 * DAY,
+          assigneeId: "u-tech",
+          assigneeName: "Teo Técnico",
+        },
+        {
+          id: "inc-old-closed",
+          reference: "INC-0002",
+          status: "resolved",
+          reportedAt: now - 20 * DAY,
+          closedAt: now - 15 * DAY,
+        },
+      ],
+      requests: [],
+      parts: [],
+      equipment: [],
+      stockMovements: [],
+      pendingPurchaseRequests: 0,
+      currentUserId: "u-tech",
+    });
+
+    expect(res.trendGranularity).toBe("day");
+    expect(res.weeklyTrend).toHaveLength(7);
+    expect(res.kpis.activeIncidents).toBe(1);
+    expect(res.myDay.assignedOpenCount).toBe(1);
+    expect(res.incidentsByPriority.find((p) => p.priority === "urgent")?.count).toBe(
+      1,
+    );
+  });
+
+  it("resuelve lentes disponibles y lente por defecto según capacidades", () => {
+    const techCaps: AnalyticsCapabilities = {
+      incidents: true,
+      manageIncidents: false,
+      requests: true,
+      decideRequests: false,
+      inventory: false,
+      equipment: false,
+      purchasing: false,
+      admin: false,
+    };
+    expect(getAvailableAnalyticsLenses(techCaps)).toEqual(["my_day", "workshop"]);
+    expect(getDefaultAnalyticsLens(techCaps)).toBe("my_day");
+
+    const warehouseCustomCaps: AnalyticsCapabilities = {
+      incidents: false,
+      manageIncidents: false,
+      requests: false,
+      decideRequests: true,
+      inventory: true,
+      equipment: false,
+      purchasing: true,
+      admin: false,
+    };
+    expect(getAvailableAnalyticsLenses(warehouseCustomCaps)).toEqual([
+      "inventory_purchasing",
+    ]);
+    expect(getDefaultAnalyticsLens(warehouseCustomCaps)).toBe(
+      "inventory_purchasing",
+    );
+
+    const adminCaps: AnalyticsCapabilities = {
+      incidents: true,
+      manageIncidents: true,
+      requests: true,
+      decideRequests: true,
+      inventory: true,
+      equipment: true,
+      purchasing: true,
+      admin: true,
+    };
+    expect(getAvailableAnalyticsLenses(adminCaps)).toEqual([
+      "my_day",
+      "workshop",
+      "inventory_purchasing",
+      "system",
+    ]);
+    expect(getDefaultAnalyticsLens(adminCaps)).toBe("workshop");
+  });
+
+  it("calcula mi jornada, carga por técnico, estancamiento, SAT externo y repuestos en pedido", () => {
+    const res = buildWorkshopAnalytics({
+      now,
+      currentUserId: "u-tech",
+      incidents: [
+        {
+          id: "inc-1",
+          reference: "INC-001",
+          status: "assigned",
+          priority: "urgent",
+          reportedAt: now - 6 * DAY,
+          model: "HDC-3500",
+          assigneeId: "u-tech",
+          assigneeName: "Teo Técnico",
+          history: [
+            { status: "reported", at: now - 6 * DAY },
+            { status: "assigned", at: now - 5 * DAY },
+          ],
+          lifecycleNotes: [],
+        },
+        {
+          id: "inc-2",
+          reference: "INC-002",
+          status: "reported",
+          priority: "medium",
+          reportedAt: now - 1 * DAY,
+          model: "OPM-4250",
+        },
+        {
+          id: "inc-3",
+          reference: "INC-003",
+          status: "externalRepair",
+          priority: "high",
+          reportedAt: now - 10 * DAY,
+          model: "HDC-3500",
+          assigneeId: "u-other",
+          assigneeName: "Ana",
+          externalRepair: {
+            companyName: "SAT Oficial",
+            expectedReturnAt: now - 1 * DAY,
+          },
+        },
+      ],
+      requests: [
+        {
+          id: "req-1",
+          reference: "PET-001",
+          status: "materialReceived",
+          priority: "urgent",
+          requesterId: "u-tech",
+          equipment: "HDC-3500",
+          createdAt: now - 3 * DAY,
+          linesCount: 1,
+        },
+        {
+          id: "req-2",
+          reference: "PET-002",
+          status: "pending",
+          priority: "normal",
+          requesterId: "u-tech",
+          createdAt: now - 1 * DAY,
+          linesCount: 0,
+        },
+      ],
+      parts: [
+        {
+          code: "REP-1",
+          name: "Fusible",
+          category: "Alimentación",
+          stock: 0,
+          minStock: 2,
+          unit: "ud",
+        },
+      ],
+      equipment: [],
+      stockMovements: [],
+      pendingPurchaseRequests: 1,
+      orderedPartCodes: ["REP-1"],
+      openPurchaseOrders: [
+        {
+          id: "po-1",
+          reference: "OC-0001",
+          supplier: "Electro",
+          status: "pending",
+          orderedAt: now - 4 * DAY,
+          pendingUnits: 2,
+          totalUnits: 2,
+        },
+      ],
+    });
+
+    expect(res.myDay.assignedOpenCount).toBe(1);
+    expect(res.myDay.assignedUrgentOrHighCount).toBe(1);
+    expect(res.myDay.unassignedReportedCount).toBe(1);
+    expect(res.myDay.myStaleCount).toBe(1);
+    expect(res.myDay.myRequestsReadyCount).toBe(1);
+    expect(res.myDay.myRequestsWaitingCount).toBe(1);
+    expect(res.myDay.myPriorityIncidents[0]?.reference).toBe("INC-001");
+    expect(res.myDay.myReadyRequests[0]?.reference).toBe("PET-001");
+
+    expect(res.workloadByTechnician).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Teo Técnico", count: 1, urgentCount: 1 }),
+        expect.objectContaining({ name: "Sin asignar", count: 1, unassigned: true }),
+      ]),
+    );
+    expect(res.staleWork[0]).toMatchObject({
+      reference: "INC-001",
+      days: 5,
+      isMine: true,
+    });
+    expect(res.externalRepairs[0]).toMatchObject({
+      reference: "INC-003",
+      companyName: "SAT Oficial",
+      overdue: true,
+    });
+    expect(res.criticalParts[0]?.onOrder).toBe(true);
+    expect(res.purchasingSummary).toMatchObject({
+      pendingRequestsToDecide: 1,
+      requestsWithoutReference: 1,
+      materialReceivedPendingDelivery: 1,
+      openOrdersCount: 1,
+    });
+    expect(res.purchasingSummary.openOrders[0]?.ageDays).toBe(4);
   });
 });

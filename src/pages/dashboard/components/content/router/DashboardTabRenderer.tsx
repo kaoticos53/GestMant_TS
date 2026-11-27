@@ -60,69 +60,108 @@ export function DashboardTabRenderer({
         <AnalyticsView
           onOpenIncidents={() => goToTab("incidents")}
           onOpenRequests={() => goToTab("requests")}
-          onOpenInventoryLowStock={() => openInventory(true)}
-          onOpenEquipment={() => goToTab("equipment")}
+          onOpenInventoryLowStock={
+            can("viewInventory") ? () => openInventory(true) : undefined
+          }
+          onOpenEquipment={
+            can("viewEquipment") ? () => goToTab("equipment") : undefined
+          }
           onOpenPurchasingPending={
             canSeePurchasing
               ? () =>
-                  setTarget((prev) => ({
-                    ...prev,
-                    tab: "purchasing",
-                    purchasingSection: "pending",
-                    purchaseOrderId: null,
-                    timestamp: Date.now(),
-                  }))
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "purchasing",
+                  purchasingSection: "pending",
+                  purchaseOrderId: null,
+                  timestamp: Date.now(),
+                }))
+              : undefined
+          }
+          onOpenPurchasingOrders={
+            canSeePurchasing
+              ? (orderId) =>
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "purchasing",
+                  purchasingSection: "orders",
+                  purchaseOrderId: orderId ?? null,
+                  timestamp: Date.now(),
+                }))
+              : undefined
+          }
+          onOpenIncident={can("viewIncidents") ? openIncident : undefined}
+          onOpenRequest={can("viewRequests") ? openRequest : undefined}
+          onOpenRequestsByStatus={
+            can("viewRequests")
+              ? (status) =>
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "requests",
+                  requestsFilter: status,
+                  requestsEquipmentFilter: undefined,
+                  requestId: null,
+                  timestamp: Date.now(),
+                }))
               : undefined
           }
           onSelectIncidentStatus={
             can("viewIncidents")
               ? (status) =>
-                  setTarget((prev) => ({
-                    ...prev,
-                    tab: "incidents",
-                    incidentsFilter: status,
-                    incidentsSearch: "",
-                    incidentId: null,
-                    timestamp: Date.now(),
-                  }))
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "incidents",
+                  incidentsFilter: status,
+                  incidentsSearch: "",
+                  incidentId: null,
+                  timestamp: Date.now(),
+                }))
               : undefined
           }
           onSelectPartCategory={
             can("viewInventory")
               ? (category) =>
-                  setTarget((prev) => ({
-                    ...prev,
-                    tab: "inventory",
-                    inventorySearch: "",
-                    inventoryCategory: category,
-                    inventoryLowStockOnly: false,
-                    timestamp: Date.now(),
-                  }))
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "inventory",
+                  inventorySearch: "",
+                  inventoryCategory: category,
+                  inventoryLowStockOnly: false,
+                  timestamp: Date.now(),
+                }))
               : undefined
           }
           onSelectEquipment={
             can("viewIncidents")
               ? (label) =>
-                  setTarget((prev) => ({
-                    ...prev,
-                    tab: "incidents",
-                    incidentsSearch: label,
-                    incidentsFilter: "all",
-                    incidentId: null,
-                    timestamp: Date.now(),
-                  }))
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "incidents",
+                  incidentsSearch: label,
+                  incidentsFilter: "all",
+                  incidentId: null,
+                  timestamp: Date.now(),
+                }))
               : undefined
           }
-          onSelectPart={(code) =>
-            setTarget((prev) => ({
-              ...prev,
-              tab: "inventory",
-              inventorySearch: code,
-              inventoryCategory: "all",
-              inventoryLowStockOnly: false,
-              timestamp: Date.now(),
-            }))
+          onSelectPart={
+            can("viewInventory")
+              ? (code) =>
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "inventory",
+                  inventorySearch: code,
+                  inventoryCategory: "all",
+                  inventoryLowStockOnly: false,
+                  timestamp: Date.now(),
+                }))
+              : undefined
           }
+          onOpenSettings={adminOk ? () => goToTab("settings") : undefined}
+          onOpenUsers={
+            can("manageUsers") ? () => goToTab("users") : undefined
+          }
+          onOpenAudit={can("viewAudit") ? () => goToTab("audit") : undefined}
         />
       );
 
@@ -163,13 +202,13 @@ export function DashboardTabRenderer({
           onOpenPurchasing={
             can("viewPurchasing")
               ? (section, orderId) =>
-                  setTarget((prev) => ({
-                    ...prev,
-                    tab: "purchasing",
-                    purchasingSection: section,
-                    purchaseOrderId: orderId ?? null,
-                    timestamp: Date.now(),
-                  }))
+                setTarget((prev) => ({
+                  ...prev,
+                  tab: "purchasing",
+                  purchasingSection: section,
+                  purchaseOrderId: orderId ?? null,
+                  timestamp: Date.now(),
+                }))
               : undefined
           }
           onOpenIncident={can("viewIncidents") ? openIncident : undefined}
