@@ -668,4 +668,21 @@ describe("el parte en PDF", () => {
     expect(texts).toContain("[imagen no disponible: foto]");
     expect(texts).toContain("El foco no enciende.");
   });
+
+  test("al saltar de página una tabla, la cabecera repetida aparece encima de la primera fila de la hoja siguiente", async () => {
+    const rows = Array.from({ length: 42 }, (_, i) => `| Fila ${i + 1} | Detalle ${i + 1} |`).join("\n");
+    const markdown = `## Historial\n\n| Columna A | Columna B |\n| --- | --- |\n${rows}\n`;
+    const bytes = await reportToPdf(markdown);
+    const items = drawnText(bytes);
+    const headers = items
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => item.text === "Columna A");
+    expect(headers).toHaveLength(2);
+    // La cabecera de la página 2 debe estar en el margen superior (y más alto que cualquier fila de la página 2)
+    const secondHeader = headers[1];
+    const nextItem = items[secondHeader.idx + 1];
+    expect(nextItem?.text).toBe("Columna B");
+    const rowAfterHeader = items[secondHeader.idx + 2];
+    expect(rowAfterHeader?.text).toMatch(/^Fila \d+$/);
+  });
 });

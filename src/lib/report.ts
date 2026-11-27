@@ -34,6 +34,7 @@ import { startOfDay } from "./browse";
 import { heading, table } from "./markdown";
 import {
   escapeMarkdown,
+  formatHistoryNote,
   richDocToMarkdown,
   richDocToPlainText,
 } from "./richDoc";
@@ -259,7 +260,7 @@ function historyBlock(incident: ReportIncident, level: number): string {
         formatDateTime(entry.at),
         INCIDENT_STATUS_META[entry.status].label,
         entry.by,
-        plainText(entry.note),
+        plainText(formatHistoryNote(entry.note)),
       ]),
     ),
   ].join("\n");

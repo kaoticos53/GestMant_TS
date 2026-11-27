@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { RichText } from "@/components/RichText";
+import { formatHistoryNote } from "@/lib/richDoc";
 import { INCIDENT_STATUS_META, formatDateTime } from "@/lib/workshop";
 import type { IncidentDoc } from "../../types";
 
@@ -40,7 +41,7 @@ export function IncidentHistoryCard({ history }: IncidentHistoryCardProps) {
                 </div>
                 {entry.note && (
                   <RichText
-                    value={entry.note}
+                    value={formatHistoryNote(entry.note) ?? entry.note}
                     className="mt-0.5 text-muted-foreground"
                   />
                 )}

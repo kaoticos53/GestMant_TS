@@ -309,20 +309,26 @@ export class ReportBlockRenderer {
         );
       });
 
-    const drawRow = (cells: readonly string[], bold: boolean): void => {
+    const measureRow = (cells: readonly string[], bold: boolean) => {
       const lines = rowLayout(cells, bold);
       const height =
         Math.max(...lines.map((cell) => cell.length)) * BODY_LEADING +
         CELL_PADDING * 2;
-      this.cursor.ensure(height);
+      return { lines, height };
+    };
+
+    const paintRow = (
+      layout: { lines: readonly (readonly Run[])[][]; height: number },
+      bold: boolean,
+    ): void => {
       const top = this.cursor.y;
       if (bold) {
-        this.cursor.page.rect(MARGIN.left, top, CONTENT_WIDTH, height, {
+        this.cursor.page.rect(MARGIN.left, top, CONTENT_WIDTH, layout.height, {
           color: HEADER_BG,
         });
       }
       let x = MARGIN.left;
-      lines.forEach((cell, column) => {
+      layout.lines.forEach((cell, column) => {
         cell.forEach((l, index) => {
           this.drawRuns(
             l,
@@ -333,7 +339,7 @@ export class ReportBlockRenderer {
         });
         x += widths[column];
       });
-      this.cursor.y = top + height;
+      this.cursor.y = top + layout.height;
       this.cursor.page.line(
         MARGIN.left,
         this.cursor.y,
@@ -345,11 +351,20 @@ export class ReportBlockRenderer {
       );
     };
 
-    drawRow(header, true);
+    const headerLayout = measureRow(header, true);
+    const firstRowLayout = rows.length > 0 ? measureRow(rows[0], false) : null;
+    this.cursor.ensure(
+      headerLayout.height + (firstRowLayout ? firstRowLayout.height : 0),
+    );
+    paintRow(headerLayout, true);
+
     for (const row of rows) {
-      const pageBefore = this.cursor.page;
-      drawRow(row, false);
-      if (this.cursor.page !== pageBefore) drawRow(header, true);
+      const layout = measureRow(row, false);
+      if (this.cursor.y + layout.height > this.cursor.bottom) {
+        this.cursor.ensure(layout.height);
+        paintRow(headerLayout, true);
+      }
+      paintRow(layout, false);
     }
     this.cursor.advance(TABLE_INDENT);
   }

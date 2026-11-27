@@ -708,6 +708,7 @@ export const verify = mutation({
 
       if (args.outcome === INCIDENT_STATUSES.WORKSHOP) {
         const workshopStatus = incidentStepStatus("verifyWorkshop");
+        const plainNotes = richDocToPlainText(notes).trim();
         await ctx.db.patch(args.incidentId, {
           status: workshopStatus,
           workshopAssigneeId: actor._id,
@@ -720,7 +721,7 @@ export const verify = mutation({
               workshopStatus,
               now,
               name,
-              notes ? `Derivada a taller · ${notes}` : "Derivada a taller",
+              plainNotes ? `Derivada a taller · ${plainNotes}` : "Derivada a taller",
             ),
           ],
         });
@@ -759,6 +760,7 @@ export const verify = mutation({
         })
         : undefined;
 
+      const plainNotes = richDocToPlainText(notes).trim();
       await ctx.db.patch(args.incidentId, {
         status,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
@@ -774,11 +776,11 @@ export const verify = mutation({
             now,
             name,
             args.outcome === "onsite"
-              ? notes
-                ? `Resuelta in situ · ${notes}`
+              ? plainNotes
+                ? `Resuelta in situ · ${plainNotes}`
                 : "Resuelta in situ"
-              : notes
-                ? `Cerrada sin resolución · ${notes}`
+              : plainNotes
+                ? `Cerrada sin resolución · ${plainNotes}`
                 : "Cerrada sin resolución",
           ),
         ],
@@ -954,6 +956,7 @@ export const close = mutation({
         })
         : undefined;
 
+      const plainNotes = richDocToPlainText(notes).trim();
       await ctx.db.patch(args.incidentId, {
         status,
         ...(args.equipmentId ? { equipmentId: args.equipmentId } : {}),
@@ -968,8 +971,8 @@ export const close = mutation({
             status,
             now,
             name,
-            notes
-              ? `Trabajo en taller finalizado · ${notes}`
+            plainNotes
+              ? `Trabajo en taller finalizado · ${plainNotes}`
               : "Trabajo en taller finalizado",
           ),
         ],
