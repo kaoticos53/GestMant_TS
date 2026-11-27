@@ -631,6 +631,8 @@ const schema = defineSchema({
         fromStatus: v.optional(incidentStatusValidator),
         by: v.optional(v.string()),
         note: v.optional(v.string()),
+        linkedIncidentId: v.optional(v.id("incidents")),
+        linkedIncidentReference: v.optional(v.string()),
       }),
     ),
     // Archivo: las cerradas antiguas salen del día a día pero siguen

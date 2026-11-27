@@ -140,7 +140,10 @@ export function IncidentDetailSheet({
           />
 
           {/* Historial de estados */}
-          <IncidentHistoryCard history={resolvedIncident.history} />
+          <IncidentHistoryCard
+            history={resolvedIncident.history}
+            onOpenIncident={onOpenIncident}
+          />
 
           {/* Expediente documental */}
           <IncidentDocumentsCard

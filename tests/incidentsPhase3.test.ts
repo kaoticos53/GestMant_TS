@@ -70,5 +70,11 @@ describe("Incidencias Fase 3 (Sub-fase 3.1)", () => {
     const all = await coord.query(api.incidents.list, {});
     const child = all.find((row) => row.reference === rec.reference);
     expect(child?.parentIncidentId).toBe(inc._id);
+
+    const parentAfter = await t.run((ctx) => ctx.db.get(inc._id));
+    const lastHistory = parentAfter?.history.at(-1);
+    expect(lastHistory?.linkedIncidentId).toBe(child?._id);
+    expect(lastHistory?.linkedIncidentReference).toBe(rec.reference);
+    expect(lastHistory?.note).toContain("Reabierta");
   });
 });

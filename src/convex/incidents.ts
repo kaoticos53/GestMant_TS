@@ -1610,6 +1610,20 @@ export const createRecurrence = mutation({
           parentIncidentId: parent._id,
           ...(parent.equipmentId ? { equipmentId: parent.equipmentId } : {}),
         });
+        await ctx.db.patch(parent._id, {
+          updatedAt: now,
+          history: [
+            ...parent.history,
+            {
+              status: parent.status,
+              at: now,
+              by: actorName(actor),
+              note: `Reabierta por reincidencia · ${created.reference}`,
+              linkedIncidentId: newIncident._id,
+              linkedIncidentReference: created.reference,
+            },
+          ],
+        });
         if (parent.equipmentId) {
           await syncEquipmentOperationalState(ctx, parent.equipmentId);
         }
