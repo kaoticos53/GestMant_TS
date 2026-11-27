@@ -100,6 +100,26 @@ describe("seguridad: cabeceras HTTP y Content Security Policy (CSP)", () => {
 });
 
 /**
+ * El visor de PDF enmarca una copia local del manual (`blob:`); `frame-src`
+ * admite ese esquema y nada más abierto (ni `https:` ni comodines).
+ */
+describe("seguridad: frame-src del visor de PDF", () => {
+  test("las dos políticas admiten blob: sin abrir orígenes externos", () => {
+    for (const source of [
+      readFileSync(INDEX_HTML, "utf8"),
+      readFileSync(SECURITY_HEADERS_CONF, "utf8"),
+    ]) {
+      const frameSrc = /frame-src([^;]*);/.exec(source)?.[1] ?? "";
+      expect(frameSrc.split(/\s+/).filter(Boolean)).toEqual([
+        "'self'",
+        "https://challenges.cloudflare.com",
+        "blob:",
+      ]);
+    }
+  });
+});
+
+/**
  * La CSP autoriza, además de Convex Cloud, la dirección de la API de **esta**
  * instalación tanto para conexiones (`connect-src`) como para imágenes de
  * `_storage` (`img-src`).
