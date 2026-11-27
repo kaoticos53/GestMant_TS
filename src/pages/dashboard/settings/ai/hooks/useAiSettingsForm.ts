@@ -44,11 +44,29 @@ export const INITIAL_AI_FORM_DATA: AiFormData = {
   enabledModules: [...ALL_AI_TOOL_MODULES],
 };
 
+/** ¿El formulario difiere de lo guardado? La clave nueva o borrarla cuentan. */
+export function isAiFormDirty(current: AiFormData, saved: AiFormData): boolean {
+  if (current.apiKey.trim() !== "" || current.clearApiKey) return true;
+  const comparable = (data: AiFormData) =>
+    JSON.stringify({
+      enabled: data.enabled,
+      baseUrl: data.baseUrl.trim(),
+      visionModel: data.visionModel.trim(),
+      chatModel: data.chatModel.trim(),
+      tasks: data.tasks,
+      rateLimitPerHour: data.rateLimitPerHour,
+      allowedRoles: [...data.allowedRoles].sort(),
+      enabledModules: [...data.enabledModules].sort(),
+    });
+  return comparable(current) !== comparable(saved);
+}
+
 export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
   const save = useMutation(api.aiSettings.save);
   const testConnection = useAction(api.aiSettings.testConnection);
 
   const [formData, setFormData] = useState<AiFormData>(INITIAL_AI_FORM_DATA);
+  const [baseline, setBaseline] = useState<AiFormData>(INITIAL_AI_FORM_DATA);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -56,7 +74,7 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
   useEffect(() => {
     if (seeded.current || settings === undefined) return;
     seeded.current = true;
-    setFormData({
+    const seededData: AiFormData = {
       enabled: settings.enabled,
       baseUrl: settings.baseUrl,
       visionModel: settings.visionModel,
@@ -69,8 +87,12 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
       allowedRoles: settings.allowedRoles ?? [],
       enabledModules:
         settings.enabledModules ?? [...ALL_AI_TOOL_MODULES],
-    });
+    };
+    setFormData(seededData);
+    setBaseline(seededData);
   }, [settings]);
+
+  const dirty = settings !== undefined && isAiFormDirty(formData, baseline);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -100,6 +122,7 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
         apiKey: "",
         clearApiKey: false,
       }));
+      setBaseline({ ...formData, apiKey: "", clearApiKey: false });
       toast.success("Configuración de IA guardada");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -127,6 +150,7 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
   return {
     formData,
     setFormData,
+    dirty,
     saving,
     testing,
     handleSave,

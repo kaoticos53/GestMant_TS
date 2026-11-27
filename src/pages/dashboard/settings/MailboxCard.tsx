@@ -28,6 +28,7 @@ import {
   type MailboxFolderItem,
 } from "./mailbox/MailboxFoldersCard";
 import { MailboxTagRulesCard } from "./mailbox/MailboxTagRulesCard";
+import { MailIndexSection } from "./MailIndexSection";
 
 const MIB = 1024 * 1024;
 
@@ -396,6 +397,7 @@ function MailboxEditor({
         <>
           <MailboxFoldersCard folders={folders} />
           <MailboxTagRulesCard />
+          <MailIndexSection />
 
           <div className="mt-4 grid gap-2 rounded-lg border border-border/60 px-3 py-3">
             <p className="text-sm font-medium">Caché local</p>

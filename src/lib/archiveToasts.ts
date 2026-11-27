@@ -38,13 +38,29 @@ export function archiveWithUndoToast({
 
 /**
  * Notificación Toast de confirmación tras deshacer con éxito el archivado.
+ * Con `onUndo` ofrece además «Deshacer» para devolverla al archivo: lo usa la
+ * recuperación desde el propio módulo Archivo, donde un clic equivocado saca
+ * la ficha de la lista sin otra forma rápida de volverla a meter.
  */
 export function unarchiveSuccessToast({
   reference,
+  onUndo,
 }: {
   reference: string;
+  onUndo?: () => void | Promise<void>;
 }): void {
   toast.success(`${reference} recuperada del archivo`, {
     description: "Vuelve a estar disponible en su cola de trabajo habitual.",
+    ...(onUndo
+      ? {
+          duration: ARCHIVE_UNDO_DURATION_MS,
+          action: {
+            label: ARCHIVE_UNDO_LABEL,
+            onClick: () => {
+              void onUndo();
+            },
+          },
+        }
+      : {}),
   });
 }

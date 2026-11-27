@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Brain, Database, Mail, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Brain, Database, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +26,10 @@ export function AiMemoryCard() {
   const facts = useQuery(api.aiMemory.listFacts, {});
   const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
   const rebuildWorkshop = useMutation(api.aiMemory.startRebuildWorkshopIndex);
-  const rebuildMailbox = useMutation(api.aiMemory.startRebuildMyMailboxIndex);
   const saveFact = useMutation(api.aiMemory.saveFact);
   const deleteFact = useMutation(api.aiMemory.deleteFact);
 
   const [startingWorkshop, setStartingWorkshop] = useState(false);
-  const [startingMail, setStartingMail] = useState(false);
   const [title, setTitle] = useState("");
   const [factText, setFactText] = useState("");
   const [savingFact, setSavingFact] = useState(false);
@@ -44,9 +42,6 @@ export function AiMemoryCard() {
   const rebuilding =
     startingWorkshop ||
     jobs.some((j) => j.type === "ai_memory_workshop" && isActiveJobStatus(j.status));
-  const rebuildingMail =
-    startingMail ||
-    jobs.some((j) => j.type === "ai_memory_mailbox" && isActiveJobStatus(j.status));
 
   const handleRebuild = async () => {
     setStartingWorkshop(true);
@@ -61,22 +56,6 @@ export function AiMemoryCard() {
       toast.error(getErrorMessage(error));
     } finally {
       setStartingWorkshop(false);
-    }
-  };
-
-  const handleRebuildMailbox = async () => {
-    setStartingMail(true);
-    try {
-      const res = await rebuildMailbox({});
-      toast.info(
-        res.reused
-          ? "Ya hay una indexación de correos en curso."
-          : "Indexación de correos iniciada en segundo plano.",
-      );
-    } catch (error) {
-      toast.error(getErrorMessage(error));
-    } finally {
-      setStartingMail(false);
     }
   };
 
@@ -118,17 +97,6 @@ export function AiMemoryCard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            disabled={rebuildingMail}
-            onClick={() => void handleRebuildMailbox()}
-          >
-            <Mail className="size-3.5" />
-            {rebuildingMail ? "Indexando correos..." : "Indexar mis correos"}
-          </Button>
           <Button
             type="button"
             variant="outline"

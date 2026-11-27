@@ -63,7 +63,12 @@ export function ManualsView({
       ? (manuals.find((m) => m._id === initialDetailId) ?? null)
       : null);
 
-  const listState = useManualsListState(manuals, equipment, initialSearch);
+  const listState = useManualsListState(
+    manuals,
+    equipment,
+    initialSearch,
+    currentUserId,
+  );
   const rights = useMemo(
     () => ({ manage: canManage, userId: currentUserId }),
     [canManage, currentUserId],
@@ -90,7 +95,7 @@ export function ManualsView({
   const paging = useTablePagination({
     total: rows.length,
     rowsFit,
-    resetKey: `${listState.search}|${listState.type}|${listState.brand}|${listState.model}|${listState.equipmentFilter}`,
+    resetKey: `${listState.search}|${listState.type}|${listState.brand}|${listState.model}|${listState.equipmentFilter}|${listState.kind}`,
   });
   const visible = rows.slice(paging.from - 1, paging.to);
 
@@ -114,6 +119,9 @@ export function ManualsView({
           onModelChange={listState.setModel}
           equipmentFilter={listState.equipmentFilter}
           onEquipmentFilterChange={listState.setEquipmentFilter}
+          kind={listState.kind}
+          onKindChange={listState.setKind}
+          canFilterMine={Boolean(currentUserId)}
           brands={listState.brands}
           models={listState.models}
           equipment={equipment}

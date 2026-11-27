@@ -137,9 +137,12 @@ export function canUseFastDateWindow(params: {
   tag?: string;
   groupByConversation?: boolean;
   sortBy?: MailSortField;
+  unreadOnly?: boolean;
+  withAttachments?: boolean;
 }): boolean {
   if ((params.search ?? "").trim() !== "") return false;
   if (params.tag) return false;
   if (params.groupByConversation) return false;
+  if (params.unreadOnly || params.withAttachments) return false;
   return (params.sortBy ?? "date") === "date";
 }

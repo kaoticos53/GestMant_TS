@@ -53,6 +53,10 @@ export function MailboxToolbar({
   onSync,
   tagFilter,
   onTagFilterChange,
+  unreadOnly = false,
+  onToggleUnreadOnly,
+  withAttachments = false,
+  onToggleWithAttachments,
   onBackToFolders,
 }: {
   activeFolder: MailboxFolder;
@@ -75,6 +79,10 @@ export function MailboxToolbar({
   onSync: () => void;
   tagFilter: MailTagId | "all";
   onTagFilterChange: (next: MailTagId | "all") => void;
+  unreadOnly?: boolean;
+  onToggleUnreadOnly?: () => void;
+  withAttachments?: boolean;
+  onToggleWithAttachments?: () => void;
   onBackToFolders: () => void;
 }) {
   return (
@@ -221,6 +229,39 @@ export function MailboxToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-1 border-b border-border/60 bg-muted/15 px-3 py-1.5 sm:px-4">
+        {onToggleUnreadOnly && (
+          <button
+            type="button"
+            aria-pressed={unreadOnly}
+            onClick={onToggleUnreadOnly}
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              unreadOnly
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Sin leer
+          </button>
+        )}
+        {onToggleWithAttachments && (
+          <button
+            type="button"
+            aria-pressed={withAttachments}
+            onClick={onToggleWithAttachments}
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              withAttachments
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:text-foreground",
+            )}
+          >
+            Con adjuntos
+          </button>
+        )}
+        {(onToggleUnreadOnly || onToggleWithAttachments) && (
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+        )}
         <button
           type="button"
           onClick={() => onTagFilterChange("all")}

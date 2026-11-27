@@ -66,8 +66,27 @@ export function WorkshopSettingsTabsPanels({
               canDecideRequests={hasDecideRequests}
             />
           )}
-          {canPurgeUploads && <UnusedUploadsCard />}
-          {canPurgeUploads && <StorageCleanupCard />}
+          {canPurgeUploads && (
+            <section
+              aria-labelledby="settings-storage-cleanup-heading"
+              className="space-y-3"
+            >
+              <div>
+                <h3
+                  id="settings-storage-cleanup-heading"
+                  className="text-sm font-semibold"
+                >
+                  Limpieza del almacenamiento
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Archivos subidos que ya no usa ninguna ficha y el registro de
+                  las pasadas de limpieza.
+                </p>
+              </div>
+              <UnusedUploadsCard />
+              <StorageCleanupCard />
+            </section>
+          )}
           {canManageData && <OrphanMailSharesCard />}
         </TabsContent>
       )}

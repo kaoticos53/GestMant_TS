@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { primaryUserRole } from "@/lib/roles";
 import { getErrorMessage } from "@/lib/workshop";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -46,6 +46,11 @@ interface UseCreateUserFormOptions {
 export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
   const createUser = useAction(api.members.createUser);
   const roleOptions = useQuery(api.permissions.listRoles);
+  const catalogPositions =
+    useQuery(api.catalogs.list, { kind: "position" }) ?? [];
+  const catalogLocations =
+    useQuery(api.catalogs.list, { kind: "equipmentLocation" }) ?? [];
+  const ensureCatalogItem = useMutation(api.catalogs.ensureItem);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -84,6 +89,25 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
         location: location.trim() || undefined,
         phone: phone.trim() || undefined,
       });
+      // Lo nuevo entra en los catálogos para autocompletar la próxima alta;
+      // si falla, el usuario ya está creado y no se bloquea nada.
+      const catalogTasks: Promise<unknown>[] = [];
+      if (position.trim()) {
+        catalogTasks.push(
+          ensureCatalogItem({ kind: "position", name: position.trim() }).catch(
+            () => {},
+          ),
+        );
+      }
+      if (location.trim()) {
+        catalogTasks.push(
+          ensureCatalogItem({
+            kind: "equipmentLocation",
+            name: location.trim(),
+          }).catch(() => {}),
+        );
+      }
+      if (catalogTasks.length > 0) await Promise.allSettled(catalogTasks);
       toast.success(`Usuario creado: ${email.trim()}`);
       onSuccess();
     } catch (err) {
@@ -111,6 +135,8 @@ export function useCreateUserForm({ onSuccess }: UseCreateUserFormOptions) {
     busy,
     error,
     roleOptions,
+    catalogPositions,
+    catalogLocations,
     handleSubmit,
   };
 }

@@ -20,6 +20,7 @@ import { InventoryTable } from "./inventory/components/InventoryTable";
 import { InventoryDeleteDialog } from "./inventory/components/InventoryDeleteDialog";
 import { PartDetailSheet } from "./inventory/components/PartDetailSheet";
 import { useInventoryState } from "./inventory/hooks/useInventoryState";
+import { findExactCodeMatch } from "@/lib/codeLookup";
 import { partLabel as buildPartLabel } from "@/lib/labelGenerator";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { PartDoc, InventoryViewProps } from "./inventory/types";
@@ -38,6 +39,8 @@ export function InventoryView({
   const [labelTarget, setLabelTarget] = useState<PartDoc | null>(null);
   const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
   const [detailId, setDetailId] = useState<Id<"spareParts"> | null>(null);
+  // Un código exacto al entrar (QR, pistola o buscador) abre la ficha directa.
+  const [dismissedInitialDetail, setDismissedInitialDetail] = useState(false);
   const [movementsOpen, setMovementsOpen] = useState(false);
   const [countOpen, setCountOpen] = useState(false);
   const origin =
@@ -91,7 +94,18 @@ export function InventoryView({
   );
 
   const detailTarget =
-    detailId === null ? null : (parts.find((part) => part._id === detailId) ?? null);
+    detailId !== null
+      ? (parts.find((part) => part._id === detailId) ?? null)
+      : !dismissedInitialDetail
+        ? findExactCodeMatch(parts, initialSearch, (part) => [
+            part.code,
+            part.partNumber,
+          ])
+        : null;
+  const closeDetail = () => {
+    setDetailId(null);
+    setDismissedInitialDetail(true);
+  };
 
   if (loading) {
     return <ListViewSkeleton />;
@@ -214,7 +228,7 @@ export function InventoryView({
         canManage={canManage}
         canPurchase={canPurchase}
         catalogModels={catalogModels}
-        onClose={() => setDetailId(null)}
+        onClose={closeDetail}
         onEdit={(part) => setFormTarget({ part })}
         onStockAdjust={setStockTarget}
         onPrintLabel={setLabelTarget}

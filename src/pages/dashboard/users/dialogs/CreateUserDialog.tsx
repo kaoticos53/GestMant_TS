@@ -1,3 +1,4 @@
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +44,8 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
     busy,
     error,
     roleOptions,
+    catalogPositions,
+    catalogLocations,
     handleSubmit,
   } = useCreateUserForm({ onSuccess: onClose });
 
@@ -176,20 +179,24 @@ export function CreateUserDialog({ onClose }: CreateUserDialogProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="user-position">Puesto</Label>
-              <Input
+              <AutocompleteInput
                 id="user-position"
                 value={position}
-                onChange={(event) => setPosition(event.target.value)}
+                onChange={setPosition}
+                items={catalogPositions}
+                kind="position"
                 placeholder="p. ej. Cámara"
                 disabled={busy}
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="user-location">Ubicación</Label>
-              <Input
+              <AutocompleteInput
                 id="user-location"
                 value={location}
-                onChange={(event) => setLocation(event.target.value)}
+                onChange={setLocation}
+                items={catalogLocations}
+                kind="equipmentLocation"
                 placeholder="p. ej. Plató 1"
                 disabled={busy}
               />

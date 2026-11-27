@@ -6,19 +6,69 @@ import type { EquipmentDoc, ManualDoc } from "../types";
 /** Valor del filtro de equipo que busca los manuales sin equipo asignado. */
 export const NO_EQUIPMENT_FILTER = "__none__";
 
+/** Clase de documento: todo, solo PDF, solo notas del taller o mis notas. */
+export type ManualKindFilter = "all" | "file" | "note" | "mine";
+
+export const MANUAL_KIND_FILTER_OPTIONS: {
+  value: ManualKindFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "PDF y notas" },
+  { value: "file", label: "Solo PDF" },
+  { value: "note", label: "Notas del taller" },
+  { value: "mine", label: "Mis notas" },
+];
+
 export interface ManualFilterCriteria {
   query: string;
   type: string;
   brand: string;
   model: string;
   equipmentFilter: string;
+  kind?: ManualKindFilter;
+  currentUserId?: string | null;
+}
+
+/** ¿El manual pasa el filtro de clase de documento? */
+export function matchesManualKind(
+  manual: Pick<ManualDoc, "kind" | "authorId">,
+  kind: ManualKindFilter | undefined,
+  currentUserId: string | null | undefined,
+): boolean {
+  switch (kind) {
+    case "file":
+      return manual.kind === "file";
+    case "note":
+      return manual.kind === "note";
+    case "mine":
+      return (
+        manual.kind === "note" &&
+        Boolean(currentUserId) &&
+        manual.authorId === currentUserId
+      );
+    default:
+      return true;
+  }
 }
 
 /**
  * Función pura que filtra la lista de manuales aplicando los criterios de búsqueda,
- * tipo, marca, modelo y la regla especial de manuales huérfanos sin equipo (`__none__`).
+ * tipo, marca, modelo, clase de documento y la regla especial de manuales
+ * huérfanos sin equipo (`__none__`).
  */
 export function filterManualsWithSpecialRules(
+  manuals: ManualDoc[],
+  filters: ManualFilterCriteria,
+): ManualDoc[] {
+  const byKind = filterManualsBase(manuals, filters);
+  return filters.kind && filters.kind !== "all"
+    ? byKind.filter((manual) =>
+        matchesManualKind(manual, filters.kind, filters.currentUserId),
+      )
+    : byKind;
+}
+
+function filterManualsBase(
   manuals: ManualDoc[],
   filters: ManualFilterCriteria,
 ): ManualDoc[] {
@@ -50,6 +100,8 @@ export interface UseManualsListStateReturn {
   setModel: (model: string) => void;
   equipmentFilter: string;
   setEquipmentFilter: (equipment: string) => void;
+  kind: ManualKindFilter;
+  setKind: (kind: ManualKindFilter) => void;
   brands: string[];
   models: string[];
   filtered: ManualDoc[];
@@ -67,12 +119,14 @@ export function useManualsListState(
   manuals: ManualDoc[],
   equipment: EquipmentDoc[],
   initialSearch = "",
+  currentUserId: string | null = null,
 ): UseManualsListStateReturn {
   const [search, setSearch] = useState(initialSearch);
   const [type, setType] = useState<string>("all");
   const [brand, setBrand] = useState<string>("all");
   const [model, setModel] = useState<string>("all");
   const [equipmentFilter, setEquipmentFilter] = useState<string>("all");
+  const [kind, setKind] = useState<ManualKindFilter>("all");
 
   // Índice memoizado O(1) para resolver equipos por ID sin búsquedas lineales O(N)
   const equipmentById = useMemo(
@@ -100,8 +154,10 @@ export function useManualsListState(
         brand,
         model,
         equipmentFilter,
+        kind,
+        currentUserId,
       }),
-    [manuals, search, type, brand, model, equipmentFilter],
+    [manuals, search, type, brand, model, equipmentFilter, kind, currentUserId],
   );
 
   const handleBrandChange = useCallback((newBrand: string) => {
@@ -115,6 +171,7 @@ export function useManualsListState(
     setBrand("all");
     setModel("all");
     setEquipmentFilter("all");
+    setKind("all");
   }, []);
 
   const isFiltering =
@@ -122,7 +179,8 @@ export function useManualsListState(
     type !== "all" ||
     brand !== "all" ||
     model !== "all" ||
-    equipmentFilter !== "all";
+    equipmentFilter !== "all" ||
+    kind !== "all";
 
   return {
     search,
@@ -135,6 +193,8 @@ export function useManualsListState(
     setModel,
     equipmentFilter,
     setEquipmentFilter,
+    kind,
+    setKind,
     brands,
     models,
     filtered,

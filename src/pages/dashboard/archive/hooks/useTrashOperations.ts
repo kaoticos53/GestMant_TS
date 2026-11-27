@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { unarchiveSuccessToast } from "@/lib/archiveToasts";
 import { getErrorMessage } from "@/lib/workshop";
 import { toast } from "sonner";
 import type { ArchiveEntry, TrashRow } from "../types";
@@ -13,6 +14,8 @@ export function useTrashOperations() {
 
   const unarchiveIncident = useMutation(api.incidents.unarchive);
   const unarchiveRequest = useMutation(api.partRequests.unarchive);
+  const archiveIncident = useMutation(api.incidents.archive);
+  const archiveRequest = useMutation(api.partRequests.archive);
   const restoreIncident = useMutation(api.incidents.restore);
   const deleteIncident = useMutation(api.incidents.deleteNow);
   const restoreRequest = useMutation(api.partRequests.restore);
@@ -26,9 +29,21 @@ export function useTrashOperations() {
       } else {
         await unarchiveRequest({ requestId: entry.id });
       }
-      toast.success(
-        `${entry.reference} vuelve a la cola de ${entry.kind === "incident" ? "incidencias" : "peticiones"}`,
-      );
+      unarchiveSuccessToast({
+        reference: entry.reference,
+        onUndo: async () => {
+          try {
+            if (entry.kind === "incident") {
+              await archiveIncident({ incidentId: entry.id });
+            } else {
+              await archiveRequest({ requestId: entry.id });
+            }
+            toast.success(`${entry.reference} vuelve al archivo`);
+          } catch (error) {
+            toast.error(getErrorMessage(error));
+          }
+        },
+      });
     } catch (error) {
       toast.error(getErrorMessage(error));
     } finally {

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/convex/_generated/api";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   AI_TOOL_MODULE_LABELS,
   ALL_AI_TOOL_MODULES,
@@ -54,8 +55,16 @@ const ROLE_OPTIONS: Array<{ key: string; label: string }> = [
 export function AiSettingsCard() {
   const settings = useQuery(api.aiSettings.settings);
   const liveRoles = useQuery(api.permissions.listRoles);
-  const { formData, setFormData, saving, testing, handleSave, handleTest } =
-    useAiSettingsForm(settings);
+  const {
+    formData,
+    setFormData,
+    dirty,
+    saving,
+    testing,
+    handleSave,
+    handleTest,
+  } = useAiSettingsForm(settings);
+  useUnsavedChangesGuard(dirty);
   const [rateLimitInput, setRateLimitInput] = useState<string | null>(null);
 
   if (settings === undefined) {
@@ -384,6 +393,14 @@ export function AiSettingsCard() {
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {dirty && (
+            <span
+              role="status"
+              className="mr-auto text-xs font-medium text-amber-700 dark:text-amber-300"
+            >
+              Hay cambios sin guardar
+            </span>
+          )}
           <Button
             type="button"
             variant="outline"

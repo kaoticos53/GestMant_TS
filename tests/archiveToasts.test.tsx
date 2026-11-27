@@ -142,4 +142,19 @@ describe("Avisos de archivado (archiveToasts)", () => {
     expect(content).toContain("REQ-2026-0010 recuperada del archivo");
     expect(content).toContain("Vuelve a estar disponible");
   });
+
+  test("unarchiveSuccessToast con onUndo ofrece devolverla al archivo", async () => {
+    await mount(<Toaster />);
+    const onUndo = vi.fn();
+
+    await showNotice(() => {
+      unarchiveSuccessToast({ reference: "INC-2026-0077", onUndo });
+    });
+
+    expect(toaster().textContent ?? "").toContain(
+      "INC-2026-0077 recuperada del archivo",
+    );
+    await press(toastButton(ARCHIVE_UNDO_LABEL));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
 });

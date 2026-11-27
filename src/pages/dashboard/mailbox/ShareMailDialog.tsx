@@ -1,3 +1,7 @@
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,7 +12,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/convex/_generated/api";
-import { getErrorMessage } from "@/lib/workshop";
+import { isClosedIncident } from "@/lib/incidentFlow";
+import { INCIDENT_STATUS_META, getErrorMessage } from "@/lib/workshop";
 import {
   DESTINATION_LABELS,
   DESTINATION_TYPES,
@@ -74,6 +79,32 @@ export function ShareMailDialog({
   );
   const share = useAction(api.mailShares.share);
   const createIncident = useAction(api.mailShares.createIncidentFromMail);
+
+  // Para incidencias, en vez de teclear la referencia se elige de la lista de
+  // las abiertas (buscable por referencia, equipo o descripción).
+  const pickIncident =
+    open && !effectiveAsIncident && effectiveType === "incident";
+  const incidents = useQuery(api.incidents.list, pickIncident ? {} : "skip");
+  const incidentOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      (incidents ?? [])
+        .filter((incident) => !isClosedIncident(incident.status))
+        .map((incident) => {
+          const equipment = [incident.equipmentKind, incident.model]
+            .map((part) => part?.trim())
+            .filter(Boolean)
+            .join(" · ");
+          return {
+            value: incident.reference,
+            label: equipment
+              ? `${incident.reference} · ${equipment}`
+              : incident.reference,
+            keywords: `${incident.reference} ${equipment} ${incident.description}`,
+            hint: INCIDENT_STATUS_META[incident.status]?.label,
+          };
+        }),
+    [incidents],
+  );
 
   const submit = async () => {
     if (!effectiveAsIncident && (effectiveType === undefined || !target)) {
@@ -167,6 +198,7 @@ export function ShareMailDialog({
                     onChange={(event) => {
                       setType(event.target.value as MailShareDestinationType);
                       setMode("summary");
+                      setReference("");
                     }}
                   >
                     {options.map((item) => (
@@ -177,15 +209,35 @@ export function ShareMailDialog({
                   </select>
                 </label>
 
-                <label className="block text-xs font-medium">
-                  Referencia
-                  <input
-                    className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                    value={reference}
-                    placeholder="INC-0004, PET-0007, OC-0003, EQ-001…"
-                    onChange={(event) => setReference(event.target.value)}
-                  />
-                </label>
+                {effectiveType === "incident" ? (
+                  <div className="block text-xs font-medium">
+                    <span id="share-incident-label">Incidencia abierta</span>
+                    <SearchableSelect
+                      className="mt-1 w-full"
+                      value={reference}
+                      onValueChange={setReference}
+                      options={incidentOptions}
+                      placeholder={
+                        incidents === undefined
+                          ? "Cargando incidencias…"
+                          : "Elige una incidencia"
+                      }
+                      searchPlaceholder="Buscar por referencia, equipo o descripción…"
+                      emptyMessage="No hay incidencias abiertas que coincidan"
+                      ariaLabel="Incidencia de destino"
+                    />
+                  </div>
+                ) : (
+                  <label className="block text-xs font-medium">
+                    Referencia
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                      value={reference}
+                      placeholder="PET-0007, OC-0003, EQ-001…"
+                      onChange={(event) => setReference(event.target.value)}
+                    />
+                  </label>
+                )}
                 {reference.trim() !== "" && target === null && (
                   <p className="text-xs text-destructive">
                     No hay ninguna ficha con esa referencia.

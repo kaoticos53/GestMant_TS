@@ -23,7 +23,12 @@ import { internal } from "./_generated/api";
 import { identityNotice, secureMutation } from "./_auth/secureMutation";
 import { CAPABILITIES } from "../lib/permissions";
 import { isClosedIncident } from "../lib/incidentFlow";
-import { grantsForRoles, hasCapability, roleExists } from "./permissions";
+import {
+  grantsForRole,
+  grantsForRoles,
+  hasCapability,
+  roleExists,
+} from "./permissions";
 import {
   type MutationCtx,
   QueryCtx,
@@ -926,6 +931,24 @@ export const getMemberSummary = query({
       (c) => ({ key: c.id, label: c.label }),
     );
 
+    // Las mismas capacidades, contadas por el rol que las concede: con varios
+    // roles, el administrador ve de dónde viene cada permiso.
+    const byRole: {
+      roleKey: string;
+      capabilities: { key: string; label: string }[];
+    }[] = [];
+    for (const roleKey of [
+      ...new Set(assigned.length > 0 ? assigned : [DEFAULT_ROLE]),
+    ]) {
+      const roleGrants = await grantsForRole(ctx, roleKey);
+      byRole.push({
+        roleKey,
+        capabilities: CAPABILITIES.filter((c) => Boolean(roleGrants[c.id])).map(
+          (c) => ({ key: c.id, label: c.label }),
+        ),
+      });
+    }
+
     const allIncidents = await ctx.db.query("incidents").collect();
     const assignedIncidents = allIncidents.filter(
       (inc) =>
@@ -957,6 +980,7 @@ export const getMemberSummary = query({
       activeAssignedIncidents,
       requestsCount: userRequestsCount,
       capabilities,
+      byRole,
       recentMovements,
     };
   },

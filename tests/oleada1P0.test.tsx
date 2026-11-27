@@ -66,6 +66,9 @@ vi.mock("@/convex/_generated/api", () => ({
     partRequests: {
       decisions: { name: "partRequests:decisions" },
     },
+    incidents: {
+      list: { name: "incidents:list" },
+    },
   },
 }));
 

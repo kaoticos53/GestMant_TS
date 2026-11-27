@@ -214,6 +214,33 @@ export function UserDetailSheet({
                     <p className="text-xs text-muted-foreground">
                       Sin capacidades concedidas para este rol.
                     </p>
+                  ) : summary.byRole && summary.byRole.length > 1 ? (
+                    <div className="space-y-2.5">
+                      {summary.byRole.map((group) => (
+                        <div key={group.roleKey} className="space-y-1">
+                          <p className="text-[11px] font-medium text-muted-foreground">
+                            Por el rol {roleLabelOf(group.roleKey)} (
+                            {group.capabilities.length})
+                          </p>
+                          {group.capabilities.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Este rol no concede capacidades.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {group.capabilities.map((cap) => (
+                                <Badge
+                                  key={`${group.roleKey}-${cap.key}`}
+                                  variant="secondary"
+                                >
+                                  {cap.label}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       {summary.capabilities.map((cap) => (

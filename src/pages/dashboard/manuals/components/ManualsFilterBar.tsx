@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/select";
 import { MANUAL_TYPES } from "@/lib/manuals";
 import { equipmentLabel } from "@/lib/workshop";
-import { NO_EQUIPMENT_FILTER } from "../hooks/useManualsListState";
+import {
+  MANUAL_KIND_FILTER_OPTIONS,
+  NO_EQUIPMENT_FILTER,
+  type ManualKindFilter,
+} from "../hooks/useManualsListState";
 import type { EquipmentDoc } from "../types";
 
 export interface ManualsFilterBarProps {
@@ -24,6 +28,10 @@ export interface ManualsFilterBarProps {
   onModelChange: (value: string) => void;
   equipmentFilter: string;
   onEquipmentFilterChange: (value: string) => void;
+  kind?: ManualKindFilter;
+  onKindChange?: (value: ManualKindFilter) => void;
+  /** Sin usuario identificado no se ofrece «Mis notas». */
+  canFilterMine?: boolean;
   brands: string[];
   models: string[];
   equipment: EquipmentDoc[];
@@ -50,6 +58,9 @@ export function ManualsFilterBar({
   onModelChange,
   equipmentFilter,
   onEquipmentFilterChange,
+  kind = "all",
+  onKindChange,
+  canFilterMine = false,
   brands,
   models,
   equipment,
@@ -107,7 +118,33 @@ export function ManualsFilterBar({
         }
       />
 
-      <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={
+          onKindChange
+            ? "grid gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-5"
+            : "grid gap-2 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-4"
+        }
+      >
+        {onKindChange && (
+          <Select
+            value={kind}
+            onValueChange={(value) => onKindChange(value as ManualKindFilter)}
+          >
+            <SelectTrigger aria-label="Filtrar por clase de documento">
+              <SelectValue placeholder="PDF y notas" />
+            </SelectTrigger>
+            <SelectContent>
+              {MANUAL_KIND_FILTER_OPTIONS.filter(
+                (option) => option.value !== "mine" || canFilterMine,
+              ).map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         <Select value={type} onValueChange={onTypeChange}>
           <SelectTrigger aria-label="Filtrar por tipo">
             <SelectValue placeholder="Tipo" />

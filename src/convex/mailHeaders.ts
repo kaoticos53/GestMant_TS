@@ -62,6 +62,8 @@ export const list = query({
     ),
     sortDir: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
     groupByConversation: v.optional(v.boolean()),
+    unreadOnly: v.optional(v.boolean()),
+    withAttachments: v.optional(v.boolean()),
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
@@ -89,6 +91,8 @@ export const list = query({
         tag: args.tag,
         groupByConversation: args.groupByConversation,
         sortBy,
+        unreadOnly: args.unreadOnly,
+        withAttachments: args.withAttachments,
       })
     ) {
       const orderedRows = await ctx.db
@@ -126,7 +130,12 @@ export const list = query({
         q.eq("userId", user._id).eq("folderRemoteId", args.folderRemoteId),
       )
       .collect();
-    const visible = rows.filter((row) => row.deletedRemoteAt === undefined);
+    const visible = rows.filter(
+      (row) =>
+        row.deletedRemoteAt === undefined &&
+        (!args.unreadOnly || row.flags.includes("u")) &&
+        (!args.withAttachments || row.hasAttachments),
+    );
     const byTag = args.tag
       ? visible.filter((row) => row.tags?.includes(args.tag as string))
       : visible;

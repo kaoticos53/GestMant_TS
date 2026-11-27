@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { useRowsThatFit } from "@/hooks/use-rows-that-fit";
 import { useTablePagination } from "@/hooks/use-table-pagination";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { stockAdjustWithUndoToast } from "@/lib/stockToasts";
 import { sortRows } from "@/lib/tableSort";
 import { getErrorMessage } from "@/lib/workshop";
 import type { InventoryViewProps, PartDoc } from "../types";
@@ -83,6 +84,23 @@ export function useInventoryState({
   const handleQuickAdjust = async (part: PartDoc, delta: number) => {
     try {
       await adjustStock({ id: part._id, delta });
+      stockAdjustWithUndoToast({
+        code: part.code,
+        delta,
+        nextStock: Math.max(0, part.stock + delta),
+        onUndo: async () => {
+          try {
+            await adjustStock({
+              id: part._id,
+              delta: -delta,
+              reason: "Deshacer ajuste rápido",
+            });
+            toast.success(`Ajuste de ${part.code} deshecho`);
+          } catch (error) {
+            toast.error(getErrorMessage(error));
+          }
+        },
+      });
     } catch (error) {
       toast.error(getErrorMessage(error));
     }

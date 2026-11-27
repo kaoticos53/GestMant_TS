@@ -112,7 +112,7 @@ export function PermissionsTable({
                       }`
                     )}
                   </span>
-                  {role.kind === "custom" && (
+                  {role.kind === "custom" ? (
                     <span className="mt-1 flex gap-1">
                       <button
                         type="button"
@@ -142,6 +142,21 @@ export function PermissionsTable({
                         <Trash2 className="size-3.5" />
                       </button>
                     </span>
+                  ) : (
+                    role.key !== ADMIN_KEY && (
+                      <span className="mt-1 flex gap-1">
+                        <button
+                          type="button"
+                          className={ICON_BUTTON_CLASS}
+                          aria-label={`Duplicar ${role.label}`}
+                          title="Crear un rol personalizado a partir de este"
+                          disabled={saving}
+                          onClick={() => onDuplicateRole(role)}
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                      </span>
+                    )
                   )}
                 </TableHead>
               ))}

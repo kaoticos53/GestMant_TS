@@ -1,8 +1,10 @@
 import { Plus, RotateCcw, Save, ShieldCheck, Workflow, X } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { ADMIN_KEY } from "@/lib/permissionsDraft";
 
 import { DeleteRoleDialog } from "./permissions/components/DeleteRoleDialog";
 import { PermissionsStats } from "./permissions/components/PermissionsStats";
@@ -43,6 +45,8 @@ export function PermissionsView({
   });
 
   useUnsavedChangesGuard(matrix.dirty);
+  // La columna del administrador no se edita: se puede plegar para ganar sitio.
+  const [showAdminColumn, setShowAdminColumn] = useState(true);
 
   if (!matrix.current || !roles) {
     return (
@@ -111,22 +115,40 @@ export function PermissionsView({
       </div>
 
       <div className="rounded-xl border border-signal/25 bg-signal/5 p-4">
-        <p className="flex items-center gap-2 text-sm font-medium text-signal">
-          <ShieldCheck className="size-4" />
-          El administrador siempre tiene todas las capacidades
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-sm font-medium text-signal">
+            <ShieldCheck className="size-4" />
+            El administrador siempre tiene todas las capacidades
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            aria-pressed={showAdminColumn}
+            onClick={() => setShowAdminColumn((prev) => !prev)}
+          >
+            {showAdminColumn
+              ? "Ocultar columna de Administrador"
+              : "Mostrar columna de Administrador"}
+          </Button>
+        </div>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           Los roles del sistema (Administrador, Responsable y Técnico) no se
-          borran ni se renombran; los personalizados sí. Las capacidades con
-          candado solo las tiene el administrador y un rol nuevo parte de la
-          plantilla que elijas. Las de modificar se comprueban en el backend de
-          cada módulo; las de «ver» deciden qué módulos aparecen en el menú y en
-          el resumen.
+          borran ni se renombran, pero puedes duplicarlos como punto de partida
+          de un rol personalizado. Las capacidades con candado solo las tiene el
+          administrador. Las de modificar se comprueban en el backend de cada
+          módulo; las de «ver» deciden qué módulos aparecen en el menú y en el
+          resumen.
         </p>
       </div>
 
       <PermissionsTable
-        roles={roles}
+        roles={
+          showAdminColumn
+            ? roles
+            : roles.filter((role) => role.key !== ADMIN_KEY)
+        }
         current={matrix.current}
         saved={matrix.saved}
         saving={matrix.saving}

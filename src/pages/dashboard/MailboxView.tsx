@@ -71,6 +71,8 @@ export function MailboxView({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<MailTagId | "all">("all");
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [withAttachments, setWithAttachments] = useState(false);
   const [sortBy, setSortBy] = useState<MailSortField>("date");
   const [sortDir, setSortDir] = useState<MailSortDirection>("desc");
   const [groupByConversation, setGroupByConversation] = useState(false);
@@ -114,7 +116,7 @@ export function MailboxView({
     folders?.[0] ??
     null;
   const activeFolderId = activeFolder?.remoteId ?? null;
-  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${effectiveSearch}|${tagFilter}|${sortBy}|${sortDir}|${groupByConversation}`;
+  const pageKey = `${activeFolderId ?? "sin-carpeta"}|${effectiveSearch}|${tagFilter}|${sortBy}|${sortDir}|${groupByConversation}|${unreadOnly}|${withAttachments}`;
 
   // Al cambiar de carpeta o de búsqueda se vuelve a la primera página en el
   // mismo render. Así la consulta siguiente ya pide `offset: 0` y no llega a
@@ -135,6 +137,8 @@ export function MailboxView({
           sortBy,
           sortDir,
           groupByConversation,
+          unreadOnly: unreadOnly || undefined,
+          withAttachments: withAttachments || undefined,
           limit: MAILBOX_PAGE_SIZE,
           offset: (page - 1) * MAILBOX_PAGE_SIZE,
         }
@@ -159,6 +163,9 @@ export function MailboxView({
   const handleSelectFolder = (folder: MailboxFolder) => {
     setSelectedFolderId(folder.remoteId);
     setSearch("");
+    setTagFilter("all");
+    setUnreadOnly(false);
+    setWithAttachments(false);
     setSelectedMessage(null);
     setMobilePane("messages");
   };
@@ -363,6 +370,12 @@ export function MailboxView({
                   onSync={() => void handleSync()}
                   tagFilter={tagFilter}
                   onTagFilterChange={setTagFilter}
+                  unreadOnly={unreadOnly}
+                  onToggleUnreadOnly={() => setUnreadOnly((prev) => !prev)}
+                  withAttachments={withAttachments}
+                  onToggleWithAttachments={() =>
+                    setWithAttachments((prev) => !prev)
+                  }
                   onBackToFolders={() => setMobilePane("folders")}
                 />
 

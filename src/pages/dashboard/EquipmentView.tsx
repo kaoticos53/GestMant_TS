@@ -16,6 +16,7 @@ import { TablePagination } from "@/components/TablePagination";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useQuery } from "convex/react";
+import { findExactCodeMatch } from "@/lib/codeLookup";
 import { equipmentLabel as buildEquipmentLabel } from "@/lib/labelGenerator";
 import {
   EQUIPMENT_OPERATIONAL_META,
@@ -64,6 +65,10 @@ export function EquipmentView({
     Parameters<typeof buildEquipmentLabel>[0] | null
   >(null);
   const [batchLabelsOpen, setBatchLabelsOpen] = useState(false);
+  // Al llegar con un código exacto (QR, pistola o buscador global) se abre su
+  // ficha directamente; al cerrarla ya no vuelve a abrirse sola.
+  const [dismissedInitialDetail, setDismissedInitialDetail] = useState(false);
+  const [initialOpenedAt] = useState(() => Date.now());
   const origin =
     typeof window === "undefined" ? "" : window.location.origin;
 
@@ -137,6 +142,21 @@ export function EquipmentView({
     manualDelete,
     setManualDelete,
   } = useEquipmentDialogs();
+
+  const initialMatch =
+    !dismissedInitialDetail && detail === null
+      ? findExactCodeMatch(equipment, initialSearch, (item) => [
+          item.code,
+          item.serialNumber,
+        ])
+      : null;
+  const effectiveDetail =
+    detail ??
+    (initialMatch ? { item: initialMatch, openedAt: initialOpenedAt } : null);
+  const closeAnyDetail = () => {
+    closeDetail();
+    setDismissedInitialDetail(true);
+  };
 
   const canAddManual = canAddManualNotes(canWriteManuals, canManageManuals);
   const rights = getManualRights(canManageManuals, currentUserId);
@@ -312,7 +332,7 @@ export function EquipmentView({
       </div>
 
       <EquipmentModals
-        detail={detail}
+        detail={effectiveDetail}
         parts={parts}
         requests={requests}
         equipment={equipment}
@@ -327,9 +347,9 @@ export function EquipmentView({
         manualForm={manualForm}
         manualDetail={manualDetail}
         manualDelete={manualDelete}
-        onCloseDetail={closeDetail}
+        onCloseDetail={closeAnyDetail}
         onEdit={(item) => {
-          closeDetail();
+          closeAnyDetail();
           openEditForm(item);
         }}
         onPrintLabel={setLabelTarget}
