@@ -5,6 +5,9 @@
 export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 export const DEFAULT_DEEPSEEK_VISION_MODEL = "deepseek-flash";
 export const DEFAULT_DEEPSEEK_CHAT_MODEL = "deepseek-chat";
+export const DEFAULT_EMBEDDING_BASE_URL = "";
+export const DEFAULT_EMBEDDING_MODEL = "@cf/baai/bge-m3";
+export const AI_EMBEDDING_DIMENSIONS = 1024;
 
 /** Ventana de cuota por usuario autenticado: 1 hora. */
 export const AI_WINDOW_MS = 60 * 60 * 1000;

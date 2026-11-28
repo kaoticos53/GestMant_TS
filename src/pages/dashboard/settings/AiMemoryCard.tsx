@@ -26,10 +26,12 @@ export function AiMemoryCard() {
   const facts = useQuery(api.aiMemory.listFacts, {});
   const jobs = useQuery(api.backgroundJobs.listMine, {}) ?? [];
   const rebuildWorkshop = useMutation(api.aiMemory.startRebuildWorkshopIndex);
+  const vectorizePending = useMutation(api.aiMemory.startVectorizePending);
   const saveFact = useMutation(api.aiMemory.saveFact);
   const deleteFact = useMutation(api.aiMemory.deleteFact);
 
   const [startingWorkshop, setStartingWorkshop] = useState(false);
+  const [startingVectors, setStartingVectors] = useState(false);
   const [title, setTitle] = useState("");
   const [factText, setFactText] = useState("");
   const [savingFact, setSavingFact] = useState(false);
@@ -42,6 +44,9 @@ export function AiMemoryCard() {
   const rebuilding =
     startingWorkshop ||
     jobs.some((j) => j.type === "ai_memory_workshop" && isActiveJobStatus(j.status));
+  const vectorizing =
+    startingVectors ||
+    jobs.some((j) => j.type === "ai_memory_vectors" && isActiveJobStatus(j.status));
 
   const handleRebuild = async () => {
     setStartingWorkshop(true);
@@ -56,6 +61,22 @@ export function AiMemoryCard() {
       toast.error(getErrorMessage(error));
     } finally {
       setStartingWorkshop(false);
+    }
+  };
+
+  const handleVectorize = async () => {
+    setStartingVectors(true);
+    try {
+      const res = await vectorizePending({});
+      toast.info(
+        res.reused
+          ? "Ya hay una vectorización en curso."
+          : "Vectorización semántica iniciada en segundo plano.",
+      );
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setStartingVectors(false);
     }
   };
 
@@ -110,11 +131,28 @@ export function AiMemoryCard() {
             />
             {rebuilding ? "Indexando..." : "Indexar todo el taller"}
           </Button>
+          {stats && stats.totalChunks > stats.embeddedChunks && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={vectorizing || rebuilding}
+              onClick={() => void handleVectorize()}
+            >
+              <RefreshCw
+                className={`size-3.5 ${vectorizing ? "animate-spin" : ""}`}
+              />
+              {vectorizing
+                ? "Vectorizando..."
+                : `Vectorizar pendientes (${stats.totalChunks - stats.embeddedChunks})`}
+            </Button>
+          )}
         </div>
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border bg-muted/20 p-3">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Database className="size-3.5" />
@@ -130,6 +168,14 @@ export function AiMemoryCard() {
             </span>
             <p className="mt-1 text-xl font-bold tabular-nums">
               {stats ? stats.mailboxChunks : "—"}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <span className="text-xs text-muted-foreground">
+              Vectorizados (embeddings)
+            </span>
+            <p className="mt-1 text-xl font-bold tabular-nums">
+              {stats ? `${stats.embeddedChunks} / ${stats.totalChunks}` : "—"}
             </p>
           </div>
           <div className="rounded-lg border bg-muted/20 p-3">

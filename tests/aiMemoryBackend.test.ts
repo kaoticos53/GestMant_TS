@@ -1,6 +1,11 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "../src/convex/_generated/api";
 import { backend } from "./backend";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("aiMemory (Fase 2)", () => {
   test("reindexa el taller, aisla buzones por ownerUserId y filtra por módulos permitidos", async () => {
@@ -170,7 +175,7 @@ describe("aiMemory (Fase 2)", () => {
       (await asAdmin.mutation(api.aiMemory.rebuildMyMailboxIndex, {})).indexed,
     ).toBe(1);
 
-    const vector = Array.from({ length: 768 }, () => 0.125);
+    const vector = Array.from({ length: 1024 }, () => 0.125);
     const initialChunks = await t.run(async (ctx) => {
       const rows = await ctx.db.query("aiKnowledgeChunks").collect();
       for (const row of rows) {
@@ -220,5 +225,84 @@ describe("aiMemory (Fase 2)", () => {
     );
     expect(afterDelete.indexed).toBe(0);
     expect(await t.run((ctx) => ctx.db.get(workshopChunk0._id))).toBeNull();
+  });
+
+  test("vectoriza fragmentos pendientes con embeddings de 1024 dimensiones y hace fallback léxico si falla la red", async () => {
+    const t = backend();
+    const { adminId } = await t.run(async (ctx) => {
+      const adminId = await ctx.db.insert("users", {
+        name: "Admin",
+        email: "admin@taller.es",
+        role: "admin",
+        active: true,
+      });
+      await ctx.db.insert("incidents", {
+        reference: "INC-2024",
+        equipmentKind: "Compresor",
+        model: "GA-22",
+        description: "Sobrecalentamiento en etapa de baja presión",
+        severity: "high",
+        status: "reported",
+        reportedAt: 100,
+        reporterName: "Ana",
+        history: [],
+        createdAt: 100,
+        updatedAt: 100,
+      });
+      return { adminId };
+    });
+
+    const asAdmin = t.withIdentity({ subject: `${adminId}|s-vec` });
+    await asAdmin.mutation(api.aiMemory.rebuildWorkshopIndex, {});
+    await asAdmin.mutation(api.aiSettings.save, {
+      enabled: true,
+      baseUrl: "https://api.deepseek.com/v1",
+      visionModel: "deepseek-flash",
+      chatModel: "deepseek-chat",
+      embeddingEnabled: true,
+      embeddingBaseUrl:
+        "https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1",
+      embeddingModel: "@cf/baai/bge-m3",
+      embeddingApiKey: "cf-token-demo",
+    });
+
+    const beforeStats = await asAdmin.query(api.aiMemory.memoryStats, {});
+    expect(beforeStats?.totalChunks).toBe(1);
+    expect(beforeStats?.embeddedChunks).toBe(0);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: Array.from({ length: 1024 }, () => 0.05) }],
+        }),
+      })),
+    );
+
+    const vecRes = await t.action(internal.aiMemory.runVectorizePendingJob, {});
+    expect(vecRes).toEqual({ processed: 1, remaining: 0 });
+
+    const afterStats = await asAdmin.query(api.aiMemory.memoryStats, {});
+    expect(afterStats?.embeddedChunks).toBe(1);
+
+    // Si el endpoint falla durante una búsqueda, searchMemoryHybrid hace fallback léxico sin romper
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 503,
+      })),
+    );
+    const hybridFallback = await t.action(
+      internal.aiMemory.searchMemoryHybrid,
+      {
+        userId: adminId,
+        query: "compresor",
+        allowedModules: ["incidents"],
+        includeMailbox: false,
+      },
+    );
+    expect(hybridFallback.chunks.map((c) => c.reference)).toEqual(["INC-2024"]);
   });
 });

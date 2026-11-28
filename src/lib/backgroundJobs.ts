@@ -8,6 +8,7 @@ export type BackgroundJobType =
   | "mail_sync"
   | "ai_memory_workshop"
   | "ai_memory_mailbox"
+  | "ai_memory_vectors"
   | "workshop_backup_export"
   | "workshop_backup_restore"
   | "storage_cleanup";
@@ -53,6 +54,7 @@ const JOB_TYPE_LABELS: Record<BackgroundJobType, string> = {
   mail_sync: "Sincronización de correo",
   ai_memory_workshop: "Indexación de memoria IA",
   ai_memory_mailbox: "Indexación de correos en IA",
+  ai_memory_vectors: "Vectorización semántica de memoria IA",
   workshop_backup_export: "Exportación de copia de seguridad",
   workshop_backup_restore: "Restauración de copia de seguridad",
   storage_cleanup: "Limpieza de almacenamiento",

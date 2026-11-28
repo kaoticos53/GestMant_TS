@@ -585,7 +585,7 @@ async function dispatchWorkshopTool(
       );
     case "search_workshop_memory":
       return JSON.stringify(
-        await ctx.runQuery(internal.aiMemory.searchMemory, {
+        await ctx.runAction(internal.aiMemory.searchMemoryHybrid, {
           userId: actor.userId,
           query: strArg("query") ?? "",
           allowedModules: actor.allowedModules,

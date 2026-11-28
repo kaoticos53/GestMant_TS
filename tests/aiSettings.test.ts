@@ -159,4 +159,58 @@ describe("Fase 2 TDD — aiSettings (configuración cifrada de DeepSeek)", () =>
       "Responde breve a {{usuario_nombre}}.",
     );
   });
+
+  test("cifra el token de embeddings y testEmbeddingConnection valida 1024 dimensiones", async () => {
+    process.env.PULSO_SETTINGS_ENCRYPTION_KEY = "clave-maestra-ai-32-bytes-test";
+    const { t, admin } = await setup();
+
+    const saved = await admin.mutation(api.aiSettings.save, {
+      enabled: true,
+      baseUrl: "https://api.deepseek.com/v1",
+      visionModel: "deepseek-flash",
+      chatModel: "deepseek-chat",
+      embeddingEnabled: true,
+      embeddingBaseUrl:
+        "https://api.cloudflare.com/client/v4/accounts/acc123/ai/v1",
+      embeddingModel: "@cf/baai/bge-m3",
+      embeddingApiKey: "cf-token-secreto-4321",
+    });
+
+    expect(saved.embeddingEnabled).toBe(true);
+    expect(saved.embeddingModel).toBe("@cf/baai/bge-m3");
+    expect(saved.hasEmbeddingKey).toBe(true);
+    expect(saved.embeddingKeyHint).toBe("…4321");
+    expect(JSON.stringify(saved)).not.toContain("cf-token-secreto-4321");
+
+    const resolved = await t.query(internal.aiSettings.resolved, {});
+    expect(resolved.embeddingApiKey).toBe("cf-token-secreto-4321");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: Array.from({ length: 1024 }, () => 0.01) }],
+        }),
+      })),
+    );
+    const okRes = await admin.action(api.aiSettings.testEmbeddingConnection, {});
+    expect(okRes).toEqual({ ok: true, dimensions: 1024 });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: Array.from({ length: 768 }, () => 0.01) }],
+        }),
+      })),
+    );
+    const badRes = await admin.action(
+      api.aiSettings.testEmbeddingConnection,
+      {},
+    );
+    expect(badRes.ok).toBe(false);
+    expect(badRes.dimensions).toBe(768);
+  });
 });

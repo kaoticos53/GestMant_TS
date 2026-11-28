@@ -5,6 +5,8 @@ import {
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_DEEPSEEK_CHAT_MODEL,
   DEFAULT_DEEPSEEK_VISION_MODEL,
+  DEFAULT_EMBEDDING_BASE_URL,
+  DEFAULT_EMBEDDING_MODEL,
   type AiSettingsPublicView,
   type AiTasksEnabledConfig,
   type AiToolModule,
@@ -25,6 +27,11 @@ export interface AiFormData {
   rateLimitPerHour: number;
   allowedRoles: string[];
   enabledModules: AiToolModule[];
+  embeddingEnabled: boolean;
+  embeddingBaseUrl: string;
+  embeddingModel: string;
+  embeddingApiKey: string;
+  clearEmbeddingApiKey: boolean;
 }
 
 export const INITIAL_AI_FORM_DATA: AiFormData = {
@@ -42,11 +49,23 @@ export const INITIAL_AI_FORM_DATA: AiFormData = {
   rateLimitPerHour: AI_MAX_CALLS_PER_USER_HOUR,
   allowedRoles: [],
   enabledModules: [...ALL_AI_TOOL_MODULES],
+  embeddingEnabled: false,
+  embeddingBaseUrl: DEFAULT_EMBEDDING_BASE_URL,
+  embeddingModel: DEFAULT_EMBEDDING_MODEL,
+  embeddingApiKey: "",
+  clearEmbeddingApiKey: false,
 };
 
 /** ¿El formulario difiere de lo guardado? La clave nueva o borrarla cuentan. */
 export function isAiFormDirty(current: AiFormData, saved: AiFormData): boolean {
-  if (current.apiKey.trim() !== "" || current.clearApiKey) return true;
+  if (
+    current.apiKey.trim() !== "" ||
+    current.clearApiKey ||
+    current.embeddingApiKey.trim() !== "" ||
+    current.clearEmbeddingApiKey
+  ) {
+    return true;
+  }
   const comparable = (data: AiFormData) =>
     JSON.stringify({
       enabled: data.enabled,
@@ -57,6 +76,9 @@ export function isAiFormDirty(current: AiFormData, saved: AiFormData): boolean {
       rateLimitPerHour: data.rateLimitPerHour,
       allowedRoles: [...data.allowedRoles].sort(),
       enabledModules: [...data.enabledModules].sort(),
+      embeddingEnabled: data.embeddingEnabled,
+      embeddingBaseUrl: data.embeddingBaseUrl.trim(),
+      embeddingModel: data.embeddingModel.trim(),
     });
   return comparable(current) !== comparable(saved);
 }
@@ -64,11 +86,15 @@ export function isAiFormDirty(current: AiFormData, saved: AiFormData): boolean {
 export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
   const save = useMutation(api.aiSettings.save);
   const testConnection = useAction(api.aiSettings.testConnection);
+  const testEmbeddingConnection = useAction(
+    api.aiSettings.testEmbeddingConnection,
+  );
 
   const [formData, setFormData] = useState<AiFormData>(INITIAL_AI_FORM_DATA);
   const [baseline, setBaseline] = useState<AiFormData>(INITIAL_AI_FORM_DATA);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingEmbedding, setTestingEmbedding] = useState(false);
 
   const seeded = useRef(false);
   useEffect(() => {
@@ -87,6 +113,12 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
       allowedRoles: settings.allowedRoles ?? [],
       enabledModules:
         settings.enabledModules ?? [...ALL_AI_TOOL_MODULES],
+      embeddingEnabled: settings.embeddingEnabled ?? false,
+      embeddingBaseUrl:
+        settings.embeddingBaseUrl ?? DEFAULT_EMBEDDING_BASE_URL,
+      embeddingModel: settings.embeddingModel ?? DEFAULT_EMBEDDING_MODEL,
+      embeddingApiKey: "",
+      clearEmbeddingApiKey: false,
     };
     setFormData(seededData);
     setBaseline(seededData);
@@ -98,6 +130,7 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
     setSaving(true);
     try {
       const trimmedKey = formData.apiKey.trim();
+      const trimmedEmbKey = formData.embeddingApiKey.trim();
       await save({
         enabled: formData.enabled,
         baseUrl: formData.baseUrl.trim() || DEFAULT_DEEPSEEK_BASE_URL,
@@ -116,13 +149,27 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
         ),
         allowedRoles: formData.allowedRoles,
         enabledModules: formData.enabledModules,
+        embeddingEnabled: formData.embeddingEnabled,
+        embeddingBaseUrl: formData.embeddingBaseUrl.trim(),
+        embeddingModel:
+          formData.embeddingModel.trim() || DEFAULT_EMBEDDING_MODEL,
+        ...(trimmedEmbKey ? { embeddingApiKey: trimmedEmbKey } : {}),
+        clearEmbeddingApiKey: formData.clearEmbeddingApiKey,
       });
       setFormData((prev) => ({
         ...prev,
         apiKey: "",
         clearApiKey: false,
+        embeddingApiKey: "",
+        clearEmbeddingApiKey: false,
       }));
-      setBaseline({ ...formData, apiKey: "", clearApiKey: false });
+      setBaseline({
+        ...formData,
+        apiKey: "",
+        clearApiKey: false,
+        embeddingApiKey: "",
+        clearEmbeddingApiKey: false,
+      });
       toast.success("Configuración de IA guardada");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -147,13 +194,35 @@ export function useAiSettingsForm(settings: AiSettingsPublicView | undefined) {
     }
   }, [testConnection]);
 
+  const handleTestEmbedding = useCallback(async () => {
+    setTestingEmbedding(true);
+    try {
+      const result = await testEmbeddingConnection({});
+      if (result.ok) {
+        toast.success(
+          `Conexión de embeddings verificada (${result.dimensions ?? 1024} dims)`,
+        );
+      } else {
+        toast.error(
+          result.error || "La prueba de embeddings ha fallado",
+        );
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setTestingEmbedding(false);
+    }
+  }, [testEmbeddingConnection]);
+
   return {
     formData,
     setFormData,
     dirty,
     saving,
     testing,
+    testingEmbedding,
     handleSave,
     handleTest,
+    handleTestEmbedding,
   };
 }

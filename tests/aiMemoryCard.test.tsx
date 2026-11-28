@@ -38,7 +38,7 @@ describe("AiMemoryCard (Fase 4)", () => {
 
   it("muestra estadísticas, hechos guardados y permite reindexar", async () => {
     const mockRebuild = vi.fn().mockResolvedValue({ jobId: "j1", reused: false });
-    const mockRebuildMail = vi.fn().mockResolvedValue({ jobId: "j2", reused: false });
+    const mockVectorize = vi.fn().mockResolvedValue({ jobId: "j3", reused: false });
     const mockSaveFact = vi.fn().mockResolvedValue("f1");
     const mockDeleteFact = vi.fn().mockResolvedValue(undefined);
 
@@ -47,7 +47,7 @@ describe("AiMemoryCard (Fase 4)", () => {
       mutIdx += 1;
       const mod = mutIdx % 4;
       if (mod === 1) return mockRebuild;
-      if (mod === 2) return mockRebuildMail;
+      if (mod === 2) return mockVectorize;
       if (mod === 3) return mockSaveFact;
       return mockDeleteFact;
     });
@@ -61,6 +61,7 @@ describe("AiMemoryCard (Fase 4)", () => {
           totalChunks: 20,
           workshopChunks: 15,
           mailboxChunks: 5,
+          embeddedChunks: 12,
           factsCount: 1,
         };
       }

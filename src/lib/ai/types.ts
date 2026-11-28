@@ -89,6 +89,15 @@ export interface AiSettingsPublicView {
   allowedRoles?: string[];
   enabledModules?: AiToolModule[];
   taskParams?: Record<AiTaskId, AiTaskParamConfig>;
+  embeddingEnabled?: boolean;
+  embeddingBaseUrl?: string;
+  embeddingModel?: string;
+  hasEmbeddingKey?: boolean;
+  embeddingKeyHint?: string;
+  embeddingEnvConfigured?: boolean;
+  lastEmbeddingTestAt?: number | null;
+  lastEmbeddingTestOk?: boolean | null;
+  lastEmbeddingTestError?: string | null;
 }
 
 export interface CatalogModelHint {

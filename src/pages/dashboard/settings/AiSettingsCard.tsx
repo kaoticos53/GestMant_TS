@@ -61,8 +61,10 @@ export function AiSettingsCard() {
     dirty,
     saving,
     testing,
+    testingEmbedding,
     handleSave,
     handleTest,
+    handleTestEmbedding,
   } = useAiSettingsForm(settings);
   useUnsavedChangesGuard(dirty);
   const [rateLimitInput, setRateLimitInput] = useState<string | null>(null);
@@ -369,6 +371,164 @@ export function AiSettingsCard() {
                 </label>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-lg border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">
+                Búsqueda semántica / Embeddings (Cloudflare Workers AI u OpenAI/Ollama)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Mejora la búsqueda de incidencias, equipos y correos por significado
+                combinando vectores de 1024 dimensiones con búsqueda léxica.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="ai-embedding-enabled"
+                checked={formData.embeddingEnabled}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    embeddingEnabled: checked,
+                  }))
+                }
+              />
+              <Label
+                htmlFor="ai-embedding-enabled"
+                className="text-xs font-medium"
+              >
+                {formData.embeddingEnabled ? "Activos" : "Desactivados"}
+              </Label>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="ai-embedding-base-url">
+                URL base de embeddings
+              </Label>
+              <Input
+                id="ai-embedding-base-url"
+                type="url"
+                value={formData.embeddingBaseUrl}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    embeddingBaseUrl: e.target.value,
+                  }))
+                }
+                placeholder="https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                En Cloudflare Workers AI sustituye{" "}
+                <code>&lt;ACCOUNT_ID&gt;</code> por tu ID de cuenta. También
+                admite Ollama o cualquier endpoint compatible con{" "}
+                <code>/embeddings</code>.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-embedding-model">Modelo de embeddings</Label>
+              <Input
+                id="ai-embedding-model"
+                value={formData.embeddingModel}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    embeddingModel: e.target.value,
+                  }))
+                }
+                placeholder="@cf/baai/bge-m3"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Recomendado para español: <code>@cf/baai/bge-m3</code> (1024
+                dimensiones).
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-embedding-api-key">
+                Token / API Key de embeddings{" "}
+                {settings.embeddingKeyHint
+                  ? `(${settings.embeddingKeyHint})`
+                  : ""}
+              </Label>
+              <Input
+                id="ai-embedding-api-key"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  settings.hasEmbeddingKey
+                    ? "Dejar vacío para conservar el token actual"
+                    : "Token API de Cloudflare Workers AI"
+                }
+                value={formData.embeddingApiKey}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    embeddingApiKey: e.target.value,
+                    clearEmbeddingApiKey: false,
+                  }))
+                }
+              />
+              {settings.hasEmbeddingKey && (
+                <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={formData.clearEmbeddingApiKey}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        clearEmbeddingApiKey: checked === true,
+                        embeddingApiKey:
+                          checked === true ? "" : prev.embeddingApiKey,
+                      }))
+                    }
+                  />
+                  Eliminar token de embeddings guardado
+                </label>
+              )}
+            </div>
+          </div>
+
+          {settings.lastEmbeddingTestAt !== null &&
+            settings.lastEmbeddingTestAt !== undefined && (
+              <div className="flex items-start gap-2 rounded-lg border bg-muted/20 p-2.5 text-xs">
+                {settings.lastEmbeddingTestOk ? (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                )}
+                <div className="space-y-0.5">
+                  <p className="font-medium">
+                    {settings.lastEmbeddingTestOk
+                      ? "Última prueba de embeddings correcta"
+                      : "Última prueba de embeddings fallida"}
+                  </p>
+                  {settings.lastEmbeddingTestError && (
+                    <p className="text-destructive">
+                      {settings.lastEmbeddingTestError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={testingEmbedding || saving || testing}
+              onClick={() => void handleTestEmbedding()}
+            >
+              {testingEmbedding && (
+                <Loader2 className="mr-2 size-3.5 animate-spin" />
+              )}
+              Probar embeddings
+            </Button>
           </div>
         </div>
 

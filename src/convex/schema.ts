@@ -1421,6 +1421,14 @@ const schema = defineSchema({
     lastTestAt: v.optional(v.number()),
     lastTestOk: v.optional(v.boolean()),
     lastTestError: v.optional(v.string()),
+    embeddingEnabled: v.optional(v.boolean()),
+    embeddingBaseUrl: v.optional(v.string()),
+    embeddingModel: v.optional(v.string()),
+    embeddingApiKey: v.optional(v.string()),
+    embeddingApiKeyHint: v.optional(v.string()),
+    lastEmbeddingTestAt: v.optional(v.number()),
+    lastEmbeddingTestOk: v.optional(v.boolean()),
+    lastEmbeddingTestError: v.optional(v.string()),
     tasks: v.optional(
       v.object({
         labelScanner: v.boolean(),
@@ -2001,7 +2009,7 @@ const schema = defineSchema({
     })
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
-      dimensions: 768,
+      dimensions: 1024,
       filterFields: ["scope", "module", "ownerUserId"],
     }),
 

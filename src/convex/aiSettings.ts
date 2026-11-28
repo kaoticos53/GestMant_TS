@@ -1,10 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import {
+  AI_EMBEDDING_DIMENSIONS,
   AI_MAX_CALLS_PER_USER_HOUR,
   ALL_AI_TOOL_MODULES,
   DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_DEEPSEEK_CHAT_MODEL,
   DEFAULT_DEEPSEEK_VISION_MODEL,
+  DEFAULT_EMBEDDING_BASE_URL,
+  DEFAULT_EMBEDDING_MODEL,
   isValidAiBaseUrl,
   type AiSettingsPublicView,
   type AiTaskId,
@@ -23,6 +26,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { callDeepSeekJson } from "./_ai/client";
+import { fetchEmbeddingVector } from "./_ai/embeddings";
 import {
   decryptSecret,
   encryptSecret,
@@ -50,6 +54,14 @@ const DEFAULT_TASK_PARAMS: Record<AiTaskId, AiTaskParamConfig> = {
 
 function envApiKey(): string {
   return (process.env.DEEPSEEK_API_KEY ?? "").trim();
+}
+
+function envEmbeddingApiKey(): string {
+  return (
+    process.env.CLOUDFLARE_AI_API_TOKEN ??
+    process.env.AI_EMBEDDING_API_KEY ??
+    ""
+  ).trim();
 }
 
 async function readRow(ctx: QueryCtx): Promise<Doc<"aiSettings"> | null> {
@@ -100,6 +112,14 @@ function publicView(row: Doc<"aiSettings"> | null): AiSettingsPublicView {
       (isEncryptedSecret(stored) ? "" : secretHint(stored)))
     : "";
 
+  const storedEmb = (row?.embeddingApiKey ?? "").trim();
+  const fromEmbEnv = envEmbeddingApiKey();
+  const hasStoredEmb = storedEmb !== "";
+  const embeddingKeyHint = hasStoredEmb
+    ? (row?.embeddingApiKeyHint ??
+      (isEncryptedSecret(storedEmb) ? "" : secretHint(storedEmb)))
+    : "";
+
   return {
     enabled: row?.enabled ?? false,
     baseUrl: row?.baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL,
@@ -119,6 +139,15 @@ function publicView(row: Doc<"aiSettings"> | null): AiSettingsPublicView {
     allowedRoles: row?.allowedRoles ?? [],
     enabledModules: normalizedEnabledModules(row),
     taskParams: normalizedTaskParams(row),
+    embeddingEnabled: row?.embeddingEnabled ?? false,
+    embeddingBaseUrl: row?.embeddingBaseUrl ?? DEFAULT_EMBEDDING_BASE_URL,
+    embeddingModel: row?.embeddingModel ?? DEFAULT_EMBEDDING_MODEL,
+    hasEmbeddingKey: hasStoredEmb || fromEmbEnv !== "",
+    embeddingKeyHint,
+    embeddingEnvConfigured: fromEmbEnv !== "",
+    lastEmbeddingTestAt: row?.lastEmbeddingTestAt ?? null,
+    lastEmbeddingTestOk: row?.lastEmbeddingTestOk ?? null,
+    lastEmbeddingTestError: row?.lastEmbeddingTestError ?? null,
   };
 }
 
@@ -145,7 +174,7 @@ export const canConfigure = internalQuery({
   },
 });
 
-/** Configuración descifrada interna para las acciones de DeepSeek. */
+/** Configuración descifrada interna para las acciones de DeepSeek y embeddings. */
 export const resolved = internalQuery({
   args: {},
   handler: async (ctx) => {
@@ -161,6 +190,20 @@ export const resolved = internalQuery({
       }
     }
     const apiKey = decrypted !== "" ? decrypted : envApiKey();
+
+    const storedEmbRaw = (row?.embeddingApiKey ?? "").trim();
+    let decryptedEmb = "";
+    let embeddingDecryptionFailed = false;
+    if (storedEmbRaw !== "") {
+      try {
+        decryptedEmb = await decryptSecret(storedEmbRaw);
+      } catch {
+        embeddingDecryptionFailed = true;
+      }
+    }
+    const embeddingApiKey =
+      decryptedEmb !== "" ? decryptedEmb : envEmbeddingApiKey();
+
     return {
       enabled: row?.enabled ?? false,
       baseUrl: row?.baseUrl ?? DEFAULT_DEEPSEEK_BASE_URL,
@@ -173,9 +216,47 @@ export const resolved = internalQuery({
       allowedRoles: row?.allowedRoles ?? [],
       enabledModules: normalizedEnabledModules(row),
       taskParams: normalizedTaskParams(row),
+      embeddingEnabled: row?.embeddingEnabled ?? false,
+      embeddingBaseUrl: row?.embeddingBaseUrl ?? DEFAULT_EMBEDDING_BASE_URL,
+      embeddingModel: row?.embeddingModel ?? DEFAULT_EMBEDDING_MODEL,
+      embeddingApiKey,
+      embeddingDecryptionFailed,
     };
   },
 });
+
+async function resolveNextSecret(opts: {
+  clear?: boolean;
+  incoming?: string;
+  existingSecret?: string;
+  existingHint?: string;
+  errorLabel: string;
+}): Promise<{ secret?: string; hint?: string }> {
+  if (opts.clear === true) {
+    return {};
+  }
+  const incoming = (opts.incoming ?? "").trim();
+  if (incoming !== "") {
+    if (incoming.length > MAX_API_KEY_LEN || /[\r\n]/.test(incoming)) {
+      throw new ConvexError(opts.errorLabel);
+    }
+    return {
+      secret: await encryptSecret(incoming),
+      hint: secretHint(incoming),
+    };
+  }
+  if (opts.existingSecret) {
+    return {
+      secret: opts.existingSecret,
+      hint:
+        opts.existingHint ??
+        (isEncryptedSecret(opts.existingSecret)
+          ? undefined
+          : secretHint(opts.existingSecret)),
+    };
+  }
+  return {};
+}
 
 const taskParamValidator = v.object({
   temperature: v.number(),
@@ -221,6 +302,11 @@ export const save = mutation({
         mail_triage: v.optional(taskParamValidator),
       }),
     ),
+    embeddingEnabled: v.optional(v.boolean()),
+    embeddingBaseUrl: v.optional(v.string()),
+    embeddingModel: v.optional(v.string()),
+    embeddingApiKey: v.optional(v.string()),
+    clearEmbeddingApiKey: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<AiSettingsPublicView> => {
     const admin = await requireAdmin(ctx, "configurar la IA del taller");
@@ -236,27 +322,39 @@ export const save = mutation({
     const chatModel = args.chatModel.trim() || DEFAULT_DEEPSEEK_CHAT_MODEL;
 
     const row = await readRow(ctx);
-    let nextApiKey: string | undefined;
-    let nextHint: string | undefined;
-
-    if (args.clearApiKey === true) {
-      nextApiKey = undefined;
-      nextHint = undefined;
-    } else {
-      const incoming = (args.apiKey ?? "").trim();
-      if (incoming !== "") {
-        if (incoming.length > MAX_API_KEY_LEN || /[\r\n]/.test(incoming)) {
-          throw new ConvexError("La clave API de IA no tiene un formato válido.");
-        }
-        nextApiKey = await encryptSecret(incoming);
-        nextHint = secretHint(incoming);
-      } else if (row?.apiKey) {
-        nextApiKey = row.apiKey;
-        nextHint =
-          row.apiKeyHint ??
-          (isEncryptedSecret(row.apiKey) ? undefined : secretHint(row.apiKey));
-      }
+    const embeddingEnabled =
+      args.embeddingEnabled !== undefined
+        ? args.embeddingEnabled
+        : (row?.embeddingEnabled ?? false);
+    const embeddingBaseUrl =
+      args.embeddingBaseUrl !== undefined
+        ? args.embeddingBaseUrl.trim()
+        : (row?.embeddingBaseUrl ?? DEFAULT_EMBEDDING_BASE_URL);
+    if (embeddingBaseUrl !== "" && !isValidAiBaseUrl(embeddingBaseUrl)) {
+      throw new ConvexError(
+        "La URL base de embeddings debe empezar por https:// o http://.",
+      );
     }
+    const embeddingModel =
+      args.embeddingModel !== undefined
+        ? args.embeddingModel.trim() || DEFAULT_EMBEDDING_MODEL
+        : (row?.embeddingModel ?? DEFAULT_EMBEDDING_MODEL);
+
+    const { secret: nextApiKey, hint: nextHint } = await resolveNextSecret({
+      clear: args.clearApiKey,
+      incoming: args.apiKey,
+      existingSecret: row?.apiKey,
+      existingHint: row?.apiKeyHint,
+      errorLabel: "La clave API de IA no tiene un formato válido.",
+    });
+    const { secret: nextEmbeddingApiKey, hint: nextEmbeddingHint } =
+      await resolveNextSecret({
+        clear: args.clearEmbeddingApiKey,
+        incoming: args.embeddingApiKey,
+        existingSecret: row?.embeddingApiKey,
+        existingHint: row?.embeddingApiKeyHint,
+        errorLabel: "El token de embeddings no tiene un formato válido.",
+      });
 
     const now = Date.now();
     const by = admin.name?.trim() || admin.email?.trim() || "Administración";
@@ -283,8 +381,17 @@ export const save = mutation({
           ? args.enabledModules
           : normalizedEnabledModules(row),
       taskParams: args.taskParams ?? normalizedTaskParams(row),
+      embeddingEnabled,
+      embeddingBaseUrl,
+      embeddingModel,
       ...(nextApiKey !== undefined ? { apiKey: nextApiKey } : {}),
       ...(nextHint !== undefined ? { apiKeyHint: nextHint } : {}),
+      ...(nextEmbeddingApiKey !== undefined
+        ? { embeddingApiKey: nextEmbeddingApiKey }
+        : {}),
+      ...(nextEmbeddingHint !== undefined
+        ? { embeddingApiKeyHint: nextEmbeddingHint }
+        : {}),
     };
 
     if (row === null) {
@@ -294,6 +401,9 @@ export const save = mutation({
         ...record,
         ...(nextApiKey === undefined
           ? { apiKey: undefined, apiKeyHint: undefined }
+          : {}),
+        ...(nextEmbeddingApiKey === undefined
+          ? { embeddingApiKey: undefined, embeddingApiKeyHint: undefined }
           : {}),
       });
     }
@@ -307,6 +417,9 @@ export const save = mutation({
         visionModel,
         chatModel,
         hasApiKey: nextApiKey !== undefined,
+        embeddingEnabled,
+        embeddingModel,
+        hasEmbeddingApiKey: nextEmbeddingApiKey !== undefined,
         rateLimitPerHour,
       },
     });
@@ -371,6 +484,75 @@ export const testConnection = action({
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       await ctx.runMutation(internal.aiSettings.recordTest, {
+        ok: false,
+        error: msg,
+      });
+      return { ok: false, error: msg };
+    }
+  },
+});
+
+export const recordEmbeddingTest = internalMutation({
+  args: { ok: v.boolean(), error: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const row = await readRow(ctx);
+    if (row === null) return;
+    await ctx.db.patch(row._id, {
+      lastEmbeddingTestAt: Date.now(),
+      lastEmbeddingTestOk: args.ok,
+      lastEmbeddingTestError: args.error,
+    });
+  },
+});
+
+/** Prueba la conexión real contra el endpoint de embeddings (Cloudflare / OpenAI / Ollama). */
+export const testEmbeddingConnection = action({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<{ ok: boolean; dimensions?: number; error?: string }> => {
+    const admin = await ctx.runQuery(internal.ai.assertActiveMember, {});
+    const isAdmin = await ctx.runQuery(internal.aiSettings.canConfigure, {
+      userId: admin,
+    });
+    if (!isAdmin) {
+      throw new ConvexError(
+        "Solo un administrador puede probar la conexión de embeddings.",
+      );
+    }
+
+    const config = await ctx.runQuery(internal.aiSettings.resolved, {});
+    if (!config.embeddingBaseUrl.trim()) {
+      const msg = "Configura y guarda primero la URL base de embeddings.";
+      await ctx.runMutation(internal.aiSettings.recordEmbeddingTest, {
+        ok: false,
+        error: msg,
+      });
+      return { ok: false, error: msg };
+    }
+
+    try {
+      const vector = await fetchEmbeddingVector({
+        baseUrl: config.embeddingBaseUrl,
+        apiKey: config.embeddingApiKey || undefined,
+        model: config.embeddingModel,
+        input: "compresor de aire sin presión en válvula de descarga",
+      });
+      if (vector.length !== AI_EMBEDDING_DIMENSIONS) {
+        const msg = `El modelo devolvió ${vector.length} dimensiones, pero el índice vectorial espera ${AI_EMBEDDING_DIMENSIONS} (ej. @cf/baai/bge-m3).`;
+        await ctx.runMutation(internal.aiSettings.recordEmbeddingTest, {
+          ok: false,
+          error: msg,
+        });
+        return { ok: false, dimensions: vector.length, error: msg };
+      }
+      await ctx.runMutation(internal.aiSettings.recordEmbeddingTest, {
+        ok: true,
+      });
+      return { ok: true, dimensions: vector.length };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await ctx.runMutation(internal.aiSettings.recordEmbeddingTest, {
         ok: false,
         error: msg,
       });
